@@ -201,13 +201,13 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 }
 
-                if !RepositoryUrl::parse(installed_url).is_ok_and(|installed_url| {
-                    installed_url == RepositoryUrl::new(requested_git.repository())
-                }) {
+                if !RepositoryUrl::parse(installed_url)
+                    .is_ok_and(|installed_url| installed_url == *requested_git.repository())
+                {
                     debug!(
                         "Repository mismatch: {:?} vs. {:?}",
                         installed_url,
-                        requested_git.repository()
+                        requested_git.url()
                     );
                     return Self::Mismatch;
                 }
@@ -461,12 +461,6 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
             let wheel_abi = wheel_tags
                 .abi_tags()
                 .map(|tag| match tag {
-                    AbiTag::CPython {
-                        gil_disabled: false,
-                        python_version: (major, minor),
-                    } => {
-                        format!("the CPython {major}.{minor} ABI (`{tag}`)")
-                    }
                     AbiTag::Abi3 => format!("the stable ABI (`{tag}`)"),
                     _ => {
                         if let Some(pretty) = tag.pretty() {

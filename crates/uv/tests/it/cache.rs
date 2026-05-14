@@ -6,16 +6,16 @@ use assert_fs::prelude::*;
 use std::process::Command;
 
 #[cfg(unix)]
-use crate::common::{TestContext, get_bin, uv_snapshot};
+use uv_test::{get_bin, uv_snapshot};
 
 /// When the cache directory cannot be created (e.g., due to permissions), we should show a
 /// chained error message that indicates we failed to initialize the cache.
 #[test]
 #[cfg(unix)]
 fn cache_init_failure() -> Result<()> {
-    use crate::common::ReadOnlyDirectoryGuard;
+    use uv_test::ReadOnlyDirectoryGuard;
 
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -37,17 +37,17 @@ fn cache_init_failure() -> Result<()> {
     // Point the cache to a subdirectory within the read-only parent
     let cache_dir = cache_parent.child("cache");
 
-    let mut filters = context.filters();
     // Filter both the relative path (in the first line) and absolute path (in the cause)
-    filters.push((r"cache_parent/cache", "[CACHE_DIR]"));
-    filters.push((
-        r"failed to create directory `.*`",
-        "failed to create directory `[CACHE_DIR]`",
-    ));
+    let context = context
+        .with_filter((r"cache_parent/cache", "[CACHE_DIR]"))
+        .with_filter((
+            r"failed to create directory `.*`",
+            "failed to create directory `[CACHE_DIR]`",
+        ));
 
     // Build the sync command manually to use our custom cache directory.
     // We can't use context.sync() because it adds --cache-dir with the default cache.
-    let mut command = Command::new(get_bin());
+    let mut command = Command::new(get_bin!());
     command
         .arg("sync")
         .arg("--cache-dir")
@@ -56,7 +56,7 @@ fn cache_init_failure() -> Result<()> {
     context.add_shared_env(&mut command, false);
 
     // Running a command should fail with a chained error about cache initialization
-    uv_snapshot!(&filters, command, @"
+    uv_snapshot!(context.filters(), command, @"
     success: false
     exit_code: 2
     ----- stdout -----

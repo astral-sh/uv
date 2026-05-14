@@ -5,11 +5,11 @@ use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 use assert_fs::prelude::*;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 #[test]
 fn list_empty_columns() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.pip_list()
         .arg("--format")
@@ -25,7 +25,7 @@ fn list_empty_columns() {
 
 #[test]
 fn list_empty_freeze() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.pip_list()
         .arg("--format")
@@ -41,7 +41,7 @@ fn list_empty_freeze() {
 
 #[test]
 fn list_empty_json() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.pip_list()
         .arg("--format")
@@ -57,9 +57,9 @@ fn list_empty_json() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn list_single_no_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
@@ -98,9 +98,9 @@ fn list_single_no_editable() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn list_outdated_columns() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio==3.0.0")?;
@@ -139,9 +139,9 @@ fn list_outdated_columns() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn list_outdated_json() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio==3.0.0")?;
@@ -179,7 +179,7 @@ fn list_outdated_json() -> Result<()> {
 
 #[test]
 fn list_outdated_freeze() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.pip_list().arg("--outdated").arg("--format").arg("freeze"), @"
     success: false
@@ -193,9 +193,9 @@ fn list_outdated_freeze() {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn list_outdated_git() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc::indoc! {r"
@@ -236,9 +236,9 @@ fn list_outdated_git() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn list_outdated_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio==3.0.0")?;
@@ -280,9 +280,9 @@ fn list_outdated_index() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn list_editable() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
@@ -326,9 +326,9 @@ fn list_editable() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn list_editable_only() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
@@ -401,9 +401,9 @@ fn list_editable_only() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn list_exclude() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
@@ -483,10 +483,10 @@ fn list_exclude() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 #[cfg(not(windows))]
 fn list_format_json() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
@@ -550,9 +550,9 @@ fn list_format_json() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn list_format_freeze() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Install the editable package.
     uv_snapshot!(context.filters(), context
@@ -623,7 +623,7 @@ fn list_format_freeze() {
 
 #[test]
 fn list_legacy_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let site_packages = ChildPath::new(context.site_packages());
 
@@ -675,7 +675,7 @@ Version: 0.22.0
 
 #[test]
 fn list_legacy_editable_invalid_version() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let site_packages = ChildPath::new(context.site_packages());
 
@@ -716,9 +716,9 @@ Version: 0.1-bulbasaur
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn list_ignores_quiet_flag_format_freeze() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Install the editable package.
     uv_snapshot!(context.filters(), context
@@ -791,9 +791,9 @@ fn list_ignores_quiet_flag_format_freeze() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn list_target() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
@@ -840,9 +840,9 @@ fn list_target() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn list_prefix() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;

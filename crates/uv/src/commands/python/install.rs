@@ -8,7 +8,7 @@ use std::str::FromStr;
 use anyhow::{Context, Error, Result};
 use futures::{StreamExt, join};
 use indexmap::IndexSet;
-use itertools::{Either, Itertools};
+use itertools::Itertools;
 use owo_colors::{AnsiColors, OwoColorize};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc;
@@ -26,7 +26,7 @@ use uv_python::downloads::{
 };
 use uv_python::managed::{
     ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink,
-    create_link_to_executable, python_executable_dir,
+    compare_build_versions, create_link_to_executable, python_executable_dir,
 };
 use uv_python::{
     ImplementationName, Interpreter, PythonDownloads, PythonInstallationKey,
@@ -318,15 +318,6 @@ async fn perform_install(
         );
     }
 
-    if let PythonUpgrade::Enabled(source @ PythonUpgradeSource::Upgrade) = upgrade {
-        if !preview.is_enabled(PreviewFeature::PythonUpgrade) {
-            warn_user!(
-                "`{source}` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
-                PreviewFeature::PythonUpgrade
-            );
-        }
-    }
-
     if default && targets.len() > 1 {
         anyhow::bail!("The `--default` flag cannot be used with multiple targets");
     }
@@ -347,7 +338,7 @@ async fn perform_install(
     let retry_policy = client_builder.retry_policy();
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
-    let client = client_builder.retries(0).build();
+    let client = client_builder.retries(0).build()?;
     let download_list =
         ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
     // TODO(zanieb): We use this variable to special-case .python-version files, but it'd be nice to
@@ -524,24 +515,47 @@ async fn perform_install(
         (vec![], unsatisfied)
     } else {
         // If we can find one existing installation that matches the request, it is satisfied
-        requests.iter().partition_map(|request| {
-            if let Some(installation) = existing_installations.iter().find(|installation| {
-                if matches!(upgrade, PythonUpgrade::Enabled(_)) {
-                    // If this is an upgrade, the requested version is a minor version but the
-                    // requested download is the highest patch for that minor version. We need to
-                    // install it unless an exact match is found.
-                    request.download.key() == installation.key()
+        let mut satisfied = Vec::new();
+        let mut unsatisfied = Vec::new();
+
+        for request in &requests {
+            if matches!(upgrade, PythonUpgrade::Enabled(_)) {
+                // If this is an upgrade, the requested version is a minor version but the
+                // requested download is the highest patch for that minor version. We need to
+                // install it unless an exact match is found (including build version).
+                if let Some(installation) = existing_installations
+                    .iter()
+                    .find(|inst| request.download.key() == inst.key())
+                {
+                    if matches_build(request.download.build(), installation.build()) {
+                        debug!("Found `{}` for request `{}`", installation.key(), request);
+                        satisfied.push(installation);
+                    } else {
+                        // Key matches but build version differs - track as existing for reinstall
+                        debug!(
+                            "Build version mismatch for `{}`, will upgrade",
+                            installation.key()
+                        );
+                        changelog.existing.insert(installation.key().clone());
+                        unsatisfied.push(Cow::Borrowed(request));
+                    }
                 } else {
-                    request.matches_installation(installation)
+                    debug!("No installation found for request `{}`", request);
+                    unsatisfied.push(Cow::Borrowed(request));
                 }
-            }) {
+            } else if let Some(installation) = existing_installations
+                .iter()
+                .find(|inst| request.matches_installation(inst))
+            {
                 debug!("Found `{}` for request `{}`", installation.key(), request);
-                Either::Left(installation)
+                satisfied.push(installation);
             } else {
                 debug!("No installation found for request `{}`", request);
-                Either::Right(Cow::Borrowed(request))
+                unsatisfied.push(Cow::Borrowed(request));
             }
-        })
+        }
+
+        (satisfied, unsatisfied)
     };
 
     // For all satisfied installs, bytecode compile them now before any future
@@ -551,7 +565,11 @@ async fn perform_install(
             .iter()
             .copied()
             .cloned()
-            .try_for_each(|installation| sender.send(installation))?;
+            .try_for_each(|installation| {
+                sender
+                    .send(installation)
+                    .map_err(|err| anyhow::anyhow!(err))
+            })?;
     }
 
     // Check if Python downloads are banned
@@ -614,7 +632,9 @@ async fn perform_install(
 
                 let installation = ManagedPythonInstallation::new(path, download);
                 if let Some(ref sender) = bytecode_compilation_sender {
-                    sender.send(installation.clone())?;
+                    sender
+                        .send(installation.clone())
+                        .map_err(|err| anyhow::anyhow!(err))?;
                 }
                 changelog.installed.insert(installation.key().clone());
                 for request in &requests {
@@ -710,16 +730,7 @@ async fn perform_install(
         );
 
     for installation in minor_versions.values() {
-        if matches!(
-            upgrade,
-            PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
-        ) {
-            // During an upgrade, update existing symlinks but avoid
-            // creating new ones.
-            installation.update_minor_version_link(preview)?;
-        } else {
-            installation.ensure_minor_version_link(preview)?;
-        }
+        installation.ensure_minor_version_link()?;
     }
 
     if changelog.installed.is_empty() && errors.is_empty() {
@@ -992,7 +1003,7 @@ fn create_bin_links(
         }
         let executable = if upgradeable {
             if let Some(minor_version_link) =
-                PythonMinorVersionLink::from_installation(installation, preview)
+                PythonMinorVersionLink::from_installation(installation)
             {
                 minor_version_link.symlink_executable.clone()
             } else {
@@ -1016,7 +1027,7 @@ fn create_bin_links(
                     .or_default()
                     .insert(target.clone());
             }
-            Err(uv_python::managed::Error::LinkExecutable { from: _, to, err })
+            Err(uv_python::managed::Error::LinkExecutable(err))
                 if err.kind() == ErrorKind::AlreadyExists =>
             {
                 debug!(
@@ -1054,7 +1065,7 @@ fn create_bin_links(
                                 if upgrade {
                                     warn_user!(
                                         "Executable already exists at `{}` but is not managed by uv; use `uv python install {}.{}{} --force` to replace it",
-                                        to.simplified_display(),
+                                        target.simplified_display(),
                                         installation.key().major(),
                                         installation.key().minor(),
                                         installation.key().variant().display_suffix()
@@ -1065,7 +1076,7 @@ fn create_bin_links(
                                         installation.key().clone(),
                                         anyhow::anyhow!(
                                             "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
-                                            to.simplified_display()
+                                            target.simplified_display()
                                         ),
                                     ));
                                 }
@@ -1128,7 +1139,7 @@ fn create_bin_links(
                                 debug!(
                                     "Executable already exists for `{}` at `{}`. Use `--force` to replace it",
                                     existing.key(),
-                                    to.simplified_display()
+                                    target.simplified_display()
                                 );
                                 continue;
                             }
@@ -1137,13 +1148,13 @@ fn create_bin_links(
                 }
 
                 // Replace the existing link
-                if let Err(err) = fs_err::remove_file(&to) {
+                if let Err(err) = fs_err::remove_file(&target) {
                     errors.push((
                         InstallErrorKind::Bin,
                         installation.key().clone(),
                         anyhow::anyhow!(
                             "Executable already exists at `{}` but could not be removed: {err}",
-                            to.simplified_display()
+                            target.simplified_display()
                         ),
                     ));
                     continue;
@@ -1322,5 +1333,19 @@ fn find_matching_bin_link<'a>(
         installations.find(|installation| installation.executable(false) == target)
     } else {
         unreachable!("Only Unix and Windows are supported")
+    }
+}
+
+/// Check if a download's build version matches an installation's build version.
+///
+/// Returns `true` if the build versions match (no upgrade needed), `false` if an upgrade is needed.
+fn matches_build(download_build: Option<&str>, installation_build: Option<&str>) -> bool {
+    match (download_build, installation_build) {
+        // Both have build, check if they match
+        (Some(d), Some(i)) => compare_build_versions(d, i) == std::cmp::Ordering::Equal,
+        // Legacy installation without BUILD file needs upgrade
+        (Some(_), None) => false,
+        // Download doesn't have build info, assume matches
+        (None, _) => true,
     }
 }

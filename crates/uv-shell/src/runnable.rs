@@ -5,8 +5,6 @@ use std::ffi::OsStr;
 use std::path::Path;
 use std::process::Command;
 
-use uv_fs::with_added_extension;
-
 #[derive(Debug)]
 pub enum WindowsRunnable {
     /// Windows PE (.exe)
@@ -92,7 +90,7 @@ impl WindowsRunnable {
             .map(|script_type| {
                 (
                     script_type,
-                    with_added_extension(&script_path, script_type.to_extension()),
+                    script_path.with_added_extension(script_type.to_extension()),
                 )
             })
             .find(|(_, script_path)| script_path.is_file())

@@ -1,11 +1,11 @@
-use crate::common::{TestContext, diff_snapshot, uv_snapshot};
 use anyhow::Result;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use insta::assert_snapshot;
+use uv_test::{diff_snapshot, uv_snapshot};
 
 #[test]
 fn packse_add_remove_one_package() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     context.copy_ecosystem_project("packse");
 
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -213,7 +213,7 @@ fn packse_add_remove_one_package() {
 
 #[test]
 fn packse_add_remove_existing_package_noop() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     context.copy_ecosystem_project("packse");
 
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -249,7 +249,7 @@ fn packse_add_remove_existing_package_noop() {
 /// transitive dependency.
 #[test]
 fn packse_promote_transitive_to_direct_then_remove() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     context.copy_ecosystem_project("packse");
 
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -397,7 +397,7 @@ fn packse_promote_transitive_to_direct_then_remove() {
 
 #[test]
 fn jax_instability() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"

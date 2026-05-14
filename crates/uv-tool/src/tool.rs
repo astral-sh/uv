@@ -6,20 +6,26 @@ use toml_edit::{Array, Item, Table, Value, value};
 
 use uv_distribution_types::Requirement;
 use uv_fs::{PortablePath, Simplified};
+use uv_normalize::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonRequest;
-use uv_settings::ToolOptions;
+use uv_settings::{ToolOptions, ToolOptionsWire};
 
 /// A tool entry.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "ToolWire", into = "ToolWire")]
 pub struct Tool {
     /// The requirements requested by the user during installation.
+    ///
+    /// The first requirement is the tool target itself; any remaining requirements come from
+    /// `--with`.
     requirements: Vec<Requirement>,
     /// The constraints requested by the user during installation.
     constraints: Vec<Requirement>,
     /// The overrides requested by the user during installation.
     overrides: Vec<Requirement>,
+    /// The excludes requested by the user during installation.
+    excludes: Vec<PackageName>,
     /// The build constraints requested by the user during installation.
     build_constraints: Vec<Requirement>,
     /// The Python requested by the user during installation.
@@ -40,11 +46,13 @@ struct ToolWire {
     #[serde(default)]
     overrides: Vec<Requirement>,
     #[serde(default)]
+    excludes: Vec<PackageName>,
+    #[serde(default)]
     build_constraint_dependencies: Vec<Requirement>,
     python: Option<PythonRequest>,
     entrypoints: Vec<ToolEntrypoint>,
     #[serde(default)]
-    options: ToolOptions,
+    options: ToolOptionsWire,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -67,10 +75,11 @@ impl From<Tool> for ToolWire {
                 .collect(),
             constraints: tool.constraints,
             overrides: tool.overrides,
+            excludes: tool.excludes,
             build_constraint_dependencies: tool.build_constraints,
             python: tool.python,
             entrypoints: tool.entrypoints,
-            options: tool.options,
+            options: tool.options.into(),
         }
     }
 }
@@ -90,10 +99,11 @@ impl TryFrom<ToolWire> for Tool {
                 .collect(),
             constraints: tool.constraints,
             overrides: tool.overrides,
+            excludes: tool.excludes,
             build_constraints: tool.build_constraint_dependencies,
             python: tool.python,
             entrypoints: tool.entrypoints,
-            options: tool.options,
+            options: tool.options.into(),
         })
     }
 }
@@ -165,6 +175,7 @@ impl Tool {
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
         overrides: Vec<Requirement>,
+        excludes: Vec<PackageName>,
         build_constraints: Vec<Requirement>,
         python: Option<PythonRequest>,
         entrypoints: impl IntoIterator<Item = ToolEntrypoint>,
@@ -176,6 +187,7 @@ impl Tool {
             requirements,
             constraints,
             overrides,
+            excludes,
             build_constraints,
             python,
             entrypoints,
@@ -259,6 +271,28 @@ impl Tool {
             });
         }
 
+        if !self.excludes.is_empty() {
+            table.insert("excludes", {
+                let excludes = self
+                    .excludes
+                    .iter()
+                    .map(|r#exclude| {
+                        serde::Serialize::serialize(
+                            &r#exclude,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let excludes = match excludes.as_slice() {
+                    [] => Array::new(),
+                    [r#exclude] => Array::from_iter([r#exclude]),
+                    excludes => each_element_on_its_line_array(excludes.iter()),
+                };
+                value(excludes)
+            });
+        }
+
         if !self.build_constraints.is_empty() {
             table.insert("build-constraint-dependencies", {
                 let build_constraints = self
@@ -302,8 +336,10 @@ impl Tool {
         });
 
         if self.options != ToolOptions::default() {
-            let serialized =
-                serde::Serialize::serialize(&self.options, toml_edit::ser::ValueSerializer::new())?;
+            let serialized = serde::Serialize::serialize(
+                &ToolOptionsWire::from(self.options.clone()),
+                toml_edit::ser::ValueSerializer::new(),
+            )?;
             let Value::InlineTable(serialized) = serialized else {
                 return Err(toml_edit::ser::Error::Custom(
                     "Expected an inline table".to_string(),
@@ -323,12 +359,21 @@ impl Tool {
         &self.requirements
     }
 
+    /// Return the primary requirement for the tool itself.
+    pub fn target_requirement(&self) -> Option<&Requirement> {
+        self.requirements.first()
+    }
+
     pub fn constraints(&self) -> &[Requirement] {
         &self.constraints
     }
 
     pub fn overrides(&self) -> &[Requirement] {
         &self.overrides
+    }
+
+    pub fn excludes(&self) -> &[PackageName] {
+        &self.excludes
     }
 
     pub fn build_constraints(&self) -> &[Requirement] {

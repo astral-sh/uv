@@ -1,17 +1,21 @@
-use async_http_range_reader::AsyncHttpRangeReaderError;
-use async_zip::error::ZipError;
-use serde::Deserialize;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
-use uv_cache::Error as CacheError;
-use uv_distribution_filename::{WheelFilename, WheelFilenameError};
-use uv_normalize::PackageName;
-use uv_redacted::DisplaySafeUrl;
+use async_http_range_reader::AsyncHttpRangeReaderError;
+use async_zip::error::ZipError;
+use reqwest::Response;
+use serde::Deserialize;
+use tracing::warn;
 
 use crate::middleware::OfflineError;
 use crate::{FlatIndexError, html};
+use uv_cache::Error as CacheError;
+use uv_distribution_filename::{WheelFilename, WheelFilenameError};
+use uv_distribution_types::IndexUrl;
+use uv_normalize::PackageName;
+use uv_redacted::DisplaySafeUrl;
 
 /// RFC 9457 Problem Details for HTTP APIs
 ///
@@ -44,6 +48,46 @@ fn default_problem_type() -> String {
 }
 
 impl ProblemDetails {
+    /// The content type for RFC 9457 Problem Details responses.
+    pub const CONTENT_TYPE: &str = "application/problem+json";
+
+    /// Try to parse a response body as RFC 9457 Problem Details.
+    ///
+    /// Returns `None` if parsing fails. The caller is responsible for checking
+    /// that the content type is `application/problem+json` before calling this.
+    pub fn try_from_response_body(body: &[u8]) -> Option<Self> {
+        match serde_json::from_slice(body) {
+            Ok(details) => Some(details),
+            Err(err) => {
+                warn!("Failed to parse problem details: {err}");
+                None
+            }
+        }
+    }
+
+    /// Try to extract RFC 9457 Problem Details from an HTTP response.
+    ///
+    /// Returns `None` if the content type is not `application/problem+json`
+    /// or if parsing fails. Only consumes the response body if the content
+    /// type matches.
+    pub async fn try_from_response(response: Response) -> Option<Self> {
+        let is_problem = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|ct| ct.to_str().ok())
+            .is_some_and(|ct| ct == Self::CONTENT_TYPE);
+        if !is_problem {
+            return None;
+        }
+        match response.bytes().await {
+            Ok(bytes) => Self::try_from_response_body(&bytes),
+            Err(err) => {
+                warn!("Failed to read response body for problem details: {err}");
+                None
+            }
+        }
+    }
+
     /// Get a human-readable description of the problem
     pub fn description(&self) -> Option<String> {
         match self {
@@ -72,6 +116,7 @@ impl ProblemDetails {
 pub struct Error {
     kind: Box<ErrorKind>,
     retries: u32,
+    duration: Duration,
 }
 
 impl Display for Error {
@@ -79,9 +124,10 @@ impl Display for Error {
         if self.retries > 0 {
             write!(
                 f,
-                "Request failed after {retries} {subject}",
+                "Request failed after {retries} {subject} in {duration:.1}s",
                 retries = self.retries,
-                subject = if self.retries > 1 { "retries" } else { "retry" }
+                subject = if self.retries > 1 { "retries" } else { "retry" },
+                duration = self.duration.as_secs_f32(),
             )
         } else {
             Display::fmt(&self.kind, f)
@@ -101,16 +147,23 @@ impl std::error::Error for Error {
 
 impl Error {
     /// Create a new [`Error`] with the given [`ErrorKind`] and number of retries.
-    pub fn new(kind: ErrorKind, retries: u32) -> Self {
+    pub fn new(kind: ErrorKind, retries: u32, duration: Duration) -> Self {
         Self {
             kind: Box::new(kind),
             retries,
+            duration,
         }
     }
 
     /// Return the number of retries that were attempted before this error was returned.
     pub fn retries(&self) -> u32 {
         self.retries
+    }
+
+    /// Return the time taken for network requests, including retries, backoff and jitter,
+    /// before this error was returned.
+    pub fn duration(&self) -> Duration {
+        self.duration
     }
 
     /// Convert this error into an [`ErrorKind`].
@@ -147,6 +200,7 @@ impl Error {
     pub(crate) fn from_reqwest_middleware(
         url: DisplaySafeUrl,
         err: reqwest_middleware::Error,
+        start: Instant,
     ) -> Self {
         if let reqwest_middleware::Error::Middleware(ref underlying) = err {
             if let Some(offline_err) = underlying.downcast_ref::<OfflineError>() {
@@ -159,6 +213,7 @@ impl Error {
                 return Self::new(
                     ErrorKind::WrappedReqwestError(url, WrappedReqwestError::from(err)),
                     retries,
+                    start.elapsed(),
                 );
             }
         }
@@ -187,7 +242,11 @@ impl Error {
     }
 
     /// Returns `true` if the error is due to the server not supporting HTTP range requests.
-    pub fn is_http_range_requests_unsupported(&self) -> bool {
+    pub fn is_http_range_requests_unsupported(
+        &self,
+        url: &DisplaySafeUrl,
+        index: Option<&IndexUrl>,
+    ) -> bool {
         match &*self.kind {
             // The server doesn't support range requests (as reported by the `HEAD` check).
             ErrorKind::AsyncHttpRangeReader(
@@ -203,6 +262,25 @@ impl Error {
                 AsyncHttpRangeReaderError::ContentLengthMissing
                 | AsyncHttpRangeReaderError::ContentRangeMissing,
             ) => {
+                return true;
+            }
+
+            // The server advertises range request support, but doesn't implement it correctly.
+            ErrorKind::AsyncHttpRangeReader(
+                _,
+                AsyncHttpRangeReaderError::RangeMismatch { .. }
+                | AsyncHttpRangeReaderError::ResponseTooShort { .. }
+                | AsyncHttpRangeReaderError::ResponseTooLong { .. },
+            ) => {
+                let url = if let Some(index) = index {
+                    index.url()
+                } else {
+                    url
+                };
+                warn!(
+                    "Invalid range request response from server that declares HTTP range request \
+                    support, falling back to streaming: {url}"
+                );
                 return true;
             }
 
@@ -240,14 +318,31 @@ impl Error {
             // The server doesn't support range requests, but we only discovered this while
             // unzipping due to erroneous server behavior.
             ErrorKind::Zip(_, ZipError::UpstreamReadError(err)) => {
-                if let Some(inner) = err.get_ref() {
-                    if let Some(inner) = inner.downcast_ref::<AsyncHttpRangeReaderError>() {
-                        if matches!(
-                            inner,
-                            AsyncHttpRangeReaderError::HttpRangeRequestUnsupported
-                        ) {
+                if let Some(inner) = err.get_ref()
+                    && let Some(range_reader_error) =
+                        inner.downcast_ref::<AsyncHttpRangeReaderError>()
+                {
+                    match range_reader_error {
+                        AsyncHttpRangeReaderError::HttpRangeRequestUnsupported
+                        | AsyncHttpRangeReaderError::ContentLengthMissing
+                        | AsyncHttpRangeReaderError::ContentRangeMissing => {
                             return true;
                         }
+                        AsyncHttpRangeReaderError::RangeMismatch { .. }
+                        | AsyncHttpRangeReaderError::ResponseTooShort { .. }
+                        | AsyncHttpRangeReaderError::ResponseTooLong { .. } => {
+                            let url = if let Some(index) = index {
+                                index.url()
+                            } else {
+                                url
+                            };
+                            warn!(
+                                "Invalid range request response from server that declares HTTP \
+                                range request support, falling back to streaming: {url}"
+                            );
+                            return true;
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -274,6 +369,7 @@ impl From<ErrorKind> for Error {
         Self {
             kind: Box::new(kind),
             retries: 0,
+            duration: Duration::default(),
         }
     }
 }
@@ -678,6 +774,17 @@ mod tests {
         assert_eq!(
             problem_details.title,
             Some("You do not have enough credit.".to_string())
+        );
+    }
+
+    #[test]
+    fn test_try_from_response_body() {
+        let body = r#"{"type": "about:blank", "status": 400, "title": "Bad Request", "detail": "Missing required field `name`"}"#;
+        let problem = ProblemDetails::try_from_response_body(body.as_bytes())
+            .expect("should parse problem details");
+        assert_eq!(
+            problem.description().unwrap(),
+            "Server message: Bad Request, Missing required field `name`"
         );
     }
 }

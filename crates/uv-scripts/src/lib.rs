@@ -7,6 +7,7 @@ use std::sync::LazyLock;
 use memchr::memmem::Finder;
 use serde::Deserialize;
 use thiserror::Error;
+use tracing::instrument;
 use url::Url;
 
 use uv_configuration::NoSources;
@@ -406,6 +407,7 @@ impl FromStr for Pep723Metadata {
     type Err = toml::de::Error;
 
     /// Parse `Pep723Metadata` from a raw TOML string.
+    #[instrument(name = "toml::from_str PEP 723 metadata", skip_all)]
     fn from_str(raw: &str) -> Result<Self, Self::Err> {
         let metadata = toml::from_str(raw)?;
         Ok(Self {

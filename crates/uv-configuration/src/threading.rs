@@ -1,6 +1,6 @@
 //! Configure rayon and determine thread stack sizes.
 
-use std::sync::LazyLock;
+use std::sync::Once;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use uv_static::EnvVars;
 
@@ -58,12 +58,15 @@ pub static RAYON_PARALLELISM: AtomicUsize = AtomicUsize::new(0);
 /// Initialize the threadpool lazily. Always call before using rayon the potentially first time.
 ///
 /// The `uv` crate sets [`RAYON_PARALLELISM`] from the user settings, and the extract and install
-/// code initialize the threadpool lazily only if they are actually used by calling
-/// `LazyLock::force(&RAYON_INITIALIZE)`.
-pub static RAYON_INITIALIZE: LazyLock<()> = LazyLock::new(|| {
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(RAYON_PARALLELISM.load(Ordering::Relaxed))
-        .stack_size(min_stack_size())
-        .build_global()
-        .expect("failed to initialize global rayon pool");
-});
+/// code initializes the threadpool lazily only if it is actually used by calling
+/// [`initialize_rayon_once`].
+pub fn initialize_rayon_once() {
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(RAYON_PARALLELISM.load(Ordering::Relaxed))
+            .stack_size(min_stack_size())
+            .build_global()
+            .expect("failed to initialize global rayon pool");
+    });
+}

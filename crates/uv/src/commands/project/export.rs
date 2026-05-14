@@ -3,7 +3,7 @@ use std::ffi::OsStr;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 use clap::ValueEnum;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -20,15 +20,15 @@ use uv_requirements::is_pylock_toml;
 use uv_resolver::{PylockToml, RequirementsTxtExport, cyclonedx_json};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
-    detect_conflicts,
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
+    default_dependency_groups, detect_conflicts,
 };
 use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
@@ -101,12 +101,13 @@ pub(crate) async fn export(
             )
             .await?
         } else if let [name] = package.as_slice() {
-            VirtualProject::Project(
-                Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                    .await?
-                    .with_current_project(name.clone())
-                    .with_context(|| format!("Package `{name}` not found in workspace"))?,
+            VirtualProject::discover_with_package(
+                project_dir,
+                &DiscoveryOptions::default(),
+                &workspace_cache,
+                name.clone(),
             )
+            .await?
         } else {
             let project = VirtualProject::discover(
                 project_dir,
@@ -162,24 +163,32 @@ pub(crate) async fn export(
             )
             .await?
             .into_interpreter(),
-            ExportTarget::Project(project) => ProjectInterpreter::discover(
-                project.workspace(),
-                project_dir,
-                &groups,
-                python.as_deref().map(PythonRequest::parse),
-                &client_builder,
-                python_preference,
-                python_downloads,
-                &install_mirrors,
-                false,
-                no_config,
-                Some(false),
-                cache,
-                printer,
-                preview,
-            )
-            .await?
-            .into_interpreter(),
+            ExportTarget::Project(project) => {
+                let workspace_python = WorkspacePython::from_request(
+                    python.as_deref().map(PythonRequest::parse),
+                    Some(project.workspace()),
+                    &groups,
+                    project_dir,
+                    no_config,
+                )
+                .await?;
+                ProjectInterpreter::discover(
+                    project.workspace(),
+                    &groups,
+                    workspace_python,
+                    &client_builder,
+                    python_preference,
+                    python_downloads,
+                    &install_mirrors,
+                    false,
+                    Some(false),
+                    cache,
+                    printer,
+                    preview,
+                )
+                .await?
+                .into_interpreter()
+            }
         })
     };
 
@@ -208,7 +217,7 @@ pub(crate) async fn export(
             &client_builder,
             &state,
             Box::new(DefaultResolveLogger),
-            concurrency,
+            &concurrency,
             cache,
             &workspace_cache,
             printer,
@@ -220,9 +229,11 @@ pub(crate) async fn export(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -443,6 +454,19 @@ fn cmd() -> String {
 
             // Skip only this argument if option and value are together
             if arg.starts_with("--upgrade-package=") || arg.starts_with("-P") {
+                // Reset state; skip this iteration.
+                *skip_next = None;
+                return Some(None);
+            }
+
+            // Always skip the `--upgrade-group` and mark the next item to be skipped
+            if arg == "--upgrade-group" {
+                *skip_next = Some(true);
+                return Some(None);
+            }
+
+            // Skip only this argument if option and value are together
+            if arg.starts_with("--upgrade-group=") {
                 // Reset state; skip this iteration.
                 *skip_next = None;
                 return Some(None);

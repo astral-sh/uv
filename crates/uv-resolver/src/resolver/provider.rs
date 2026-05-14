@@ -4,12 +4,13 @@ use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
 use uv_distribution_types::{
-    Dist, IndexCapabilities, IndexMetadata, IndexMetadataRef, InstalledDist, RequestedDist,
-    RequiresPython,
+    Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, InstalledDist,
+    RequestedDist, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Tags;
+use uv_static::EnvVars;
 use uv_types::{BuildContext, HashStrategy};
 
 use crate::ExcludeNewer;
@@ -117,6 +118,8 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     allowed_yanks: AllowedYanks,
     hasher: HashStrategy,
     exclude_newer: ExcludeNewer,
+    available_version_cutoff: Option<jiff::Timestamp>,
+    index_locations: &'a IndexLocations,
     build_options: &'a BuildOptions,
     capabilities: &'a IndexCapabilities,
 }
@@ -131,6 +134,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         allowed_yanks: AllowedYanks,
         hasher: &'a HashStrategy,
         exclude_newer: ExcludeNewer,
+        index_locations: &'a IndexLocations,
         build_options: &'a BuildOptions,
         capabilities: &'a IndexCapabilities,
     ) -> Self {
@@ -142,9 +146,24 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             allowed_yanks,
             hasher: hasher.clone(),
             exclude_newer,
+            available_version_cutoff: std::env::var(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
+                .ok()
+                .and_then(|value| value.parse().ok()),
+            index_locations,
             build_options,
             capabilities,
         }
+    }
+
+    fn effective_exclude_newer(
+        &self,
+        package_name: &PackageName,
+        index: &uv_distribution_types::IndexUrl,
+    ) -> Option<jiff::Timestamp> {
+        self.exclude_newer.exclude_newer_package_for_index(
+            package_name,
+            self.index_locations.exclude_newer_for(index),
+        )
     }
 }
 
@@ -175,27 +194,37 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             Ok(results) => Ok(VersionsResponse::Found(
                 results
                     .into_iter()
-                    .map(|(index, metadata)| match metadata {
-                        MetadataFormat::Simple(metadata) => VersionMap::from_simple_metadata(
-                            metadata,
-                            package_name,
-                            index,
-                            self.tags.as_ref(),
-                            &self.requires_python,
-                            &self.allowed_yanks,
-                            &self.hasher,
-                            Some(&self.exclude_newer),
-                            flat_index
-                                .and_then(|flat_index| flat_index.get(package_name))
-                                .cloned(),
-                            self.build_options,
-                        ),
-                        MetadataFormat::Flat(metadata) => VersionMap::from_flat_metadata(
-                            metadata,
-                            self.tags.as_ref(),
-                            &self.hasher,
-                            self.build_options,
-                        ),
+                    .map(|(index, metadata)| {
+                        let included_version_cutoff =
+                            self.effective_exclude_newer(package_name, index);
+                        let available_version_cutoff = included_version_cutoff
+                            .is_none()
+                            .then_some(self.available_version_cutoff)
+                            .flatten();
+
+                        match metadata {
+                            MetadataFormat::Simple(metadata) => VersionMap::from_simple_metadata(
+                                metadata,
+                                package_name,
+                                index,
+                                self.tags.as_ref(),
+                                &self.requires_python,
+                                &self.allowed_yanks,
+                                &self.hasher,
+                                included_version_cutoff,
+                                available_version_cutoff,
+                                flat_index
+                                    .and_then(|flat_index| flat_index.get(package_name))
+                                    .cloned(),
+                                self.build_options,
+                            ),
+                            MetadataFormat::Flat(metadata) => VersionMap::from_flat_metadata(
+                                metadata,
+                                self.tags.as_ref(),
+                                &self.hasher,
+                                self.build_options,
+                            ),
+                        }
                     })
                     .collect(),
             )),
@@ -248,6 +277,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             Err(err) => match err {
                 uv_distribution::Error::Client(client) => {
                     let retries = client.retries();
+                    let duration = client.duration();
                     match client.into_kind() {
                         uv_client::ErrorKind::Offline(_) => {
                             Ok(MetadataResponse::Unavailable(MetadataUnavailable::Offline))
@@ -262,7 +292,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                                 MetadataUnavailable::InvalidStructure(Arc::new(err)),
                             ))
                         }
-                        kind => Err(uv_client::Error::new(kind, retries).into()),
+                        kind => Err(uv_client::Error::new(kind, retries, duration).into()),
                     }
                 }
                 uv_distribution::Error::WheelMetadataVersionMismatch { .. } => {

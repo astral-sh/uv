@@ -1,15 +1,15 @@
 pub use dependency_mode::DependencyMode;
 pub use error::{ErrorTree, NoSolutionError, NoSolutionHeader, ResolveError, SentinelRange};
 pub use exclude_newer::{
-    ExcludeNewer, ExcludeNewerChange, ExcludeNewerPackage, ExcludeNewerPackageChange,
-    ExcludeNewerPackageEntry, ExcludeNewerValue, ExcludeNewerValueChange, PackageExcludeNewer,
-    PackageExcludeNewerChange,
+    ExcludeNewer, ExcludeNewerChange, ExcludeNewerOverrideChange, ExcludeNewerPackage,
+    ExcludeNewerPackageChange, ExcludeNewerPackageEntry, ExcludeNewerValueChange,
+    ExcludeNewerValueWithSpanRef, serialize_exclude_newer_package_with_spans,
 };
 pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
 pub use fork_strategy::ForkStrategy;
 pub use lock::{
-    Installable, Lock, LockError, LockVersion, Package, PackageMap, PylockToml,
+    Installable, Lock, LockError, LockVersion, Metadata, Package, PackageMap, PylockToml,
     PylockTomlErrorKind, RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay,
     VERSION, cyclonedx_json,
 };
@@ -28,6 +28,8 @@ pub use resolver::{
     ResolverProvider, VersionsResponse, WheelMetadataResult,
 };
 pub use universal_marker::{ConflictMarker, UniversalMarker};
+pub use upgrade::UpgradePackages;
+pub use uv_distribution_types::{ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue};
 pub use version_map::VersionMap;
 pub use yanks::AllowedYanks;
 
@@ -65,5 +67,6 @@ mod resolution;
 mod resolution_mode;
 mod resolver;
 mod universal_marker;
+mod upgrade;
 mod version_map;
 mod yanks;

@@ -8,9 +8,9 @@ use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_distribution_types::{
-    ConfigSettings, Diagnostic, ExtraBuildRequires, ExtraBuildVariables, InstalledDist,
-    InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings, Requirement,
-    UnresolvedRequirement, UnresolvedRequirementSpecification,
+    ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
+    InstalledDist, InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings,
+    Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -196,6 +196,7 @@ impl SitePackages {
         &self,
         markers: &ResolverMarkerEnvironment,
         tags: &Tags,
+        dependency_metadata: &DependencyMetadata,
     ) -> Result<Vec<SitePackagesDiagnostic>> {
         let mut diagnostics = Vec::new();
 
@@ -225,12 +226,19 @@ impl SitePackages {
                 };
 
                 // Determine the dependencies for the given package.
-                let Ok(metadata) = distribution.read_metadata() else {
-                    diagnostics.push(SitePackagesDiagnostic::MetadataUnavailable {
-                        package: package.clone(),
-                        path: distribution.install_path().to_owned(),
-                    });
-                    continue;
+                let metadata = if let Some(metadata) =
+                    dependency_metadata.get(package, Some(distribution.version()))
+                {
+                    Cow::Owned(metadata)
+                } else {
+                    let Ok(metadata) = distribution.read_metadata() else {
+                        diagnostics.push(SitePackagesDiagnostic::MetadataUnavailable {
+                            package: package.clone(),
+                            path: distribution.install_path().to_owned(),
+                        });
+                        continue;
+                    };
+                    Cow::Borrowed(metadata)
                 };
 
                 // Verify that the package is compatible with the current Python version.

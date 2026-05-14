@@ -5,13 +5,12 @@ use indoc::indoc;
 
 use uv_static::EnvVars;
 
-use crate::common::TestContext;
-use crate::common::uv_snapshot;
+use uv_test::uv_snapshot;
 
 /// `cache prune` should be a no-op if there's nothing out-of-date in the cache.
 #[test]
 fn prune_no_op() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio")?;
@@ -35,11 +34,10 @@ fn prune_no_op() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
 
     Ok(())
@@ -48,7 +46,7 @@ fn prune_no_op() -> Result<()> {
 /// `cache prune` should remove any stale top-level directories from the cache.
 #[test]
 fn prune_stale_directory() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio")?;
@@ -76,12 +74,11 @@ fn prune_stale_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache bucket: [CACHE_DIR]/simple-v4
     Removed 1 directory
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
 
     Ok(())
@@ -90,7 +87,7 @@ fn prune_stale_directory() -> Result<()> {
 /// `cache prune` should remove all cached environments from the cache.
 #[test]
 fn prune_cached_env() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -138,20 +135,19 @@ fn prune_cached_env() {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache environment: [CACHE_DIR]/environments-v2/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
 }
 
 /// `cache prune` should remove any stale symlink from the cache.
 #[test]
 fn prune_stale_symlink() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio")?;
@@ -164,7 +160,7 @@ fn prune_stale_symlink() -> Result<()> {
         .success();
 
     // Remove the wheels directory, causing the symlink to become stale.
-    let wheels = context.cache_dir.child("wheels-v5");
+    let wheels = context.cache_dir.child("wheels-v6");
     fs_err::remove_dir_all(wheels)?;
 
     let filters: Vec<_> = context
@@ -185,12 +181,11 @@ fn prune_stale_symlink() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed 44 files ([SIZE])
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
 
     Ok(())
@@ -198,7 +193,7 @@ fn prune_stale_symlink() -> Result<()> {
 
 #[tokio::test]
 async fn prune_force() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("typing-extensions\niniconfig")?;
@@ -217,11 +212,10 @@ async fn prune_force() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
 
     // Add a stale directory to the cache.
@@ -238,6 +232,7 @@ async fn prune_force() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Lock is busy for `[CACHE_DIR]/`
     DEBUG Cache is currently in use, proceeding due to `--force`
@@ -252,7 +247,7 @@ async fn prune_force() -> Result<()> {
 /// `cache prune --ci` should remove all unzipped archives.
 #[test]
 fn prune_unzipped() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! { r"
@@ -331,7 +326,7 @@ fn prune_unzipped() -> Result<()> {
 /// `cache prune` should remove any stale source distribution revisions.
 #[test]
 fn prune_stale_revision() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -343,12 +338,17 @@ fn prune_stale_revision() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
-    context.temp_dir.child("src").child("__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
     context.temp_dir.child("README").touch()?;
 
     let filters: Vec<_> = context
@@ -407,13 +407,15 @@ fn prune_stale_revision() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    DEBUG Skipping `pyproject.toml` in `[TEMP_DIR]/` (no `[tool]` section)
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
 
     // Uninstall and reinstall the package. We should use the cached version.

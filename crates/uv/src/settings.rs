@@ -6,26 +6,28 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use rustc_hash::FxHashSet;
+use uv_audit::service::VulnerabilityServiceFormat;
+use uv_audit::types::VulnerabilityID;
 
 use crate::commands::{PythonUpgrade, PythonUpgradeSource};
 use uv_auth::Service;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
-    AddArgs, AuthLoginArgs, AuthLogoutArgs, AuthTokenArgs, ColorChoice, ExternalCommand,
-    GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
-    PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs,
-    PythonFindArgs, PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs,
-    PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs, SyncArgs, SyncFormat, ToolDirArgs,
-    ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs,
-    VersionBumpSpec, VersionFormat,
+    AddArgs, AuditArgs, AuthLoginArgs, AuthLogoutArgs, AuthTokenArgs, ColorChoice, ExternalCommand,
+    GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe, MetadataArgs, PipCheckArgs, PipCompileArgs,
+    PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs,
+    PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs, PythonListFormat,
+    PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs, SyncArgs,
+    SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs,
+    TreeArgs, VenvArgs, VersionArgs, VersionBumpSpec, VersionFormat,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
     ResolverInstallerArgs, ToolUpgradeArgs,
     options::{
-        Flag, FlagSource, check_conflicts, flag, resolve_flag, resolver_installer_options,
-        resolver_options,
+        Flag, FlagSource, check_conflicts, flag, resolve_flag, resolve_flag_pair,
+        resolver_installer_options, resolver_options,
     },
 };
 use uv_client::Connectivity;
@@ -93,56 +95,34 @@ impl GlobalSettings {
     ) -> Self {
         let network_settings = NetworkSettings::resolve(args, workspace, environment);
         let python_preference = resolve_python_preference(args, workspace, environment);
+        let color = resolve_color(args);
         Self {
             required_version: workspace
                 .and_then(|workspace| workspace.globals.required_version.clone()),
             quiet: args.quiet,
             verbose: args.verbose,
-            color: if let Some(color_choice) = args.color {
-                // If `--color` is passed explicitly, use its value.
-                color_choice
-            } else if args.no_color {
-                // If `--no-color` is passed explicitly, disable color output.
-                ColorChoice::Never
-            } else if std::env::var_os(EnvVars::NO_COLOR)
-                .filter(|v| !v.is_empty())
-                .is_some()
-            {
-                // If the `NO_COLOR` is set, disable color output.
-                ColorChoice::Never
-            } else if std::env::var_os(EnvVars::FORCE_COLOR)
-                .filter(|v| !v.is_empty())
-                .is_some()
-                || std::env::var_os(EnvVars::CLICOLOR_FORCE)
-                    .filter(|v| !v.is_empty())
-                    .is_some()
-            {
-                // If `FORCE_COLOR` or `CLICOLOR_FORCE` is set, always enable color output.
-                ColorChoice::Always
-            } else {
-                ColorChoice::Auto
-            },
+            color,
             network_settings,
-            concurrency: Concurrency {
-                downloads: environment
+            concurrency: Concurrency::new(
+                environment
                     .concurrency
                     .downloads
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_downloads))
                     .map(NonZeroUsize::get)
                     .unwrap_or(Concurrency::DEFAULT_DOWNLOADS),
-                builds: environment
+                environment
                     .concurrency
                     .builds
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_builds))
                     .map(NonZeroUsize::get)
                     .unwrap_or_else(Concurrency::threads),
-                installs: environment
+                environment
                     .concurrency
                     .installs
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_installs))
                     .map(NonZeroUsize::get)
                     .unwrap_or_else(Concurrency::threads),
-            },
+            ),
             show_settings: args.show_settings,
             preview: Preview::from_args(
                 resolve_preview(args, workspace, environment),
@@ -174,21 +154,47 @@ impl GlobalSettings {
     }
 }
 
+/// Resolve the color choice from CLI arguments and environment variables.
+pub(crate) fn resolve_color(args: &GlobalArgs) -> ColorChoice {
+    if let Some(color_choice) = args.color {
+        // If `--color` is passed explicitly, use its value.
+        color_choice
+    } else if args.no_color {
+        // If `--no-color` is passed explicitly, disable color output.
+        ColorChoice::Never
+    } else if std::env::var_os(EnvVars::NO_COLOR)
+        .as_ref()
+        .is_some_and(|v| !v.is_empty())
+    {
+        // If the `NO_COLOR` is set, disable color output.
+        ColorChoice::Never
+    } else if std::env::var_os(EnvVars::FORCE_COLOR)
+        .as_ref()
+        .is_some_and(|v| !v.is_empty())
+        || std::env::var_os(EnvVars::CLICOLOR_FORCE)
+            .as_ref()
+            .is_some_and(|v| !v.is_empty())
+    {
+        // If `FORCE_COLOR` or `CLICOLOR_FORCE` is set, always enable color output.
+        ColorChoice::Always
+    } else {
+        ColorChoice::Auto
+    }
+}
+
 fn resolve_python_preference(
     args: &GlobalArgs,
     workspace: Option<&FilesystemOptions>,
     environment: &EnvironmentOptions,
 ) -> PythonPreference {
     // Resolve flags from CLI and environment variables.
-    let managed_python = resolve_flag(
+    let (managed_python, no_managed_python) = resolve_flag_pair(
         args.managed_python,
-        "managed-python",
-        environment.managed_python,
-    );
-    let no_managed_python = resolve_flag(
         args.no_managed_python,
+        "managed-python",
         "no-managed-python",
-        environment.no_managed_python,
+        Some(environment.managed_python),
+        Some(environment.no_managed_python),
     );
 
     // Check for conflicts between managed_python and python_preference.
@@ -213,7 +219,7 @@ fn resolve_python_preference(
 }
 
 /// Resolve the preview setting from CLI, environment, and workspace config.
-fn resolve_preview(
+pub(crate) fn resolve_preview(
     args: &GlobalArgs,
     workspace: Option<&FilesystemOptions>,
     environment: &EnvironmentOptions,
@@ -240,16 +246,18 @@ fn resolve_preview(
 pub(crate) struct NetworkSettings {
     pub(crate) connectivity: Connectivity,
     pub(crate) offline: Flag,
-    pub(crate) native_tls: bool,
+    pub(crate) system_certs: bool,
     pub(crate) http_proxy: Option<ProxyUrl>,
     pub(crate) https_proxy: Option<ProxyUrl>,
     pub(crate) no_proxy: Option<Vec<String>>,
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
-    pub(crate) timeout: Duration,
+    pub(crate) read_timeout: Duration,
+    pub(crate) connect_timeout: Duration,
     pub(crate) retries: u32,
 }
 
 impl NetworkSettings {
+    #[allow(deprecated)]
     pub(crate) fn resolve(
         args: &GlobalArgs,
         workspace: Option<&FilesystemOptions>,
@@ -282,18 +290,57 @@ impl NetworkSettings {
         } else {
             Connectivity::Online
         };
-        let native_tls = match flag(args.native_tls, args.no_native_tls, "native-tls") {
-            Some(value) => value,
-            None => {
-                if environment.native_tls.value == Some(true) {
-                    true
-                } else {
-                    workspace
-                        .and_then(|workspace| workspace.globals.native_tls)
-                        .unwrap_or(false)
-                }
-            }
-        };
+
+        if args.native_tls {
+            warn_user_once!(
+                "The `--native-tls` flag is deprecated and will be removed in a future release. Use `--system-certs` instead."
+            );
+        }
+        if args.no_native_tls {
+            warn_user_once!(
+                "The `--no-native-tls` flag is deprecated and will be removed in a future release. Use `--no-system-certs` instead."
+            );
+        }
+        if environment.native_tls.value.is_some() {
+            warn_user_once!(
+                "The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead."
+            );
+        }
+        if workspace
+            .and_then(|workspace| workspace.globals.native_tls)
+            .is_some()
+        {
+            warn_user_once!(
+                "The `native-tls` setting is deprecated and will be removed in a future release. Use `system-certs` instead."
+            );
+        }
+
+        // Resolve whether to use system certificates.
+        //
+        // `--native-tls` is a legacy alias for `--system-certs` — it enables system certificates
+        // but does NOT change the TLS backend. Any explicit CLI setting should take precedence
+        // over environment variables and workspace configuration, regardless of which spelling is
+        // used.
+        let system_certs =
+            if let Some(value) = flag(args.system_certs, args.no_system_certs, "system-certs") {
+                value
+            } else if let Some(value) = flag(args.native_tls, args.no_native_tls, "native-tls") {
+                value
+            } else if let Some(true) = environment.system_certs.value {
+                true
+            } else if let Some(true) = environment.native_tls.value {
+                true
+            } else {
+                workspace
+                    .and_then(|workspace| {
+                        workspace
+                            .globals
+                            .system_certs
+                            .or(workspace.globals.native_tls)
+                    })
+                    .unwrap_or(false)
+            };
+
         let allow_insecure_host = args
             .allow_insecure_host
             .as_ref()
@@ -318,12 +365,13 @@ impl NetworkSettings {
         Self {
             connectivity,
             offline,
-            native_tls,
+            system_certs,
             http_proxy,
             https_proxy,
             no_proxy,
             allow_insecure_host,
-            timeout: environment.http_timeout,
+            read_timeout: environment.http_read_timeout,
+            connect_timeout: environment.http_connect_timeout,
             retries: environment.http_retries,
         }
     }
@@ -428,6 +476,8 @@ impl InitSettings {
             "virtual",
         )
         .unwrap_or(kind.packaged_by_default());
+
+        let bare = resolve_flag(bare, "bare", environment.init_bare).is_enabled();
 
         let filesystem_install_mirrors = filesystem
             .map(|fs| fs.install_mirrors.clone())
@@ -625,10 +675,23 @@ impl RunSettings {
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
 
-        let dev = dev || environment.dev.value == Some(true);
-        let no_dev = no_dev || environment.no_dev.value == Some(true);
+        let (dev, no_dev) = resolve_flag_pair(
+            dev,
+            no_dev,
+            "dev",
+            "no-dev",
+            Some(environment.dev),
+            Some(environment.no_dev),
+        );
 
-        let no_editable = no_editable || environment.no_editable.value == Some(true);
+        let (editable, no_editable) = resolve_flag_pair(
+            editable,
+            no_editable,
+            "editable",
+            "no-editable",
+            None,
+            Some(environment.no_editable),
+        );
         let isolated = isolated || environment.isolated.value == Some(true);
         let show_resolution = show_resolution || environment.show_resolution.value == Some(true);
         let no_env_file = no_env_file || environment.no_env_file.value == Some(true);
@@ -646,8 +709,8 @@ impl RunSettings {
                 flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
             ),
             groups: DependencyGroups::from_args(
-                dev,
-                no_dev,
+                dev.into(),
+                no_dev.into(),
                 only_dev,
                 group,
                 no_group,
@@ -655,7 +718,7 @@ impl RunSettings {
                 only_group,
                 all_groups,
             ),
-            editable: flag(editable, no_editable, "editable").map(EditableMode::from),
+            editable: flag(editable.into(), no_editable.into(), "editable").map(EditableMode::from),
             modifications: if flag(exact, inexact, "inexact").unwrap_or(false) {
                 Modifications::Exact
             } else {
@@ -992,6 +1055,7 @@ impl ToolUpgradeSettings {
             python_platform,
             upgrade,
             upgrade_package,
+            upgrade_group,
             index_args,
             all,
             reinstall,
@@ -1031,6 +1095,7 @@ impl ToolUpgradeSettings {
             upgrade: upgrade_package.is_empty(),
             no_upgrade: false,
             upgrade_package,
+            upgrade_group,
             reinstall,
             no_reinstall,
             reinstall_package,
@@ -1088,21 +1153,32 @@ pub(crate) struct ToolListSettings {
     pub(crate) show_with: bool,
     pub(crate) show_extras: bool,
     pub(crate) show_python: bool,
+    pub(crate) outdated: bool,
+    pub(crate) args: ResolverInstallerOptions,
+    pub(crate) filesystem: ResolverInstallerOptions,
 }
 
 impl ToolListSettings {
     /// Resolve the [`ToolListSettings`] from the CLI and filesystem configuration.
-    #[expect(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ToolListArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(args: ToolListArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let ToolListArgs {
             show_paths,
             show_version_specifiers,
             show_with,
             show_extras,
             show_python,
+            outdated,
+            no_outdated,
+            exclude_newer,
             python_preference: _,
             no_python_downloads: _,
         } = args;
+
+        let filesystem = filesystem.map(FilesystemOptions::into_options);
+        let filesystem = ResolverInstallerOptions {
+            exclude_newer: filesystem.and_then(|options| options.top_level.exclude_newer),
+            ..ResolverInstallerOptions::default()
+        };
 
         Self {
             show_paths,
@@ -1110,6 +1186,12 @@ impl ToolListSettings {
             show_with,
             show_extras,
             show_python,
+            outdated: flag(outdated, no_outdated, "outdated").unwrap_or(false),
+            args: ResolverInstallerOptions {
+                exclude_newer,
+                ..ResolverInstallerOptions::default()
+            },
+            filesystem,
         }
     }
 }
@@ -1331,8 +1413,16 @@ impl PythonInstallSettings {
                 PythonUpgrade::Disabled
             },
             bin: flag(bin, no_bin, "bin").or(environment.python_install_bin),
-            registry: flag(registry, no_registry, "registry")
-                .or(environment.python_install_registry),
+            registry: match flag(registry, no_registry, "registry") {
+                Some(registry) => Some(registry),
+                None => environment.python_install_registry.or(
+                    if environment.python_no_registry.value == Some(true) {
+                        Some(false)
+                    } else {
+                        None
+                    },
+                ),
+            },
             python_install_mirror,
             pypy_install_mirror,
             python_downloads_json_url,
@@ -1389,7 +1479,13 @@ impl PythonUpgradeSettings {
         let force = false;
         let default = false;
         let bin = None;
-        let registry = None;
+        let registry = environment.python_install_registry.or(
+            if environment.python_no_registry.value == Some(true) {
+                Some(false)
+            } else {
+                None
+            },
+        );
 
         let PythonUpgradeArgs {
             install_dir,
@@ -1455,6 +1551,7 @@ impl PythonUninstallSettings {
 pub(crate) struct PythonFindSettings {
     pub(crate) request: Option<String>,
     pub(crate) show_version: bool,
+    pub(crate) resolve_links: bool,
     pub(crate) no_project: bool,
     pub(crate) system: bool,
     pub(crate) python_downloads_json_url: Option<String>,
@@ -1470,6 +1567,7 @@ impl PythonFindSettings {
         let PythonFindArgs {
             request,
             show_version,
+            resolve_links,
             no_project,
             system,
             no_system,
@@ -1497,6 +1595,7 @@ impl PythonFindSettings {
         Self {
             request,
             show_version,
+            resolve_links,
             no_project,
             system: flag(system, no_system, "system").unwrap_or_default(),
             python_downloads_json_url,
@@ -1529,11 +1628,19 @@ impl PythonPinSettings {
             no_project,
             global,
             rm,
+            python_downloads_json_url,
         } = args;
 
         let filesystem_install_mirrors = filesystem
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
+
+        let install_mirrors = PythonInstallMirrors {
+            python_downloads_json_url,
+            ..Default::default()
+        }
+        .combine(environment.install_mirrors)
+        .combine(filesystem_install_mirrors);
 
         Self {
             request,
@@ -1541,9 +1648,7 @@ impl PythonPinSettings {
             no_project,
             global,
             rm,
-            install_mirrors: environment
-                .install_mirrors
-                .combine(filesystem_install_mirrors),
+            install_mirrors,
         }
     }
 }
@@ -1645,9 +1750,22 @@ impl SyncSettings {
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
 
-        let dev = dev || environment.dev.value == Some(true);
-        let no_dev = no_dev || environment.no_dev.value == Some(true);
-        let no_editable = no_editable || environment.no_editable.value == Some(true);
+        let (dev, no_dev) = resolve_flag_pair(
+            dev,
+            no_dev,
+            "dev",
+            "no-dev",
+            Some(environment.dev),
+            Some(environment.no_dev),
+        );
+        let (editable, no_editable) = resolve_flag_pair(
+            editable,
+            no_editable,
+            "editable",
+            "no-editable",
+            None,
+            Some(environment.no_editable),
+        );
 
         Self {
             output_format,
@@ -1666,8 +1784,8 @@ impl SyncSettings {
                 flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
             ),
             groups: DependencyGroups::from_args(
-                dev,
-                no_dev,
+                dev.into(),
+                no_dev.into(),
                 only_dev,
                 group,
                 no_group,
@@ -1675,7 +1793,7 @@ impl SyncSettings {
                 only_group,
                 all_groups,
             ),
-            editable: flag(editable, no_editable, "editable").map(EditableMode::from),
+            editable: flag(editable.into(), no_editable.into(), "editable").map(EditableMode::from),
             install_options: InstallOptions::new(
                 no_install_project,
                 only_install_project,
@@ -1759,6 +1877,60 @@ impl LockSettings {
             frozen: resolve_frozen(frozen),
             dry_run: DryRun::from_args(dry_run),
             script,
+            python: python.and_then(Maybe::into_option),
+            refresh: Refresh::from(refresh),
+            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
+        }
+    }
+}
+/// The resolved settings to use for a `lock` invocation.
+#[derive(Debug, Clone)]
+pub(crate) struct MetadataSettings {
+    pub(crate) lock_check: LockCheck,
+    pub(crate) frozen: Option<FrozenSource>,
+    pub(crate) dry_run: DryRun,
+    pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: PythonInstallMirrors,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: ResolverSettings,
+}
+
+impl MetadataSettings {
+    /// Resolve the [`LockSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(
+        args: Box<MetadataArgs>,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
+        let MetadataArgs {
+            locked,
+            frozen,
+            dry_run,
+            resolver,
+            build,
+            refresh,
+            python,
+        } = *args;
+
+        let filesystem_install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
+        // Resolve flags from CLI and environment variables.
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+
+        // Check for conflicts between locked and frozen.
+        check_conflicts(locked, frozen);
+
+        Self {
+            lock_check: resolve_lock_check(locked),
+            frozen: resolve_frozen(frozen),
+            dry_run: DryRun::from_args(dry_run),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
@@ -1857,7 +2029,14 @@ impl AddSettings {
 
         // Resolve flags from CLI and environment variables.
         let dev = dev || environment.dev.value == Some(true);
-        let no_editable = no_editable || environment.no_editable.value == Some(true);
+        let (editable, no_editable) = resolve_flag_pair(
+            editable,
+            no_editable,
+            "editable",
+            "no-editable",
+            None,
+            Some(environment.no_editable),
+        );
 
         let dependency_type = if let Some(extra) = optional {
             DependencyType::Optional(extra)
@@ -1979,7 +2158,7 @@ impl AddSettings {
             only_install_local,
             no_install_package,
             only_install_package,
-            editable: flag(editable, no_editable, "editable"),
+            editable: flag(editable.into(), no_editable.into(), "editable"),
             extras: extra.unwrap_or_default(),
             refresh: Refresh::from(refresh),
             indexes,
@@ -2240,13 +2419,19 @@ impl TreeSettings {
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
 
-        let dev = dev || environment.dev.value == Some(true);
-        let no_dev = no_dev || environment.no_dev.value == Some(true);
+        let (dev, no_dev) = resolve_flag_pair(
+            dev,
+            no_dev,
+            "dev",
+            "no-dev",
+            Some(environment.dev),
+            Some(environment.no_dev),
+        );
 
         Self {
             groups: DependencyGroups::from_args(
-                dev,
-                no_dev,
+                dev.into(),
+                no_dev.into(),
                 only_dev,
                 group,
                 no_group,
@@ -2362,9 +2547,22 @@ impl ExportSettings {
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
 
-        let dev = dev || environment.dev.value == Some(true);
-        let no_dev = no_dev || environment.no_dev.value == Some(true);
-        let no_editable = no_editable || environment.no_editable.value == Some(true);
+        let (dev, no_dev) = resolve_flag_pair(
+            dev,
+            no_dev,
+            "dev",
+            "no-dev",
+            Some(environment.dev),
+            Some(environment.no_dev),
+        );
+        let (editable, no_editable) = resolve_flag_pair(
+            editable,
+            no_editable,
+            "editable",
+            "no-editable",
+            None,
+            Some(environment.no_editable),
+        );
 
         Self {
             format,
@@ -2381,8 +2579,8 @@ impl ExportSettings {
                 flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
             ),
             groups: DependencyGroups::from_args(
-                dev,
-                no_dev,
+                dev.into(),
+                no_dev.into(),
                 only_dev,
                 group,
                 no_group,
@@ -2390,7 +2588,7 @@ impl ExportSettings {
                 only_group,
                 all_groups,
             ),
-            editable: flag(editable, no_editable, "editable").map(EditableMode::from),
+            editable: flag(editable.into(), no_editable.into(), "editable").map(EditableMode::from),
             hashes: flag(hashes, no_hashes, "hashes").unwrap_or(true),
             install_options: InstallOptions::new(
                 no_emit_project,
@@ -2425,7 +2623,9 @@ pub(crate) struct FormatSettings {
     pub(crate) diff: bool,
     pub(crate) extra_args: Vec<String>,
     pub(crate) version: Option<String>,
+    pub(crate) exclude_newer: Option<jiff::Timestamp>,
     pub(crate) no_project: bool,
+    pub(crate) show_version: bool,
 }
 
 impl FormatSettings {
@@ -2436,7 +2636,9 @@ impl FormatSettings {
             diff,
             extra_args,
             version,
+            exclude_newer,
             no_project,
+            show_version,
         } = args;
 
         Self {
@@ -2444,7 +2646,119 @@ impl FormatSettings {
             diff,
             extra_args,
             version,
+            exclude_newer: exclude_newer.map(|v| v.timestamp()),
             no_project,
+            show_version,
+        }
+    }
+}
+
+/// The resolved settings to use for an `audit` invocation.
+#[derive(Debug, Clone)]
+pub(crate) struct AuditSettings {
+    pub(crate) extras: ExtrasSpecification,
+    pub(crate) groups: DependencyGroups,
+    pub(crate) lock_check: LockCheck,
+    pub(crate) frozen: Option<FrozenSource>,
+    pub(crate) python_version: Option<PythonVersion>,
+    pub(crate) python_platform: Option<TargetTriple>,
+    pub(crate) install_mirrors: PythonInstallMirrors,
+    pub(crate) settings: ResolverSettings,
+    pub(crate) service_format: VulnerabilityServiceFormat,
+    pub(crate) service_url: Option<String>,
+    pub(crate) ignore: Vec<VulnerabilityID>,
+    pub(crate) ignore_until_fixed: Vec<VulnerabilityID>,
+}
+
+impl AuditSettings {
+    /// Resolve the [`AuditSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(
+        args: AuditArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
+        let AuditArgs {
+            no_extra,
+            no_dev,
+            no_group,
+            no_default_groups,
+            only_group,
+            only_dev,
+            script: _,
+            python_version,
+            python_platform,
+            locked,
+            frozen,
+            build,
+            resolver,
+            ignore,
+            ignore_until_fixed,
+            service_format,
+            service_url,
+        } = args;
+
+        let filesystem_install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
+        let filesystem_audit = filesystem
+            .as_ref()
+            .and_then(|fs| fs.audit.clone())
+            .unwrap_or_default();
+
+        let no_dev = no_dev || environment.no_dev.value == Some(true);
+
+        // Resolve flags from CLI and environment variables.
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+
+        // Check for conflicts between locked and frozen.
+        check_conflicts(locked, frozen);
+
+        Self {
+            extras: ExtrasSpecification::from_args(
+                vec![],
+                no_extra,
+                // TODO(ww): support no_default_extras?
+                false,
+                // TODO(ww): support only_extra?
+                vec![],
+                true,
+            ),
+            groups: DependencyGroups::from_args(
+                only_group.is_empty() && !only_dev,
+                no_dev,
+                only_dev,
+                vec![],
+                no_group,
+                no_default_groups,
+                only_group.clone(),
+                only_group.is_empty() && !only_dev,
+            ),
+            lock_check: resolve_lock_check(locked),
+            frozen: resolve_frozen(frozen),
+            python_version,
+            python_platform,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
+            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            service_format,
+            service_url,
+            ignore: {
+                let config_ignore = filesystem_audit.ignore.unwrap_or_default();
+                let mut merged = ignore;
+                merged.extend(config_ignore);
+                merged.into_iter().map(VulnerabilityID::new).collect()
+            },
+            ignore_until_fixed: {
+                let config_ignore_until_fixed =
+                    filesystem_audit.ignore_until_fixed.unwrap_or_default();
+                let mut merged = ignore_until_fixed;
+                merged.extend(config_ignore_until_fixed);
+                merged.into_iter().map(VulnerabilityID::new).collect()
+            },
         }
     }
 }
@@ -2463,6 +2777,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) excludes_from_workspace: Vec<PackageName>,
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) environments: SupportedEnvironments,
+    pub(crate) required_environments: SupportedEnvironments,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
@@ -2585,6 +2900,15 @@ impl PipCompileSettings {
             SupportedEnvironments::default()
         };
 
+        let required_environments = if let Some(configuration) = &filesystem {
+            configuration
+                .required_environments
+                .clone()
+                .unwrap_or_default()
+        } else {
+            SupportedEnvironments::default()
+        };
+
         Self {
             format,
             src_file,
@@ -2609,6 +2933,7 @@ impl PipCompileSettings {
             excludes_from_workspace,
             build_constraints_from_workspace,
             environments,
+            required_environments,
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
@@ -2769,6 +3094,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) package: Vec<String>,
     pub(crate) requirements: Vec<PathBuf>,
     pub(crate) editables: Vec<String>,
+    pub(crate) editable: Option<EditableMode>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) excludes: Vec<PathBuf>,
@@ -2794,6 +3120,7 @@ impl PipInstallSettings {
             package,
             requirements,
             editable,
+            no_editable,
             constraints,
             overrides,
             excludes,
@@ -2912,6 +3239,11 @@ impl PipInstallSettings {
                 Modifications::Exact
             } else {
                 Modifications::Sufficient
+            },
+            editable: if no_editable || environment.no_editable.value == Some(true) {
+                Some(EditableMode::NonEditable)
+            } else {
+                None
             },
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
@@ -3262,6 +3594,7 @@ pub(crate) struct BuildSettings {
     pub(crate) force_pep517: bool,
     pub(crate) clear: bool,
     pub(crate) build_constraints: Vec<PathBuf>,
+    pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -3304,6 +3637,19 @@ impl BuildSettings {
             Some(fs) => fs.install_mirrors.clone(),
             None => PythonInstallMirrors::default(),
         };
+        let build_constraints_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
+                .build_constraint_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         Self {
             src,
@@ -3322,6 +3668,7 @@ impl BuildSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_constraints_from_workspace,
             hash_checking: HashCheckingMode::from_args(
                 flag(require_hashes, no_require_hashes, "require-hashes"),
                 flag(verify_hashes, no_verify_hashes, "verify-hashes"),
@@ -3347,6 +3694,7 @@ pub(crate) struct VenvSettings {
     pub(crate) prompt: Option<String>,
     pub(crate) system_site_packages: bool,
     pub(crate) relocatable: bool,
+    pub(crate) no_relocatable: bool,
     pub(crate) no_project: bool,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
@@ -3371,6 +3719,7 @@ impl VenvSettings {
             prompt,
             system_site_packages,
             relocatable,
+            no_relocatable,
             index_args,
             index_strategy,
             keyring_provider,
@@ -3384,18 +3733,34 @@ impl VenvSettings {
 
         // Resolve flags from CLI and environment variables.
         let seed = seed || environment.venv_seed.value == Some(true);
-        let clear = clear || environment.venv_clear.value == Some(true);
+        let (clear, no_clear) = resolve_flag_pair(
+            clear,
+            no_clear,
+            "clear",
+            "no-clear",
+            Some(environment.venv_clear),
+            None,
+        );
+        let (relocatable, no_relocatable) = resolve_flag_pair(
+            relocatable,
+            no_relocatable,
+            "relocatable",
+            "no-relocatable",
+            Some(environment.venv_relocatable),
+            None,
+        );
 
         Self {
             seed,
             allow_existing,
-            clear,
-            no_clear,
+            clear: clear.into(),
+            no_clear: no_clear.into(),
             path,
             prompt,
             system_site_packages,
             no_project,
-            relocatable,
+            relocatable: relocatable.into(),
+            no_relocatable: no_relocatable.into(),
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
@@ -4005,6 +4370,7 @@ impl PipSettings {
                     .flatten()
                     .map(Requirement::from)
                     .collect(),
+                Vec::new(),
             )
             .combine(Upgrade::from_args(
                 upgrade,
@@ -4013,6 +4379,7 @@ impl PipSettings {
                     .flatten()
                     .map(Requirement::from)
                     .collect(),
+                Vec::new(),
             ))
             .unwrap_or_default(),
             reinstall: Reinstall::from_args(

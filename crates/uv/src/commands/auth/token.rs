@@ -3,7 +3,7 @@ use std::fmt::Write;
 use anyhow::{Result, bail};
 use tracing::debug;
 
-use uv_auth::{AuthBackend, Service};
+use uv_auth::{AuthBackend, Service, is_default_pyx_domain};
 use uv_auth::{Credentials, PyxTokenStore};
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder};
 use uv_preview::Preview;
@@ -21,13 +21,13 @@ pub(crate) async fn token(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let pyx_store = PyxTokenStore::from_settings()?;
-    if pyx_store.is_known_domain(service.url()) {
+    if pyx_store.is_known_domain(service.url()) || is_default_pyx_domain(service.url()) {
         if username.is_some() {
             bail!("Cannot specify a username when logging in to pyx");
         }
         let client = client_builder
             .auth_integration(AuthIntegration::NoAuthMiddleware)
-            .build();
+            .build()?;
 
         pyx_refresh(&pyx_store, &client, printer).await?;
         return Ok(ExitStatus::Success);
@@ -66,7 +66,7 @@ pub(crate) async fn token(
             .await
             .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?,
         AuthBackend::TextStore(store, _lock) => store
-            .get_credentials(url, Some(&username))
+            .get_credentials(url, Some(&username))?
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?,
     };

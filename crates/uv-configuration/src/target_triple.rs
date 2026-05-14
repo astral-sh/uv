@@ -84,158 +84,262 @@ pub enum TargetTriple {
     Riscv64UnknownLinuxGnu,
 
     /// An `x86_64` target for the `manylinux2014` platform. Equivalent to `x86_64-manylinux_2_17`.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux2014"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux2014", alias = "manylinux2014_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux2014")]
     #[serde(alias = "x8664-manylinux2014")]
+    #[serde(alias = "manylinux2014_x86_64")]
     X8664Manylinux2014,
 
     /// An `x86_64` target for the `manylinux_2_17` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_17"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_17", alias = "manylinux_2_17_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_17")]
     #[serde(alias = "x8664-manylinux217")]
+    #[serde(alias = "manylinux_2_17_x86_64")]
     X8664Manylinux217,
 
     /// An `x86_64` target for the `manylinux_2_28` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_28"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_28", alias = "manylinux_2_28_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_28")]
     #[serde(alias = "x8664-manylinux228")]
+    #[serde(alias = "manylinux_2_28_x86_64")]
     X8664Manylinux228,
 
     /// An `x86_64` target for the `manylinux_2_31` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_31"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_31", alias = "manylinux_2_31_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_31")]
     #[serde(alias = "x8664-manylinux231")]
+    #[serde(alias = "manylinux_2_31_x86_64")]
     X8664Manylinux231,
 
     /// An `x86_64` target for the `manylinux_2_32` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_32"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_32", alias = "manylinux_2_32_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_32")]
     #[serde(alias = "x8664-manylinux232")]
+    #[serde(alias = "manylinux_2_32_x86_64")]
     X8664Manylinux232,
 
     /// An `x86_64` target for the `manylinux_2_33` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_33"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_33", alias = "manylinux_2_33_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_33")]
     #[serde(alias = "x8664-manylinux233")]
+    #[serde(alias = "manylinux_2_33_x86_64")]
     X8664Manylinux233,
 
     /// An `x86_64` target for the `manylinux_2_34` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_34"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_34", alias = "manylinux_2_34_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_34")]
     #[serde(alias = "x8664-manylinux234")]
+    #[serde(alias = "manylinux_2_34_x86_64")]
     X8664Manylinux234,
 
     /// An `x86_64` target for the `manylinux_2_35` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_35"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_35", alias = "manylinux_2_35_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_35")]
     #[serde(alias = "x8664-manylinux235")]
+    #[serde(alias = "manylinux_2_35_x86_64")]
     X8664Manylinux235,
 
     /// An `x86_64` target for the `manylinux_2_36` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_36"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_36", alias = "manylinux_2_36_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_36")]
     #[serde(alias = "x8664-manylinux236")]
+    #[serde(alias = "manylinux_2_36_x86_64")]
     X8664Manylinux236,
 
     /// An `x86_64` target for the `manylinux_2_37` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_37"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_37", alias = "manylinux_2_37_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_37")]
     #[serde(alias = "x8664-manylinux237")]
+    #[serde(alias = "manylinux_2_37_x86_64")]
     X8664Manylinux237,
 
     /// An `x86_64` target for the `manylinux_2_38` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_38"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_38", alias = "manylinux_2_38_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_38")]
     #[serde(alias = "x8664-manylinux238")]
+    #[serde(alias = "manylinux_2_38_x86_64")]
     X8664Manylinux238,
 
     /// An `x86_64` target for the `manylinux_2_39` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_39"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_39", alias = "manylinux_2_39_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_39")]
     #[serde(alias = "x8664-manylinux239")]
+    #[serde(alias = "manylinux_2_39_x86_64")]
     X8664Manylinux239,
 
     /// An `x86_64` target for the `manylinux_2_40` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_40"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_40", alias = "manylinux_2_40_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_40")]
     #[serde(alias = "x8664-manylinux240")]
+    #[serde(alias = "manylinux_2_40_x86_64")]
     X8664Manylinux240,
 
     /// An ARM64 target for the `manylinux2014` platform. Equivalent to `aarch64-manylinux_2_17`.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux2014"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux2014", alias = "manylinux2014_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux2014")]
+    #[serde(alias = "manylinux2014_aarch64")]
     Aarch64Manylinux2014,
 
     /// An ARM64 target for the `manylinux_2_17` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_17"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_17", alias = "manylinux_2_17_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_17")]
     #[serde(alias = "aarch64-manylinux217")]
+    #[serde(alias = "manylinux_2_17_aarch64")]
     Aarch64Manylinux217,
 
     /// An ARM64 target for the `manylinux_2_28` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_28"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_28", alias = "manylinux_2_28_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_28")]
     #[serde(alias = "aarch64-manylinux228")]
+    #[serde(alias = "manylinux_2_28_aarch64")]
     Aarch64Manylinux228,
 
     /// An ARM64 target for the `manylinux_2_31` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_31"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_31", alias = "manylinux_2_31_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_31")]
     #[serde(alias = "aarch64-manylinux231")]
+    #[serde(alias = "manylinux_2_31_aarch64")]
     Aarch64Manylinux231,
 
     /// An ARM64 target for the `manylinux_2_32` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_32"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_32", alias = "manylinux_2_32_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_32")]
     #[serde(alias = "aarch64-manylinux232")]
+    #[serde(alias = "manylinux_2_32_aarch64")]
     Aarch64Manylinux232,
 
     /// An ARM64 target for the `manylinux_2_33` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_33"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_33", alias = "manylinux_2_33_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_33")]
     #[serde(alias = "aarch64-manylinux233")]
+    #[serde(alias = "manylinux_2_33_aarch64")]
     Aarch64Manylinux233,
 
     /// An ARM64 target for the `manylinux_2_34` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_34"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_34", alias = "manylinux_2_34_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_34")]
     #[serde(alias = "aarch64-manylinux234")]
+    #[serde(alias = "manylinux_2_34_aarch64")]
     Aarch64Manylinux234,
 
     /// An ARM64 target for the `manylinux_2_35` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_35"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_35", alias = "manylinux_2_35_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_35")]
     #[serde(alias = "aarch64-manylinux235")]
+    #[serde(alias = "manylinux_2_35_aarch64")]
     Aarch64Manylinux235,
 
     /// An ARM64 target for the `manylinux_2_36` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_36"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_36", alias = "manylinux_2_36_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_36")]
     #[serde(alias = "aarch64-manylinux236")]
+    #[serde(alias = "manylinux_2_36_aarch64")]
     Aarch64Manylinux236,
 
     /// An ARM64 target for the `manylinux_2_37` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_37"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_37", alias = "manylinux_2_37_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_37")]
     #[serde(alias = "aarch64-manylinux237")]
+    #[serde(alias = "manylinux_2_37_aarch64")]
     Aarch64Manylinux237,
 
     /// An ARM64 target for the `manylinux_2_38` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_38"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_38", alias = "manylinux_2_38_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_38")]
     #[serde(alias = "aarch64-manylinux238")]
+    #[serde(alias = "manylinux_2_38_aarch64")]
     Aarch64Manylinux238,
 
     /// An ARM64 target for the `manylinux_2_39` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_39"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_39", alias = "manylinux_2_39_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_39")]
     #[serde(alias = "aarch64-manylinux239")]
+    #[serde(alias = "manylinux_2_39_aarch64")]
     Aarch64Manylinux239,
 
     /// An ARM64 target for the `manylinux_2_40` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_40"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_40", alias = "manylinux_2_40_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_40")]
     #[serde(alias = "aarch64-manylinux240")]
+    #[serde(alias = "manylinux_2_40_aarch64")]
     Aarch64Manylinux240,
 
     /// An ARM64 Android target.

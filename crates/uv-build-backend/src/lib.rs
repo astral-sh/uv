@@ -20,7 +20,7 @@ use thiserror::Error;
 use tracing::debug;
 use walkdir::DirEntry;
 
-use uv_fs::Simplified;
+use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::PortableGlobError;
 use uv_normalize::PackageName;
 use uv_pypi_types::{Identifier, IdentifierParseError};
@@ -62,7 +62,7 @@ pub enum Error {
         err: walkdir::Error,
     },
     #[error("Failed to write wheel zip archive")]
-    Zip(#[from] zip::result::ZipError),
+    AsyncZip(#[from] async_zip::error::ZipError),
     #[error("Failed to write RECORD file")]
     Csv(#[from] csv::Error),
     #[error("Failed to write JSON metadata file")]
@@ -276,14 +276,12 @@ fn find_roots(
     namespace: bool,
     show_warnings: bool,
 ) -> Result<(PathBuf, Vec<PathBuf>), Error> {
-    let relative_module_root = uv_fs::normalize_path(relative_module_root);
+    let relative_module_root = normalize_path(relative_module_root);
     // Check that even if a path contains `..`, we only include files below the module root.
-    if !uv_fs::normalize_path(&source_tree.join(&relative_module_root))
-        .starts_with(uv_fs::normalize_path(source_tree))
-    {
+    let src_root = source_tree.join(&relative_module_root);
+    if !normalize_path(&src_root).starts_with(normalize_path(source_tree)) {
         return Err(Error::InvalidModuleRoot(relative_module_root.to_path_buf()));
     }
-    let src_root = source_tree.join(&relative_module_root);
     debug!("Source root: {}", src_root.user_display());
 
     if namespace {
@@ -441,19 +439,21 @@ pub(crate) fn error_on_venv(file_name: &OsStr, path: &Path) -> Result<(), Error>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_zip::base::read::mem::ZipFileReader;
     use flate2::bufread::GzDecoder;
     use fs_err::File;
+    use futures_lite::future::block_on;
     use indoc::indoc;
     use insta::assert_snapshot;
     use itertools::Itertools;
     use regex::Regex;
     use sha2::Digest;
-    use std::io::{BufReader, Read};
+    use std::io::BufReader;
     use std::iter;
     use tempfile::TempDir;
     use uv_distribution_filename::{SourceDistFilename, WheelFilename};
     use uv_fs::{copy_dir_all, relative_to};
-    use uv_preview::{Preview, PreviewFeature};
+    use uv_preview::PreviewFeature;
 
     const MOCK_UV_VERSION: &str = "1.0.0+test";
 
@@ -480,13 +480,21 @@ mod tests {
 
     /// Run both a direct wheel build and an indirect wheel build through a source distribution,
     /// while checking that directly built wheel and indirectly built wheel are the same.
-    fn build(source_root: &Path, dist: &Path, preview: Preview) -> Result<BuildResults, Error> {
+    fn build(
+        source_root: &Path,
+        dist: &Path,
+        preview_features: &[PreviewFeature],
+    ) -> Result<BuildResults, Error> {
         // Build a direct wheel, capture all its properties to compare it with the indirect wheel
         // latest and remove it since it has the same filename as the indirect wheel.
-        let (_name, direct_wheel_list_files) =
-            list_wheel(source_root, MOCK_UV_VERSION, false, preview)?;
-        let direct_wheel_filename =
-            build_wheel(source_root, dist, None, MOCK_UV_VERSION, false, preview)?;
+        let (_name, direct_wheel_list_files) = {
+            let _preview = uv_preview::test::with_features(preview_features);
+            list_wheel(source_root, MOCK_UV_VERSION, false)?
+        };
+        let direct_wheel_filename = {
+            let _preview = uv_preview::test::with_features(preview_features);
+            build_wheel(source_root, dist, None, MOCK_UV_VERSION, false)?
+        };
         let direct_wheel_path = dist.join(direct_wheel_filename.to_string());
         let direct_wheel_contents = wheel_contents(&direct_wheel_path);
         let direct_wheel_hash = sha2::Sha256::digest(fs_err::read(&direct_wheel_path)?);
@@ -497,7 +505,10 @@ mod tests {
             list_source_dist(source_root, MOCK_UV_VERSION, false)?;
         // TODO(konsti): This should run in the unpacked source dist tempdir, but we need to
         // normalize the path.
-        let (_name, wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION, false, preview)?;
+        let (_name, wheel_list_files) = {
+            let _preview = uv_preview::test::with_features(preview_features);
+            list_wheel(source_root, MOCK_UV_VERSION, false)?
+        };
         let source_dist_filename = build_source_dist(source_root, dist, MOCK_UV_VERSION, false)?;
         let source_dist_path = dist.join(source_dist_filename.to_string());
         let source_dist_contents = sdist_contents(&source_dist_path);
@@ -512,14 +523,16 @@ mod tests {
             source_dist_filename.name.as_dist_info_name(),
             source_dist_filename.version
         ));
-        let wheel_filename = build_wheel(
-            &sdist_top_level_directory,
-            dist,
-            None,
-            MOCK_UV_VERSION,
-            false,
-            preview,
-        )?;
+        let wheel_filename = {
+            let _preview = uv_preview::test::with_features(preview_features);
+            build_wheel(
+                &sdist_top_level_directory,
+                dist,
+                None,
+                MOCK_UV_VERSION,
+                false,
+            )?
+        };
         let wheel_contents = wheel_contents(&dist.join(wheel_filename.to_string()));
 
         // Check that direct and indirect wheels are identical.
@@ -543,7 +556,7 @@ mod tests {
 
     fn build_err(source_root: &Path) -> String {
         let dist = TempDir::new().unwrap();
-        let build_err = build(source_root, dist.path(), Preview::default()).unwrap_err();
+        let build_err = build(source_root, dist.path(), &[]).unwrap_err();
         let err_message: String = format_err(&build_err)
             .replace(&source_root.user_display().to_string(), "[TEMP_PATH]")
             .replace('\\', "/");
@@ -571,13 +584,55 @@ mod tests {
     }
 
     fn wheel_contents(direct_output_dir: &Path) -> Vec<String> {
-        let wheel = zip::ZipArchive::new(File::open(direct_output_dir).unwrap()).unwrap();
+        let wheel = block_on(read_wheel(direct_output_dir));
         let mut wheel_contents: Vec<_> = wheel
-            .file_names()
-            .map(|path| path.replace('\\', "/"))
+            .file()
+            .entries()
+            .iter()
+            .map(|entry| {
+                entry
+                    .filename()
+                    .as_str()
+                    .expect("wheel filenames should be UTF-8")
+                    .replace('\\', "/")
+            })
             .collect();
         wheel_contents.sort_unstable();
         wheel_contents
+    }
+
+    fn wheel_entry(wheel_path: &Path, filename: &str) -> String {
+        block_on(async {
+            let wheel = read_wheel(wheel_path).await;
+            let index = wheel
+                .file()
+                .entries()
+                .iter()
+                .position(|entry| {
+                    entry
+                        .filename()
+                        .as_str()
+                        .is_ok_and(|entry_filename| entry_filename == filename)
+                })
+                .expect("wheel entry should exist");
+
+            let mut reader = wheel
+                .reader_with_entry(index)
+                .await
+                .expect("wheel entry should be readable");
+            let mut contents = String::new();
+            reader
+                .read_to_string_checked(&mut contents)
+                .await
+                .expect("wheel entry should be valid UTF-8");
+            contents
+        })
+    }
+
+    async fn read_wheel(wheel_path: &Path) -> ZipFileReader {
+        ZipFileReader::new(fs_err::read(wheel_path).expect("wheel should be readable"))
+            .await
+            .expect("wheel should be valid")
     }
 
     fn format_file_list(file_list: FileList, src: &Path) -> String {
@@ -660,7 +715,7 @@ mod tests {
 
         // Perform both the direct and the indirect build.
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path(), Preview::default()).unwrap();
+        let build = build(src.path(), dist.path(), &[]).unwrap();
 
         let source_dist_path = dist.path().join(build.source_dist_filename.to_string());
         assert_eq!(
@@ -670,7 +725,7 @@ mod tests {
         // Check that the source dist is reproducible across platforms.
         assert_snapshot!(
             format!("{:x}", sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())),
-            @"bb74bff575b135bb39e5c9bce56349441fb0923bb8857e32a5eaf34ec1843967"
+            @"8bed1f7a8059064bcbeedb61a867cca7f63a474306011d0114280de631ac705e"
         );
         // Check both the files we report and the actual files
         assert_snapshot!(format_file_list(build.source_dist_list_files, src.path()), @"
@@ -724,7 +779,7 @@ mod tests {
         // Check that the wheel is reproducible across platforms.
         assert_snapshot!(
             format!("{:x}", sha2::Sha256::digest(fs_err::read(&wheel_path).unwrap())),
-            @"dbe56fd8bd52184095b2e0ea3e83c95d1bc8b4aa53cf469cec5af62251b24abb"
+            @"9e8d80fef76be79a7fe73a2ccac3bdd0132b10fdcff7271ca8b868c99061b8ce"
         );
         assert_snapshot!(build.wheel_contents.join("\n"), @"
         built_by_uv-0.1.0.data/data/
@@ -768,13 +823,7 @@ mod tests {
         built_by_uv-0.1.0.dist-info/METADATA (generated)
         ");
 
-        let mut wheel = zip::ZipArchive::new(File::open(wheel_path).unwrap()).unwrap();
-        let mut record = String::new();
-        wheel
-            .by_name("built_by_uv-0.1.0.dist-info/RECORD")
-            .unwrap()
-            .read_to_string(&mut record)
-            .unwrap();
+        let record = wheel_entry(&wheel_path, "built_by_uv-0.1.0.dist-info/RECORD");
         assert_snapshot!(record, @"
         built_by_uv/__init__.py,sha256=AJ7XpTNWxYktP97ydb81UpnNqoebH7K4sHRakAMQKG4,44
         built_by_uv/arithmetic/__init__.py,sha256=x2agwFbJAafc9Z6TdJ0K6b6bLMApQdvRSQjP4iy7IEI,67
@@ -835,26 +884,21 @@ mod tests {
         let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
         let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
         source_dist.unpack(sdist_tree.path()).unwrap();
-        build_wheel(
-            &sdist_tree.path().join("pep_pep639_license-1.0.0"),
-            output_dir.path(),
-            None,
-            "0.5.15",
-            false,
-            Preview::default(),
-        )
-        .unwrap();
+        {
+            let _preview = uv_preview::test::with_features(&[]);
+            build_wheel(
+                &sdist_tree.path().join("pep_pep639_license-1.0.0"),
+                output_dir.path(),
+                None,
+                "0.5.15",
+                false,
+            )
+            .unwrap();
+        }
         let wheel = output_dir
             .path()
             .join("pep_pep639_license-1.0.0-py3-none-any.whl");
-        let mut wheel = zip::ZipArchive::new(File::open(wheel).unwrap()).unwrap();
-
-        let mut metadata = String::new();
-        wheel
-            .by_name("pep_pep639_license-1.0.0.dist-info/METADATA")
-            .unwrap()
-            .read_to_string(&mut metadata)
-            .unwrap();
+        let metadata = wheel_entry(&wheel, "pep_pep639_license-1.0.0.dist-info/METADATA");
 
         assert_snapshot!(metadata, @"
         Metadata-Version: 2.3
@@ -893,40 +937,35 @@ mod tests {
         .unwrap();
 
         // Prepare the metadata.
-        let metadata_dir = TempDir::new().unwrap();
-        let dist_info_dir = metadata(
-            src.path(),
-            metadata_dir.path(),
-            "0.5.15",
-            Preview::default(),
-        )
-        .unwrap();
+        let metadata_dir = {
+            let _preview = uv_preview::test::with_features(&[]);
+            TempDir::new().unwrap()
+        };
+        let dist_info_dir = {
+            let _preview = uv_preview::test::with_features(&[]);
+            metadata(src.path(), metadata_dir.path(), "0.5.15").unwrap()
+        };
         let metadata_prepared =
             fs_err::read_to_string(metadata_dir.path().join(&dist_info_dir).join("METADATA"))
                 .unwrap();
 
         // Build the wheel, using the prepared metadata directory.
         let output_dir = TempDir::new().unwrap();
-        build_wheel(
-            src.path(),
-            output_dir.path(),
-            Some(&metadata_dir.path().join(&dist_info_dir)),
-            "0.5.15",
-            false,
-            Preview::default(),
-        )
-        .unwrap();
+        {
+            let _preview = uv_preview::test::with_features(&[]);
+            build_wheel(
+                src.path(),
+                output_dir.path(),
+                Some(&metadata_dir.path().join(&dist_info_dir)),
+                "0.5.15",
+                false,
+            )
+            .unwrap();
+        }
         let wheel = output_dir
             .path()
             .join("two_step_build-1.0.0-py3-none-any.whl");
-        let mut wheel = zip::ZipArchive::new(File::open(wheel).unwrap()).unwrap();
-
-        let mut metadata_wheel = String::new();
-        wheel
-            .by_name("two_step_build-1.0.0.dist-info/METADATA")
-            .unwrap()
-            .read_to_string(&mut metadata_wheel)
-            .unwrap();
+        let metadata_wheel = wheel_entry(&wheel, "two_step_build-1.0.0.dist-info/METADATA");
 
         assert_eq!(metadata_prepared, metadata_wheel);
 
@@ -963,7 +1002,7 @@ mod tests {
         File::create(src.path().join("two_step_build").join("__init__.py")).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build1 = build(src.path(), dist.path(), Preview::default()).unwrap();
+        let build1 = build(src.path(), dist.path(), &[]).unwrap();
 
         assert_snapshot!(build1.source_dist_contents.join("\n"), @"
         two_step_build-1.0.0/
@@ -1002,7 +1041,7 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build2 = build(src.path(), dist.path(), Preview::default()).unwrap();
+        let build2 = build(src.path(), dist.path(), &[]).unwrap();
         assert_eq!(build1, build2);
     }
 
@@ -1029,7 +1068,7 @@ mod tests {
         File::create(src.path().join("src").join("camelCase").join("__init__.py")).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build1 = build(src.path(), dist.path(), Preview::default()).unwrap();
+        let build1 = build(src.path(), dist.path(), &[]).unwrap();
 
         assert_snapshot!(build1.wheel_contents.join("\n"), @"
         camelCase/
@@ -1046,7 +1085,7 @@ mod tests {
             pyproject_toml.replace("camelCase", "camel_case"),
         )
         .unwrap();
-        let build_err = build(src.path(), dist.path(), Preview::default()).unwrap_err();
+        let build_err = build(src.path(), dist.path(), &[]).unwrap_err();
         let err_message = format_err(&build_err)
             .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
             .replace('\\', "/");
@@ -1083,14 +1122,10 @@ mod tests {
         assert!(sdist_result.is_err());
 
         // Wheel build should fail
-        let wheel_result = build_wheel(
-            src.path(),
-            dist.path(),
-            None,
-            MOCK_UV_VERSION,
-            false,
-            Preview::default(),
-        );
+        let wheel_result = {
+            let _preview = uv_preview::test::with_features(&[]);
+            build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false)
+        };
         assert!(wheel_result.is_err());
 
         // dist directory should be empty (no partial files)
@@ -1134,14 +1169,10 @@ mod tests {
         let sdist_result = build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false);
         assert!(sdist_result.is_err());
 
-        let wheel_result = build_wheel(
-            src.path(),
-            dist.path(),
-            None,
-            MOCK_UV_VERSION,
-            false,
-            Preview::default(),
-        );
+        let wheel_result = {
+            let _preview = uv_preview::test::with_features(&[]);
+            build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false)
+        };
         assert!(wheel_result.is_err());
 
         // Verify pre-existing files were deleted
@@ -1194,15 +1225,10 @@ mod tests {
 
         // Build should succeed and overwrite existing files
         build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false).unwrap();
-        build_wheel(
-            src.path(),
-            dist.path(),
-            None,
-            MOCK_UV_VERSION,
-            false,
-            Preview::default(),
-        )
-        .unwrap();
+        {
+            let _preview = uv_preview::test::with_features(&[]);
+            build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false).unwrap();
+        }
 
         // Verify files were overwritten (content should be different)
         assert_ne!(
@@ -1246,7 +1272,7 @@ mod tests {
         fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build_err = build(src.path(), dist.path(), Preview::default()).unwrap_err();
+        let build_err = build(src.path(), dist.path(), &[]).unwrap_err();
         let err_message = format_err(&build_err);
         assert_snapshot!(
             err_message,
@@ -1282,7 +1308,7 @@ mod tests {
         File::create(&regular_init_py).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build_err = build(src.path(), dist.path(), Preview::default()).unwrap_err();
+        let build_err = build(src.path(), dist.path(), &[]).unwrap_err();
         let err_message = format_err(&build_err)
             .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
             .replace('\\', "/");
@@ -1301,7 +1327,7 @@ mod tests {
         )
         .unwrap();
 
-        let build1 = build(src.path(), dist.path(), Preview::default()).unwrap();
+        let build1 = build(src.path(), dist.path(), &[]).unwrap();
         assert_snapshot!(build1.wheel_contents.join("\n"), @"
         stuffed_bird-stubs/
         stuffed_bird-stubs/__init__.pyi
@@ -1327,7 +1353,7 @@ mod tests {
         };
         fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
 
-        let build2 = build(src.path(), dist.path(), Preview::default()).unwrap();
+        let build2 = build(src.path(), dist.path(), &[]).unwrap();
         assert_eq!(build1.wheel_contents, build2.wheel_contents);
     }
 
@@ -1381,7 +1407,7 @@ mod tests {
         fs_err::remove_file(bogus_init_py).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build1 = build(src.path(), dist.path(), Preview::default()).unwrap();
+        let build1 = build(src.path(), dist.path(), &[]).unwrap();
         assert_snapshot!(build1.source_dist_contents.join("\n"), @"
         simple_namespace_part-1.0.0/
         simple_namespace_part-1.0.0/PKG-INFO
@@ -1418,7 +1444,7 @@ mod tests {
         };
         fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
 
-        let build2 = build(src.path(), dist.path(), Preview::default()).unwrap();
+        let build2 = build(src.path(), dist.path(), &[]).unwrap();
         assert_eq!(build1, build2);
     }
 
@@ -1472,7 +1498,7 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build1 = build(src.path(), dist.path(), Preview::default()).unwrap();
+        let build1 = build(src.path(), dist.path(), &[]).unwrap();
         assert_snapshot!(build1.wheel_contents.join("\n"), @"
         complex_namespace-1.0.0.dist-info/
         complex_namespace-1.0.0.dist-info/METADATA
@@ -1502,7 +1528,7 @@ mod tests {
         };
         fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
 
-        let build2 = build(src.path(), dist.path(), Preview::default()).unwrap();
+        let build2 = build(src.path(), dist.path(), &[]).unwrap();
         assert_eq!(build1, build2);
     }
 
@@ -1543,7 +1569,7 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path(), Preview::default()).unwrap();
+        let build = build(src.path(), dist.path(), &[]).unwrap();
         assert_snapshot!(build.wheel_contents.join("\n"), @"
         cloud-stubs/
         cloud-stubs/db/
@@ -1640,7 +1666,7 @@ mod tests {
         fs_err::remove_file(bogus_init_py).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path(), Preview::default()).unwrap();
+        let build = build(src.path(), dist.path(), &[]).unwrap();
         assert_snapshot!(build.source_dist_contents.join("\n"), @"
         simple_namespace_part-1.0.0/
         simple_namespace_part-1.0.0/PKG-INFO
@@ -1754,7 +1780,7 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path(), Preview::default()).unwrap();
+        let build = build(src.path(), dist.path(), &[]).unwrap();
         assert_snapshot!(build.source_dist_contents.join("\n"), @"
         duplicate-1.0.0/
         duplicate-1.0.0/PKG-INFO
@@ -1807,12 +1833,7 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build = build(
-            src.path(),
-            dist.path(),
-            Preview::new(&[PreviewFeature::MetadataJson]),
-        )
-        .unwrap();
+        let build = build(src.path(), dist.path(), &[PreviewFeature::MetadataJson]).unwrap();
 
         assert_snapshot!(build.wheel_contents.join("\n"), @"
         metadata_json_preview-1.0.0.dist-info/

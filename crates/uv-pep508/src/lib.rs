@@ -78,7 +78,7 @@ pub enum Pep508ErrorSource<T: Pep508Url = VerbatimUrl> {
     String(String),
     /// A URL parsing error.
     #[error(transparent)]
-    UrlError(T::Err),
+    UrlError(Box<T::Err>),
     /// The version requirement is not supported.
     #[error("{0}")]
     UnsupportedRequirement(String),
@@ -151,69 +151,56 @@ impl<T: Pep508Url> Requirement<T> {
 
     /// Returns a [`Display`] implementation that doesn't mask credentials.
     pub fn displayable_with_credentials(&self) -> impl Display {
-        RequirementDisplay {
-            requirement: self,
-            display_credentials: true,
-        }
+        std::fmt::from_fn(|f| fmt_requirement(self, f, true))
     }
 }
 
 impl<T: Pep508Url + Display> Display for Requirement<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        RequirementDisplay {
-            requirement: self,
-            display_credentials: false,
-        }
-        .fmt(f)
+        fmt_requirement(self, f, false)
     }
 }
 
-struct RequirementDisplay<'a, T>
-where
-    T: Pep508Url + Display,
-{
-    requirement: &'a Requirement<T>,
+fn fmt_requirement<T: Pep508Url + Display>(
+    requirement: &Requirement<T>,
+    f: &mut Formatter<'_>,
     display_credentials: bool,
-}
-
-impl<T: Pep508Url + Display> Display for RequirementDisplay<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.requirement.name)?;
-        if !self.requirement.extras.is_empty() {
-            write!(
-                f,
-                "[{}]",
-                self.requirement
-                    .extras
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(",")
-            )?;
-        }
-        if let Some(version_or_url) = &self.requirement.version_or_url {
-            match version_or_url {
-                VersionOrUrl::VersionSpecifier(version_specifier) => {
-                    let version_specifier: Vec<String> =
-                        version_specifier.iter().map(ToString::to_string).collect();
-                    write!(f, "{}", version_specifier.join(","))?;
-                }
-                VersionOrUrl::Url(url) => {
-                    let url_string = if self.display_credentials {
-                        url.displayable_with_credentials().to_string()
-                    } else {
-                        url.to_string()
-                    };
-                    // We add the space for markers later if necessary
-                    write!(f, " @ {url_string}")?;
-                }
+) -> std::fmt::Result {
+    write!(f, "{}", requirement.name)?;
+    if !requirement.extras.is_empty() {
+        write!(
+            f,
+            "[{}]",
+            requirement
+                .extras
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        )?;
+    }
+    if let Some(version_or_url) = &requirement.version_or_url {
+        match version_or_url {
+            VersionOrUrl::VersionSpecifier(version_specifier) => {
+                let version_specifier: Vec<String> =
+                    version_specifier.iter().map(ToString::to_string).collect();
+                write!(f, "{}", version_specifier.join(","))?;
+            }
+            VersionOrUrl::Url(url) => {
+                let url_string = if display_credentials {
+                    url.displayable_with_credentials().to_string()
+                } else {
+                    url.to_string()
+                };
+                // We add the space for markers later if necessary
+                write!(f, " @ {url_string}")?;
             }
         }
-        if let Some(marker) = self.requirement.marker.contents() {
-            write!(f, " ; {marker}")?;
-        }
-        Ok(())
     }
+    if let Some(marker) = requirement.marker.contents() {
+        write!(f, " ; {marker}")?;
+    }
+    Ok(())
 }
 
 /// <https://github.com/serde-rs/serde/issues/908#issuecomment-298027413>
@@ -792,7 +779,7 @@ fn parse_url<T: Pep508Url>(
     }
 
     let url = T::parse_url(url, working_dir).map_err(|err| Pep508Error {
-        message: Pep508ErrorSource::UrlError(err),
+        message: Pep508ErrorSource::UrlError(Box::new(err)),
         start,
         len,
         input: cursor.to_string(),
@@ -1084,7 +1071,6 @@ impl<T: Pep508Url + Display, D: rkyv::rancor::Fallible + ?Sized>
 mod tests {
     //! Half of these tests are copied from <https://github.com/pypa/packaging/pull/624>
 
-    use std::env;
     use std::str::FromStr;
 
     use insta::assert_snapshot;
@@ -1822,7 +1808,7 @@ mod tests {
             "foo @ file:foo-3.0.0-py3-none-any.whl",
             "foo @ ./foo-3.0.0-py3-none-any.whl",
         ];
-        let cwd = env::current_dir().unwrap();
+        let cwd = std::env::current_dir().unwrap();
 
         for requirement in requirements {
             assert_eq!(

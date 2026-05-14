@@ -2266,7 +2266,19 @@ impl<'a> Parser<'a> {
         if digits.is_empty() {
             return Ok(None);
         }
-        Ok(Some(parse_u64(digits)?))
+        let n = parse_u64(digits)?;
+        // Reject `u64::MAX` to prevent arithmetic overflow in downstream code
+        // that computes `segment + 1` (e.g., `~=` upper bound, `==*` upper
+        // bound, `python_version` marker algebra). This only applies to version
+        // segments (release, epoch, pre/post/dev), not local version segments
+        // which don't undergo arithmetic.
+        if n == u64::MAX {
+            return Err(ErrorKind::NumberTooBig {
+                bytes: digits.to_vec(),
+            }
+            .into());
+        }
+        Ok(Some(n))
     }
 
     /// Turns whatever state has been gathered into a `VersionPattern`.
@@ -2581,7 +2593,7 @@ impl std::fmt::Display for VersionParseError {
                     f,
                     "expected number less than or equal to {}, \
                      but number found in {string:?} exceeds it",
-                    u64::MAX,
+                    u64::MAX - 1,
                 )
             }
             ErrorKind::NoLeadingNumber => {
@@ -4182,6 +4194,7 @@ mod tests {
         assert_eq!(p("10a"), Err(ErrorKind::InvalidDigit { got: b'a' }.into()));
         assert_eq!(p("10["), Err(ErrorKind::InvalidDigit { got: b'[' }.into()));
         assert_eq!(p("10/"), Err(ErrorKind::InvalidDigit { got: b'/' }.into()));
+        // u64::MAX + 1 is rejected (overflow during parsing).
         assert_eq!(
             p("18446744073709551616"),
             Err(ErrorKind::NumberTooBig {
@@ -4205,36 +4218,29 @@ mod tests {
         );
     }
 
-    /// Wraps a `Version` and provides a more "bloated" debug but standard
-    /// representation.
-    ///
-    /// We don't do this by default because it takes up a ton of space, and
-    /// just printing out the display version of the version is quite a bit
-    /// simpler.
-    ///
-    /// Nevertheless, when *testing* version parsing, you really want to
-    /// be able to peek at all of its constituent parts. So we use this in
-    /// assertion failure messages.
-    struct VersionBloatedDebug<'a>(&'a Version);
-
-    impl std::fmt::Debug for VersionBloatedDebug<'_> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("Version")
-                .field("epoch", &self.0.epoch())
-                .field("release", &&*self.0.release())
-                .field("pre", &self.0.pre())
-                .field("post", &self.0.post())
-                .field("dev", &self.0.dev())
-                .field("local", &self.0.local())
-                .field("min", &self.0.min())
-                .field("max", &self.0.max())
-                .finish()
-        }
-    }
-
     impl Version {
+        /// Returns a more "bloated" debug representation of this [`Version`].
+        ///
+        /// We don't do this by default because it takes up a ton of space, and
+        /// just printing out the display version of the version is quite a bit
+        /// simpler.
+        ///
+        /// Nevertheless, when *testing* version parsing, you really want to
+        /// be able to peek at all of its constituent parts. So we use this in
+        /// assertion failure messages.
         pub(crate) fn as_bloated_debug(&self) -> impl std::fmt::Debug + '_ {
-            VersionBloatedDebug(self)
+            std::fmt::from_fn(|f| {
+                f.debug_struct("Version")
+                    .field("epoch", &self.epoch())
+                    .field("release", &&*self.release())
+                    .field("pre", &self.pre())
+                    .field("post", &self.post())
+                    .field("dev", &self.dev())
+                    .field("local", &self.local())
+                    .field("min", &self.min())
+                    .field("max", &self.max())
+                    .finish()
+            })
         }
     }
 

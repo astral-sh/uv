@@ -2,12 +2,11 @@ use anyhow::Result;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 
-use crate::common::TestContext;
-use crate::common::uv_snapshot;
+use uv_test::uv_snapshot;
 
 #[test]
 fn check_compatible_packages() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==2.31.0")?;
@@ -51,7 +50,7 @@ fn check_compatible_packages() -> Result<()> {
 // this test force-installs idna 2.4 to trigger a failure.
 #[test]
 fn check_incompatible_packages() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==2.31.0")?;
@@ -120,7 +119,7 @@ fn check_incompatible_packages() -> Result<()> {
 // with multiple incompatible packages.
 #[test]
 fn check_multiple_incompatible_packages() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==2.31.0")?;
@@ -190,7 +189,7 @@ fn check_multiple_incompatible_packages() -> Result<()> {
 
 #[test]
 fn check_python_version() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context
         .pip_install()
@@ -219,4 +218,81 @@ fn check_python_version() {
     The package `urllib3` requires Python >=3.8, but `3.12.[X]` is installed
     "
     );
+}
+
+#[test]
+fn check_dependency_metadata_from_config_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("requests==2.31.0")?;
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0
+     + urllib3==2.2.1
+    "
+    );
+
+    let requirements_txt_idna = context.temp_dir.child("requirements_idna.txt");
+    requirements_txt_idna.write_str("idna==2.4")?;
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements_idna.txt")
+        .arg("--strict"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - idna==3.6
+     + idna==2.4
+    warning: The package `requests` requires `idna>=2.5,<4`, but `2.4` is installed
+    "
+    );
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(
+        r#"
+        dependency-metadata = [
+          { name = "requests", version = "2.31.0", requires-dist = ["certifi>=2017.4.17", "charset-normalizer>=2,<4", "idna>=2.4,<4", "urllib3>=1.21.1,<3"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context
+        .pip_check()
+        .arg("--config-file")
+        .arg("uv.toml"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 5 packages in [TIME]
+    All installed packages are compatible
+    "
+    );
+
+    Ok(())
 }

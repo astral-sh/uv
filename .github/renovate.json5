@@ -7,7 +7,7 @@
     // For tool versions defined in GitHub Actions:
     "customManagers:githubActionsVersions",
   ],
-  labels: ["internal", "build:skip-release"],
+  labels: ["internal", "build:skip-docker", "build:skip-release"],
   schedule: ["* 0-3 * * 1"],
   semanticCommits: "disabled",
   separateMajorMinor: false,
@@ -37,6 +37,13 @@
       // See: https://github.com/astral-sh/uv/issues/3642
       matchPackageNames: ["/zip/"],
       matchManagers: ["cargo"],
+      enabled: false,
+    },
+    {
+      // Disable updates of actions used by `.github/workflows/release.yml`;
+      // these action pins are managed by dist-workspace.toml
+      matchFileNames: [".github/workflows/release.yml"],
+      matchManagers: ["github-actions"],
       enabled: false,
     },
     {
@@ -72,6 +79,19 @@
       matchDepNames: ["python"],
       description: "Disable Python version updates in test-system.yml",
       enabled: false,
+    },
+    {
+      // Exclude test-integration.yml from Python version updates, as it intentionally
+      // tests specific Python versions and should not be auto-updated.
+      matchFileNames: [".github/workflows/test-integration.yml"],
+      matchDepNames: ["python"],
+      description: "Disable Python version updates in test-integration.yml",
+      enabled: false,
+    },
+    {
+      matchFileNames: [".github/workflows/test-system.yml"],
+      extends: ["schedule:monthly"],
+      description: "Monthly update of test-system.yml dependencies",
     },
     {
       groupName: "pre-commit dependencies",

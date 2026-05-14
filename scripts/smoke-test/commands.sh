@@ -13,7 +13,7 @@ uv pip install ruff -v
 
 # Install a package with extension modules, e.g., `numpy` and make sure it's importable
 uv pip install numpy -v
-uv run python -c "import numpy; print(numpy.__version__)"
+uv run --no-project python -c "import numpy; print(numpy.__version__)"
 
 # Show the `uvx` version
 uvx --version

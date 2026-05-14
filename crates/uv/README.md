@@ -10,11 +10,12 @@ for more information.
 This crate is the entry point to the uv command-line interface. The Rust API exposed here is not
 considered public interface.
 
-This is version 0.9.26. The source can be found
-[here](https://github.com/astral-sh/uv/blob/0.9.26/crates/uv).
+This is version 0.11.14. The source can be found
+[here](https://github.com/astral-sh/uv/blob/0.11.14/crates/uv).
 
 The following uv workspace members are also available:
 
+- [uv-audit](https://crates.io/crates/uv-audit)
 - [uv-auth](https://crates.io/crates/uv-auth)
 - [uv-bin-install](https://crates.io/crates/uv-bin-install)
 - [uv-build](https://crates.io/crates/uv-build)
@@ -33,6 +34,7 @@ The following uv workspace members are also available:
 - [uv-distribution-filename](https://crates.io/crates/uv-distribution-filename)
 - [uv-distribution-types](https://crates.io/crates/uv-distribution-types)
 - [uv-extract](https://crates.io/crates/uv-extract)
+- [uv-fastid](https://crates.io/crates/uv-fastid)
 - [uv-flags](https://crates.io/crates/uv-flags)
 - [uv-fs](https://crates.io/crates/uv-fs)
 - [uv-git](https://crates.io/crates/uv-git)
@@ -66,6 +68,7 @@ The following uv workspace members are also available:
 - [uv-small-str](https://crates.io/crates/uv-small-str)
 - [uv-state](https://crates.io/crates/uv-state)
 - [uv-static](https://crates.io/crates/uv-static)
+- [uv-test](https://crates.io/crates/uv-test)
 - [uv-tool](https://crates.io/crates/uv-tool)
 - [uv-torch](https://crates.io/crates/uv-torch)
 - [uv-trampoline-builder](https://crates.io/crates/uv-trampoline-builder)
@@ -74,6 +77,7 @@ The following uv workspace members are also available:
 - [uv-version](https://crates.io/crates/uv-version)
 - [uv-virtualenv](https://crates.io/crates/uv-virtualenv)
 - [uv-warnings](https://crates.io/crates/uv-warnings)
+- [uv-windows](https://crates.io/crates/uv-windows)
 - [uv-workspace](https://crates.io/crates/uv-workspace)
 
 uv's workspace members are considered internal and will have frequent breaking changes.

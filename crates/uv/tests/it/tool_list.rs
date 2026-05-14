@@ -1,14 +1,14 @@
-use crate::common::{self, TestContext, uv_snapshot};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::PathChild;
 use fs_err as fs;
 use insta::assert_snapshot;
 use uv_static::EnvVars;
+use uv_test::uv_snapshot;
 
 #[test]
 fn tool_list() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -37,7 +37,7 @@ fn tool_list() {
 
 #[test]
 fn tool_list_paths() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -67,7 +67,7 @@ fn tool_list_paths() {
 #[cfg(windows)]
 #[test]
 fn tool_list_paths_windows() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .clear_filters()
         .with_filtered_windows_temp_dir();
     let tool_dir = context.temp_dir.child("tools");
@@ -98,7 +98,7 @@ fn tool_list_paths_windows() {
 
 #[test]
 fn tool_list_empty() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -115,8 +115,158 @@ fn tool_list_empty() {
 }
 
 #[test]
+fn tool_list_outdated_empty() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // With no tools installed, `--outdated` should produce the same output as the base case.
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--outdated")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    No tools installed
+    ");
+}
+
+#[test]
+fn tool_list_outdated() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install an older version of `black`.
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // With `--outdated`, the installed (older) version should be listed with the latest version.
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--outdated")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 [latest: 24.3.0]
+    - black
+    - blackd
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn tool_list_outdated_respects_exclude_newer() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black` with a persisted `exclude-newer` cutoff.
+    context
+        .tool_install()
+        .arg("black")
+        .arg("--exclude-newer")
+        .arg("2024-03-25T00:00:00Z")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // `--outdated` should respect the stored tool settings and avoid flagging upgrades that
+    // `uv tool upgrade` would intentionally skip.
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--outdated")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn tool_list_outdated_recomputes_relative_exclude_newer() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black` with a relative `exclude-newer` cutoff that initially resolves to 2024-03-01.
+    context
+        .tool_install()
+        .arg("black")
+        .arg("--exclude-newer")
+        .arg("3 weeks")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-03-22T00:00:00Z")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Recompute the stored span at a later time so `black` is considered outdated.
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--outdated")
+    .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+    .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-04-15T00:00:00Z")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 [latest: 24.3.0]
+    - black
+    - blackd
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn tool_list_outdated_cli_exclude_newer() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install an older version of `black`.
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // `--exclude-newer` should filter out releases newer than the cutoff when determining the
+    // latest available tool version.
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--outdated")
+    .arg("--exclude-newer")
+    .arg("2024-03-01T00:00:00Z")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
 fn tool_list_missing_receipt() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -145,7 +295,7 @@ fn tool_list_missing_receipt() {
 
 #[test]
 fn tool_list_bad_environment() -> Result<()> {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix();
@@ -170,7 +320,7 @@ fn tool_list_bad_environment() -> Result<()> {
         .assert()
         .success();
 
-    let venv_path = common::venv_bin_path(tool_dir.path().join("black"));
+    let venv_path = uv_test::venv_bin_path(tool_dir.path().join("black"));
     // Remove the python interpreter for black
     fs::remove_dir_all(venv_path.clone())?;
 
@@ -197,7 +347,7 @@ fn tool_list_bad_environment() -> Result<()> {
 
 #[test]
 fn tool_list_deprecated() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -284,7 +434,7 @@ fn tool_list_deprecated() -> Result<()> {
 
 #[test]
 fn tool_list_show_version_specifiers() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -340,7 +490,7 @@ fn tool_list_show_version_specifiers() {
 
 #[test]
 fn tool_list_show_with() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -455,7 +605,7 @@ fn tool_list_show_with() {
 
 #[test]
 fn tool_list_show_extras() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -566,7 +716,7 @@ fn tool_list_show_extras() {
 
 #[test]
 fn tool_list_show_python() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -596,7 +746,7 @@ fn tool_list_show_python() {
 
 #[test]
 fn tool_list_show_all() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 

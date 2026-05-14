@@ -963,7 +963,7 @@ impl ArchivedCachePolicy {
             // Expires also works too, as above).
             //
             // [1]: https://github.com/astral-sh/uv/issues/5351#issuecomment-2260588764
-            let duration = Duration::from_secs(600);
+            let duration = Duration::from_mins(10);
             tracing::trace!(
                 "Freshness lifetime heuristically assumed \
                  because of presence of last-modified header: {duration:?}"

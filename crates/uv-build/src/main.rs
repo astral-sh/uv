@@ -6,6 +6,7 @@ use uv_preview::Preview;
 use uv_static::{EnvVars, parse_boolish_environment_variable};
 
 use anyhow::{Context, Result, bail};
+use tracing::debug;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -57,6 +58,16 @@ fn main() -> Result<()> {
     } else {
         Preview::default()
     };
+    if preview.all_enabled() {
+        debug!("All preview features are enabled");
+    } else if preview.any_enabled() {
+        debug!("The following preview features are enabled: {preview}");
+    }
+    uv_preview::set(preview)
+        .expect("Global preview features should not have been initialised already");
+    // Errors returned by finalize are self-describing, but should also be impossible.
+    uv_preview::finalize().unwrap();
+
     match command.as_str() {
         "build-sdist" => {
             let sdist_directory = PathBuf::from(args.next().context("Missing sdist directory")?);
@@ -78,7 +89,6 @@ fn main() -> Result<()> {
                 metadata_directory.as_deref(),
                 uv_version::version(),
                 false,
-                preview,
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
@@ -92,7 +102,6 @@ fn main() -> Result<()> {
                 metadata_directory.as_deref(),
                 uv_version::version(),
                 false,
-                preview,
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
@@ -103,7 +112,6 @@ fn main() -> Result<()> {
                 &env::current_dir()?,
                 &wheel_directory,
                 uv_version::version(),
-                preview,
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
@@ -114,7 +122,6 @@ fn main() -> Result<()> {
                 &env::current_dir()?,
                 &wheel_directory,
                 uv_version::version(),
-                preview,
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;

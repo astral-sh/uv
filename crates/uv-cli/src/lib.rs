@@ -11,6 +11,7 @@ use clap::error::ErrorKind;
 use clap::{Args, Parser, Subcommand};
 use clap::{ValueEnum, ValueHint};
 
+use uv_audit::service::VulnerabilityServiceFormat;
 use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::{
@@ -235,20 +236,32 @@ pub struct GlobalArgs {
     )]
     pub color: Option<ColorChoice>,
 
-    /// Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
+    /// (Deprecated: use `--system-certs` instead.) Whether to load TLS certificates from the
+    /// platform's native certificate store [env: UV_NATIVE_TLS=]
     ///
-    /// By default, uv loads certificates from the bundled `webpki-roots` crate. The
-    /// `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
-    /// improves portability and performance (especially on macOS).
+    /// By default, uv uses bundled Mozilla root certificates. When enabled, this flag loads
+    /// certificates from the platform's native certificate store instead.
+    ///
+    /// This is equivalent to `--system-certs`.
+    #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new(), overrides_with_all = ["no_native_tls", "system_certs", "no_system_certs"], hide = true)]
+    pub native_tls: bool,
+
+    #[arg(global = true, long, overrides_with_all = ["native_tls", "system_certs", "no_system_certs"], hide = true)]
+    pub no_native_tls: bool,
+
+    /// Whether to load TLS certificates from the platform's native certificate store [env: UV_SYSTEM_CERTS=]
+    ///
+    /// By default, uv uses bundled Mozilla root certificates, which improves portability and
+    /// performance (especially on macOS).
     ///
     /// However, in some cases, you may want to use the platform's native certificate store,
     /// especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
     /// included in your system's certificate store.
-    #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_native_tls"))]
-    pub native_tls: bool,
+    #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new(), overrides_with_all = ["no_system_certs", "native_tls", "no_native_tls"])]
+    pub system_certs: bool,
 
-    #[arg(global = true, long, overrides_with("native_tls"), hide = true)]
-    pub no_native_tls: bool,
+    #[arg(global = true, long, overrides_with_all = ["system_certs", "native_tls", "no_native_tls"], hide = true)]
+    pub no_system_certs: bool,
 
     /// Disable network access [env: UV_OFFLINE=]
     ///
@@ -865,6 +878,7 @@ pub struct CacheNamespace {
 #[derive(Subcommand)]
 pub enum CacheCommand {
     /// Clear the cache, removing all entries or those linked to specific packages.
+    #[command(alias = "clear")]
     Clean(CleanArgs),
     /// Prune all unreachable objects from the cache.
     Prune(PruneArgs),
@@ -1148,7 +1162,8 @@ pub enum ProjectCommand {
     Lock(LockArgs),
     /// Export the project's lockfile to an alternate format.
     ///
-    /// At present, both `requirements.txt` and `pylock.toml` (PEP 751) formats are supported.
+    /// At present, `requirements.txt`, `pylock.toml` (PEP 751) and CycloneDX v1.5 JSON output
+    /// formats are supported.
     ///
     /// The project is re-locked before exporting unless the `--locked` or `--frozen` flag is
     /// provided.
@@ -1180,6 +1195,19 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Format(FormatArgs),
+    /// Audit the project's dependencies.
+    ///
+    /// Dependencies are audited for known vulnerabilities, as well as 'adverse' statuses such as
+    /// deprecation and quarantine.
+    ///
+    /// By default, all extras and groups within the project are audited. To exclude extras
+    /// and/or groups from the audit, use the `--no-extra`, `--no-group`, and related
+    /// options.
+    #[command(
+        after_help = "Use `uv help audit` for more details.",
+        after_long_help = ""
+    )]
+    Audit(AuditArgs),
 }
 
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
@@ -1431,7 +1459,7 @@ pub struct PipCompileArgs {
     /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
-    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, value_delimiter = ',', conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
@@ -1673,7 +1701,7 @@ pub struct PipCompileArgs {
 
     /// Specify a package to omit from the output resolution. Its dependencies will still be
     /// included in the resolution. Equivalent to pip-compile's `--unsafe-package` option.
-    #[arg(long, alias = "unsafe-package", value_hint = ValueHint::Other)]
+    #[arg(long, alias = "unsafe-package", value_delimiter = ',', value_hint = ValueHint::Other)]
     pub no_emit_package: Option<Vec<PackageName>>,
 
     /// Include `--index-url` and `--extra-index-url` entries in the generated output file.
@@ -1788,7 +1816,7 @@ pub struct PipSyncArgs {
     /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
     /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
-    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, value_delimiter = ',', conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
@@ -2083,6 +2111,10 @@ pub struct PipInstallArgs {
     #[arg(long, short, group = "sources")]
     pub editable: Vec<String>,
 
+    /// Install any editable dependencies as non-editable [env: UV_NO_EDITABLE=]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_editable: bool,
+
     /// Constrain versions using the given requirements files.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
@@ -2157,7 +2189,7 @@ pub struct PipInstallArgs {
     /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
     /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
-    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, value_delimiter = ',', conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
@@ -2523,7 +2555,7 @@ pub struct PipUninstallArgs {
     pub dry_run: bool,
 
     #[command(flatten)]
-    pub compat_args: compat::PipGlobalCompatArgs,
+    pub compat_args: compat::PipUninstallCompatArgs,
 }
 
 #[derive(Args)]
@@ -3087,7 +3119,12 @@ pub struct VenvArgs {
     /// By default, uv searches for projects in the current directory or any parent directory to
     /// determine the default path of the virtual environment and check for Python version
     /// constraints, if any.
-    #[arg(long, alias = "no-workspace")]
+    #[arg(
+        long,
+        alias = "no-workspace",
+        env = EnvVars::UV_NO_PROJECT,
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
     pub no_project: bool,
 
     /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual
@@ -3157,7 +3194,7 @@ pub struct VenvArgs {
     #[arg(long)]
     pub system_site_packages: bool,
 
-    /// Make the virtual environment relocatable.
+    /// Make the virtual environment relocatable [env: UV_VENV_RELOCATABLE=]
     ///
     /// A relocatable virtual environment can be moved around and redistributed without invalidating
     /// its associated entrypoint and activation scripts.
@@ -3170,8 +3207,16 @@ pub struct VenvArgs {
     /// absolute paths), the entrypoints and scripts themselves will _not_ be relocatable. In other
     /// words, copying those entrypoints and scripts to a location outside the environment will not
     /// work, as they reference paths relative to the environment itself.
-    #[arg(long)]
+    #[expect(clippy::doc_markdown)]
+    #[arg(long, overrides_with("no_relocatable"))]
     pub relocatable: bool,
+
+    /// Don't make the virtual environment relocatable.
+    ///
+    /// Disables the default relocatable behavior when the `relocatable-envs-default` preview
+    /// feature is enabled.
+    #[arg(long, overrides_with("relocatable"), hide = true)]
+    pub no_relocatable: bool,
 
     #[command(flatten)]
     pub index_args: IndexArgs,
@@ -3195,6 +3240,10 @@ pub struct VenvArgs {
     pub keyring_provider: Option<KeyringProviderType>,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// The date is compared against the upload time of each individual distribution artifact
+    /// (i.e., when each file was uploaded to the package index), not the release date of the
+    /// package version.
     ///
     /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
     /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
@@ -3228,7 +3277,7 @@ pub struct VenvArgs {
     ///
     /// This option is only used for installing seed packages.
     ///
-    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
@@ -3455,21 +3504,18 @@ pub struct RunArgs {
     ///
     /// May be provided more than once.
     ///
-    /// Optional dependencies are defined via `project.optional-dependencies` in a `pyproject.toml`.
-    ///
     /// This option is only available when running in a project.
     #[arg(
         long,
         conflicts_with = "all_extras",
         conflicts_with = "only_group",
+        value_delimiter = ',',
         value_parser = extra_name_with_clap_error,
         value_hint = ValueHint::Other,
     )]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
-    ///
-    /// Optional dependencies are defined via `project.optional-dependencies` in a `pyproject.toml`.
     ///
     /// This option is only available when running in a project.
     #[arg(long, conflicts_with = "extra", conflicts_with = "only_group")]
@@ -3523,7 +3569,7 @@ pub struct RunArgs {
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
-    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS)]
+    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
@@ -3714,7 +3760,13 @@ pub struct RunArgs {
     ///
     /// If a virtual environment is active or found in a current or parent directory, it will be
     /// used as if there was no project or workspace.
-    #[arg(long, alias = "no_workspace", conflicts_with = "package")]
+    #[arg(
+        long,
+        alias = "no_workspace",
+        env = EnvVars::UV_NO_PROJECT,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        conflicts_with = "package"
+    )]
     pub no_project: bool,
 
     /// The Python interpreter to use for the run environment.
@@ -3789,6 +3841,7 @@ pub struct SyncArgs {
         long,
         conflicts_with = "all_extras",
         conflicts_with = "only_group",
+        value_delimiter = ',',
         value_parser = extra_name_with_clap_error,
         value_hint = ValueHint::Other,
     )]
@@ -3860,7 +3913,7 @@ pub struct SyncArgs {
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
-    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS)]
+    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
@@ -4675,7 +4728,7 @@ pub struct TreeArgs {
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
-    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS)]
+    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
@@ -4760,7 +4813,6 @@ pub struct TreeArgs {
 
 #[derive(Args)]
 pub struct ExportArgs {
-    #[expect(clippy::doc_markdown)]
     /// The format to which `uv.lock` should be exported.
     ///
     /// Supports `requirements.txt`, `pylock.toml` (PEP 751) and CycloneDX v1.5 JSON output formats.
@@ -4796,7 +4848,7 @@ pub struct ExportArgs {
     /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
-    #[arg(long, conflicts_with = "all_extras", conflicts_with = "only_group", value_parser = extra_name_with_clap_error)]
+    #[arg(long, value_delimiter = ',', conflicts_with = "all_extras", conflicts_with = "only_group", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
@@ -4852,7 +4904,7 @@ pub struct ExportArgs {
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
-    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS)]
+    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
@@ -4984,6 +5036,7 @@ pub struct ExportArgs {
         long,
         alias = "no-install-package",
         conflicts_with = "only_emit_package",
+        value_delimiter = ',',
         value_hint = ValueHint::Other,
     )]
     pub no_emit_package: Vec<PackageName>,
@@ -4994,6 +5047,7 @@ pub struct ExportArgs {
         alias = "only-install-package",
         conflicts_with = "no_emit_package",
         hide = true,
+        value_delimiter = ',',
         value_hint = ValueHint::Other,
     )]
     pub only_emit_package: Vec<PackageName>,
@@ -5067,9 +5121,20 @@ pub struct FormatArgs {
 
     /// The version of Ruff to use for formatting.
     ///
-    /// By default, a version of Ruff pinned by uv will be used.
+    /// Accepts either a version (e.g., `0.8.2`) which will be treated as an exact pin,
+    /// a version specifier (e.g., `>=0.8.0`), or `latest` to use the latest available version.
+    ///
+    /// By default, a constrained version range of Ruff will be used (e.g., `>=0.15,<0.16`).
     #[arg(long, value_hint = ValueHint::Other)]
     pub version: Option<String>,
+
+    /// Limit candidate Ruff versions to those released prior to the given date.
+    ///
+    /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
+    /// `2006-12-02T02:07:43Z`) or local date in the same format (e.g. `2006-12-02`), as well as
+    /// durations relative to "now" (e.g., `-1 week`).
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
+    pub exclude_newer: Option<ExcludeNewerValue>,
 
     /// Additional arguments to pass to Ruff.
     ///
@@ -5083,8 +5148,147 @@ pub struct FormatArgs {
     /// Instead of running the formatter in the context of the current project, run it in the
     /// context of the current directory. This is useful when the current directory is not a
     /// project.
-    #[arg(long)]
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_PROJECT,
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
     pub no_project: bool,
+
+    /// Display the version of Ruff that will be used for formatting.
+    ///
+    /// This is useful for verifying which version was resolved when using version constraints
+    /// (e.g., `--version ">=0.8.0"`) or `--version latest`.
+    #[arg(long, hide = true)]
+    pub show_version: bool,
+}
+
+#[derive(Args)]
+pub struct AuditArgs {
+    /// Don't audit the specified optional dependencies.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, value_hint = ValueHint::Other)]
+    pub no_extra: Vec<ExtraName>,
+
+    /// Don't audit the development dependency group [env: UV_NO_DEV=]
+    ///
+    /// This option is an alias of `--no-group dev`.
+    /// See `--no-default-groups` to exclude all default groups instead.
+    ///
+    /// This option is only available when running in a project.
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_dev: bool,
+
+    /// Don't audit the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    pub no_group: Vec<GroupName>,
+
+    /// Don't audit the default dependency groups.
+    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_default_groups: bool,
+
+    /// Only audit dependencies from the specified dependency group.
+    ///
+    /// The project and its dependencies will be omitted.
+    ///
+    /// May be provided multiple times. Implies `--no-default-groups`.
+    #[arg(long, value_hint = ValueHint::Other)]
+    pub only_group: Vec<GroupName>,
+
+    /// Only audit the development dependency group.
+    ///
+    /// The project and its dependencies will be omitted.
+    ///
+    /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
+    #[arg(long, conflicts_with_all = ["no_dev"])]
+    pub only_dev: bool,
+
+    /// Assert that the `uv.lock` will remain unchanged [env: UV_LOCKED=]
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
+    /// uv will exit with an error.
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
+    pub locked: bool,
+
+    /// Audit the requirements without locking the project [env: UV_FROZEN=]
+    ///
+    /// If the lockfile is missing, uv will exit with an error.
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    pub frozen: bool,
+
+    #[command(flatten)]
+    pub build: BuildOptionsArgs,
+
+    #[command(flatten)]
+    pub resolver: ResolverArgs,
+
+    /// Audit the specified PEP 723 Python script, rather than the current
+    /// project.
+    ///
+    /// The specified script must be locked, i.e. with `uv lock --script <script>`
+    /// before it can be audited.
+    #[arg(long, value_hint = ValueHint::FilePath)]
+    pub script: Option<PathBuf>,
+
+    /// The Python version to use when auditing.
+    ///
+    /// For example, pass `--python-version 3.10` to audit the dependencies that would be included
+    /// when installing on Python 3.10.
+    ///
+    /// Defaults to the version of the discovered Python interpreter.
+    #[arg(long)]
+    pub python_version: Option<PythonVersion>,
+
+    /// The platform to use when auditing.
+    ///
+    /// For example, pass `--platform windows` to audit the dependencies that would be included
+    /// when installing on Windows.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aarch64-apple-darwin`.
+    #[arg(long)]
+    pub python_platform: Option<TargetTriple>,
+
+    /// Ignore a vulnerability by ID.
+    ///
+    /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
+    /// the audit results.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub ignore: Vec<String>,
+
+    /// Ignore a vulnerability by ID, but only while no fix is available.
+    ///
+    /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
+    /// the audit results as long as they have no known fix versions. Once a fix version becomes
+    /// available, the vulnerability will be reported again.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub ignore_until_fixed: Vec<String>,
+
+    /// The service format to use for vulnerability lookups.
+    ///
+    /// Each service format has a default URL, which can be
+    /// changed with `--service-url`. The defaults are:
+    ///
+    /// * OSV: <https://api.osv.dev/>
+    #[arg(long, value_enum, default_value = "osv")]
+    pub service_format: VulnerabilityServiceFormat,
+
+    /// The URL to vulnerability service API endpoint.
+    ///
+    /// If not provided, the default URL for the selected service will be used.
+    ///
+    /// The service needs to use the OSV protocol, unless a different
+    /// format was requested by `--service-format`.
+    #[arg(long, value_hint = ValueHint::Url)]
+    pub service_url: Option<String>,
 }
 
 #[derive(Args)]
@@ -5526,7 +5730,8 @@ pub struct ToolInstallArgs {
 
     /// Force installation of the tool.
     ///
-    /// Will replace any existing entry points with the same name in the executable directory.
+    /// Will recreate any existing environment for the tool and replace any existing entry points
+    /// with the same name in the executable directory.
     #[arg(long)]
     pub force: bool,
 
@@ -5608,6 +5813,29 @@ pub struct ToolListArgs {
     /// Whether to display the Python version associated with each tool.
     #[arg(long)]
     pub show_python: bool,
+
+    /// List outdated tools.
+    ///
+    /// The latest version of each tool will be shown alongside the installed version. Up-to-date
+    /// tools will be omitted from the output.
+    #[arg(long, overrides_with("no_outdated"))]
+    pub outdated: bool,
+
+    #[arg(long, overrides_with("outdated"), hide = true)]
+    pub no_outdated: bool,
+
+    /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
+    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
+    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
+    /// `P7D`, `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
+    pub exclude_newer: Option<ExcludeNewerValue>,
 
     // Hide unused global Python options.
     #[arg(long, hide = true)]
@@ -5694,8 +5922,9 @@ pub struct ToolUpgradeArgs {
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
-    // The following is equivalent to flattening `ResolverInstallerArgs`, with the `--upgrade`, and
-    // `--upgrade-package` options hidden, and the `--no-upgrade` option removed.
+    // The following is equivalent to flattening `ResolverInstallerArgs`, with the `--upgrade`,
+    // `--upgrade-package`, and `--upgrade-group` options hidden, and the `--no-upgrade` option
+    // removed.
     /// Allow package upgrades, ignoring pinned versions in any existing output file. Implies
     /// `--refresh`.
     #[arg(hide = true, long, short = 'U', help_heading = "Resolver options")]
@@ -5705,6 +5934,11 @@ pub struct ToolUpgradeArgs {
     /// file. Implies `--refresh-package`.
     #[arg(hide = true, long, short = 'P', help_heading = "Resolver options")]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
+
+    /// Allow upgrades for all packages in a dependency group, ignoring pinned versions in any
+    /// existing output file.
+    #[arg(hide = true, long, help_heading = "Resolver options")]
+    pub upgrade_group: Vec<GroupName>,
 
     #[command(flatten)]
     pub index_args: IndexArgs,
@@ -5851,6 +6085,10 @@ pub struct ToolUpgradeArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
+    /// The date is compared against the upload time of each individual distribution artifact
+    /// (i.e., when each file was uploaded to the package index), not the release date of the
+    /// package version.
+    ///
     /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
     /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
     /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
@@ -5881,7 +6119,7 @@ pub struct ToolUpgradeArgs {
 
     /// The method to use when installing packages from the global cache.
     ///
-    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
@@ -6380,7 +6618,12 @@ pub struct PythonFindArgs {
     ///
     /// Otherwise, when no request is provided, the Python requirement of a project in the current
     /// directory or parent directories will be used.
-    #[arg(long, alias = "no_workspace")]
+    #[arg(
+        long,
+        alias = "no_workspace",
+        env = EnvVars::UV_NO_PROJECT,
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
     pub no_project: bool,
 
     /// Only find system Python interpreters.
@@ -6417,6 +6660,12 @@ pub struct PythonFindArgs {
     #[arg(long)]
     pub show_version: bool,
 
+    /// Resolve symlinks in the output path.
+    ///
+    /// When enabled, the output path will be canonicalized, resolving any symlinks.
+    #[arg(long)]
+    pub resolve_links: bool,
+
     /// URL pointing to JSON of custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     pub python_downloads_json_url: Option<String>,
@@ -6452,7 +6701,12 @@ pub struct PythonPinArgs {
     /// By default, a project or workspace is discovered in the current directory or any parent
     /// directory. If a workspace is found, the Python pin is validated against the workspace's
     /// `requires-python` constraint.
-    #[arg(long, alias = "no-workspace")]
+    #[arg(
+        long,
+        alias = "no-workspace",
+        env = EnvVars::UV_NO_PROJECT,
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
     pub no_project: bool,
 
     /// Update the global Python version pin.
@@ -6468,6 +6722,10 @@ pub struct PythonPinArgs {
     /// Remove the Python version pin.
     #[arg(long, conflicts_with = "request", conflicts_with = "resolved")]
     pub rm: bool,
+
+    /// URL pointing to JSON of custom Python installations.
+    #[arg(long, value_hint = ValueHint::Other)]
+    pub python_downloads_json_url: Option<String>,
 }
 
 #[derive(Args)]
@@ -6632,7 +6890,13 @@ pub struct IndexArgs {
     // The nested Vec structure (`Vec<Vec<Maybe<Index>>>`) is required for clap's
     // value parsing mechanism, which processes one value at a time, in order to handle
     // `UV_INDEX` the same way pip handles `PIP_EXTRA_INDEX_URL`.
-    #[arg(long, env = EnvVars::UV_INDEX, value_parser = parse_indices, help_heading = "Index options")]
+    #[arg(
+        long,
+        env = EnvVars::UV_INDEX,
+        hide_env_values = true,
+        value_parser = parse_indices,
+        help_heading = "Index options"
+    )]
     pub index: Option<Vec<Vec<Maybe<Index>>>>,
 
     /// The URL of the default package index (by default: <https://pypi.org/simple>).
@@ -6642,7 +6906,13 @@ pub struct IndexArgs {
     ///
     /// The index given by this flag is given lower priority than all other indexes specified via
     /// the `--index` flag.
-    #[arg(long, env = EnvVars::UV_DEFAULT_INDEX, value_parser = parse_default_index, help_heading = "Index options")]
+    #[arg(
+        long,
+        env = EnvVars::UV_DEFAULT_INDEX,
+        hide_env_values = true,
+        value_parser = parse_default_index,
+        help_heading = "Index options"
+    )]
     pub default_index: Option<Maybe<Index>>,
 
     /// (Deprecated: use `--default-index` instead) The URL of the Python package index (by default:
@@ -6653,7 +6923,14 @@ pub struct IndexArgs {
     ///
     /// The index given by this flag is given lower priority than all other indexes specified via
     /// the `--extra-index-url` flag.
-    #[arg(long, short, env = EnvVars::UV_INDEX_URL, value_parser = parse_index_url, help_heading = "Index options")]
+    #[arg(
+        long,
+        short,
+        env = EnvVars::UV_INDEX_URL,
+        hide_env_values = true,
+        value_parser = parse_index_url,
+        help_heading = "Index options"
+    )]
     pub index_url: Option<Maybe<PipIndex>>,
 
     /// (Deprecated: use `--index` instead) Extra URLs of package indexes to use, in addition to
@@ -6665,7 +6942,14 @@ pub struct IndexArgs {
     /// All indexes provided via this flag take priority over the index specified by `--index-url`
     /// (which defaults to PyPI). When multiple `--extra-index-url` flags are provided, earlier
     /// values take priority.
-    #[arg(long, env = EnvVars::UV_EXTRA_INDEX_URL, value_delimiter = ' ', value_parser = parse_extra_index_url, help_heading = "Index options")]
+    #[arg(
+        long,
+        env = EnvVars::UV_EXTRA_INDEX_URL,
+        hide_env_values = true,
+        value_delimiter = ' ',
+        value_parser = parse_extra_index_url,
+        help_heading = "Index options"
+    )]
     pub extra_index_url: Option<Vec<Maybe<PipExtraIndex>>>,
 
     /// Locations to search for candidate distributions, in addition to those found in the registry
@@ -6680,6 +6964,7 @@ pub struct IndexArgs {
         long,
         short,
         env = EnvVars::UV_FIND_LINKS,
+        hide_env_values = true,
         value_delimiter = ',',
         value_parser = parse_find_links,
         help_heading = "Index options"
@@ -6873,6 +7158,10 @@ pub struct InstallerArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
+    /// The date is compared against the upload time of each individual distribution artifact
+    /// (i.e., when each file was uploaded to the package index), not the release date of the
+    /// package version.
+    ///
     /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
     /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
     /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
@@ -6903,7 +7192,7 @@ pub struct InstallerArgs {
 
     /// The method to use when installing packages from the global cache.
     ///
-    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
@@ -6991,6 +7280,11 @@ pub struct ResolverArgs {
     /// file. Implies `--refresh-package`.
     #[arg(long, short = 'P', help_heading = "Resolver options")]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
+
+    /// Allow upgrades for all packages in a dependency group, ignoring pinned versions in any
+    /// existing output file.
+    #[arg(long, help_heading = "Resolver options")]
+    pub upgrade_group: Vec<GroupName>,
 
     /// The strategy to use when resolving against multiple index URLs.
     ///
@@ -7111,6 +7405,10 @@ pub struct ResolverArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
+    /// The date is compared against the upload time of each individual distribution artifact
+    /// (i.e., when each file was uploaded to the package index), not the release date of the
+    /// package version.
+    ///
     /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
     /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
     /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
@@ -7143,7 +7441,7 @@ pub struct ResolverArgs {
     ///
     /// This option is only used when building source distributions.
     ///
-    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
@@ -7202,6 +7500,11 @@ pub struct ResolverInstallerArgs {
     /// Implies `--refresh-package`.
     #[arg(long, short = 'P', help_heading = "Resolver options", value_hint = ValueHint::Other)]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
+
+    /// Allow upgrades for all packages in a dependency group, ignoring pinned versions in any
+    /// existing output file.
+    #[arg(long, help_heading = "Resolver options")]
+    pub upgrade_group: Vec<GroupName>,
 
     /// Reinstall all packages, regardless of whether they're already installed. Implies
     /// `--refresh`.
@@ -7347,6 +7650,10 @@ pub struct ResolverInstallerArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
+    /// The date is compared against the upload time of each individual distribution artifact
+    /// (i.e., when each file was uploaded to the package index), not the release date of the
+    /// package version.
+    ///
     /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
     /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
     /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
@@ -7382,7 +7689,7 @@ pub struct ResolverInstallerArgs {
 
     /// The method to use when installing packages from the global cache.
     ///
-    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
@@ -7478,6 +7785,10 @@ pub struct FetchArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
+    /// The date is compared against the upload time of each individual distribution artifact
+    /// (i.e., when each file was uploaded to the package index), not the release date of the
+    /// package version.
+    ///
     /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
     /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
     /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
@@ -7564,11 +7875,23 @@ pub struct PublishArgs {
     pub index: Option<String>,
 
     /// The username for the upload.
-    #[arg(short, long, env = EnvVars::UV_PUBLISH_USERNAME, value_hint = ValueHint::Other)]
+    #[arg(
+        short,
+        long,
+        env = EnvVars::UV_PUBLISH_USERNAME,
+        hide_env_values = true,
+        value_hint = ValueHint::Other
+    )]
     pub username: Option<String>,
 
     /// The password for the upload.
-    #[arg(short, long, env = EnvVars::UV_PUBLISH_PASSWORD, value_hint = ValueHint::Other)]
+    #[arg(
+        short,
+        long,
+        env = EnvVars::UV_PUBLISH_PASSWORD,
+        hide_env_values = true,
+        value_hint = ValueHint::Other
+    )]
     pub password: Option<String>,
 
     /// The token for the upload.
@@ -7579,6 +7902,7 @@ pub struct PublishArgs {
         short,
         long,
         env = EnvVars::UV_PUBLISH_TOKEN,
+        hide_env_values = true,
         conflicts_with = "username",
         conflicts_with = "password",
         value_hint = ValueHint::Other,
@@ -7609,7 +7933,7 @@ pub struct PublishArgs {
     /// and index upload.
     ///
     /// Defaults to PyPI's publish URL (<https://upload.pypi.org/legacy/>).
-    #[arg(long, env = EnvVars::UV_PUBLISH_URL)]
+    #[arg(long, env = EnvVars::UV_PUBLISH_URL, hide_env_values = true)]
     pub publish_url: Option<DisplaySafeUrl>,
 
     /// Check an index URL for existing files to skip duplicate uploads.
@@ -7626,7 +7950,7 @@ pub struct PublishArgs {
     /// pyx, the index URL can be inferred automatically from the publish URL.
     ///
     /// The index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).
-    #[arg(long, env = EnvVars::UV_PUBLISH_CHECK_URL)]
+    #[arg(long, env = EnvVars::UV_PUBLISH_CHECK_URL, hide_env_values = true)]
     pub check_url: Option<IndexUrl>,
 
     #[arg(long, hide = true)]
@@ -7665,7 +7989,7 @@ pub enum WorkspaceCommand {
     /// View metadata about the current workspace.
     ///
     /// The output of this command is not yet stable.
-    Metadata(MetadataArgs),
+    Metadata(Box<MetadataArgs>),
     /// Display the path of a workspace member.
     ///
     /// By default, the path to the workspace root directory is displayed.
@@ -7679,9 +8003,55 @@ pub enum WorkspaceCommand {
     #[command(hide = true)]
     List(WorkspaceListArgs),
 }
+#[derive(Args)]
+pub struct MetadataArgs {
+    /// Check if the lockfile is up-to-date [env: UV_LOCKED=]
+    ///
+    /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is
+    /// missing or needs to be updated, uv will exit with an error.
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
+    pub locked: bool,
 
-#[derive(Args, Debug)]
-pub struct MetadataArgs;
+    /// Assert that a `uv.lock` exists without checking if it is up-to-date [env: UV_FROZEN=]
+    #[arg(long, conflicts_with_all = ["locked"])]
+    pub frozen: bool,
+
+    /// Perform a dry run, without writing the lockfile.
+    ///
+    /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
+    /// changes, but will not write the lockfile to disk.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "locked")]
+    pub dry_run: bool,
+
+    #[command(flatten)]
+    pub resolver: ResolverArgs,
+
+    #[command(flatten)]
+    pub build: BuildOptionsArgs,
+
+    #[command(flatten)]
+    pub refresh: RefreshArgs,
+
+    /// The Python interpreter to use during resolution.
+    ///
+    /// A Python interpreter is required for building source distributions to determine package
+    /// metadata when there are not wheels.
+    ///
+    /// The interpreter is also used as the fallback value for the minimum Python version if
+    /// `requires-python` is not set.
+    ///
+    /// See `uv help python` for details on Python discovery and supported request formats.
+    #[arg(
+        long,
+        short,
+        env = EnvVars::UV_PYTHON,
+        verbatim_doc_comment,
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
+        value_hint = ValueHint::Other,
+    )]
+    pub python: Option<Maybe<String>>,
+}
 
 #[derive(Args, Debug)]
 pub struct WorkspaceDirArgs {

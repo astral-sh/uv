@@ -1,6 +1,10 @@
-use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
+#[cfg(feature = "tokio")]
+use std::io::Read;
+
+#[cfg(feature = "tokio")]
+use encoding_rs_io::DecodeReaderBytes;
 use tempfile::NamedTempFile;
 use tracing::warn;
 
@@ -8,27 +12,10 @@ pub use crate::locked_file::*;
 pub use crate::path::*;
 
 pub mod cachedir;
+pub mod link;
 mod locked_file;
 mod path;
 pub mod which;
-
-/// Append an extension to a [`PathBuf`].
-///
-/// Unlike [`Path::with_extension`], this function does not replace an existing extension.
-///
-/// If there is no file name, the path is returned unchanged.
-///
-/// This mimics the behavior of the unstable [`Path::with_added_extension`] method.
-pub fn with_added_extension<'a>(path: &'a Path, extension: &str) -> Cow<'a, Path> {
-    let Some(name) = path.file_name() else {
-        // If there is no file name, we cannot add an extension.
-        return Cow::Borrowed(path);
-    };
-    let mut name = name.to_os_string();
-    name.push(".");
-    name.push(extension.trim_start_matches('.'));
-    Cow::Owned(path.with_file_name(name))
-}
 
 /// Attempt to check if the two paths refer to the same file.
 ///
@@ -64,19 +51,15 @@ pub fn is_same_file_allow_missing(left: &Path, right: &Path) -> Option<bool> {
 
 /// Reads data from the path and requires that it be valid UTF-8 or UTF-16.
 ///
-/// This uses BOM sniffing to determine if the data should be transcoded
-/// from UTF-16 to Rust's `String` type (which uses UTF-8).
+/// This uses BOM sniffing to determine if the data should be transcoded from UTF-16 to Rust's
+/// `String` type (which uses UTF-8).
 ///
-/// This should generally only be used when one specifically wants to support
-/// reading UTF-16 transparently.
+/// This should generally only be used when one specifically wants to support reading UTF-16
+/// transparently.
 ///
 /// If the file path is `-`, then contents are read from stdin instead.
 #[cfg(feature = "tokio")]
 pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result<String> {
-    use std::io::Read;
-
-    use encoding_rs_io::DecodeReaderBytes;
-
     let path = path.as_ref();
     let raw = if path == Path::new("-") {
         let mut buf = Vec::with_capacity(1024);
@@ -95,31 +78,47 @@ pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result
     Ok(buf)
 }
 
-/// Create a symlink at `dst` pointing to `src`, replacing any existing symlink.
+/// Create a directory link at `dst` pointing to `src`, replacing any existing link.
 ///
-/// On Windows, this uses the `junction` crate to create a junction point. The
-/// operation is _not_ atomic, as we first delete the junction, then create a
-/// junction at the same path.
+/// On Windows, this normally creates an NTFS junction, since junctions don't
+/// require elevated privileges. When running under Wine, which doesn't implement
+/// the reparse-point ioctl that junction creation depends on, this transparently
+/// creates a Windows directory symbolic link instead via `CreateSymbolicLinkW`
+/// (Wine maps that to a Unix symlink, so it succeeds without privileges).
 ///
-/// Note that because junctions are used, the source must be a directory.
+/// The operation is _not_ atomic: any existing entry at `dst` is removed first,
+/// then the new link is created at the same path.
+///
+/// Note that the source must be a directory.
 ///
 /// Changes to this function should be reflected in [`create_symlink`].
 #[cfg(windows)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
-    // If the source is a file, we can't create a junction
-    if src.as_ref().is_file() {
+    let src = src.as_ref();
+    let dst = dst.as_ref();
+
+    if src.is_file() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             format!(
-                "Cannot create a junction for {}: is not a directory",
-                src.as_ref().display()
+                "Cannot create a directory link for {}: is not a directory",
+                src.display()
             ),
         ));
     }
 
-    // Remove the existing symlink, if any.
-    match junction::delete(dunce::simplified(dst.as_ref())) {
-        Ok(()) => match fs_err::remove_dir_all(dst.as_ref()) {
+    if uv_windows::is_wine() {
+        replace_with_symlink_dir(src, dst)
+    } else {
+        replace_with_junction(src, dst)
+    }
+}
+
+#[cfg(windows)]
+fn replace_with_junction(src: &Path, dst: &Path) -> std::io::Result<()> {
+    // Remove the existing junction, if any.
+    match junction::delete(dunce::simplified(dst)) {
+        Ok(()) => match fs_err::remove_dir_all(dst) {
             Ok(()) => {}
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => return Err(err),
@@ -128,11 +127,45 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
         Err(err) => return Err(err),
     }
 
-    // Replace it with a new symlink.
-    junction::create(
-        dunce::simplified(src.as_ref()),
-        dunce::simplified(dst.as_ref()),
-    )
+    // Replace it with a new junction.
+    junction::create(dunce::simplified(src), dunce::simplified(dst))
+}
+
+#[cfg(windows)]
+fn replace_with_symlink_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
+    // Best-effort removal of any existing entry. The destination may be a
+    // directory, file, or symlink, so try the directory removal first and
+    // fall back to file removal if that fails.
+    match fs_err::remove_dir_all(dst) {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => match fs_err::remove_file(dst) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err),
+        },
+    }
+
+    fs_err::os::windows::fs::symlink_dir(dunce::simplified(src), dunce::simplified(dst))
+}
+
+/// Read the target of a directory link created by [`create_symlink`] or
+/// [`replace_symlink`].
+///
+/// On Windows, uv normally creates junctions for directory links, but creates
+/// directory symbolic links under Wine. This function reads the appropriate link
+/// type for the current environment. For junctions, this uses the `junction`
+/// crate, which handles the `\??\` prefix that Windows uses internally for
+/// junction targets.
+#[cfg(windows)]
+pub fn read_link(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
+    let path = path.as_ref();
+
+    if uv_windows::is_wine() {
+        fs_err::read_link(path)
+    } else {
+        junction::get_target(dunce::simplified(path))
+    }
 }
 
 /// Create a symlink at `dst` pointing to `src`, replacing any existing symlink if necessary.
@@ -158,30 +191,35 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
     }
 }
 
-/// Create a symlink at `dst` pointing to `src`.
+/// Create a directory link at `dst` pointing to `src`.
 ///
-/// On Windows, this uses the `junction` crate to create a junction point.
+/// On Windows, this normally creates an NTFS junction, falling back to a Windows
+/// directory symbolic link when running under Wine. See [`replace_symlink`] for
+/// the rationale.
 ///
-/// Note that because junctions are used, the source must be a directory.
+/// Note that the source must be a directory.
 ///
 /// Changes to this function should be reflected in [`replace_symlink`].
 #[cfg(windows)]
 pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
-    // If the source is a file, we can't create a junction
-    if src.as_ref().is_file() {
+    let src = src.as_ref();
+    let dst = dst.as_ref();
+
+    if src.is_file() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             format!(
-                "Cannot create a junction for {}: is not a directory",
-                src.as_ref().display()
+                "Cannot create a directory link for {}: is not a directory",
+                src.display()
             ),
         ));
     }
 
-    junction::create(
-        dunce::simplified(src.as_ref()),
-        dunce::simplified(dst.as_ref()),
-    )
+    if uv_windows::is_wine() {
+        fs_err::os::windows::fs::symlink_dir(dunce::simplified(src), dunce::simplified(dst))
+    } else {
+        junction::create(dunce::simplified(src), dunce::simplified(dst))
+    }
 }
 
 /// Create a symlink at `dst` pointing to `src`.
@@ -193,6 +231,24 @@ pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::
 #[cfg(unix)]
 pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
     fs_err::remove_file(path.as_ref())
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_link_reads_created_directory_link() -> std::io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let target = tempdir.path().join("target");
+        fs_err::create_dir(&target)?;
+        let link = tempdir.path().join("link");
+
+        create_symlink(&target, &link)?;
+
+        assert_eq!(read_link(&link)?, dunce::simplified(&target));
+        Ok(())
+    }
 }
 
 /// Create a symlink at `dst` pointing to `src` on Unix or copy `src` to `dst` on Windows
@@ -281,12 +337,13 @@ pub fn copy_atomic_sync(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io
 fn backoff_file_move() -> backon::ExponentialBackoff {
     use backon::BackoffBuilder;
     // This amounts to 10 total seconds of trying the operation.
-    // We start at 10 milliseconds and try 9 times, doubling each time, so the last try will take
-    // about 10*(2^9) milliseconds ~= 5 seconds. All other attempts combined should equal
-    // the length of the last attempt (because it's a sum of powers of 2), so 10 seconds overall.
+    // We retry 10 times, starting at 10*(2^0) milliseconds for the first retry, doubling with each
+    // retry, so the last (10th) one will take about 10*(2^9) milliseconds ~= 5 seconds. All other
+    // attempts combined should equal the length of the last attempt (because it's a sum of powers
+    // of 2), so 10 seconds overall.
     backon::ExponentialBuilder::default()
         .with_min_delay(std::time::Duration::from_millis(10))
-        .with_max_times(9)
+        .with_max_times(10)
         .build()
 }
 
@@ -329,8 +386,9 @@ pub async fn rename_with_retry(
     }
 }
 
-/// Rename or copy a file, retrying (on Windows) if it fails due to transient operating system
-/// errors, in a synchronous context.
+// TODO(zanieb): Look into reusing this code?
+/// Wrap an arbitrary operation on two files, e.g., copying, with retries on transient operating
+/// system errors.
 #[cfg_attr(not(windows), allow(unused_variables))]
 pub fn with_retry_sync(
     from: impl AsRef<Path>,
@@ -388,7 +446,9 @@ enum PersistRetryError {
     LostState,
 }
 
-/// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system errors, in a synchronous context.
+/// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system
+/// errors.
+#[cfg(feature = "tokio")]
 pub async fn persist_with_retry(
     from: NamedTempFile,
     to: impl AsRef<Path>,
@@ -483,7 +543,10 @@ pub async fn persist_with_retry(
     }
 }
 
-/// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system errors, in a synchronous context.
+/// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system
+/// errors.
+///
+/// This is a synchronous implementation of [`persist_with_retry`].
 pub fn persist_with_retry_sync(
     from: NamedTempFile,
     to: impl AsRef<Path>,
@@ -714,46 +777,4 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
         }
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::PathBuf;
-
-    #[test]
-    fn test_with_added_extension() {
-        // Test with simple package name (no dots)
-        let path = PathBuf::from("python");
-        let result = with_added_extension(&path, "exe");
-        assert_eq!(result, PathBuf::from("python.exe"));
-
-        // Test with package name containing single dot
-        let path = PathBuf::from("awslabs.cdk-mcp-server");
-        let result = with_added_extension(&path, "exe");
-        assert_eq!(result, PathBuf::from("awslabs.cdk-mcp-server.exe"));
-
-        // Test with package name containing multiple dots
-        let path = PathBuf::from("org.example.tool");
-        let result = with_added_extension(&path, "exe");
-        assert_eq!(result, PathBuf::from("org.example.tool.exe"));
-
-        // Test with different extensions
-        let path = PathBuf::from("script");
-        let result = with_added_extension(&path, "ps1");
-        assert_eq!(result, PathBuf::from("script.ps1"));
-
-        // Test with path that has directory components
-        let path = PathBuf::from("some/path/to/awslabs.cdk-mcp-server");
-        let result = with_added_extension(&path, "exe");
-        assert_eq!(
-            result,
-            PathBuf::from("some/path/to/awslabs.cdk-mcp-server.exe")
-        );
-
-        // Test with empty path (edge case)
-        let path = PathBuf::new();
-        let result = with_added_extension(&path, "exe");
-        assert_eq!(result, path); // Should return unchanged
-    }
 }

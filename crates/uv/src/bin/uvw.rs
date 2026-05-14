@@ -14,15 +14,7 @@ fn exec_spawn(cmd: &mut Command) -> std::io::Result<Infallible> {
     }
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
-
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-
-        cmd.stdin(std::process::Stdio::inherit());
-        let status = cmd.creation_flags(CREATE_NO_WINDOW).status()?;
-
-        #[expect(clippy::exit)]
-        std::process::exit(status.code().unwrap())
+        uv_windows::spawn_child(cmd, true)
     }
 }
 

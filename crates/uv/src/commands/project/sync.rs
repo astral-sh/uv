@@ -1,11 +1,11 @@
 use std::fmt::Write;
 use std::ops::Deref;
 use std::path::Path;
-use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashSet;
 use serde::Serialize;
 use tracing::warn;
 use uv_cache::Cache;
@@ -18,9 +18,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::{
-    DirectorySourceDist, Dist, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist,
-};
+use uv_distribution_types::{Dist, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist};
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
@@ -31,11 +29,12 @@ use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequ
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
-use uv_types::{BuildIsolation, HashStrategy};
-use uv_warnings::{warn_user, warn_user_once};
+use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
+use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
+use crate::commands::editable::apply_editable_mode;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::{ChangedDist, Changelog, Modifications};
 use crate::commands::pip::resolution_markers;
@@ -81,6 +80,7 @@ pub(crate) async fn sync(
     concurrency: Concurrency,
     no_config: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
     output_format: SyncFormat,
@@ -93,7 +93,6 @@ pub(crate) async fn sync(
     }
 
     // Identify the target.
-    let workspace_cache = WorkspaceCache::default();
     let target = if let Some(script) = script {
         SyncTarget::Script(script)
     } else {
@@ -105,21 +104,22 @@ pub(crate) async fn sync(
                     members: MemberDiscovery::None,
                     ..DiscoveryOptions::default()
                 },
-                &workspace_cache,
+                workspace_cache,
             )
             .await?
         } else if let [name] = package.as_slice() {
-            VirtualProject::Project(
-                Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                    .await?
-                    .with_current_project(name.clone())
-                    .with_context(|| format!("Package `{name}` not found in workspace"))?,
+            VirtualProject::discover_with_package(
+                project_dir,
+                &DiscoveryOptions::default(),
+                workspace_cache,
+                name.clone(),
             )
+            .await?
         } else {
             let project = VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions::default(),
-                &workspace_cache,
+                workspace_cache,
             )
             .await?;
 
@@ -131,16 +131,6 @@ pub(crate) async fn sync(
 
             project
         };
-
-        // TODO(lucab): improve warning content
-        // <https://github.com/astral-sh/uv/issues/7428>
-        if project.workspace().pyproject_toml().has_scripts()
-            && !project.workspace().pyproject_toml().is_package(true)
-        {
-            warn_user!(
-                "Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`"
-            );
-        }
 
         SyncTarget::Project(project)
     };
@@ -275,6 +265,7 @@ pub(crate) async fn sync(
                 spec,
                 modifications,
                 python_platform.as_ref(),
+                SourceTreeEditablePolicy::Project,
                 build_constraints.unwrap_or_default(),
                 script_extra_build_requires,
                 &settings,
@@ -283,9 +274,9 @@ pub(crate) async fn sync(
                 Box::new(DefaultResolveLogger),
                 Box::new(DefaultInstallLogger),
                 installer_metadata,
-                concurrency,
+                &concurrency,
                 cache,
-                workspace_cache.clone(),
+                workspace_cache,
                 dry_run,
                 printer,
                 preview,
@@ -293,28 +284,36 @@ pub(crate) async fn sync(
             .await
             {
                 Ok(EnvironmentUpdate { changelog, .. }) => {
-                    // Generate a report for the script without a lockfile
-                    let report = Report {
-                        schema: SchemaReport::default(),
-                        target: TargetName::from(&target),
-                        project: None,
-                        script: Some(ScriptReport::from(script)),
-                        sync: SyncReport {
-                            changes: PackageChangesReport::from_changelog(&changelog),
-                            ..sync_report
-                        },
-                        lock: None,
-                        dry_run: dry_run.enabled(),
-                    };
-                    if let Some(output) = report.format(output_format) {
-                        writeln!(printer.stdout_important(), "{output}")?;
-                    }
+                    write_sync_report(
+                        &target,
+                        &environment,
+                        &changelog,
+                        None,
+                        dry_run,
+                        output_format,
+                        printer,
+                    )?;
                     return Ok(ExitStatus::Success);
                 }
-                // TODO(zanieb): We should respect `--output-format json` for the error case
+                Err(ProjectError::Operation(operations::Error::OutdatedEnvironment(changelog))) => {
+                    write_sync_report(
+                        &target,
+                        &environment,
+                        &changelog,
+                        None,
+                        dry_run,
+                        output_format,
+                        printer,
+                    )?;
+                    return diagnostics::OperationDiagnostic::with_system_certs(
+                        client_builder.system_certs(),
+                    )
+                    .report(operations::Error::OutdatedEnvironment(changelog))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                }
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::native_tls(
-                        client_builder.is_native_tls(),
+                    return diagnostics::OperationDiagnostic::with_system_certs(
+                        client_builder.system_certs(),
                     )
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -350,9 +349,9 @@ pub(crate) async fn sync(
             &client_builder,
             &state,
             Box::new(DefaultResolveLogger),
-            concurrency,
+            &concurrency,
             cache,
-            &workspace_cache,
+            workspace_cache,
             printer,
             preview,
         )
@@ -362,9 +361,11 @@ pub(crate) async fn sync(
     {
         Ok(result) => Outcome::Success(result),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
             if dry_run.enabled() {
@@ -393,6 +394,23 @@ pub(crate) async fn sync(
     // Identify the installation target.
     let sync_target = identify_installation_target(&target, outcome.lock(), all_packages, &package);
 
+    // TODO(lucab): improve warning content
+    // <https://github.com/astral-sh/uv/issues/7428>
+    if let SyncTarget::Project(project) = &target {
+        let roots = sync_target.roots().collect::<FxHashSet<_>>();
+        for (name, member) in project.workspace().packages() {
+            if roots.contains(name)
+                && member.pyproject_toml().has_scripts()
+                && !member.pyproject_toml().is_package(true)
+            {
+                warn_user!(
+                    "Skipping installation of entry points (`project.scripts`) for package `{}` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`",
+                    name
+                );
+            }
+        }
+    }
+
     let state = state.fork();
 
     // Perform the sync operation.
@@ -410,7 +428,7 @@ pub(crate) async fn sync(
         &state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
-        concurrency,
+        &concurrency,
         cache,
         workspace_cache,
         dry_run,
@@ -420,30 +438,41 @@ pub(crate) async fn sync(
     .await
     {
         Ok(changelog) => changelog,
+        Err(ProjectError::Operation(operations::Error::OutdatedEnvironment(changelog))) => {
+            write_sync_report(
+                &target,
+                &environment,
+                &changelog,
+                Some(lock_report),
+                dry_run,
+                output_format,
+                printer,
+            )?;
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(operations::Error::OutdatedEnvironment(changelog))
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+        }
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
 
-    let report = Report {
-        schema: SchemaReport::default(),
-        target: TargetName::from(&target),
-        project: target.project().map(ProjectReport::from),
-        script: target.script().map(ScriptReport::from),
-        sync: SyncReport {
-            changes: PackageChangesReport::from_changelog(&changelog),
-            ..sync_report
-        },
-        lock: Some(lock_report),
-        dry_run: dry_run.enabled(),
-    };
-
-    if let Some(output) = report.format(output_format) {
-        writeln!(printer.stdout_important(), "{output}")?;
-    }
+    write_sync_report(
+        &target,
+        &environment,
+        &changelog,
+        Some(lock_report),
+        dry_run,
+        output_format,
+        printer,
+    )?;
 
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::Success),
@@ -613,9 +642,9 @@ pub(super) async fn do_sync(
     state: &PlatformState,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
-    workspace_cache: WorkspaceCache,
+    workspace_cache: &WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
@@ -638,15 +667,6 @@ pub(super) async fn do_sync(
         build_options,
         sources,
     } = settings;
-
-    if !preview.is_enabled(PreviewFeature::ExtraBuildDependencies)
-        && !extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::ExtraBuildDependencies
-        );
-    }
 
     // Lower the extra build dependencies with source resolution.
     let extra_build_requires = match &target {
@@ -772,7 +792,7 @@ pub(super) async fn do_sync(
         .index_strategy(index_strategy)
         .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())
-        .build();
+        .build()?;
 
     // Determine whether to enable build isolation.
     let build_isolation = match build_isolation {
@@ -823,8 +843,9 @@ pub(super) async fn do_sync(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        SourceTreeEditablePolicy::Project,
         workspace_cache.clone(),
-        concurrency,
+        concurrency.clone(),
         preview,
     );
 
@@ -878,70 +899,6 @@ fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
     })
 }
 
-/// If necessary, convert any editable requirements to non-editable.
-fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -> Resolution {
-    match editable {
-        // No modifications are necessary for editable mode; retain any editable distributions.
-        None => resolution,
-
-        // Filter out any non-editable distributions.
-        Some(EditableMode::Editable) => resolution.map(|dist| {
-            let ResolvedDist::Installable { dist, version } = dist else {
-                return None;
-            };
-            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                name,
-                install_path,
-                editable: None | Some(false),
-                r#virtual,
-                url,
-            })) = dist.as_ref()
-            else {
-                return None;
-            };
-
-            Some(ResolvedDist::Installable {
-                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                    name: name.clone(),
-                    install_path: install_path.clone(),
-                    editable: Some(true),
-                    r#virtual: *r#virtual,
-                    url: url.clone(),
-                }))),
-                version: version.clone(),
-            })
-        }),
-
-        // Filter out any editable distributions.
-        Some(EditableMode::NonEditable) => resolution.map(|dist| {
-            let ResolvedDist::Installable { dist, version } = dist else {
-                return None;
-            };
-            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                name,
-                install_path,
-                editable: None | Some(true),
-                r#virtual,
-                url,
-            })) = dist.as_ref()
-            else {
-                return None;
-            };
-
-            Some(ResolvedDist::Installable {
-                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                    name: name.clone(),
-                    install_path: install_path.clone(),
-                    editable: Some(false),
-                    r#virtual: *r#virtual,
-                    url: url.clone(),
-                }))),
-                version: version.clone(),
-            })
-        }),
-    }
-}
-
 /// Extract any credentials that are defined on the workspace dependencies themselves. While we
 /// don't store plaintext credentials in the `uv.lock`, we do respect credentials that are defined
 /// in the `pyproject.toml`.
@@ -979,7 +936,7 @@ fn store_credentials_from_target(target: InstallTarget<'_>, client_builder: &Bas
         };
         match &url.parsed_url {
             ParsedUrl::Git(ParsedGitUrl { url, .. }) => {
-                uv_git::store_credentials_from_url(url.repository());
+                uv_git::store_credentials_from_url(url.url());
             }
             ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
                 client_builder.store_credentials_from_url(url);
@@ -1440,4 +1397,36 @@ impl Report {
             SyncFormat::Text => None,
         }
     }
+}
+
+fn write_sync_report(
+    target: &SyncTarget,
+    environment: &SyncEnvironment,
+    changelog: &Changelog,
+    lock: Option<LockReport>,
+    dry_run: DryRun,
+    output_format: SyncFormat,
+    printer: Printer,
+) -> Result<()> {
+    let report = Report {
+        schema: SchemaReport::default(),
+        target: TargetName::from(target),
+        project: target.project().map(ProjectReport::from),
+        script: target.script().map(ScriptReport::from),
+        sync: SyncReport {
+            environment: EnvironmentReport::from(environment),
+            action: SyncAction::from(environment),
+            changes: PackageChangesReport::from_changelog(changelog),
+            dry_run: dry_run.enabled(),
+            target: TargetName::from(target),
+        },
+        lock,
+        dry_run: dry_run.enabled(),
+    };
+
+    if let Some(output) = report.format(output_format) {
+        writeln!(printer.stdout_important(), "{output}")?;
+    }
+
+    Ok(())
 }

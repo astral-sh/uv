@@ -61,7 +61,7 @@ pub struct Metadata23 {
     /// it should be omitted if it is identical to `author`.
     pub maintainer: Option<String>,
     /// A string containing the maintainer's e-mail address.
-    /// It can contain a name and e-mail address in the legal forms for a RFC-822 `From:` header.
+    /// It can contain a name and e-mail address in the legal forms for an RFC-822 `From:` header.
     ///
     /// Note that this field is intended for use when a project is being maintained by someone other
     /// than the original author: it should be omitted if it is identical to `author_email`.

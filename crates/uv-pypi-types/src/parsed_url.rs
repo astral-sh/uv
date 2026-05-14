@@ -483,7 +483,7 @@ impl From<&ParsedArchiveUrl> for DirectUrl {
 impl From<&ParsedGitUrl> for DirectUrl {
     fn from(value: &ParsedGitUrl) -> Self {
         Self::VcsUrl {
-            url: value.url.repository().to_string(),
+            url: value.url.url().to_string(),
             vcs_info: VcsInfo {
                 vcs: VcsKind::Git,
                 commit_id: value.url.precise().as_ref().map(ToString::to_string),

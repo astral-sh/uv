@@ -17,10 +17,10 @@ use std::str::FromStr;
 use glob::Pattern;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashSet};
-use serde::de::{IntoDeserializer, SeqAccess};
+use serde::de::SeqAccess;
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
-
+use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::GitLfsSetting;
 use uv_distribution_types::{Index, IndexName, RequirementSource};
@@ -39,9 +39,7 @@ use uv_redacted::DisplaySafeUrl;
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
     #[error(transparent)]
-    TomlSyntax(#[from] toml_edit::TomlError),
-    #[error(transparent)]
-    TomlSchema(#[from] toml_edit::de::Error),
+    Toml(#[from] toml::de::Error),
     #[error(
         "`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set"
     )]
@@ -123,11 +121,9 @@ pub struct PyProjectToml {
 
 impl PyProjectToml {
     /// Parse a `PyProjectToml` from a raw TOML string.
-    pub fn from_string(raw: String) -> Result<Self, PyprojectTomlError> {
-        let pyproject =
-            toml_edit::Document::from_str(&raw).map_err(PyprojectTomlError::TomlSyntax)?;
-        let pyproject = Self::deserialize(pyproject.into_deserializer())
-            .map_err(PyprojectTomlError::TomlSchema)?;
+    #[instrument("toml::from_str workspace", skip_all, fields(path = %_path.as_ref().display()))]
+    pub fn from_string(raw: String, _path: impl AsRef<Path>) -> Result<Self, PyprojectTomlError> {
+        let pyproject = toml::from_str(&raw).map_err(PyprojectTomlError::Toml)?;
         Ok(Self { raw, ..pyproject })
     }
 
@@ -276,10 +272,11 @@ pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
-/// Validates that index names in the `tool.uv.index` field are unique.
+/// Validates the `tool.uv.index` field.
 ///
-/// This custom deserializer function checks for duplicate index names
-/// and returns an error if any duplicates are found.
+/// This custom deserializer function checks for:
+/// - Duplicate index names
+/// - Multiple indexes marked as default
 fn deserialize_index_vec<'de, D>(deserializer: D) -> Result<Option<Vec<Index>>, D::Error>
 where
     D: Deserializer<'de>,
@@ -287,6 +284,7 @@ where
     let indexes = Option::<Vec<Index>>::deserialize(deserializer)?;
     if let Some(indexes) = indexes.as_ref() {
         let mut seen_names = FxHashSet::with_capacity_and_hasher(indexes.len(), FxBuildHasher);
+        let mut seen_default = false;
         for index in indexes {
             if let Some(name) = index.name.as_ref() {
                 if !seen_names.insert(name) {
@@ -294,6 +292,14 @@ where
                         "duplicate index name `{name}`"
                     )));
                 }
+            }
+            if index.default {
+                if seen_default {
+                    return Err(serde::de::Error::custom(
+                        "found multiple indexes with `default = true`; only one index may be marked as default",
+                    ));
+                }
+                seen_default = true;
             }
         }
     }
@@ -343,7 +349,7 @@ pub struct ToolUv {
     /// ```toml
     /// [[tool.uv.index]]
     /// name = "pytorch"
-    /// url = "https://download.pytorch.org/whl/cu121"
+    /// url = "https://download.pytorch.org/whl/cu130"
     /// explicit = true
     ///
     /// [tool.uv.sources]
@@ -359,7 +365,7 @@ pub struct ToolUv {
         example = r#"
             [[tool.uv.index]]
             name = "pytorch"
-            url = "https://download.pytorch.org/whl/cu121"
+            url = "https://download.pytorch.org/whl/cu130"
         "#
     )]
     #[serde(deserialize_with = "deserialize_index_vec", default)]
@@ -638,10 +644,14 @@ pub struct ToolUv {
         default = "[]",
         value_type = "str | list[str]",
         example = r#"
-            # Require that the package is available for macOS ARM and x86 (Intel).
+            # Require that the package is available on the following platforms:
             required-environments = [
+                # macOS on Apple Silicon (ARM)
                 "sys_platform == 'darwin' and platform_machine == 'arm64'",
-                "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+                # Linux on x86_64 (Intel/AMD)
+                "sys_platform == 'linux' and platform_machine == 'x86_64'",
+                # Windows on x86_64 (Intel/AMD)
+                "sys_platform == 'win32' and platform_machine == 'AMD64'",
             ]
         "#
     )]
@@ -1772,7 +1782,7 @@ impl Source {
                         tag,
                         branch,
                         lfs: lfs.into(),
-                        git: git.repository().clone(),
+                        git: git.url().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
                         extra: None,
@@ -1784,7 +1794,7 @@ impl Source {
                         tag,
                         branch,
                         lfs: lfs.into(),
-                        git: git.repository().clone(),
+                        git: git.url().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
                         extra: None,

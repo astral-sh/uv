@@ -12,6 +12,7 @@ use uv_warnings::warn_user_once;
 
 use crate::Credentials;
 use crate::credentials::Token;
+use crate::index::is_path_prefix;
 use crate::realm::{Realm, RealmRef};
 
 /// The [`Realm`] for the Hugging Face platform.
@@ -56,10 +57,10 @@ impl HuggingFaceProvider {
 }
 
 /// The [`Url`] for the S3 endpoint, if set.
-static S3_ENDPOINT_REALM: LazyLock<Option<Realm>> = LazyLock::new(|| {
+static S3_ENDPOINT_URL: LazyLock<Option<Url>> = LazyLock::new(|| {
     let s3_endpoint_url = std::env::var(EnvVars::UV_S3_ENDPOINT_URL).ok()?;
     let url = Url::parse(&s3_endpoint_url).expect("Failed to parse S3 endpoint URL");
-    Some(Realm::from(&url))
+    Some(url)
 });
 
 /// A provider for authentication credentials for S3 endpoints.
@@ -69,7 +70,7 @@ pub(crate) struct S3EndpointProvider;
 impl S3EndpointProvider {
     /// Returns `true` if the URL matches the configured S3 endpoint.
     pub(crate) fn is_s3_endpoint(url: &Url, preview: Preview) -> bool {
-        if let Some(s3_endpoint_realm) = S3_ENDPOINT_REALM.as_ref().map(RealmRef::from) {
+        if let Some(s3_endpoint_url) = S3_ENDPOINT_URL.as_ref() {
             if !preview.is_enabled(PreviewFeature::S3Endpoint) {
                 warn_user_once!(
                     "The `s3-endpoint` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
@@ -77,9 +78,9 @@ impl S3EndpointProvider {
                 );
             }
 
-            // Treat any URL on the same domain or subdomain as available for S3 signing.
-            let realm = RealmRef::from(url);
-            if realm == s3_endpoint_realm || realm.is_subdomain_of(s3_endpoint_realm) {
+            // Treat any URL under the endpoint path on the same domain or subdomain as available
+            // for S3 signing.
+            if is_endpoint_url(url, s3_endpoint_url) {
                 return true;
             }
         }
@@ -105,10 +106,10 @@ impl S3EndpointProvider {
 }
 
 /// The [`Url`] for the GCS endpoint, if set.
-static GCS_ENDPOINT_REALM: LazyLock<Option<Realm>> = LazyLock::new(|| {
+static GCS_ENDPOINT_URL: LazyLock<Option<Url>> = LazyLock::new(|| {
     let gcs_endpoint_url = std::env::var(EnvVars::UV_GCS_ENDPOINT_URL).ok()?;
     let url = Url::parse(&gcs_endpoint_url).expect("Failed to parse GCS endpoint URL");
-    Some(Realm::from(&url))
+    Some(url)
 });
 
 /// A provider for authentication credentials for GCS endpoints.
@@ -118,7 +119,7 @@ pub(crate) struct GcsEndpointProvider;
 impl GcsEndpointProvider {
     /// Returns `true` if the URL matches the configured GCS endpoint.
     pub(crate) fn is_gcs_endpoint(url: &Url, preview: Preview) -> bool {
-        if let Some(gcs_endpoint_realm) = GCS_ENDPOINT_REALM.as_ref().map(RealmRef::from) {
+        if let Some(gcs_endpoint_url) = GCS_ENDPOINT_URL.as_ref() {
             if !preview.is_enabled(PreviewFeature::GcsEndpoint) {
                 warn_user_once!(
                     "The `gcs-endpoint` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
@@ -126,9 +127,9 @@ impl GcsEndpointProvider {
                 );
             }
 
-            // Treat any URL on the same domain or subdomain as available for GCS signing.
-            let realm = RealmRef::from(url);
-            if realm == gcs_endpoint_realm || realm.is_subdomain_of(gcs_endpoint_realm) {
+            // Treat any URL under the endpoint path on the same domain or subdomain as available
+            // for GCS signing.
+            if is_endpoint_url(url, gcs_endpoint_url) {
                 return true;
             }
         }
@@ -141,5 +142,85 @@ impl GcsEndpointProvider {
     /// should be cached.
     pub(crate) fn create_signer() -> GcsDefaultSigner {
         reqsign::google::default_signer("storage.googleapis.com")
+    }
+}
+
+/// Returns `true` if `url` is within the configured S3 or GCS-compatible endpoint URL.
+///
+/// The URL must be in the same realm, or a subdomain of the endpoint realm, and must be under the
+/// endpoint path using complete path-segment prefix matching.
+fn is_endpoint_url(url: &Url, endpoint_url: &Url) -> bool {
+    let endpoint_realm = RealmRef::from(endpoint_url);
+    let realm = RealmRef::from(url);
+    if realm != endpoint_realm && !realm.is_subdomain_of(endpoint_realm) {
+        return false;
+    }
+
+    is_path_prefix(endpoint_url.path(), url.path())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_endpoint_url_matches_path_prefix() {
+        let endpoint_url = Url::parse("https://example.com/private").unwrap();
+
+        for url in [
+            "https://example.com/private",
+            "https://example.com/private/",
+            "https://example.com/private/packages/anyio.whl",
+        ] {
+            assert!(
+                is_endpoint_url(&Url::parse(url).unwrap(), &endpoint_url),
+                "Failed to match endpoint URL prefix: {url}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_endpoint_url_rejects_partial_path_segments() {
+        let endpoint_url = Url::parse("https://example.com/private").unwrap();
+
+        for url in [
+            "https://example.com/public",
+            "https://example.com/private-bucket",
+            "https://example.com/privatebucket",
+        ] {
+            assert!(
+                !is_endpoint_url(&Url::parse(url).unwrap(), &endpoint_url),
+                "Should not match URL outside endpoint path: {url}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_endpoint_url_matches_subdomain_with_path_prefix() {
+        let endpoint_url = Url::parse("https://example.com/private").unwrap();
+
+        assert!(is_endpoint_url(
+            &Url::parse("https://bucket.example.com/private/package.whl").unwrap(),
+            &endpoint_url
+        ));
+        assert!(!is_endpoint_url(
+            &Url::parse("https://bucket.example.com/public/package.whl").unwrap(),
+            &endpoint_url
+        ));
+    }
+
+    #[test]
+    fn test_endpoint_url_root_path_matches_all_paths() {
+        let endpoint_url = Url::parse("https://example.com").unwrap();
+
+        for url in [
+            "https://example.com/package.whl",
+            "https://bucket.example.com/package.whl",
+        ] {
+            assert!(
+                is_endpoint_url(&Url::parse(url).unwrap(), &endpoint_url),
+                "Failed to match URL under endpoint root: {url}"
+            );
+        }
     }
 }

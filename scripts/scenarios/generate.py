@@ -51,7 +51,7 @@ PACKSE = TOOL_ROOT / "packse-scenarios"
 REQUIREMENTS = TOOL_ROOT / "pylock.toml"
 PROJECT_ROOT = TOOL_ROOT.parent.parent
 TESTS = PROJECT_ROOT / "crates" / "uv" / "tests" / "it"
-TESTS_COMMON_MOD_RS = TESTS / "common" / "mod.rs"
+TESTS_COMMON_MOD_RS = PROJECT_ROOT / "crates" / "uv-test" / "src" / "lib.rs"
 
 try:
     import packse
@@ -185,7 +185,7 @@ def main(
         resolver_options = scenario["resolver_options"] or {}
         # Avoid writing the empty `required-environments = []`
         resolver_options["has_required_environments"] = bool(
-            resolver_options["required_environments"]
+            resolver_options.get("required_environments", [])
         )
         if resolver_options.get("universal"):
             lock_scenarios.append(scenario)
@@ -259,7 +259,7 @@ def main(
                 "insta",
                 "test",
                 "--features",
-                "pypi,python,python-patch",
+                "test-pypi,test-python,test-python-patch",
                 "--accept",
                 "--test-runner",
                 "nextest",

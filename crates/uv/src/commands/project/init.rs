@@ -1,10 +1,10 @@
 use std::fmt::Write;
 use std::iter;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::str::FromStr;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use owo_colors::OwoColorize;
 use toml_edit::{InlineTable, Value};
 use tracing::{debug, trace, warn};
@@ -142,7 +142,7 @@ pub(crate) async fn init(
                 }
             };
 
-            init_project(
+            Box::pin(init_project(
                 &path,
                 &name,
                 package,
@@ -165,7 +165,7 @@ pub(crate) async fn init(
                 cache,
                 printer,
                 preview,
-            )
+            ))
             .await?;
 
             // Create the `README.md` if it does not already exist.
@@ -311,7 +311,18 @@ async fn init_project(
     // Discover the current workspace, if it exists.
     let workspace_cache = WorkspaceCache::default();
     let workspace = {
-        let parent = path.parent().expect("Project path has no parent");
+        let parent = match path.parent() {
+            Some(parent) => parent,
+            None => {
+                if path.is_dir() {
+                    // Support creating a project in the filesystem root (`/` on Unix).
+                    path
+                } else {
+                    // Not sure how we'd end up here, but we need to handle the case.
+                    bail!("Project directory has no parent directory");
+                }
+            }
+        };
         match Workspace::discover(
             parent,
             &DiscoveryOptions {
@@ -451,14 +462,14 @@ async fn init_project(
         if let Some(python_request) = python_pin {
             if PythonVersionFile::discover(path, &VersionFileDiscoveryOptions::default())
                 .await?
-                .filter(|file| {
+                .as_ref()
+                .is_none_or(|file| !{
                     file.version()
                         .is_some_and(|version| *version == python_request)
                         && file.path().parent().is_some_and(|parent| {
                             parent == workspace.install_path() || parent == path
                         })
                 })
-                .is_none()
             {
                 PythonVersionFile::new(path.join(".python-version"))
                     .with_versions(vec![python_request.clone()])
@@ -472,8 +483,8 @@ async fn init_project(
             if PythonVersionFile::discover(path, &VersionFileDiscoveryOptions::default())
                 .await?
                 .filter(|file| file.version().is_some())
-                .filter(|file| file.path().parent().is_some_and(|parent| parent == path))
-                .is_none()
+                .as_ref()
+                .is_none_or(|file| file.path().parent().is_none_or(|parent| parent != path))
             {
                 PythonVersionFile::new(path.join(".python-version"))
                     .with_versions(vec![python_request.clone()])
@@ -641,10 +652,8 @@ async fn determine_requires_python(
         .flatten()
     {
         // (3) `requires-python` from the workspace
-        let python_request = PythonRequest::Version(VersionRequest::Range(
-            requires_python.specifiers().clone(),
-            PythonVariant::Default,
-        ));
+        let python_request = PythonRequest::from_requires_python(requires_python.clone())
+            .unwrap_or(PythonRequest::Default);
 
         // Pin to the minor version.
         let python_pin = if pin_python {
@@ -1064,7 +1073,7 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
                 cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }]
 
                 [build-system]
-                requires = ["scikit-build-core>=0.10", "pybind11"]
+                requires = ["scikit-build-core>=0.12", "pybind11>=3"]
                 build-backend = "scikit_build_core.build"
             "#}
         .to_string(),
@@ -1108,7 +1117,7 @@ fn pyproject_build_backend_prerequisites(
                     [dependencies]
                     # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
                     # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
-                    pyo3 = {{ version = "0.27.1", features = ["extension-module", "abi3-py39"] }}
+                    pyo3 = {{ version = "0.28.2", features = ["extension-module", "abi3-py39"] }}
                 "#},
                 )?;
             }
@@ -1120,10 +1129,9 @@ fn pyproject_build_backend_prerequisites(
                 fs_err::write(
                     build_file,
                     indoc::formatdoc! {r"
-                    cmake_minimum_required(VERSION 3.15)
+                    cmake_minimum_required(VERSION 3.15...4.0)
                     project(${{SKBUILD_PROJECT_NAME}} LANGUAGES CXX)
 
-                    set(PYBIND11_FINDPYTHON ON)
                     find_package(pybind11 CONFIG REQUIRED)
 
                     pybind11_add_module(_core MODULE src/main.cpp)
@@ -1289,7 +1297,8 @@ fn detect_git_repository(path: &Path) -> GitDiscoveryResult {
     let Ok(git) = GIT.as_ref() else {
         return GitDiscoveryResult::NoGit;
     };
-    let Ok(output) = Command::new(git)
+    let Ok(output) = git
+        .build_command()
         .arg("rev-parse")
         .arg("--is-inside-work-tree")
         .env(EnvVars::LC_ALL, "C")
@@ -1392,7 +1401,8 @@ fn get_author_from_git(path: &Path) -> Result<Author> {
     let mut name = None;
     let mut email = None;
 
-    let output = Command::new(git)
+    let output = git
+        .build_command()
         .arg("config")
         .arg("--get")
         .arg("user.name")
@@ -1404,7 +1414,8 @@ fn get_author_from_git(path: &Path) -> Result<Author> {
         name = Some(String::from_utf8_lossy(&output.stdout).trim().to_string());
     }
 
-    let output = Command::new(git)
+    let output = git
+        .build_command()
         .arg("config")
         .arg("--get")
         .arg("user.email")

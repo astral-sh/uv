@@ -2,11 +2,11 @@ use assert_fs::fixture::PathChild;
 
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 #[test]
 fn tool_dir() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -24,7 +24,7 @@ fn tool_dir() {
 
 #[test]
 fn tool_dir_bin() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 

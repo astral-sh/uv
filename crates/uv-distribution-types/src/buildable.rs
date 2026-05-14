@@ -115,7 +115,7 @@ impl SourceUrl<'_> {
     /// Return the source tree of the source, if available.
     pub fn source_tree(&self) -> Option<&Path> {
         match self {
-            Self::Directory(dist) => Some(&dist.install_path),
+            Self::Directory(dist) => Some(dist.install_path),
             _ => None,
         }
     }
@@ -212,7 +212,7 @@ impl<'a> From<&'a PathSourceDist> for PathSourceUrl<'a> {
 #[derive(Debug, Clone)]
 pub struct DirectorySourceUrl<'a> {
     pub url: &'a DisplaySafeUrl,
-    pub install_path: Cow<'a, Path>,
+    pub install_path: &'a Path,
     pub editable: Option<bool>,
 }
 
@@ -226,7 +226,7 @@ impl<'a> From<&'a DirectorySourceDist> for DirectorySourceUrl<'a> {
     fn from(dist: &'a DirectorySourceDist) -> Self {
         Self {
             url: &dist.url,
-            install_path: Cow::Borrowed(&dist.install_path),
+            install_path: &dist.install_path,
             editable: dist.editable,
         }
     }

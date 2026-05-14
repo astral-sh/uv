@@ -143,6 +143,43 @@ pub fn resolve_flag(cli_flag: bool, name: &'static str, env_flag: EnvFlag) -> Fl
     }
 }
 
+/// Resolve a pair of mutually exclusive boolean flags from the CLI and environment variables.
+///
+/// If either flag is set on the command line, both environment variables are ignored so the CLI
+/// retains precedence over the full pair.
+pub fn resolve_flag_pair(
+    cli_flag: bool,
+    cli_no_flag: bool,
+    name: &'static str,
+    no_name: &'static str,
+    env_flag: Option<EnvFlag>,
+    env_no_flag: Option<EnvFlag>,
+) -> (Flag, Flag) {
+    if cli_flag || cli_no_flag {
+        (
+            if cli_flag {
+                Flag::from_cli(name)
+            } else {
+                Flag::disabled()
+            },
+            if cli_no_flag {
+                Flag::from_cli(no_name)
+            } else {
+                Flag::disabled()
+            },
+        )
+    } else {
+        (
+            env_flag.map_or_else(Flag::disabled, |env_flag| {
+                resolve_flag(false, name, env_flag)
+            }),
+            env_no_flag.map_or_else(Flag::disabled, |env_no_flag| {
+                resolve_flag(false, no_name, env_no_flag)
+            }),
+        )
+    }
+}
+
 /// Check if two flags conflict and exit with an error if they do.
 ///
 /// This function checks if both flags are enabled (truthy) and reports an error if so, including
@@ -202,6 +239,7 @@ impl From<ResolverArgs> for PipOptions {
             upgrade,
             no_upgrade,
             upgrade_package,
+            upgrade_group,
             index_strategy,
             keyring_provider,
             resolution,
@@ -219,6 +257,16 @@ impl From<ResolverArgs> for PipOptions {
             no_sources_package,
             exclude_newer_package,
         } = args;
+
+        if !upgrade_group.is_empty() {
+            eprintln!(
+                "{}{} `{}` is not supported in `uv pip` commands",
+                "error".bold().red(),
+                ":".bold(),
+                "--upgrade-group".green(),
+            );
+            std::process::exit(2);
+        }
 
         Self {
             upgrade: flag(upgrade, no_upgrade, "no-upgrade"),
@@ -304,6 +352,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             upgrade,
             no_upgrade,
             upgrade_package,
+            upgrade_group,
             reinstall,
             no_reinstall,
             reinstall_package,
@@ -326,6 +375,16 @@ impl From<ResolverInstallerArgs> for PipOptions {
             no_sources_package,
             exclude_newer_package,
         } = args;
+
+        if !upgrade_group.is_empty() {
+            eprintln!(
+                "{}{} `{}` is not supported in `uv pip` commands",
+                "error".bold().red(),
+                ":".bold(),
+                "--upgrade-group".green(),
+            );
+            std::process::exit(2);
+        }
 
         Self {
             upgrade: flag(upgrade, no_upgrade, "upgrade"),
@@ -430,6 +489,7 @@ pub fn resolver_options(
         upgrade,
         no_upgrade,
         upgrade_package,
+        upgrade_group,
         index_strategy,
         keyring_provider,
         resolution,
@@ -490,6 +550,7 @@ pub fn resolver_options(
         upgrade: Upgrade::from_args(
             flag(upgrade, no_upgrade, "no-upgrade"),
             upgrade_package.into_iter().map(Requirement::from).collect(),
+            upgrade_group,
         ),
         index_strategy,
         keyring_provider,
@@ -539,6 +600,7 @@ pub fn resolver_installer_options(
         upgrade,
         no_upgrade,
         upgrade_package,
+        upgrade_group,
         reinstall,
         no_reinstall,
         reinstall_package,
@@ -606,6 +668,7 @@ pub fn resolver_installer_options(
         upgrade: Upgrade::from_args(
             flag(upgrade, no_upgrade, "upgrade"),
             upgrade_package.into_iter().map(Requirement::from).collect(),
+            upgrade_group,
         ),
         reinstall: Reinstall::from_args(
             flag(reinstall, no_reinstall, "reinstall"),

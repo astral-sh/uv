@@ -3,21 +3,19 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
-use std::io::BufReader;
 use url::Url;
 
-#[cfg(feature = "git")]
-use crate::common::{READ_ONLY_GITHUB_TOKEN, decode_token};
-use crate::common::{
-    TestContext, build_vendor_links_url, download_to_disk, packse_index_url, uv_snapshot,
-    venv_bin_path,
-};
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+#[cfg(feature = "test-git")]
+use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
+use uv_test::{
+    build_vendor_links_url, download_to_disk, packse_index_url, uv_snapshot, venv_bin_path,
+};
 
 #[test]
 fn lock_wheel_registry() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -140,7 +138,7 @@ fn lock_wheel_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     Ok(())
@@ -149,7 +147,7 @@ fn lock_wheel_registry() -> Result<()> {
 /// Lock a requirement from PyPI.
 #[test]
 fn lock_sdist_registry() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -234,7 +232,7 @@ fn lock_sdist_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -242,9 +240,9 @@ fn lock_sdist_registry() -> Result<()> {
 
 /// Lock a Git requirement using `tool.uv.sources`.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_sdist_git() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -512,9 +510,9 @@ fn lock_sdist_git() -> Result<()> {
 
 /// Lock a Git requirement using PEP 508.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_sdist_git_subdirectory() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -598,7 +596,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -606,9 +604,9 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
 
 /// Lock a Git requirement using PEP 508.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_sdist_git_pep508() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -841,9 +839,9 @@ fn lock_sdist_git_pep508() -> Result<()> {
 
 /// Lock a Git requirement using `tool.uv.sources` with a short revision.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_sdist_git_short_rev() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -941,7 +939,7 @@ fn lock_sdist_git_short_rev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -950,7 +948,7 @@ fn lock_sdist_git_short_rev() -> Result<()> {
 /// Lock a requirement from a direct URL to a wheel.
 #[test]
 fn lock_wheel_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1095,7 +1093,7 @@ fn lock_wheel_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     Ok(())
@@ -1104,7 +1102,7 @@ fn lock_wheel_url() -> Result<()> {
 /// Lock a requirement from a direct URL to a source distribution.
 #[test]
 fn lock_sdist_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1236,7 +1234,7 @@ fn lock_sdist_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     Ok(())
@@ -1245,7 +1243,7 @@ fn lock_sdist_url() -> Result<()> {
 /// Lock a requirement from a direct URL to a source distribution, with a subdirectory.
 #[test]
 fn lock_sdist_url_subdirectory() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1373,7 +1371,7 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     Ok(())
@@ -1382,7 +1380,7 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
 /// Lock a requirement from a direct URL to a source distribution, with a subdirectory.
 #[test]
 fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1507,7 +1505,7 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     Ok(())
@@ -1516,7 +1514,7 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
 /// Lock a project with an extra. When resolving, all extras should be included.
 #[test]
 fn lock_project_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1660,7 +1658,7 @@ fn lock_project_extra() -> Result<()> {
 /// Lock a project with `uv.tool.override-dependencies`.
 #[test]
 fn lock_project_with_overrides() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1719,7 +1717,7 @@ fn lock_project_with_overrides() -> Result<()> {
 /// Lock a project with `uv.tool.override-dependencies` that reference `tool.uv.sources`.
 #[test]
 fn lock_project_with_override_sources() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1777,7 +1775,7 @@ fn lock_project_with_override_sources() -> Result<()> {
 /// Lock a project with `uv.tool.exclude-dependencies`.
 #[test]
 fn lock_project_with_excludes() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1974,7 +1972,7 @@ fn lock_project_with_excludes() -> Result<()> {
 /// Lock a project with `uv.tool.constraint-dependencies`.
 #[test]
 fn lock_project_with_constraints() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2029,7 +2027,7 @@ fn lock_project_with_constraints() -> Result<()> {
 /// Lock a project with `uv.tool.constraint-dependencies` that reference `tool.uv.sources`.
 #[test]
 fn lock_project_with_constraint_sources() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2087,7 +2085,7 @@ fn lock_project_with_constraint_sources() -> Result<()> {
 /// Lock a project with `uv.tool.build-constraint-dependencies`.
 #[test]
 fn lock_project_with_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2171,7 +2169,7 @@ fn lock_project_with_build_constraints() -> Result<()> {
 /// Lock a project with `uv.tool.build-constraint-dependencies` that reference `tool.uv.sources`.
 #[test]
 fn lock_project_with_build_constraint_sources() -> Result<()> {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2227,7 +2225,7 @@ fn lock_project_with_build_constraint_sources() -> Result<()> {
 /// Lock a project with a dependency that has an extra.
 #[test]
 fn lock_dependency_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2421,10 +2419,10 @@ fn lock_dependency_extra() -> Result<()> {
 }
 
 /// Lock a project with a dependency that has a conditional extra.
-#[cfg(feature = "python-eol")]
+#[cfg(feature = "test-python-eol")]
 #[test]
 fn lock_conditional_dependency_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2685,7 +2683,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     ");
 
     // Validate that the extra is included on relevant Python versions.
-    let context_38 = TestContext::new("3.8");
+    let context_38 = uv_test::test_context!("3.8");
 
     fs_err::copy(pyproject_toml, context_38.temp_dir.join("pyproject.toml"))?;
     fs_err::copy(lockfile, context_38.temp_dir.join("uv.lock"))?;
@@ -2723,7 +2721,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
 /// Lock a project with a dependency that requests a non-existent extra.
 #[test]
 fn lock_dependency_non_existent_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2906,7 +2904,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
 /// project itself.
 #[test]
 fn lock_conflicting_project_basic1() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // First we test that resolving a group with a dependency that conflicts
     // with the project fails.
@@ -2924,8 +2922,8 @@ fn lock_conflicting_project_basic1() -> Result<()> {
         foo = ["sortedcontainers==2.4.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -2964,8 +2962,8 @@ fn lock_conflicting_project_basic1() -> Result<()> {
         foo = ["sortedcontainers==2.4.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -3048,6 +3046,13 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
@@ -3093,7 +3098,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
 /// This tests a case where workspace members conflict with each other.
 #[test]
 fn lock_conflicting_workspace_members() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3277,7 +3282,7 @@ fn lock_conflicting_workspace_members() -> Result<()> {
 /// workspace member
 #[test]
 fn lock_conflicting_workspace_members_depends_direct() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3350,7 +3355,7 @@ fn lock_conflicting_workspace_members_depends_direct() -> Result<()> {
 /// conflicting workspace member via a direct optional dependency.
 #[test]
 fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3551,7 +3556,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
 /// intermediate package without conflict.
 #[test]
 fn lock_conflicting_workspace_members_depends_transitive() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3648,7 +3653,7 @@ fn lock_conflicting_workspace_members_depends_transitive() -> Result<()> {
 /// intermediate package without conflict.
 #[test]
 fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3842,7 +3847,7 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     // Install just the child package
@@ -3865,7 +3870,7 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
 /// the project itself.
 #[test]
 fn lock_conflicting_project_basic2() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3894,10 +3899,18 @@ fn lock_conflicting_project_basic2() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+
+    context.temp_dir.child("README.md").touch()?;
+    context
+        .temp_dir
+        .child("src")
+        .child("example")
+        .child("__init__.py")
+        .touch()?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
     success: true
@@ -4050,7 +4063,7 @@ fn lock_conflicting_project_basic2() -> Result<()> {
 /// This tests a case where we declare an extra and a group as conflicting.
 #[test]
 fn lock_conflicting_mixed() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // First we test that resolving with a conflicting extra
     // and group fails.
@@ -4070,8 +4083,8 @@ fn lock_conflicting_mixed() -> Result<()> {
         project2 = ["sortedcontainers==2.4.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -4113,8 +4126,8 @@ fn lock_conflicting_mixed() -> Result<()> {
         project2 = ["sortedcontainers==2.4.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -4198,6 +4211,13 @@ fn lock_conflicting_mixed() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
@@ -4249,7 +4269,7 @@ fn lock_conflicting_mixed() -> Result<()> {
 /// Show updated dependencies on `lock --upgrade`.
 #[test]
 fn lock_upgrade_log() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4419,7 +4439,7 @@ fn lock_upgrade_log() -> Result<()> {
 /// versions.
 #[test]
 fn lock_upgrade_log_multi_version() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4576,10 +4596,226 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     Ok(())
 }
 
+/// `--upgrade --dry-run` should not report changes when the lockfile is up-to-date with
+/// fork markers.
+///
+/// Regression test for: <https://github.com/astral-sh/uv/issues/16839>
+#[test]
+fn lock_upgrade_dry_run_multi_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "markupsafe<2 ; sys_platform != 'win32'",
+            "markupsafe==2.0.0 ; sys_platform == 'win32'"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade").arg("--dry-run"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    No lockfile changes detected
+    ");
+
+    Ok(())
+}
+
+/// `--check --refresh` should not report changes when the lockfile is already
+/// canonical for workspace conflicts.
+///
+/// Regression test for: <https://github.com/astral-sh/uv/issues/18553>
+#[test]
+fn lock_check_refresh_workspace_conflicts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "workspace-demo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-a"]
+
+        [project.optional-dependencies]
+        prod = ["package-a[prod]"]
+        non-prod = ["package-a[non-prod]"]
+
+        [tool.uv.workspace]
+        members = ["packages/package-a"]
+
+        [tool.uv.sources]
+        package-a = { workspace = true }
+
+        [tool.uv]
+        conflicts = [
+            [
+                { extra = "prod" },
+                { extra = "non-prod" },
+            ],
+        ]
+        "#,
+    )?;
+
+    let package_dir = context.temp_dir.child("packages").child("package-a");
+    package_dir.create_dir_all()?;
+    package_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        prod = ["sortedcontainers==2.3.0"]
+        non-prod = ["sortedcontainers==2.4.0"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                { extra = "prod" },
+                { extra = "non-prod" },
+            ],
+        ]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "package-a", extra = "non-prod" },
+            { package = "package-a", extra = "prod" },
+        ], [
+            { package = "workspace-demo", extra = "non-prod" },
+            { package = "workspace-demo", extra = "prod" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "package-a",
+            "workspace-demo",
+        ]
+
+        [[package]]
+        name = "package-a"
+        version = "0.1.0"
+        source = { editable = "packages/package-a" }
+
+        [package.optional-dependencies]
+        non-prod = [
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+        prod = [
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "sortedcontainers", marker = "extra == 'non-prod'", specifier = "==2.4.0" },
+            { name = "sortedcontainers", marker = "extra == 'prod'", specifier = "==2.3.0" },
+        ]
+        provides-extras = ["prod", "non-prod"]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509, upload-time = "2020-11-09T00:03:52.258Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479, upload-time = "2020-11-09T00:03:50.723Z" },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
+        ]
+
+        [[package]]
+        name = "workspace-demo"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "package-a" },
+        ]
+
+        [package.optional-dependencies]
+        non-prod = [
+            { name = "package-a", extra = ["non-prod"], marker = "(extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-14-workspace-demo-prod') or (extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-9-package-a-non-prod') or (extra == 'extra-9-package-a-non-prod' and extra == 'extra-9-package-a-prod')" },
+        ]
+        prod = [
+            { name = "package-a", extra = ["prod"], marker = "(extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-14-workspace-demo-prod') or (extra == 'extra-14-workspace-demo-prod' and extra == 'extra-9-package-a-prod') or (extra == 'extra-9-package-a-non-prod' and extra == 'extra-9-package-a-prod')" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", editable = "packages/package-a" },
+            { name = "package-a", extras = ["non-prod"], marker = "extra == 'non-prod'", editable = "packages/package-a" },
+            { name = "package-a", extras = ["prod"], marker = "extra == 'prod'", editable = "packages/package-a" },
+        ]
+        provides-extras = ["prod", "non-prod"]
+        "#
+        );
+    });
+
+    context.lock().arg("--refresh").assert().success();
+    assert_eq!(lock, context.read("uv.lock"));
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--refresh"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Respect the locked version in an existing lockfile.
 #[test]
 fn lock_preference() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4750,9 +4986,9 @@ fn lock_preference() -> Result<()> {
 
 /// If the user includes `git+` in a `tool.uv.sources` entry, we shouldn't fail.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_git_plus_prefix() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4836,9 +5072,9 @@ fn lock_git_plus_prefix() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_partial_git() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4995,7 +5231,7 @@ fn lock_partial_git() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/10654#issuecomment-2594022975>
 #[test]
 fn lock_unsupported_tag() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5077,9 +5313,9 @@ fn lock_unsupported_tag() -> Result<()> {
 
 /// Respect locked versions with `uv lock`, unless `--upgrade` is passed.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_git_sha() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Lock against `main`.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -5195,7 +5431,7 @@ fn lock_git_sha() -> Result<()> {
 /// Lock a requirement from PyPI, respecting the `Requires-Python` metadata.
 #[test]
 fn lock_requires_python() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -5844,7 +6080,7 @@ fn lock_requires_python() -> Result<()> {
     });
 
     // Validate that attempting to install with an unsupported Python version raises an error.
-    let context_unsupported = TestContext::new("3.9").with_filtered_python_sources();
+    let context_unsupported = uv_test::test_context!("3.9").with_filtered_python_sources();
 
     fs_err::copy(
         pyproject_toml,
@@ -5882,7 +6118,7 @@ fn lock_requires_python() -> Result<()> {
 /// upper-bound.
 #[test]
 fn lock_requires_python_upper() -> Result<()> {
-    let context = TestContext::new("3.11").with_exclude_newer("2024-08-29T00:00:00Z");
+    let context = uv_test::test_context!("3.11").with_exclude_newer("2024-08-29T00:00:00Z");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -6004,10 +6240,10 @@ fn lock_requires_python_upper() -> Result<()> {
 }
 
 /// Lock a requirement from PyPI with an exact Python bound.
-#[cfg(feature = "python-patch")]
+#[cfg(feature = "test-python-patch")]
 #[test]
 fn lock_requires_python_exact() -> Result<()> {
-    let context = TestContext::new("3.13.0");
+    let context = uv_test::test_context!("3.13.0");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -6084,10 +6320,10 @@ fn lock_requires_python_exact() -> Result<()> {
 }
 
 /// Lock a requirement from PyPI with a compatible release Python bound.
-#[cfg(feature = "python-patch")]
+#[cfg(feature = "test-python-patch")]
 #[test]
 fn lock_requires_python_compatible_specifier() -> Result<()> {
-    let context = TestContext::new("3.13.0");
+    let context = uv_test::test_context!("3.13.0");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6150,7 +6386,7 @@ fn lock_requires_python_compatible_specifier() -> Result<()> {
 /// Fork, even with a single dependency, if the minimum Python version is increased.
 #[test]
 fn lock_requires_python_fork() -> Result<()> {
-    let context = TestContext::new("3.11").with_exclude_newer("2024-08-29T00:00:00Z");
+    let context = uv_test::test_context!("3.11").with_exclude_newer("2024-08-29T00:00:00Z");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -6243,7 +6479,7 @@ fn lock_requires_python_fork() -> Result<()> {
 /// Lock a requirement from PyPI, respecting the `Requires-Python` metadata
 #[test]
 fn lock_requires_python_wheels() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -6424,7 +6660,7 @@ fn lock_requires_python_wheels() -> Result<()> {
 /// `Requires-Python` uses the equals-star syntax.
 #[test]
 fn lock_requires_python_star() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = uv_test::test_context!("3.11");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -6546,7 +6782,7 @@ fn lock_requires_python_star() -> Result<()> {
 /// `Requires-Python` uses the != operator.
 #[test]
 fn lock_requires_python_not_equal() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -6625,7 +6861,7 @@ fn lock_requires_python_not_equal() -> Result<()> {
 /// is interpreted as equivalent to `>=3.11.0`.
 #[test]
 fn lock_requires_python_pre() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = uv_test::test_context!("3.11");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -6746,7 +6982,7 @@ fn lock_requires_python_pre() -> Result<()> {
 /// Warn if `Requires-Python` does not include a lower bound.
 #[test]
 fn lock_requires_python_unbounded() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = uv_test::test_context!("3.11");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -6845,7 +7081,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
 /// Error if `Requires-Python` is disjoint across the workspace.
 #[test]
 fn lock_requires_python_disjoint() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = uv_test::test_context!("3.11");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6888,7 +7124,7 @@ fn lock_requires_python_disjoint() -> Result<()> {
 
 #[test]
 fn lock_requires_python_maximum_version() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = uv_test::test_context!("3.11");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -7044,7 +7280,7 @@ fn lock_requires_python_maximum_version() -> Result<()> {
 
 #[test]
 fn lock_requires_python_fewest_versions() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = uv_test::test_context!("3.11");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -7157,7 +7393,7 @@ fn lock_requires_python_fewest_versions() -> Result<()> {
 /// like `3.10.0b0`.
 #[test]
 fn lock_python_version_marker_complement() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = uv_test::test_context!("3.11");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -7274,7 +7510,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
 /// Lock the development dependencies for a project.
 #[test]
 fn lock_dev() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7395,7 +7631,7 @@ fn lock_dev() -> Result<()> {
 /// Lock a package that's included both conditionally and unconditionally in the lockfile.
 #[test]
 fn lock_conditional_unconditional() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7473,7 +7709,7 @@ fn lock_conditional_unconditional() -> Result<()> {
 /// Lock a package that's included twice with different markers.
 #[test]
 fn lock_multiple_markers() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7551,7 +7787,7 @@ fn lock_multiple_markers() -> Result<()> {
 /// Check relative and absolute path handling in lockfiles.
 #[test]
 fn lock_relative_and_absolute_paths() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {r#"
@@ -7580,8 +7816,8 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         license = {text = "MIT"}
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
     "#})?;
     context.temp_dir.child("b/b/__init__.py").touch()?;
@@ -7597,12 +7833,125 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         license = {text = "MIT"}
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     context.temp_dir.child("c/c/__init__.py").touch()?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.11, <3.13"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "b" },
+            { name = "c" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "b", directory = "b" },
+            { name = "c", directory = "[TEMP_DIR]/c" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "0.1.0"
+        source = { directory = "b" }
+
+        [[package]]
+        name = "c"
+        version = "0.1.0"
+        source = { directory = "[TEMP_DIR]/c" }
+        "#
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Check PEP 508 URL handling when they contain variables
+#[test]
+fn lock_pep508_urls_with_vars() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&indoc! {r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = ["b @ file://${PWD}/b", "c @ file:///${PROJECT_ROOT}/c"]
+        "#,
+    })?;
+    context.temp_dir.child("src/a/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("b/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "b"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.11,<3.13"
+        license = {text = "MIT"}
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+    "#})?;
+    context.temp_dir.child("src/b/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("c/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "c"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.11,<3.13"
+        license = {text = "MIT"}
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/c/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.lock().env("PWD", context.temp_dir.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7654,7 +8003,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    uv_snapshot!(context.filters(), context.lock().env("PWD", context.temp_dir.path()).arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7666,10 +8015,228 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
     Ok(())
 }
 
+/// Check relative and absolute path handling in constraint-dependencies.
+///
+/// When a user provides an absolute path in `constraint-dependencies`, it should be preserved
+/// as absolute in the lockfile manifest.
+///
+/// See: <https://github.com/astral-sh/uv/issues/17307>
+#[test]
+fn lock_constraint_dependency_absolute_path() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a local sniffio package at an absolute path.
+    // We use sniffio because anyio depends on it, so the constraint will
+    // actually be used in the resolution and its path will appear in the
+    // lockfile package list.
+    let sniffio_pkg = context.temp_dir.child("sniffio_local");
+    sniffio_pkg.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "sniffio"
+        version = "1.3.1"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    sniffio_pkg
+        .child("src")
+        .child("sniffio")
+        .child("__init__.py")
+        .touch()?;
+
+    // Create the main project with a constraint-dependency using an absolute path.
+    let pyproject_toml = context.temp_dir.child("project").child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        constraint-dependencies = ["sniffio @ {}"]
+        "#,
+        sniffio_pkg.portable_display()
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(context.temp_dir.join("project")), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Check the lockfile - the absolute path should stay absolute, and sniffio
+    // should be resolved from the local path rather than PyPI.
+    let lock = fs_err::read_to_string(context.temp_dir.join("project/uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        constraints = [{ name = "sniffio", directory = "[TEMP_DIR]/sniffio_local" }]
+
+        [[package]]
+        name = "anyio"
+        version = "3.7.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737, upload-time = "2023-05-27T11:12:46.688Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873, upload-time = "2023-05-27T11:12:44.474Z" },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "anyio" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { directory = "[TEMP_DIR]/sniffio_local" }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Check that absolute index paths in config files are preserved in lockfiles.
+///
+/// When an index is specified with an absolute path in a config file (pyproject.toml),
+/// that absolute path should be preserved in the lockfile.
+///
+/// See: <https://github.com/astral-sh/uv/issues/17307>
+#[test]
+fn lock_index_absolute_path_from_config() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a local flat index with a wheel.
+    let index_dir = context.temp_dir.child("local_index");
+    fs_err::create_dir_all(&index_dir)?;
+
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path
+            .file_name()
+            .and_then(|file_name| file_name.to_str())
+            .is_some_and(|file_name| file_name.starts_with("tqdm-1000"))
+        {
+            let dest = index_dir.join(path.file_name().unwrap());
+            fs_err::copy(&path, &dest)?;
+        }
+    }
+
+    // Create a project directory.
+    let project = context.temp_dir.child("project");
+    fs_err::create_dir_all(&project)?;
+
+    // Configure the index with an ABSOLUTE path in pyproject.toml.
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["tqdm==1000.0.0"]
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "{}"
+        format = "flat"
+        "#,
+        index_dir.portable_display()
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&project), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Check the lockfile - the absolute path should stay absolute.
+    let lock = fs_err::read_to_string(project.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "tqdm" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "tqdm", specifier = "==1000.0.0" }]
+
+        [[package]]
+        name = "tqdm"
+        version = "1000.0.0"
+        source = { registry = "[TEMP_DIR]/local_index" }
+        wheels = [
+            { path = "[TEMP_DIR]/local_index/tqdm-1000.0.0-py3-none-any.whl" },
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// Lock a project that includes cyclic dependencies.
 #[test]
 fn lock_cycles() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7872,7 +8439,7 @@ fn lock_cycles() -> Result<()> {
 /// Ensures that stale lockfile metadata is detected.
 #[test]
 fn lock_new_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8145,7 +8712,7 @@ fn lock_new_extras() -> Result<()> {
 /// In this case, the hashes for `idna` have all been incremented by one in the left-most digit.
 #[test]
 fn lock_invalid_hash() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8246,7 +8813,7 @@ fn lock_invalid_hash() -> Result<()> {
 /// without clearing the cache.
 #[test]
 fn lock_mixed_hashes() -> Result<()> {
-    let context = TestContext::new("3.13");
+    let context = uv_test::test_context!("3.13");
 
     let root = context.temp_dir.child("simple-html");
     fs_err::create_dir_all(&root)?;
@@ -8342,10 +8909,10 @@ fn lock_mixed_hashes() -> Result<()> {
         [[package]]
         name = "basic-package"
         version = "0.1.0"
-        source = { registry = "simple-html" }
-        sdist = { path = "basic-package/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
+        source = { registry = "[TEMP_DIR]/simple-html" }
+        sdist = { path = "[TEMP_DIR]/simple-html/basic-package/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
         wheels = [
-            { path = "basic-package/basic_package-0.1.0-py3-none-any.whl", hash = "sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
+            { path = "[TEMP_DIR]/simple-html/basic-package/basic_package-0.1.0-py3-none-any.whl", hash = "sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
         ]
 
         [[package]]
@@ -8424,10 +8991,10 @@ fn lock_mixed_hashes() -> Result<()> {
         [[package]]
         name = "basic-package"
         version = "0.1.0"
-        source = { registry = "simple-html" }
-        sdist = { path = "basic-package/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
+        source = { registry = "[TEMP_DIR]/simple-html" }
+        sdist = { path = "[TEMP_DIR]/simple-html/basic-package/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
         wheels = [
-            { path = "basic-package/basic_package-0.1.0-py3-none-any.whl", hash = "sha512:765bde25938af485e492e25ee0e8cde262462565122c1301213a69bf9ceb2008e3997b652a604092a238c4b1a6a334e697ff3cee3c22f9a617cb14f34e26ef17" },
+            { path = "[TEMP_DIR]/simple-html/basic-package/basic_package-0.1.0-py3-none-any.whl", hash = "sha512:765bde25938af485e492e25ee0e8cde262462565122c1301213a69bf9ceb2008e3997b652a604092a238c4b1a6a334e697ff3cee3c22f9a617cb14f34e26ef17" },
         ]
 
         [[package]]
@@ -8469,7 +9036,7 @@ async fn lock_zstd_wheel() -> Result<()> {
         matchers::{method, path},
     };
 
-    let context = TestContext::new("3.13");
+    let context = uv_test::test_context!("3.13");
     let server = MockServer::start().await;
 
     // Copy the wheel to serve it
@@ -8590,7 +9157,7 @@ async fn lock_zstd_wheel() -> Result<()> {
 /// Vary the `--resolution-mode`, and ensure that the lockfile is updated.
 #[test]
 fn lock_resolution_mode() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8770,7 +9337,7 @@ fn lock_resolution_mode() -> Result<()> {
 /// with the `Requires-Python` constraint.
 #[test]
 fn lock_requires_python_no_wheels() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8802,7 +9369,7 @@ fn lock_requires_python_no_wheels() -> Result<()> {
 /// URLs.
 #[test]
 fn lock_same_version_multiple_urls() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let v1 = context.temp_dir.child("v1");
     fs_err::create_dir_all(&v1)?;
@@ -8908,7 +9475,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         [[package]]
         name = "dependency"
         version = "0.0.1"
-        source = { directory = "v1" }
+        source = { directory = "[TEMP_DIR]/v1" }
         resolution-markers = [
             "sys_platform == 'darwin'",
         ]
@@ -8922,7 +9489,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         [[package]]
         name = "dependency"
         version = "0.0.1"
-        source = { directory = "v2" }
+        source = { directory = "[TEMP_DIR]/v2" }
         resolution-markers = [
             "sys_platform != 'darwin'",
         ]
@@ -8947,14 +9514,14 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "dependency", version = "0.0.1", source = { directory = "v1" }, marker = "sys_platform == 'darwin'" },
-            { name = "dependency", version = "0.0.1", source = { directory = "v2" }, marker = "sys_platform != 'darwin'" },
+            { name = "dependency", version = "0.0.1", source = { directory = "[TEMP_DIR]/v1" }, marker = "sys_platform == 'darwin'" },
+            { name = "dependency", version = "0.0.1", source = { directory = "[TEMP_DIR]/v2" }, marker = "sys_platform != 'darwin'" },
         ]
 
         [package.metadata]
         requires-dist = [
-            { name = "dependency", marker = "sys_platform != 'darwin'", directory = "v2" },
-            { name = "dependency", marker = "sys_platform == 'darwin'", directory = "v1" },
+            { name = "dependency", marker = "sys_platform != 'darwin'", directory = "[TEMP_DIR]/v2" },
+            { name = "dependency", marker = "sys_platform == 'darwin'", directory = "[TEMP_DIR]/v1" },
         ]
 
         [[package]]
@@ -8986,7 +9553,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
 /// dependencies.
 #[test]
 fn lock_unsafe_lowest() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9029,7 +9596,7 @@ fn lock_unsafe_lowest() -> Result<()> {
 /// Lock a package that's excluded from the parent workspace, but depends on that parent.
 #[test]
 fn lock_exclusion() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9059,8 +9626,8 @@ fn lock_exclusion() -> Result<()> {
         dependencies = ["project"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         project = { path = ".." }
@@ -9126,7 +9693,7 @@ fn lock_exclusion() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/9832#issuecomment-2539121761>
 #[test]
 fn lock_relative_lock_deserialization() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9228,7 +9795,7 @@ fn lock_relative_lock_deserialization() -> Result<()> {
 /// Lock a workspace member with a non-workspace source.
 #[test]
 fn lock_non_workspace_source() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9260,8 +9827,8 @@ fn lock_non_workspace_source() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -9282,7 +9849,7 @@ fn lock_non_workspace_source() -> Result<()> {
 /// Lock a workspace member with a non-workspace source.
 #[test]
 fn lock_no_workspace_source() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9311,8 +9878,8 @@ fn lock_no_workspace_source() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -9333,7 +9900,7 @@ fn lock_no_workspace_source() -> Result<()> {
 /// Lock a workspace with a member that's a peer to the root.
 #[test]
 fn lock_peer_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context
         .temp_dir
@@ -9368,8 +9935,8 @@ fn lock_peer_member() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
         )?;
 
@@ -9436,9 +10003,10 @@ fn lock_peer_member() -> Result<()> {
 }
 
 /// Lock a workspace in which a member defines an explicit index that requires authentication.
-#[test]
-fn lock_index_workspace_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_index_workspace_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9461,7 +10029,7 @@ fn lock_index_workspace_member() -> Result<()> {
     fs_err::create_dir_all(&child)?;
 
     let pyproject_toml = child.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "child"
@@ -9471,17 +10039,18 @@ fn lock_index_workspace_member() -> Result<()> {
 
         [[tool.uv.index]]
         name = "my-index"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         explicit = true
 
         [tool.uv.sources]
-        iniconfig = { index = "my-index" }
+        iniconfig = {{ index = "my-index" }}
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Locking without the necessary credentials should fail.
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -9535,15 +10104,15 @@ fn lock_index_workspace_member() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "iniconfig", specifier = ">=2", index = "https://pypi-proxy.fly.dev/basic-auth/simple" }]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2", index = "http://[LOCALHOST]/basic-auth/simple" }]
 
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
 
         [[package]]
@@ -9580,7 +10149,7 @@ fn lock_index_workspace_member() -> Result<()> {
 /// on `foo`, but `bar/uv.lock` should omit `anyio`, but should include `typing-extensions`.
 #[test]
 fn lock_dev_transitive() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let foo = context.temp_dir.child("foo");
     fs_err::create_dir_all(&foo)?;
@@ -9612,8 +10181,8 @@ fn lock_dev_transitive() -> Result<()> {
         dependencies = ["foo", "baz", "iniconfig>1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         foo = { path = "../foo" }
@@ -9637,13 +10206,16 @@ fn lock_dev_transitive() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         dev-dependencies = ["typing-extensions>4"]
         "#,
     )?;
+
+    bar.child("src").child("bar").child("__init__.py").touch()?;
+    baz.child("src").child("baz").child("__init__.py").touch()?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&bar), @"
     success: true
@@ -9753,8 +10325,8 @@ fn lock_dev_transitive() -> Result<()> {
 }
 
 /// Avoid persisting registry credentials in `uv.lock`.
-#[test]
-fn lock_redact_https() -> Result<()> {
+#[tokio::test]
+async fn lock_redact_http() -> Result<()> {
     // This test in particular seems to prompt a link mode warning
     // that occurs when hardlinking fails. In particular, in this test,
     // uv tries to hardlink between `/tmp` and `~/.local`, which on my
@@ -9766,7 +10338,8 @@ fn lock_redact_https() -> Result<()> {
     // which in turns means we don't use the test context cache location.
     // We should probably add a way to configure the `--no-cache` temporary
     // directory location during testing.
-    let context = TestContext::new("3.12").with_filtered_link_mode_warning();
+    let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9779,7 +10352,7 @@ fn lock_redact_https() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(proxy.authenticated_url("public", "heron", "/basic-auth/simple")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9817,10 +10390,10 @@ fn lock_redact_https() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
         "#
         );
@@ -9838,15 +10411,15 @@ fn lock_redact_https() -> Result<()> {
 
     // Installing from the lockfile should fail without credentials. Omit the root, so that we fail
     // when installing `iniconfig`, rather than when building `foo`.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://pypi-proxy.fly.dev/basic-auth/simple").arg("--no-install-project"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg(proxy.url("/basic-auth/simple")).arg("--no-install-project"), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × Failed to download `iniconfig==2.0.0`
-      ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
-      ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+      ├─▶ Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      ╰─▶ HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
       help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
     ");
 
@@ -9858,13 +10431,13 @@ fn lock_redact_https() -> Result<()> {
 
     ----- stderr -----
       × Failed to download `iniconfig==2.0.0`
-      ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
-      ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+      ├─▶ Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      ╰─▶ HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
       help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
     ");
 
     // Installing from the lockfile should succeed when credentials are included on the command-line.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg(proxy.authenticated_url("public", "heron", "/basic-auth/simple")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9896,13 +10469,13 @@ fn lock_redact_https() -> Result<()> {
 
     ----- stderr -----
       × Failed to download `iniconfig==2.0.0`
-      ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
-      ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+      ├─▶ Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      ╰─▶ HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
       help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
     ");
 
     // Installing with credentials from with `UV_INDEX_URL` should succeed.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").env(EnvVars::UV_INDEX_URL, "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").env(EnvVars::UV_INDEX_URL, proxy.authenticated_url("public", "heron", "/basic-auth/simple")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9915,7 +10488,7 @@ fn lock_redact_https() -> Result<()> {
     ");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -9924,9 +10497,10 @@ fn lock_redact_https() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [tool.uv]
-        index-url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"
+        index-url = "{proxy_auth_uri}/basic-auth/simple"
         "#,
-    )?;
+        proxy_auth_uri = proxy.authenticated_uri("public", "heron")
+    ))?;
 
     // Installing from the lockfile should succeed when credentials are included via
     // `pyproject.toml`.
@@ -9948,7 +10522,7 @@ fn lock_redact_https() -> Result<()> {
 /// Test that packages aren't unnecessarily updated when an index URL contains a username.
 #[test]
 fn lock_index_url_username_change_no_update() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create initial lockfile with exact version constraint
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -10024,9 +10598,9 @@ fn lock_index_url_username_change_no_update() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_redact_git_pep508() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_link_mode_warning();
+    let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -10109,9 +10683,9 @@ fn lock_redact_git_pep508() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_redact_git_sources() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_link_mode_warning();
+    let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -10197,9 +10771,9 @@ fn lock_redact_git_sources() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_redact_git_pep508_non_project() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_link_mode_warning();
+    let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -10277,12 +10851,13 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn lock_redact_index_sources() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_link_mode_warning();
+#[tokio::test]
+async fn lock_redact_index_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -10292,12 +10867,13 @@ fn lock_redact_index_sources() -> Result<()> {
 
         [[tool.uv.index]]
         name = "private"
-        url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_auth_uri}/basic-auth/simple"
 
         [tool.uv.sources]
-        iniconfig = { index = "private" }
+        iniconfig = {{ index = "private" }}
         "#,
-    )?;
+        proxy_auth_uri = proxy.authenticated_uri("public", "heron")
+    ))?;
 
     uv_snapshot!(&context.filters(), context.lock(), @"
     success: true
@@ -10331,15 +10907,15 @@ fn lock_redact_index_sources() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "iniconfig", specifier = ">=2", index = "https://pypi-proxy.fly.dev/basic-auth/simple" }]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2", index = "http://[LOCALHOST]/basic-auth/simple" }]
 
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
         "#
         );
@@ -10370,12 +10946,13 @@ fn lock_redact_index_sources() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn lock_redact_url_sources() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_link_mode_warning();
+#[tokio::test]
+async fn lock_redact_url_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(r#"
+    pyproject_toml.write_str(&format!(r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -10383,8 +10960,8 @@ fn lock_redact_url_sources() -> Result<()> {
         dependencies = ["iniconfig>=2"]
 
         [tool.uv.sources]
-        iniconfig = { url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
-        "#)?;
+        iniconfig = {{ url = "{proxy_auth_uri}/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }}
+        "#, proxy_auth_uri = proxy.authenticated_uri("public", "heron")))?;
 
     uv_snapshot!(&context.filters(), context.lock(), @"
     success: true
@@ -10419,14 +10996,14 @@ fn lock_redact_url_sources() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "iniconfig", url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }]
+        requires-dist = [{ name = "iniconfig", url = "http://public:heron@[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }]
 
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
+        source = { url = "http://public:heron@[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
         wheels = [
-            { url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
+            { url = "http://public:heron@[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
         ]
         "#
         );
@@ -10451,19 +11028,20 @@ fn lock_redact_url_sources() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from https://public:****@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+     + iniconfig==2.0.0 (from http://public:****@[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
     ");
 
     Ok(())
 }
 
 /// Pass credentials for a named index via environment variables.
-#[test]
-fn lock_env_credentials() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_env_credentials() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -10473,10 +11051,11 @@ fn lock_env_credentials() -> Result<()> {
 
         [[tool.uv.index]]
         name = "internal-proxy"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         default = true
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Without credentials, the resolution should fail.
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -10488,7 +11067,7 @@ fn lock_env_credentials() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     ");
 
     // Provide credentials via environment variables.
@@ -10532,10 +11111,10 @@ fn lock_env_credentials() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
         "#
         );
@@ -10547,12 +11126,13 @@ fn lock_env_credentials() -> Result<()> {
 /// Test solving for packages that are pinned to separate indexes in the same realm.
 /// This requires the credentials to be cached at the URL-level instead of the realm-level, or
 /// credentials for one index will be used for both indexes and the request will fail.
-#[test]
-fn lock_multiple_indexes_same_realm_different_credentials() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_multiple_indexes_same_realm_different_credentials() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -10561,18 +11141,19 @@ fn lock_multiple_indexes_same_realm_different_credentials() -> Result<()> {
         dependencies = ["iniconfig", "anyio"]
 
         [tool.uv.sources]
-        iniconfig = { index = "internal-proxy-heron" }
-        anyio = { index = "internal-proxy-eagle" }
+        iniconfig = {{ index = "internal-proxy-heron" }}
+        anyio = {{ index = "internal-proxy-eagle" }}
 
         [[tool.uv.index]]
         name = "internal-proxy-heron"
-        url = "https://pypi-proxy.fly.dev/basic-auth-heron/simple"
+        url = "{proxy_uri}/basic-auth-heron/simple"
 
         [[tool.uv.index]]
         name = "internal-proxy-eagle"
-        url = "https://pypi-proxy.fly.dev/basic-auth-eagle/simple"
+        url = "{proxy_uri}/basic-auth-eagle/simple"
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Provide credentials via environment variables.
     uv_snapshot!(context.filters(), context.lock()
@@ -10593,12 +11174,13 @@ fn lock_multiple_indexes_same_realm_different_credentials() -> Result<()> {
 
 // Same as [`lock_multiple_indexes_same_realm_different_credentials`], but with trailing slashes
 // on the index URL
-#[test]
-fn lock_multiple_indexes_same_realm_different_credentials_trailing_slash() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_multiple_indexes_same_realm_different_credentials_trailing_slash() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -10607,18 +11189,19 @@ fn lock_multiple_indexes_same_realm_different_credentials_trailing_slash() -> Re
         dependencies = ["iniconfig", "anyio"]
 
         [tool.uv.sources]
-        iniconfig = { index = "internal-proxy-heron" }
-        anyio = { index = "internal-proxy-eagle" }
+        iniconfig = {{ index = "internal-proxy-heron" }}
+        anyio = {{ index = "internal-proxy-eagle" }}
 
         [[tool.uv.index]]
         name = "internal-proxy-heron"
-        url = "https://pypi-proxy.fly.dev/basic-auth-heron/simple/"
+        url = "{proxy_uri}/basic-auth-heron/simple/"
 
         [[tool.uv.index]]
         name = "internal-proxy-eagle"
-        url = "https://pypi-proxy.fly.dev/basic-auth-eagle/simple/"
+        url = "{proxy_uri}/basic-auth-eagle/simple/"
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Provide credentials via environment variables.
     uv_snapshot!(context.filters(), context.lock()
@@ -10638,12 +11221,13 @@ fn lock_multiple_indexes_same_realm_different_credentials_trailing_slash() -> Re
 }
 
 /// Resolve against an index that uses relative links.
-#[test]
-fn lock_relative_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_relative_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -10652,9 +11236,10 @@ fn lock_relative_index() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [tool.uv]
-        index-url = "https://pypi-proxy.fly.dev/relative/simple"
+        index-url = "{proxy_uri}/relative/simple"
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
     success: true
@@ -10693,10 +11278,10 @@ fn lock_relative_index() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/relative/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/relative/simple" }
+        sdist = { url = "http://[LOCALHOST]/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
         "#
         );
@@ -10730,7 +11315,7 @@ fn lock_relative_index() -> Result<()> {
 /// Lock a package that's excluded from the parent workspace, but depends on that parent.
 #[test]
 fn lock_no_sources() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -10762,8 +11347,8 @@ fn lock_no_sources() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -10962,7 +11547,7 @@ fn lock_no_sources() -> Result<()> {
 /// Lock a project that has an existing lockfile with a deprecated schema.
 #[test]
 fn lock_migrate() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -11105,7 +11690,7 @@ fn lock_migrate() -> Result<()> {
 /// Upgrade a specific package with `--upgrade-package`.
 #[test]
 fn lock_upgrade_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Constrain `anyio` and `idna.`
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -11385,10 +11970,236 @@ fn lock_upgrade_package() -> Result<()> {
     Ok(())
 }
 
+/// Upgrade all packages in a dependency group with `--upgrade-group`.
+#[test]
+fn lock_upgrade_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Constrain `anyio` and `idna` in both the main dependencies and a dev group.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna<=3"]
+
+        [dependency-groups]
+        dev = ["anyio<=2"]
+        "#,
+    )?;
+
+    // Lock the project.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Remove the constraints.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+
+        [dependency-groups]
+        dev = ["anyio"]
+        "#,
+    )?;
+
+    // Upgrade just the `dev` group; `idna` should remain pinned.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-group").arg("dev"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Updated anyio v2.0.0 -> v4.3.0
+    ");
+
+    Ok(())
+}
+
+/// `--upgrade-group` only upgrades direct dependencies of the group, not transitive dependencies.
+#[test]
+fn lock_upgrade_group_transitive() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Pin `anyio` in the dev group. `anyio` depends on `idna` and `sniffio` transitively.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["anyio<=2", "idna<=3"]
+        "#,
+    )?;
+
+    // Lock the project — `anyio` at 2.0.0, `idna` at 3.0, `sniffio` at 1.3.1.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Remove the version constraints.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["anyio", "idna"]
+        "#,
+    )?;
+
+    // Upgrade just `anyio` via `--upgrade-package`; `idna` should stay pinned at 3.0.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("anyio"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Updated anyio v2.0.0 -> v4.3.0
+    ");
+
+    // Reset back to the constrained versions.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["anyio<=2", "idna<=3"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Updated anyio v4.3.0 -> v2.0.0
+    ");
+
+    // Remove the version constraints again.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["anyio", "idna"]
+        "#,
+    )?;
+
+    // Upgrade the `dev` group. Both `anyio` and `idna` are direct dependencies of the group,
+    // so both should be upgraded.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-group").arg("dev"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Updated anyio v2.0.0 -> v4.3.0
+    Updated idna v3.0 -> v3.6
+    ");
+
+    Ok(())
+}
+
+/// `--upgrade-group` works for projects without a `[project]` table (e.g., virtual workspace
+/// roots), where dependency groups are stored in the lock manifest rather than on a package.
+#[test]
+fn lock_upgrade_group_no_project_table() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        dev = ["anyio<=2"]
+        "#,
+    )?;
+
+    // Lock the project.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Remove the constraint.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        dev = ["anyio"]
+        "#,
+    )?;
+
+    // Upgrade the `dev` group.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-group").arg("dev"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    Updated anyio v2.0.0 -> v4.3.0
+    ");
+
+    Ok(())
+}
+
 /// Check that we discard the fork marker from the lockfile when using `--upgrade`.
 #[test]
 fn lock_upgrade_drop_fork_markers() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements = r#"[project]
     name = "forking"
@@ -11431,7 +12242,7 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
 /// Warn when there are missing bounds on transitive dependencies with `--resolution lowest`.
 #[test]
 fn lock_warn_missing_transitive_lower_bounds() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -11462,7 +12273,7 @@ fn lock_warn_missing_transitive_lower_bounds() -> Result<()> {
 /// Lock a local wheel via `--find-links`.
 #[test]
 fn lock_find_links_local_wheel() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
@@ -11537,9 +12348,9 @@ fn lock_find_links_local_wheel() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "1000.0.0"
-        source = { registry = "../links" }
+        source = { registry = "[TEMP_DIR]/links" }
         wheels = [
-            { path = "tqdm-1000.0.0-py3-none-any.whl" },
+            { path = "[TEMP_DIR]/links/tqdm-1000.0.0-py3-none-any.whl" },
         ]
         "#
         );
@@ -11576,7 +12387,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
 /// Prefer an explicit index over any `--find-links` entries.
 #[test]
 fn lock_find_links_ignore_explicit_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
@@ -11697,7 +12508,7 @@ fn lock_find_links_ignore_explicit_index() -> Result<()> {
 /// `url` field.
 #[test]
 fn lock_find_links_relative_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
@@ -11813,7 +12624,7 @@ fn lock_find_links_relative_url() -> Result<()> {
 /// Lock a local source distribution via `--find-links`.
 #[test]
 fn lock_find_links_local_sdist() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
@@ -11888,8 +12699,8 @@ fn lock_find_links_local_sdist() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "999.0.0"
-        source = { registry = "../links" }
-        sdist = { path = "tqdm-999.0.0.tar.gz" }
+        source = { registry = "[TEMP_DIR]/links" }
+        sdist = { path = "[TEMP_DIR]/links/tqdm-999.0.0.tar.gz" }
         "#
         );
     });
@@ -11925,7 +12736,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
 /// Lock a wheel over HTTP via `--find-links`.
 #[test]
 fn lock_find_links_http_wheel() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! { r#"
@@ -12016,7 +12827,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
 /// Lock a source distribution over HTTP via `--find-links`.
 #[test]
 fn lock_find_links_http_sdist() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! { r#"
@@ -12107,7 +12918,7 @@ fn lock_find_links_http_sdist() -> Result<()> {
 /// Use an explicit `--find-links` index.
 #[test]
 fn lock_find_links_explicit_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
@@ -12188,9 +12999,9 @@ fn lock_find_links_explicit_index() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "1000.0.0"
-        source = { registry = "../links" }
+        source = { registry = "[TEMP_DIR]/links" }
         wheels = [
-            { path = "tqdm-1000.0.0-py3-none-any.whl" },
+            { path = "[TEMP_DIR]/links/tqdm-1000.0.0-py3-none-any.whl" },
         ]
         "#
         );
@@ -12213,7 +13024,7 @@ fn lock_find_links_explicit_index() -> Result<()> {
 /// Use the same index priority rules, interchangeably, for `--find-links` and Simple API indexes.
 #[test]
 fn lock_find_links_higher_priority_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
@@ -12290,9 +13101,9 @@ fn lock_find_links_higher_priority_index() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "1000.0.0"
-        source = { registry = "../links" }
+        source = { registry = "[TEMP_DIR]/links" }
         wheels = [
-            { path = "tqdm-1000.0.0-py3-none-any.whl" },
+            { path = "[TEMP_DIR]/links/tqdm-1000.0.0-py3-none-any.whl" },
         ]
         "#
         );
@@ -12304,7 +13115,7 @@ fn lock_find_links_higher_priority_index() -> Result<()> {
 /// Use the same index priority rules, interchangeably, for `--find-links` and Simple API indexes.
 #[test]
 fn lock_find_links_lower_priority_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
@@ -12412,7 +13223,7 @@ fn lock_find_links_lower_priority_index() -> Result<()> {
 /// Lock against a local directory laid out as a PEP 503-compatible index.
 #[test]
 fn lock_local_index() -> Result<()> {
-    let context = TestContext::new("3.13");
+    let context = uv_test::test_context!("3.13");
 
     let root = context.temp_dir.child("simple-html");
     fs_err::create_dir_all(&root)?;
@@ -12507,10 +13318,10 @@ fn lock_local_index() -> Result<()> {
         [[package]]
         name = "basic-package"
         version = "0.1.0"
-        source = { registry = "simple-html" }
-        sdist = { path = "basic-package/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
+        source = { registry = "[TEMP_DIR]/simple-html" }
+        sdist = { path = "[TEMP_DIR]/simple-html/basic-package/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
         wheels = [
-            { path = "basic-package/basic_package-0.1.0-py3-none-any.whl", hash = "sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
+            { path = "[TEMP_DIR]/simple-html/basic-package/basic_package-0.1.0-py3-none-any.whl", hash = "sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
         ]
 
         [[package]]
@@ -12559,7 +13370,7 @@ fn lock_local_index() -> Result<()> {
 /// When resolving, we should ignore the `tool.uv.sources` and instead pull in `anyio` from PyPI.
 #[test]
 fn lock_sources_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -12687,7 +13498,7 @@ fn lock_sources_url() -> Result<()> {
 /// When resolving, we should ignore the `tool.uv.sources` and instead pull in `anyio` from PyPI.
 #[test]
 fn lock_sources_archive() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Download the source.
     let workspace_archive = context.temp_dir.child("workspace.zip");
@@ -12762,7 +13573,7 @@ fn lock_sources_archive() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "workspace", path = "workspace.zip" }]
+        requires-dist = [{ name = "workspace", path = "[TEMP_DIR]/workspace.zip" }]
 
         [[package]]
         name = "sniffio"
@@ -12776,7 +13587,7 @@ fn lock_sources_archive() -> Result<()> {
         [[package]]
         name = "workspace"
         version = "0.1.0"
-        source = { path = "workspace.zip" }
+        source = { path = "[TEMP_DIR]/workspace.zip" }
         dependencies = [
             { name = "anyio" },
         ]
@@ -12823,7 +13634,7 @@ fn lock_sources_archive() -> Result<()> {
 /// When resolving, we should respect the `tool.uv.sources` and pull in the stub `anyio`.
 #[test]
 fn lock_sources_source_tree() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Download the source.
     let workspace_archive = context.temp_dir.child("workspace.zip");
@@ -12834,8 +13645,7 @@ fn lock_sources_source_tree() -> Result<()> {
 
     // Unzip the file.
     let file = fs_err::File::open(&*workspace_archive)?;
-    let mut archive = zip::ZipArchive::new(BufReader::new(file))?;
-    archive.extract(&context.temp_dir)?;
+    uv_extract::unzip(file, &context.temp_dir)?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {
@@ -12896,12 +13706,12 @@ fn lock_sources_source_tree() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "workspace", directory = "workspace" }]
+        requires-dist = [{ name = "workspace", directory = "[TEMP_DIR]/workspace" }]
 
         [[package]]
         name = "workspace"
         version = "0.1.0"
-        source = { directory = "workspace" }
+        source = { directory = "[TEMP_DIR]/workspace" }
         dependencies = [
             { name = "anyio" },
         ]
@@ -12943,7 +13753,7 @@ fn lock_sources_source_tree() -> Result<()> {
 /// editable, and once as non-editable. This should trigger a conflicting URL error.
 #[test]
 fn lock_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create the workspace root.
     context
@@ -12973,8 +13783,8 @@ fn lock_editable() -> Result<()> {
         dependencies = ["library"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         library = { path = "../../library" }
@@ -12990,8 +13800,8 @@ fn lock_editable() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     library.child("src/__init__.py").touch()?;
 
@@ -13073,8 +13883,8 @@ fn lock_editable() -> Result<()> {
         dependencies = ["library"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         library = { path = "../../library", editable = true }
@@ -13099,7 +13909,7 @@ fn lock_editable() -> Result<()> {
 /// editable, and once as non-editable.
 #[test]
 fn lock_mixed_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a workspace (`workspace1`) with a dependency on another workspace (`workspace2`).
     let workspace1 = context.temp_dir.child("workspace1");
@@ -13334,7 +14144,7 @@ fn lock_mixed_extras() -> Result<()> {
 /// editable, and once as non-editable.
 #[test]
 fn lock_transitive_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a workspace (`workspace1`) with a dependency on another workspace (`workspace2`).
     let workspace = context.temp_dir.child("workspace");
@@ -13508,9 +14318,9 @@ fn lock_transitive_extra() -> Result<()> {
 /// If a source is provided via `tool.uv.sources` _and_ a URL is provided in `project.dependencies`,
 /// we accept the source in `tool.uv.sources`, unless `--no-sources` is provided.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_mismatched_sources() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -13622,9 +14432,9 @@ fn lock_mismatched_sources() -> Result<()> {
 ///
 /// See: <https://github.com/astral-sh/uv/issues/4604>
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_mismatched_versions() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -13709,9 +14519,9 @@ fn lock_mismatched_versions() -> Result<()> {
 
 /// Test that `--no-sources-package` allows selectively disabling sources for specific packages.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_no_sources_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -13732,14 +14542,14 @@ fn lock_no_sources_package() -> Result<()> {
     )?;
 
     // Lock with sources disabled only for anyio
-    uv_snapshot!(context.filters(), context.lock().arg("--no-sources-package").arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--no-sources-package").arg("anyio"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -13814,9 +14624,9 @@ fn lock_no_sources_package() -> Result<()> {
 
 /// Test that `--no-sources-package` works with multiple packages.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_no_sources_package_multiple() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -13839,14 +14649,14 @@ fn lock_no_sources_package_multiple() -> Result<()> {
     )?;
 
     // Lock with sources disabled for two packages
-    uv_snapshot!(context.filters(), context.lock().arg("--no-sources-package").arg("anyio typing-extensions"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--no-sources-package").arg("anyio typing-extensions"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -13932,9 +14742,9 @@ fn lock_no_sources_package_multiple() -> Result<()> {
 
 /// Test that `--no-sources` takes precedence over `--no-sources-package`.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_no_sources_with_no_sources_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -13956,14 +14766,14 @@ fn lock_no_sources_with_no_sources_package() -> Result<()> {
 
     // Lock with both --no-sources and --no-sources-package
     // --no-sources should take precedence and disable all sources
-    uv_snapshot!(context.filters(), context.lock().arg("--no-sources").arg("--no-sources-package").arg("iniconfig"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--no-sources").arg("--no-sources-package").arg("iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -14042,9 +14852,9 @@ fn lock_no_sources_with_no_sources_package() -> Result<()> {
 
 /// Test that `UV_NO_SOURCES_PACKAGE` environment variable works.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_no_sources_package_env_var() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -14065,14 +14875,14 @@ fn lock_no_sources_package_env_var() -> Result<()> {
     )?;
 
     // Lock with UV_NO_SOURCES_PACKAGE environment variable
-    uv_snapshot!(context.filters(), context.lock().env("UV_NO_SOURCES_PACKAGE", "anyio iniconfig"), @r###"
+    uv_snapshot!(context.filters(), context.lock().env("UV_NO_SOURCES_PACKAGE", "anyio iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -14153,7 +14963,7 @@ fn lock_no_sources_package_env_var() -> Result<()> {
 /// version constraints fails to resolve.
 #[test]
 fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -14185,7 +14995,7 @@ fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()>
 /// Checks the output of `uv lock --check` when there isn't a lock
 #[test]
 fn check_no_lock() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -14213,7 +15023,7 @@ fn check_no_lock() -> Result<()> {
 /// Checks the output of `uv lock --check` when the lock is outdated
 #[test]
 fn check_outdated_lock() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -14289,7 +15099,7 @@ fn check_outdated_lock() -> Result<()> {
 /// Otherwise `uv lock --check` will always fail.
 #[test]
 fn normalize_false_marker_dependency_groups() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -14358,7 +15168,7 @@ fn normalize_false_marker_dependency_groups() -> Result<()> {
 /// Otherwise `uv lock --check` will always fail.
 #[test]
 fn normalize_false_marker_requires_dist() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -14420,9 +15230,10 @@ fn normalize_false_marker_requires_dist() -> Result<()> {
 }
 
 /// Change indexes between locking operations.
-#[test]
-fn lock_change_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_change_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -14435,7 +15246,7 @@ fn lock_change_index() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(proxy.authenticated_url("public", "heron", "/basic-auth/simple")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14461,10 +15272,10 @@ fn lock_change_index() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
 
         [[package]]
@@ -14545,7 +15356,7 @@ fn lock_change_index() -> Result<()> {
 /// updated on the next run.
 #[test]
 fn lock_remove_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a workspace member.
     let leaf = context.temp_dir.child("leaf");
@@ -14847,7 +15658,7 @@ fn lock_remove_member() -> Result<()> {
 /// we wouldn't be able to determine that a new member was added.
 #[test]
 fn lock_add_member_with_build_system() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a workspace, but don't add the member.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -14916,8 +15727,8 @@ fn lock_add_member_with_build_system() -> Result<()> {
         dependencies = ["anyio>3"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -15059,7 +15870,7 @@ fn lock_add_member_with_build_system() -> Result<()> {
 
 #[test]
 fn lock_add_member_without_build_system() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a workspace, but don't add the member.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -15395,7 +16206,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
 /// the existing lockfile.
 #[test]
 fn lock_redundant_add_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Lock `anyio`.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -15596,7 +16407,7 @@ fn lock_redundant_add_member() -> Result<()> {
 /// next run.
 #[test]
 fn lock_new_constraints() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -15794,7 +16605,7 @@ fn lock_new_constraints() -> Result<()> {
 /// next run.
 #[test]
 fn lock_remove_member_non_project() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a virtual workspace root.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -15816,8 +16627,8 @@ fn lock_remove_member_non_project() -> Result<()> {
         dependencies = ["anyio>3"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -15963,7 +16774,7 @@ fn lock_remove_member_non_project() -> Result<()> {
 /// the next run.
 #[test]
 fn lock_rename_project() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a workspace, but don't add the member.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -16110,7 +16921,7 @@ fn lock_rename_project() -> Result<()> {
 /// Test backwards compatibility for `[package.metadata]`.
 #[test]
 fn lock_missing_metadata() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -16252,7 +17063,7 @@ fn lock_missing_metadata() -> Result<()> {
 /// `package.dev-dependencies`, with backwards compatibility for `package.dependency-groups`.
 #[test]
 fn lock_dev_dependencies_alias() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -16399,7 +17210,7 @@ fn lock_dev_dependencies_alias() -> Result<()> {
 /// on the next run.
 #[test]
 fn lock_reorder() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -16530,7 +17341,7 @@ fn lock_reorder() -> Result<()> {
 /// Ensure that `requires-python` bounds are correctly narrowed in the presence of upper-bound caps.
 #[test]
 fn lock_narrowed_python_version_upper() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let dependency = context.temp_dir.child("dependency");
     dependency.child("pyproject.toml").write_str(
@@ -16640,7 +17451,7 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
 
 #[test]
 fn lock_narrowed_python_version() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let dependency = context.temp_dir.child("dependency");
     dependency.child("pyproject.toml").write_str(
@@ -16652,8 +17463,8 @@ fn lock_narrowed_python_version() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -16757,7 +17568,7 @@ fn lock_narrowed_python_version() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/6059>
 #[test]
 fn lock_exclude_unnecessary_python_forks() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -16864,7 +17675,7 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
 /// Lock with a user-provided constraint on the space of supported environments.
 #[test]
 fn lock_constrained_environment() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -17176,11 +17987,11 @@ fn lock_constrained_environment() -> Result<()> {
     Ok(())
 }
 
-/// Lock with a user-provided constraint on the space of supported environments, using a legacy
-/// virtual workspace root.
+/// Lock with a user-provided constraint on the space of supported environments, using a
+/// non-project workspace root.
 #[test]
-fn lock_constrained_environment_legacy() -> Result<()> {
-    let context = TestContext::new("3.12");
+fn lock_constrained_environment_non_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -17344,7 +18155,7 @@ fn lock_constrained_environment_legacy() -> Result<()> {
 /// User-provided constraints must be disjoint.
 #[test]
 fn lock_overlapping_environment() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -17374,10 +18185,10 @@ fn lock_overlapping_environment() -> Result<()> {
     Ok(())
 }
 
-/// Lock a (legacy) non-project workspace root with forked dev dependencies.
+/// Lock a non-project workspace root with forked dev dependencies.
 #[test]
 fn lock_non_project_fork() -> Result<()> {
-    let context = TestContext::new("3.10");
+    let context = uv_test::test_context!("3.10");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -17570,10 +18381,10 @@ fn lock_non_project_fork() -> Result<()> {
     Ok(())
 }
 
-/// Lock a (legacy) non-project workspace root with a conditional dependency.
+/// Lock a non-project workspace root with a conditional dependency.
 #[test]
 fn lock_non_project_conditional() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -17675,10 +18486,10 @@ fn lock_non_project_conditional() -> Result<()> {
     Ok(())
 }
 
-/// Lock a (legacy) non-project workspace root with `dependency-groups`.
+/// Lock a non-project workspace root with `dependency-groups`.
 #[test]
 fn lock_non_project_group() -> Result<()> {
-    let context = TestContext::new("3.10");
+    let context = uv_test::test_context!("3.10");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -17817,10 +18628,105 @@ fn lock_non_project_group() -> Result<()> {
     Ok(())
 }
 
-/// Lock a (legacy) non-project workspace root with `tool.uv.sources`.
+/// Lock a non-project workspace root with `dependency-groups`.
+///
+/// Here instead of leaning on `tool.uv.workspace` we use the
+/// officially blessed "pyproject.toml with no `[project]` that
+/// declares `[dependency-groups]`".
+#[test]
+fn lock_non_project_group_standard() -> Result<()> {
+    let context = uv_test::test_context!("3.10");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [dependency-groups]
+        lint = ["iniconfig"]
+        dev = ["typing-extensions"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.10"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+
+        [manifest.dependency-groups]
+        dev = [{ name = "typing-extensions" }]
+        lint = [{ name = "iniconfig" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z" },
+        ]
+        "#
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Re-run with `--offline`. We shouldn't need a network connection to validate an
+    // already-correct lockfile with immutable metadata.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Lock a non-project workspace root with `tool.uv.sources`.
 #[test]
 fn lock_non_project_sources() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -17902,10 +18808,230 @@ fn lock_non_project_sources() -> Result<()> {
     Ok(())
 }
 
+/// Lock a non-project workspace root with conflicts declared between members.
+#[test]
+fn lock_non_project_member_conflicts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["member-a", "member-b"]
+        "#,
+    )?;
+
+    let member_a = context.temp_dir.child("member-a");
+    member_a.create_dir_all()?;
+    member_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sortedcontainers==2.3.0"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    let member_b = context.temp_dir.child("member-b");
+    member_b.create_dir_all()?;
+    member_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because member-a depends on sortedcontainers==2.3.0 and member-b depends on sortedcontainers==2.4.0, we can conclude that member-a and member-b are incompatible.
+          And because your workspace requires member-a and member-b, we can conclude that your workspace's requirements are unsatisfiable.
+    ");
+
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["member-a", "member-b"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { package = "member-a" },
+            { package = "member-b" },
+          ],
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 4 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "member-a" },
+            { package = "member-b" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "member-a",
+            "member-b",
+        ]
+
+        [[package]]
+        name = "member-a"
+        version = "0.1.0"
+        source = { editable = "member-a" }
+        dependencies = [
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-8-member-a'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "sortedcontainers", specifier = "==2.3.0" }]
+
+        [[package]]
+        name = "member-b"
+        version = "0.1.0"
+        source = { editable = "member-b" }
+        dependencies = [
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-8-member-b'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "sortedcontainers", specifier = "==2.4.0" }]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509, upload-time = "2020-11-09T00:03:52.258Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479, upload-time = "2020-11-09T00:03:50.723Z" },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
+        ]
+        "#
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--all-packages"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `member-a` and package `member-b` are incompatible with the declared conflicts: {member-a, member-b}
+    ");
+
+    Ok(())
+}
+
+/// Locking a non-project workspace root should reject conflicts that omit
+/// `package = ...`, since there is no root project name to infer.
+#[test]
+fn lock_non_project_member_conflicts_missing_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["member-a"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "foo" },
+            { package = "member-a" },
+          ],
+        ]
+        "#,
+    )?;
+
+    let member_a = context.temp_dir.child("member-a");
+    member_a.create_dir_all()?;
+    member_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Expected `package` field in conflicting entry: { extra = "foo" }
+    "#);
+
+    Ok(())
+}
+
 /// `coverage` defines a `toml` extra, but it doesn't enable any dependencies after Python 3.11.
 #[test]
 fn lock_dropped_dev_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -18022,7 +19148,7 @@ fn lock_dropped_dev_extra() -> Result<()> {
 /// Lock with an empty (but existent) `tool.uv.dev-dependencies` group.
 #[test]
 fn lock_empty_dev_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -18130,7 +19256,7 @@ fn lock_empty_dev_dependencies() -> Result<()> {
 /// Lock with an empty (but existent) `dependency-groups` group.
 #[test]
 fn lock_empty_dependency_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -18234,7 +19360,7 @@ fn lock_empty_dependency_group() -> Result<()> {
 /// Add and remove an empty dependency group.
 #[test]
 fn lock_add_empty_dependency_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -18473,7 +19599,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
 /// Use a trailing slash on the declared index.
 #[test]
 fn lock_trailing_slash_index_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -18597,7 +19723,7 @@ fn lock_trailing_slash_index_url() -> Result<()> {
 
 #[test]
 fn lock_invalid_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -18644,7 +19770,7 @@ fn lock_invalid_index() -> Result<()> {
 
 #[test]
 fn lock_explicit_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -18751,7 +19877,7 @@ fn lock_explicit_index() -> Result<()> {
 
 #[test]
 fn lock_explicit_default_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -18841,22 +19967,28 @@ fn lock_explicit_default_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired shared lock for `[CACHE_DIR]/`
     DEBUG Found workspace root: `[TEMP_DIR]/`
     DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    DEBUG Found workspace configuration at `[TEMP_DIR]/pyproject.toml`
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    DEBUG Found project root: `[TEMP_DIR]/`
+    DEBUG No workspace root found, using project root
     DEBUG No Python version file found in workspace: [TEMP_DIR]/
     DEBUG Using Python request `>=3.12` from `requires-python` metadata
     DEBUG Checking for Python environment at: `.venv`
     DEBUG The project environment's Python version satisfies the request: `Python >=3.12`
-    DEBUG Using request timeout of [TIME]
-    DEBUG Found static `pyproject.toml` for: project @ file://[TEMP_DIR]/
+    DEBUG Using request connect timeout of [TIME] and read timeout of [TIME]
+    DEBUG Found static `requires-dist` for: [TEMP_DIR]/
     DEBUG No workspace root found, using project root
     DEBUG Resolving despite existing lockfile due to mismatched requirements for: `project==0.1.0`
       Requested: {Requirement { name: PackageName("anyio"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([]), index: None, conflict: None }, origin: None }}
-      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2.0.0" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: DisplaySafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None }), format: Simple }), conflict: None }, origin: None }}
+      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2.0.0" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: DisplaySafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None, expanded: false }), format: Simple }), conflict: None }, origin: None }}
+    DEBUG Found static `pyproject.toml` for: project @ file://[TEMP_DIR]/
+    DEBUG No workspace root found, using project root
     DEBUG Solving with installed Python version: 3.12.[X]
     DEBUG Solving with target Python version: >=3.12
+    DEBUG Solving with exclude-newer: global: 2024-03-25T00:00:00Z
     DEBUG Adding direct dependency: project*
     DEBUG Searching for a compatible version of project @ file://[TEMP_DIR]/ (*)
     DEBUG Adding direct dependency: anyio*
@@ -18867,7 +19999,6 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG No compatible version found for: project
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     "#);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -18910,12 +20041,104 @@ fn lock_explicit_default_index() -> Result<()> {
     Ok(())
 }
 
+/// Error when an explicit index does not have a name.
 #[test]
-fn lock_named_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+fn lock_unnamed_explicit_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [[tool.uv.index]]
+        url = "https://test.pypi.org/simple"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 8, column 9
+        |
+      8 |         [[tool.uv.index]]
+        |         ^^^^^^^^^^^^^^^^^
+      An index with `explicit = true` requires a `name`: https://test.pypi.org/simple
+
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 8, column 9
+      |
+    8 |         [[tool.uv.index]]
+      |         ^^^^^^^^^^^^^^^^^
+    An index with `explicit = true` requires a `name`: https://test.pypi.org/simple
+    ");
+
+    Ok(())
+}
+
+/// Error when an index cache-control override is not a valid HTTP header value.
+#[test]
+fn lock_invalid_index_cache_control() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [[tool.uv.index]]
+        name = "test"
+        url = "https://test.pypi.org/simple"
+        cache-control.api = """
+        max-age=600
+        """
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 11, column 9
+         |
+      11 |         cache-control.api = \"\"\"
+         |         ^^^^^^^^^^^^^
+      `cache-control.api` must be a valid HTTP header value
+
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 11, column 9
+       |
+    11 |         cache-control.api = \"\"\"
+       |         ^^^^^^^^^^^^^
+    `cache-control.api` must be a valid HTTP header value
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn lock_named_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "project"
@@ -18930,13 +20153,14 @@ fn lock_named_index() -> Result<()> {
 
         [[tool.uv.index]]
         name = "heron"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "{proxy_uri}/simple"
 
         [[tool.uv.index]]
         name = "test"
         url = "https://test.pypi.org/simple"
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
     success: true
@@ -18975,7 +20199,7 @@ fn lock_named_index() -> Result<()> {
         [[package]]
         name = "typing-extensions"
         version = "4.10.0"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        source = { registry = "http://[LOCALHOST]/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z" },
@@ -18989,7 +20213,7 @@ fn lock_named_index() -> Result<()> {
 
 #[test]
 fn lock_default_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // If an index is included, PyPI will still be used as the default index.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -19121,7 +20345,7 @@ fn lock_default_index() -> Result<()> {
 
 #[test]
 fn lock_named_index_cli() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -19209,10 +20433,113 @@ fn lock_named_index_cli() -> Result<()> {
     Ok(())
 }
 
+/// If a named index is referenced in `tool.uv.sources` but only defined in `uv.toml`, we should
+/// provide a hint that the index was found in a configuration file.
+#[test]
+fn lock_named_index_config_file_hint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["jinja2==3.1.2"]
+
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
+        "#,
+    )?;
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(
+        r#"
+        [[index]]
+        name = "pytorch"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu121"
+        explicit = true
+        "#,
+    )?;
+
+    // The index is defined in `uv.toml`, which should produce a hint.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry: `jinja2`
+      ╰─▶ Package `jinja2` references an undeclared index: `pytorch`
+
+          hint: Index `pytorch` was found in a project-level `uv.toml`, but indexes referenced via `tool.uv.sources` must be defined in the project's `pyproject.toml`
+    ");
+
+    Ok(())
+}
+
+/// If a named index is referenced in `tool.uv.sources` but only defined in a user-level `uv.toml`
+/// (e.g., `~/.config/uv/uv.toml`), we should provide a hint that the index was found in a
+/// configuration file.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn lock_named_index_user_config_file_hint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["jinja2==3.1.2"]
+
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
+        "#,
+    )?;
+
+    // Define the index in a user-level configuration file.
+    let xdg = assert_fs::TempDir::new().expect("Failed to create temp dir");
+    let uv_config = xdg.child("uv");
+    let uv_toml = uv_config.child("uv.toml");
+    uv_toml.write_str(
+        r#"
+        [[index]]
+        name = "pytorch"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu121"
+        explicit = true
+        "#,
+    )?;
+
+    // The index is defined in a user-level `uv.toml`, which should produce a hint.
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry: `jinja2`
+      ╰─▶ Package `jinja2` references an undeclared index: `pytorch`
+
+          hint: Index `pytorch` was found in a user-level `uv.toml`, but indexes referenced via `tool.uv.sources` must be defined in the project's `pyproject.toml`
+    ");
+
+    Ok(())
+}
+
 /// If a name is reused, within a single file, we should raise an error.
 #[test]
 fn lock_repeat_named_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -19250,10 +20577,53 @@ fn lock_repeat_named_index() -> Result<()> {
     Ok(())
 }
 
+/// If multiple indexes are marked as default within a single file, we should raise an error.
+#[test]
+fn lock_multiple_default_indexes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [[tool.uv.index]]
+        name = "first"
+        url = "https://pypi.org/simple"
+        default = true
+
+        [[tool.uv.index]]
+        name = "second"
+        url = "https://example.com"
+        default = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 8, column 9
+      |
+    8 |         [[tool.uv.index]]
+      |         ^^^^^^^^^^^^^^^^^
+    found multiple indexes with `default = true`; only one index may be marked as default
+    ");
+
+    Ok(())
+}
+
 /// If a name is defined in both the workspace root and the member, prefer the index in the member.
 #[test]
 fn lock_repeat_named_index_member() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -19292,8 +20662,8 @@ fn lock_repeat_named_index_member() -> Result<()> {
         url = "https://astral-sh.github.io/pytorch-mirror/whl/cpu"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         idna = { index = "pytorch" }
@@ -19367,7 +20737,7 @@ fn lock_repeat_named_index_member() -> Result<()> {
 
 #[test]
 fn lock_unique_named_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -19442,7 +20812,7 @@ fn lock_unique_named_index() -> Result<()> {
 /// This includes names passed in via the CLI.
 #[test]
 fn lock_repeat_named_index_cli() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -19609,7 +20979,7 @@ fn lock_repeat_named_index_cli() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/11776>
 #[test]
 fn lock_named_index_overlap() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -19688,7 +21058,7 @@ fn lock_named_index_overlap() -> Result<()> {
 /// Lock a project with `package = false`, making it a virtual project.
 #[test]
 fn lock_explicit_virtual_project() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -19700,8 +21070,8 @@ fn lock_explicit_virtual_project() -> Result<()> {
         dependencies = ["black"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         package = false
@@ -19915,7 +21285,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
 /// Lock a project that is implicitly virtual (by way of omitting `build-system`).
 #[test]
 fn lock_implicit_virtual_project() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -20138,7 +21508,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
 /// omitting `build-system`).
 #[test]
 fn lock_implicit_package_path() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -20299,7 +21669,7 @@ fn lock_implicit_package_path() -> Result<()> {
 
 #[test]
 fn lock_conflicting_environment() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -20329,7 +21699,7 @@ fn lock_conflicting_environment() -> Result<()> {
 
 #[test]
 fn lock_split_python_environment() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -20447,7 +21817,7 @@ fn lock_split_python_environment() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/6911>
 #[test]
 fn lock_python_upper_bound() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -20813,7 +22183,7 @@ fn lock_python_upper_bound() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/7876>
 #[test]
 fn lock_simplified_environments() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = uv_test::test_context!("3.11");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -20924,7 +22294,7 @@ fn lock_simplified_environments() -> Result<()> {
 
 #[test]
 fn lock_dependency_metadata() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -21161,9 +22531,9 @@ fn lock_dependency_metadata() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_dependency_metadata_git() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -21284,7 +22654,7 @@ fn lock_dependency_metadata_git() -> Result<()> {
 
 #[test]
 fn lock_strip_fragment() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -21368,7 +22738,7 @@ fn lock_strip_fragment() -> Result<()> {
 
 #[test]
 fn lock_request_requires_python() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -21412,7 +22782,7 @@ fn lock_request_requires_python() -> Result<()> {
 
 #[test]
 fn lock_duplicate_sources() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -21482,7 +22852,7 @@ fn lock_duplicate_sources() -> Result<()> {
 
 #[test]
 fn lock_invalid_project_table() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("a/pyproject.toml");
     pyproject_toml.write_str(
@@ -21527,7 +22897,7 @@ fn lock_invalid_project_table() -> Result<()> {
 
 #[test]
 fn lock_missing_name() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc::indoc! {
@@ -21558,7 +22928,7 @@ fn lock_missing_name() -> Result<()> {
 
 #[test]
 fn lock_missing_version() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc::indoc! {
@@ -21589,7 +22959,7 @@ fn lock_missing_version() -> Result<()> {
 
 #[test]
 fn lock_unsupported_version() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -21680,7 +23050,7 @@ fn lock_unsupported_version() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/7618>
 #[test]
 fn lock_change_requires_python() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -21906,9 +23276,9 @@ fn lock_change_requires_python() -> Result<()> {
 }
 
 /// Retrieve credentials for a named index from the keyring.
-#[test]
-fn lock_keyring_credentials() -> Result<()> {
-    let keyring_context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_keyring_credentials() -> Result<()> {
+    let keyring_context = uv_test::test_context!("3.12");
 
     // Install our keyring plugin
     keyring_context
@@ -21923,10 +23293,11 @@ fn lock_keyring_credentials() -> Result<()> {
         .assert()
         .success();
 
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -21939,23 +23310,24 @@ fn lock_keyring_credentials() -> Result<()> {
 
         [[tool.uv.index]]
         name = "proxy"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         default = true
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Provide credentials via the keyring
     uv_snapshot!(context.filters(), context.lock()
         .env(EnvVars::index_username("PROXY"), "public")
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for public@pypi-proxy.fly.dev
+    Keyring request for public@http://[LOCALHOST]/basic-auth/simple
+    Keyring request for public@[LOCALHOST]
     Resolved 2 packages in [TIME]
     ");
 
@@ -21988,10 +23360,10 @@ fn lock_keyring_credentials() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
         "#
         );
@@ -22001,9 +23373,10 @@ fn lock_keyring_credentials() -> Result<()> {
 }
 
 /// Get credentials from the keyring with `explicit = true` and `authenticate = always`
-#[test]
-fn lock_keyring_explicit_always() -> Result<()> {
-    let keyring_context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_keyring_explicit_always() -> Result<()> {
+    let keyring_context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Install our keyring plugin
     keyring_context
@@ -22016,6 +23389,7 @@ fn lock_keyring_explicit_always() -> Result<()> {
                 .join("keyring_test_plugin"),
         )
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env_remove(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
         // (from `echo "keyring==v25.6.0" | uv pip compile - --no-annotate --no-header -q`)
         .arg("jaraco-classes==3.4.0")
         .arg("jaraco-context==6.0.1")
@@ -22025,10 +23399,10 @@ fn lock_keyring_explicit_always() -> Result<()> {
         .assert()
         .success();
 
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -22040,44 +23414,45 @@ fn lock_keyring_explicit_always() -> Result<()> {
         keyring-provider = "subprocess"
 
         [tool.uv.sources]
-        iniconfig = {index = "proxy"}
+        iniconfig = {{index = "proxy"}}
 
         [[tool.uv.index]]
         name = "proxy"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         authenticate = "always"
         explicit = true
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // First, try some invalid credentials — we should not fall back to the default index
     uv_snapshot!(context.filters(), context.lock()
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "frog"}}"#)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "frog"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for https://pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for pypi-proxy.fly.dev
+    Keyring request for http://[LOCALHOST]/basic-auth/simple
+    Keyring request for [LOCALHOST]
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     ");
 
     // With valid credentials, we should succeed
     uv_snapshot!(context.filters(), context.lock()
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for https://pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for pypi-proxy.fly.dev
+    Keyring request for http://[LOCALHOST]/basic-auth/simple
+    Keyring request for [LOCALHOST]
     Resolved 2 packages in [TIME]
     ");
 
@@ -22086,9 +23461,10 @@ fn lock_keyring_explicit_always() -> Result<()> {
 
 /// Fetch credentials (including a username) for a named index via the keyring using `authenticate =
 /// always`
-#[test]
-fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()> {
-    let keyring_context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()> {
+    let keyring_context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Install our keyring plugin
     keyring_context
@@ -22100,9 +23476,10 @@ fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()>
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
-        // We need a newer version of keyring that supports `--mode`, so unset `EXCLUDE_NEWER` and
-        // pin the dependencies
+        // We need a newer version of keyring that supports `--mode`, so unset the timestamp
+        // cutoffs and pin the dependencies.
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env_remove(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
         // (from `echo "keyring==v25.6.0" | uv pip compile - --no-annotate --no-header -q`)
         .arg("jaraco-classes==3.4.0")
         .arg("jaraco-context==6.0.1")
@@ -22112,10 +23489,10 @@ fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()>
         .assert()
         .success();
 
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -22128,22 +23505,23 @@ fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()>
 
         [[tool.uv.index]]
         name = "proxy"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         default = true
         authenticate = "always"
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     uv_snapshot!(context.filters(), context.lock()
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for https://pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for pypi-proxy.fly.dev
+    Keyring request for http://[LOCALHOST]/basic-auth/simple
+    Keyring request for [LOCALHOST]
     Resolved 2 packages in [TIME]
     ");
 
@@ -22176,10 +23554,10 @@ fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()>
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
         "#
         );
@@ -22190,9 +23568,9 @@ fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()>
 
 /// Fetch credentials (including a username) for a named index via the keyring using `authenticate =
 /// always` — but the keyring version installed does not support `--mode creds`
-#[test]
-fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()> {
-    let keyring_context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()> {
+    let keyring_context = uv_test::test_context!("3.12");
 
     // Install our keyring plugin
     keyring_context
@@ -22207,10 +23585,11 @@ fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()>
         .assert()
         .success();
 
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -22223,14 +23602,15 @@ fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()>
 
         [[tool.uv.index]]
         name = "proxy"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         default = true
         authenticate = "always"
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     uv_snapshot!(context.filters(), context.lock()
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: false
     exit_code: 2
@@ -22238,8 +23618,8 @@ fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()>
 
     ----- stderr -----
     warning: Attempted to fetch credentials using the `keyring` command, but it does not support `--mode creds`; upgrade to `keyring>=v25.2.1` or provide a username
-    error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/`
-      Caused by: Missing credentials for https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/
+    error: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/iniconfig/`
+      Caused by: Missing credentials for http://[LOCALHOST]/basic-auth/simple/iniconfig/
     ");
 
     Ok(())
@@ -22247,7 +23627,7 @@ fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()>
 
 #[test]
 fn lock_multiple_sources() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -22346,7 +23726,7 @@ fn lock_multiple_sources() -> Result<()> {
 
 #[test]
 fn lock_multiple_sources_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -22386,7 +23766,7 @@ fn lock_multiple_sources_conflict() -> Result<()> {
 
 #[test]
 fn lock_multiple_sources_no_marker() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -22424,7 +23804,7 @@ fn lock_multiple_sources_no_marker() -> Result<()> {
 
 #[test]
 fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -22559,7 +23939,7 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
 
 #[test]
 fn lock_multiple_sources_index_mixed() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -22697,7 +24077,7 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
 
 #[test]
 fn lock_multiple_sources_index_non_total() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -22797,7 +24177,7 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
 
 #[test]
 fn lock_multiple_sources_index_explicit() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -22948,7 +24328,7 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
 
 #[test]
 fn lock_multiple_sources_non_total() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -23049,7 +24429,7 @@ fn lock_multiple_sources_non_total() -> Result<()> {
 
 #[test]
 fn lock_multiple_sources_respect_marker() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -23128,7 +24508,7 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
 
 #[test]
 fn lock_multiple_sources_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -23215,7 +24595,7 @@ fn lock_multiple_sources_extra() -> Result<()> {
 
 #[test]
 fn lock_multiple_sources_index_overlapping_extras() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -23269,7 +24649,7 @@ fn lock_multiple_sources_index_overlapping_extras() -> Result<()> {
 /// Sources will be ignored when an `extra` is applied, but references a non-existent extra.
 #[test]
 fn lock_multiple_index_with_missing_extra() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -23309,7 +24689,7 @@ fn lock_multiple_index_with_missing_extra() -> Result<()> {
 /// group.
 #[test]
 fn lock_multiple_index_with_absent_extra() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -23351,7 +24731,7 @@ fn lock_multiple_index_with_absent_extra() -> Result<()> {
 /// Sources will be ignored when a `group` is applied, but references a non-existent group.
 #[test]
 fn lock_multiple_index_with_missing_group() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -23391,7 +24771,7 @@ fn lock_multiple_index_with_missing_group() -> Result<()> {
 /// group.
 #[test]
 fn lock_multiple_index_with_absent_group() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -23432,7 +24812,7 @@ fn lock_multiple_index_with_absent_group() -> Result<()> {
 
 #[test]
 fn lock_dry_run() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -23499,7 +24879,7 @@ fn lock_dry_run() -> Result<()> {
 
 #[test]
 fn lock_dry_run_noop() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -23562,7 +24942,7 @@ fn lock_dry_run_noop() -> Result<()> {
 
 #[test]
 fn lock_group_include() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -23746,7 +25126,7 @@ fn lock_group_include() -> Result<()> {
 
 #[test]
 fn lock_group_requires_python() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -23864,7 +25244,7 @@ fn lock_group_requires_python() -> Result<()> {
 
 #[test]
 fn lock_group_includes_requires_python() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -24015,7 +25395,7 @@ fn lock_group_includes_requires_python() -> Result<()> {
 /// Referring to a dependency-group with group-requires-python that does not exist
 #[test]
 fn lock_group_requires_undefined_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -24049,7 +25429,7 @@ fn lock_group_requires_undefined_group() -> Result<()> {
 /// The legacy dev-dependencies cannot be referred to by group-requires-python
 #[test]
 fn lock_group_requires_dev_dep() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -24083,7 +25463,7 @@ fn lock_group_requires_dev_dep() -> Result<()> {
 
 #[test]
 fn lock_group_includes_requires_python_contradiction() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -24206,7 +25586,7 @@ fn lock_group_includes_requires_python_contradiction() -> Result<()> {
 
 #[test]
 fn lock_group_include_cycle() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -24239,7 +25619,7 @@ fn lock_group_include_cycle() -> Result<()> {
 
 #[test]
 fn lock_group_include_dev() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -24274,7 +25654,7 @@ fn lock_group_include_dev() -> Result<()> {
 
 #[test]
 fn lock_group_include_missing() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -24305,7 +25685,7 @@ fn lock_group_include_missing() -> Result<()> {
 
 #[test]
 fn lock_group_invalid_entry_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -24352,7 +25732,7 @@ fn lock_group_invalid_entry_package() -> Result<()> {
 
 #[test]
 fn lock_group_invalid_entry_group_name() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -24387,7 +25767,7 @@ fn lock_group_invalid_entry_group_name() -> Result<()> {
 
 #[test]
 fn lock_group_invalid_duplicate_group_name() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -24423,7 +25803,7 @@ fn lock_group_invalid_duplicate_group_name() -> Result<()> {
 
 #[test]
 fn lock_group_invalid_entry_table() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -24454,7 +25834,7 @@ fn lock_group_invalid_entry_table() -> Result<()> {
 
 #[test]
 fn lock_group_invalid_entry_type() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -24489,7 +25869,7 @@ fn lock_group_invalid_entry_type() -> Result<()> {
 
 #[test]
 fn lock_group_empty_entry_table() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -24524,7 +25904,7 @@ fn lock_group_empty_entry_table() -> Result<()> {
 
 #[test]
 fn lock_group_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -24562,8 +25942,8 @@ fn lock_group_workspace() -> Result<()> {
         testing = ["pytest>8"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -24740,9 +26120,9 @@ fn lock_group_workspace() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_transitive_git() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -24885,7 +26265,7 @@ fn lock_transitive_git() -> Result<()> {
 /// Lock a package with a dynamic version.
 #[test]
 fn lock_dynamic_version() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -24996,7 +26376,7 @@ fn lock_dynamic_version() -> Result<()> {
 /// Lock a package with a dynamic version and dynamic dependencies.
 #[test]
 fn lock_dynamic_version_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -25107,7 +26487,7 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
 /// building the package.
 #[test]
 fn lock_dynamic_version_no_build() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -25173,7 +26553,7 @@ fn lock_dynamic_version_no_build() -> Result<()> {
 /// Lock a package that depends on a package with a dynamic version using a `workspace` source.
 #[test]
 fn lock_dynamic_version_workspace_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -25364,7 +26744,7 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
 /// opposed to a workspace).
 #[test]
 fn lock_dynamic_version_path_dependency() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -25541,7 +26921,7 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
 /// N.B. `hatchling` "flattens" recursive extras.
 #[test]
 fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -25695,7 +27075,7 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
 /// N.B. `setuptools` does not "flatten" recursive extras.
 #[test]
 fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -25853,7 +27233,7 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/11047>
 #[test]
 fn lock_dynamic_built_cache() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -25974,7 +27354,7 @@ fn lock_dynamic_built_cache() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/11047>
 #[test]
 fn lock_shared_build_dependency() -> Result<()> {
-    let context = TestContext::new("3.13").with_exclude_newer("2025-01-28T00:00:00Z");
+    let context = uv_test::test_context!("3.13").with_exclude_newer("2025-01-28T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -26256,7 +27636,7 @@ fn lock_shared_build_dependency() -> Result<()> {
 /// Re-lock after converting a package from dynamic to static.
 #[test]
 fn lock_dynamic_to_static() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -26386,7 +27766,7 @@ fn lock_dynamic_to_static() -> Result<()> {
 /// Re-lock after converting a package from static to dynamic.
 #[test]
 fn lock_static_to_dynamic() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -26515,7 +27895,7 @@ fn lock_static_to_dynamic() -> Result<()> {
 
 #[test]
 fn lock_bump_static_version() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -26618,7 +27998,7 @@ fn lock_bump_static_version() -> Result<()> {
 
 #[test]
 fn lock_derivation_chain_prod() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -26674,7 +28054,7 @@ fn lock_derivation_chain_prod() -> Result<()> {
 
 #[test]
 fn lock_derivation_chain_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -26731,7 +28111,7 @@ fn lock_derivation_chain_extra() -> Result<()> {
 
 #[test]
 fn lock_derivation_chain_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -26790,7 +28170,7 @@ fn lock_derivation_chain_group() -> Result<()> {
 
 #[test]
 fn lock_derivation_chain_extended() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -26862,7 +28242,7 @@ fn lock_derivation_chain_extended() -> Result<()> {
 /// itself isn't a package.
 #[test]
 fn mismatched_name_self_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -26896,7 +28276,7 @@ fn mismatched_name_self_editable() -> Result<()> {
 
 #[test]
 fn lock_relative_project() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context
         .temp_dir
@@ -26998,7 +28378,7 @@ fn lock_relative_project() -> Result<()> {
 
 #[test]
 fn lock_recursive_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -27107,7 +28487,7 @@ fn lock_recursive_extra() -> Result<()> {
 /// ```
 #[test]
 fn no_lowest_warning_with_name_and_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -27144,7 +28524,7 @@ fn no_lowest_warning_with_name_and_url() -> Result<()> {
 
 #[test]
 fn lock_no_build_static_metadata() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -27241,7 +28621,7 @@ fn lock_no_build_static_metadata() -> Result<()> {
 
 #[test]
 fn lock_no_build_dynamic_metadata() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -27269,7 +28649,7 @@ fn lock_no_build_dynamic_metadata() -> Result<()> {
 
 #[test]
 fn lock_self_compatible() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -27369,7 +28749,7 @@ fn lock_self_compatible() -> Result<()> {
 
 #[test]
 fn lock_self_exact() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -27469,7 +28849,7 @@ fn lock_self_exact() -> Result<()> {
 
 #[test]
 fn lock_self_incompatible() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -27499,7 +28879,7 @@ fn lock_self_incompatible() -> Result<()> {
 
 #[test]
 fn lock_self_extra_to_extra_compatible() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -27603,7 +28983,7 @@ fn lock_self_extra_to_extra_compatible() -> Result<()> {
 
 #[test]
 fn lock_self_extra_to_same_extra_incompatible() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -27636,7 +29016,7 @@ fn lock_self_extra_to_same_extra_incompatible() -> Result<()> {
 
 #[test]
 fn lock_self_extra_to_other_extra_incompatible() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -27670,7 +29050,7 @@ fn lock_self_extra_to_other_extra_incompatible() -> Result<()> {
 
 #[test]
 fn lock_self_extra_compatible() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -27774,7 +29154,7 @@ fn lock_self_extra_compatible() -> Result<()> {
 
 #[test]
 fn lock_self_extra_incompatible() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -27807,7 +29187,7 @@ fn lock_self_extra_incompatible() -> Result<()> {
 
 #[test]
 fn lock_self_marker_compatible() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -27907,7 +29287,7 @@ fn lock_self_marker_compatible() -> Result<()> {
 
 #[test]
 fn lock_self_marker_incompatible() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -27939,7 +29319,7 @@ fn lock_self_marker_incompatible() -> Result<()> {
 /// Windows. This may change in the future.
 #[test]
 fn lock_split_on_windows() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2024-12-18T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2024-12-18T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -28029,9 +29409,9 @@ fn lock_split_on_windows() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_missing_git_prefix() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -28063,7 +29443,7 @@ fn lock_missing_git_prefix() -> Result<()> {
 
 #[test]
 fn lock_arm() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -28138,7 +29518,7 @@ fn lock_arm() -> Result<()> {
 
 #[test]
 fn lock_x86_64() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -28214,7 +29594,7 @@ fn lock_x86_64() -> Result<()> {
 
 #[test]
 fn lock_x86() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -28287,7 +29667,7 @@ fn lock_x86() -> Result<()> {
 
 #[test]
 fn lock_script() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! { r#"
@@ -28402,7 +29782,7 @@ fn lock_script() -> Result<()> {
 
 #[test]
 fn lock_script_path() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! { r#"
@@ -28434,8 +29814,8 @@ fn lock_script_path() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -28535,10 +29915,186 @@ fn lock_script_path() -> Result<()> {
     Ok(())
 }
 
+/// Repro for: <https://github.com/astral-sh/uv/issues/18312>
+///
+/// `uv lock --script` should invalidate a script lockfile when a local editable dependency's
+/// `pyproject.toml` changes.
+#[test]
+fn lock_script_editable_path_dependency_change() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "child",
+        # ]
+        #
+        # [tool.uv.sources]
+        # child = { path = "child", editable = true }
+        # ///
+
+        import child
+       "#
+    })?;
+
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir_all(&child)?;
+
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--script")
+        .arg("script.py")
+        .assert()
+        .success();
+
+    let lock = context.read("script.py.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock,
+            @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.11"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [{ name = "child", editable = "child" }]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { editable = "child" }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+        "#
+        );
+    });
+
+    context
+        .lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .assert()
+        .success();
+
+    // Update the editable dependency's transitive requirements.
+    child_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["sniffio"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    // Expected behavior: this should fail because the script lockfile is stale.
+    let output = context
+        .lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .output()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success(),
+        "expected `uv lock --script script.py --locked` to fail after editable dependency changes, but it succeeded\n{stderr}"
+    );
+    assert!(stderr.contains("needs to be updated"), "{stderr}");
+
+    // Expected behavior: re-locking should pick up the new transitive dependency.
+    context
+        .lock()
+        .arg("--script")
+        .arg("script.py")
+        .assert()
+        .success();
+    let lock = context.read("script.py.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock,
+            @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.11"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [{ name = "child", editable = "child" }]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { editable = "child" }
+        dependencies = [
+            { name = "sniffio" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "sniffio" }]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// `uv lock --script` should add a PEP 723 tag, if it doesn't exist already.
 #[test]
 fn lock_script_initialize() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_missing_file_error();
+    let context = uv_test::test_context!("3.12").with_filtered_missing_file_error();
 
     uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @"
     success: false
@@ -28586,7 +30142,7 @@ fn lock_script_initialize() -> Result<()> {
 
 #[test]
 fn lock_pytorch_cpu() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -29271,7 +30827,7 @@ fn lock_pytorch_cpu() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/10772>
 #[test]
 fn lock_pytorch_index_preferences() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -29765,7 +31321,7 @@ fn lock_pytorch_index_preferences() -> Result<()> {
 
 #[test]
 fn lock_intel_mac() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2024-12-18T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2024-12-18T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -30144,7 +31700,7 @@ fn lock_intel_mac() -> Result<()> {
 
 #[test]
 fn lock_pytorch_local_preference() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -30490,7 +32046,7 @@ fn lock_pytorch_local_preference() -> Result<()> {
 
 #[test]
 fn windows_arm() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -30567,7 +32123,7 @@ fn windows_arm() -> Result<()> {
 
 #[test]
 fn windows_amd64_required() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -30642,7 +32198,7 @@ fn windows_amd64_required() -> Result<()> {
 
 #[test]
 fn windows_arm64_required() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -30715,7 +32271,7 @@ fn windows_arm64_required() -> Result<()> {
 
 #[test]
 fn lock_empty_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -30906,7 +32462,7 @@ fn lock_empty_extra() -> Result<()> {
 /// need to discard the lockfile.
 #[test]
 fn lock_invalid_fork_markers() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.temp_dir.child("pyproject.toml").write_str(
         r#"
@@ -30985,7 +32541,7 @@ fn lock_invalid_fork_markers() -> Result<()> {
 
 #[test]
 fn lock_omit_wheels_exclude_newer() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2024-08-01T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2024-08-01T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -31076,7 +32632,7 @@ fn lock_omit_wheels_exclude_newer() -> Result<()> {
 /// Check that we hint if the resolution failed in a different Python version.
 #[test]
 fn lock_conflict_for_disjoint_python_version() -> Result<()> {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -31132,13 +32688,13 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
 }
 
 /// Check that we hint if the resolution failed for a different platform.
-#[cfg(feature = "python-patch")]
+#[cfg(feature = "test-python-patch")]
 #[test]
 fn lock_requires_python_empty_lock_file() -> Result<()> {
     // N.B. These versions were selected based on what was
     // in `.python-versions` at the time of writing (2025-06-16).
     let (v1, v2) = ("3.13.0", "3.13.2");
-    let context = TestContext::new_with_versions(&[v1, v2]);
+    let context = uv_test::test_context_with_versions!(&[v1, v2]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&format!(
@@ -31298,7 +32854,7 @@ fn lock_requires_python_empty_lock_file() -> Result<()> {
 /// Check that we hint if the resolution failed for a different platform.
 #[test]
 fn lock_conflict_for_disjoint_platform() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -31359,12 +32915,14 @@ fn lock_conflict_for_disjoint_platform() -> Result<()> {
 
 /// Add a package with an `--index` URL with no trailing slash while an index with the same URL
 /// exists with a trailing slash in the `pyproject.toml`.
-#[test]
-fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -31373,10 +32931,12 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
 
         [[tool.uv.index]]
         name = "pypi-proxy"
-        url = "https://pypi-proxy.fly.dev/simple/"
-    "#})?;
+        url = "{proxy_uri}/simple/"
+    "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
-    let no_trailing_slash_url = "https://pypi-proxy.fly.dev/simple";
+    let no_trailing_slash_url = &proxy.url("/simple");
 
     uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--index").arg(no_trailing_slash_url), @"
     success: true
@@ -31409,7 +32969,7 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
 
         [[tool.uv.index]]
         name = "pypi-proxy"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "http://[LOCALHOST]/simple"
         "#
         );
     });
@@ -31431,7 +32991,7 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
         [[package]]
         name = "anyio"
         version = "4.3.0"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        source = { registry = "http://[LOCALHOST]/simple" }
         dependencies = [
             { name = "idna" },
             { name = "sniffio" },
@@ -31444,7 +33004,7 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
         [[package]]
         name = "idna"
         version = "3.6"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        source = { registry = "http://[LOCALHOST]/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
@@ -31464,7 +33024,7 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
         [[package]]
         name = "sniffio"
         version = "1.3.1"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        source = { registry = "http://[LOCALHOST]/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
@@ -31488,12 +33048,13 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
 
 /// Run `uv lock --locked` with a lockfile with trailing slashes on the index URL but a
 /// `pyproject.toml` without a trailing slash on the index URL.
-#[test]
-fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "project"
@@ -31503,15 +33064,16 @@ fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()> {
 
         [[tool.uv.index]]
         name = "pypi-proxy"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "{proxy_uri}/simple"
 
         [tool.uv.sources]
-        anyio = { index = "pypi-proxy" }
+        anyio = {{ index = "pypi-proxy" }}
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     let lock = context.temp_dir.child("uv.lock");
-    lock.write_str(r#"
+    lock.write_str(&format!(r#"
         version = 1
         revision = 2
         requires-python = ">=3.12"
@@ -31522,46 +33084,46 @@ fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()> {
         [[package]]
         name = "anyio"
         version = "4.3.0"
-        source = { registry = "https://pypi-proxy.fly.dev/simple/" }
+        source = {{ registry = "{proxy_uri}/simple/" }}
         dependencies = [
-            { name = "idna" },
-            { name = "sniffio" },
+            {{ name = "idna" }},
+            {{ name = "sniffio" }},
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
+        sdist = {{ url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
+            {{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" }},
         ]
 
         [[package]]
         name = "idna"
         version = "3.6"
-        source = { registry = "https://pypi-proxy.fly.dev/simple/" }
-        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+        source = {{ registry = "{proxy_uri}/simple/" }}
+        sdist = {{ url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+            {{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" }},
         ]
 
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { virtual = "." }
+        source = {{ virtual = "." }}
         dependencies = [
-            { name = "anyio" },
+            {{ name = "anyio" }},
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "anyio", index = "https://pypi-proxy.fly.dev/simple/" }]
+        requires-dist = [{{ name = "anyio", index = "{proxy_uri}/simple/" }}]
 
         [[package]]
         name = "sniffio"
         version = "1.3.1"
-        source = { registry = "https://pypi-proxy.fly.dev/simple/" }
-        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        source = {{ registry = "{proxy_uri}/simple/" }}
+        sdist = {{ url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+            {{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" }},
         ]
-        "#
-    )?;
+        "#, proxy_uri = proxy.uri()
+    ))?;
 
     // Run `uv lock --locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
@@ -31579,12 +33141,13 @@ fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()> {
 
 /// Run `uv lock --locked` with `pyproject.toml` with trailing slashes on the index URL but a
 /// lockfile without trailing slashes on the index URL.
-#[test]
-fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "project"
@@ -31594,15 +33157,16 @@ fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result<()> {
 
         [[tool.uv.index]]
         name = "pypi-proxy"
-        url = "https://pypi-proxy.fly.dev/simple/"
+        url = "{proxy_uri}/simple/"
 
         [tool.uv.sources]
-        anyio = { index = "pypi-proxy" }
+        anyio = {{ index = "pypi-proxy" }}
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     let lock = context.temp_dir.child("uv.lock");
-    lock.write_str(r#"
+    lock.write_str(&format!(r#"
         version = 1
         revision = 2
         requires-python = ">=3.12"
@@ -31613,46 +33177,46 @@ fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result<()> {
         [[package]]
         name = "anyio"
         version = "4.3.0"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        source = {{ registry = "{proxy_uri}/simple" }}
         dependencies = [
-            { name = "idna" },
-            { name = "sniffio" },
+            {{ name = "idna" }},
+            {{ name = "sniffio" }},
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
+        sdist = {{ url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
+            {{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" }},
         ]
 
         [[package]]
         name = "idna"
         version = "3.6"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+        source = {{ registry = "{proxy_uri}/simple" }}
+        sdist = {{ url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+            {{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" }},
         ]
 
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { virtual = "." }
+        source = {{ virtual = "." }}
         dependencies = [
-            { name = "anyio" },
+            {{ name = "anyio" }},
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "anyio", index = "https://pypi-proxy.fly.dev/simple" }]
+        requires-dist = [{{ name = "anyio", index = "{proxy_uri}/simple" }}]
 
         [[package]]
         name = "sniffio"
         version = "1.3.1"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        source = {{ registry = "{proxy_uri}/simple" }}
+        sdist = {{ url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+            {{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" }},
         ]
-        "#
-    )?;
+        "#, proxy_uri = proxy.uri()
+    ))?;
 
     // Run `uv lock --locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
@@ -31670,12 +33234,13 @@ fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result<()> {
 
 /// Run `uv lock --locked` with a lockfile and `pyproject.toml` with trailing slashes on the index
 /// URL.
-#[test]
-fn lock_trailing_slash_index_url_in_lockfile_and_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_trailing_slash_index_url_in_lockfile_and_pyproject_toml() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "project"
@@ -31685,15 +33250,16 @@ fn lock_trailing_slash_index_url_in_lockfile_and_pyproject_toml() -> Result<()> 
 
         [[tool.uv.index]]
         name = "pypi-proxy"
-        url = "https://pypi-proxy.fly.dev/simple/"
+        url = "{proxy_uri}/simple/"
 
         [tool.uv.sources]
-        anyio = { index = "pypi-proxy" }
+        anyio = {{ index = "pypi-proxy" }}
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     let lock = context.temp_dir.child("uv.lock");
-    lock.write_str(r#"
+    lock.write_str(&format!(r#"
         version = 1
         revision = 2
         requires-python = ">=3.12"
@@ -31704,46 +33270,46 @@ fn lock_trailing_slash_index_url_in_lockfile_and_pyproject_toml() -> Result<()> 
         [[package]]
         name = "anyio"
         version = "4.3.0"
-        source = { registry = "https://pypi-proxy.fly.dev/simple/" }
+        source = {{ registry = "{proxy_uri}/simple/" }}
         dependencies = [
-            { name = "idna" },
-            { name = "sniffio" },
+            {{ name = "idna" }},
+            {{ name = "sniffio" }},
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
+        sdist = {{ url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
+            {{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" }},
         ]
 
         [[package]]
         name = "idna"
         version = "3.6"
-        source = { registry = "https://pypi-proxy.fly.dev/simple/" }
-        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+        source = {{ registry = "{proxy_uri}/simple/" }}
+        sdist = {{ url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+            {{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" }},
         ]
 
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { virtual = "." }
+        source = {{ virtual = "." }}
         dependencies = [
-            { name = "anyio" },
+            {{ name = "anyio" }},
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "anyio", index = "https://pypi-proxy.fly.dev/simple/" }]
+        requires-dist = [{{ name = "anyio", index = "{proxy_uri}/simple/" }}]
 
         [[package]]
         name = "sniffio"
         version = "1.3.1"
-        source = { registry = "https://pypi-proxy.fly.dev/simple/" }
-        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        source = {{ registry = "{proxy_uri}/simple/" }}
+        sdist = {{ url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+            {{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" }},
         ]
-        "#
-    )?;
+        "#, proxy_uri = proxy.uri()
+    ))?;
 
     // Run `uv lock --locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
@@ -31760,7 +33326,7 @@ fn lock_trailing_slash_index_url_in_lockfile_and_pyproject_toml() -> Result<()> 
 
 #[test]
 fn lock_trailing_slash_find_links() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -31906,7 +33472,7 @@ fn lock_trailing_slash_find_links() -> Result<()> {
 
 #[test]
 fn lock_prefix_match() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -31935,7 +33501,7 @@ fn lock_prefix_match() -> Result<()> {
 /// Regression test for <https://github.com/astral-sh/uv/issues/14231>.
 #[test]
 fn test_tilde_equals_python_version() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -31966,7 +33532,7 @@ fn test_tilde_equals_python_version() -> Result<()> {
 /// Test that exclude-newer-package can be disabled for specific packages using `false`.
 #[test]
 fn lock_exclude_newer_package_disable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -32014,11 +33580,11 @@ fn lock_exclude_newer_package_disable() -> Result<()> {
 
         [[package]]
         name = "idna"
-        version = "3.11"
+        version = "3.6"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/6f/6d/0703ccc57f3a7233505399edb88de3cbd678da106337b9fcde432b65ed60/idna-3.11.tar.gz", hash = "sha256:795dafcc9c04ed0c1fb032c2aa73654d8e8c5023a7df64a53f39190ada629902", size = 194582, upload-time = "2025-10-12T14:55:20.501Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/0e/61/66938bbb5fc52dbdf84594873d5b51fb1f7c7794e9c0f5bd885f30bc507b/idna-3.11-py3-none-any.whl", hash = "sha256:771a87f49d9defaf64091e6e6fe9c18d4833f140bd19464795bc32d966ca37ea", size = 71008, upload-time = "2025-10-12T14:55:18.883Z" },
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
         ]
 
         [[package]]
@@ -32054,7 +33620,7 @@ fn lock_exclude_newer_package_disable() -> Result<()> {
 /// Test that exclude-newer-package is properly serialized in the lockfile.
 #[test]
 fn lock_exclude_newer_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -32193,18 +33759,317 @@ fn lock_exclude_newer_package() -> Result<()> {
     Ok(())
 }
 
+/// Test that the resolver emits a hint when all versions are excluded by `--exclude-newer`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/18014>
+#[test]
+fn lock_exclude_newer_hint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2000-01-01T00:00:00Z"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2000-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0, published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    Ok(())
+}
+
+/// Test that `exclude-newer` can be disabled for a specific index.
+///
+/// Regression test for:
+/// - <https://github.com/astral-sh/uv/issues/16813>
+/// - <https://github.com/astral-sh/uv/issues/18799>
+#[tokio::test]
+async fn lock_exclude_newer_index_disable() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [tool.uv]
+        exclude-newer = "2025-01-01T00:00:00Z"
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "internal" }}
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/no-upload-time/simple"
+        explicit = true
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2024-03-25T00:00:00Z
+    warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2024-03-25T00:00:00Z
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2024-03-25T00:00:00Z. The latest version satisfying the requirement is v2.0.0. Consider using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [tool.uv]
+        exclude-newer = "2025-01-01T00:00:00Z"
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "internal" }}
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/no-upload-time/simple"
+        explicit = true
+        exclude-newer = false
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains(&format!(
+        "source = {{ registry = \"{}/no-upload-time/simple\" }}",
+        proxy.uri()
+    )));
+
+    Ok(())
+}
+
+/// Test that an index can set its own `exclude-newer` value, and package overrides still win.
+#[tokio::test]
+async fn lock_exclude_newer_index_value() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "internal" }}
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/no-upload-time/simple"
+        explicit = true
+        exclude-newer = "2025-01-01T00:00:00Z"
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
+    warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+    warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: `iniconfig` was filtered by the index-specific `exclude-newer` setting to only include packages uploaded before 2025-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0. Consider updating that index's cutoff, setting it to `false`, or using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("index-exclude-newer"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+    warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: `iniconfig` was filtered by the index-specific `exclude-newer` setting to only include packages uploaded before 2025-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0. Consider updating that index's cutoff, setting it to `false`, or using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [tool.uv]
+        exclude-newer-package = {{ iniconfig = false }}
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "internal" }}
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/no-upload-time/simple"
+        explicit = true
+        exclude-newer = "2025-01-01T00:00:00Z"
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that the resolver emits a hint when a pinned version is excluded by `--exclude-newer`,
+/// even though older versions of the same package are still available.
+///
+/// See: <https://github.com/astral-sh/uv/issues/18949>
+#[test]
+fn lock_exclude_newer_hint_pinned_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    // Use a cutoff that excludes `iniconfig 2.0.0` (2023-01-07) but not `1.1.1` (2020-10-18).
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2022-01-01T00:00:00Z"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of iniconfig==2.0.0 and your project depends on iniconfig==2.0.0, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2022-01-01T00:00:00Z. The requested version, v2.0.0, was published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    Ok(())
+}
+
+/// Test that `~=` requirements don't emit a misleading pre-release hint when the compatible
+/// release upper bound is excluded by `--exclude-newer`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/19266>
+#[test]
+fn lock_exclude_newer_hint_compatible_release() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig~=2.0"]
+        "#,
+    )?;
+
+    // Use a cutoff that excludes `iniconfig 2.0.0` (2023-01-07) but not `1.1.1` (2020-10-18).
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2022-01-01T00:00:00Z"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only iniconfig<=1.1.1 is available and your project depends on iniconfig>=2.0,<3.dev0, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2022-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0, published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    Ok(())
+}
+
 /// Test that lockfile validation includes explicit indexes from path dependencies.
 /// <https://github.com/astral-sh/uv/issues/11419>
-#[test]
-fn lock_path_dependency_explicit_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_path_dependency_explicit_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Create the path dependency with explicit index
     let pkg_a = context.temp_dir.child("pkg_a");
     fs_err::create_dir_all(&pkg_a)?;
 
     let pyproject_toml = pkg_a.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "pkg-a"
@@ -32213,14 +34078,15 @@ fn lock_path_dependency_explicit_index() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [tool.uv.sources]
-        iniconfig = { index = "inner-index" }
+        iniconfig = {{ index = "inner-index" }}
 
         [[tool.uv.index]]
         name = "inner-index"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "{proxy_uri}/simple"
         explicit = true
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Create a project that depends on pkg_a
     let pkg_b = context.temp_dir.child("pkg_b");
@@ -32271,16 +34137,17 @@ fn lock_path_dependency_explicit_index() -> Result<()> {
 
 /// Test that lockfile validation includes explicit indexes from path dependencies
 /// defined in a non-root workspace member.
-#[test]
-fn lock_path_dependency_explicit_index_workspace_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_path_dependency_explicit_index_workspace_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Create the path dependency with explicit index
     let pkg_a = context.temp_dir.child("pkg_a");
     fs_err::create_dir_all(&pkg_a)?;
 
     let pyproject_toml = pkg_a.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "pkg-a"
@@ -32289,14 +34156,15 @@ fn lock_path_dependency_explicit_index_workspace_member() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [tool.uv.sources]
-        iniconfig = { index = "inner-index" }
+        iniconfig = {{ index = "inner-index" }}
 
         [[tool.uv.index]]
         name = "inner-index"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "{proxy_uri}/simple"
         explicit = true
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Create a project that depends on pkg_a
     let member = context.temp_dir.child("member");
@@ -32369,16 +34237,17 @@ fn lock_path_dependency_explicit_index_workspace_member() -> Result<()> {
 
 /// Test that lockfile validation works correctly when path dependency has
 /// both explicit and non-explicit indexes.
-#[test]
-fn lock_path_dependency_mixed_indexes() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_path_dependency_mixed_indexes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Create the path dependency with both explicit and non-explicit indexes.
     let pkg_a = context.temp_dir.child("pkg_a");
     fs_err::create_dir_all(&pkg_a)?;
 
     let pyproject_toml = pkg_a.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "pkg-a"
@@ -32387,19 +34256,20 @@ fn lock_path_dependency_mixed_indexes() -> Result<()> {
         dependencies = ["iniconfig", "anyio"]
 
         [tool.uv.sources]
-        iniconfig = { index = "explicit-index" }
-        anyio = { index = "non-explicit-index" }
+        iniconfig = {{ index = "explicit-index" }}
+        anyio = {{ index = "non-explicit-index" }}
 
         [[tool.uv.index]]
         name = "non-explicit-index"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "{proxy_uri}/simple"
 
         [[tool.uv.index]]
         name = "explicit-index"
         url = "https://pypi.org/simple"
         explicit = true
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Create a project that depends on pkg_a.
     let pkg_b = context.temp_dir.child("pkg_b");
@@ -32451,7 +34321,7 @@ fn lock_path_dependency_mixed_indexes() -> Result<()> {
 /// Test that path dependencies without an index don't affect validation.
 #[test]
 fn lock_path_dependency_no_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create the path dependency without explicit indexes.
     let pkg_a = context.temp_dir.child("pkg_a");
@@ -32509,17 +34379,78 @@ fn lock_path_dependency_no_index() -> Result<()> {
     Ok(())
 }
 
-/// Test that a nested path dependency with an explicit index validates correctly.
+/// Lock a project with a local path dependency gated behind a Python version marker, where the
+/// child's `requires-python` is stricter than the root but compatible with the marker.
+///
+/// See: <https://github.com/astral-sh/uv/issues/18199>
 #[test]
-fn lock_nested_path_dependency_explicit_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+fn lock_path_dependency_marker_gated_requires_python() -> Result<()> {
+    // Use Python 3.9 as the interpreter to reproduce the issue: the installed Python (3.9)
+    // does not satisfy the child's `requires-python = ">=3.12"`, but the child is gated
+    // behind `python_version >= '3.12'`, so it should still resolve.
+    let context = uv_test::test_context!("3.9");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child; python_version >= '3.12'"]
+
+        [tool.uv.sources]
+        child = { path = "./child" }
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // The lock should succeed: the child is only required for Python >= 3.12, so its
+    // `requires-python = ">=3.12"` is compatible with the fork.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Re-lock with `--refresh` should also succeed.
+    uv_snapshot!(context.filters(), context.lock().arg("--refresh"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that a nested path dependency with an explicit index validates correctly.
+#[tokio::test]
+async fn lock_nested_path_dependency_explicit_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Create the inner dependency with explicit index.
     let pkg_a = context.temp_dir.child("pkg_a");
     fs_err::create_dir_all(&pkg_a)?;
 
     let pyproject_toml = pkg_a.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "pkg-a"
@@ -32528,14 +34459,15 @@ fn lock_nested_path_dependency_explicit_index() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [tool.uv.sources]
-        iniconfig = { index = "inner-index" }
+        iniconfig = {{ index = "inner-index" }}
 
         [[tool.uv.index]]
         name = "inner-index"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "{proxy_uri}/simple"
         explicit = true
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Create intermediate dependency that depends on pkg_a.
     let pkg_b = context.temp_dir.child("pkg_b");
@@ -32603,16 +34535,17 @@ fn lock_nested_path_dependency_explicit_index() -> Result<()> {
 }
 
 /// Test that validating circular path dependency indexes doesn't cause an infinite loop.
-#[test]
-fn lock_circular_path_dependency_explicit_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn lock_circular_path_dependency_explicit_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Create pkg_a (with explicit index) that depends on pkg_b.
     let pkg_a = context.temp_dir.child("pkg_a");
     fs_err::create_dir_all(&pkg_a)?;
 
     let pyproject_toml = pkg_a.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "pkg-a"
@@ -32621,15 +34554,16 @@ fn lock_circular_path_dependency_explicit_index() -> Result<()> {
         dependencies = ["pkg-b", "iniconfig"]
 
         [tool.uv.sources]
-        pkg-b = { path = "../pkg_b/" }
-        iniconfig = { index = "index-a" }
+        pkg-b = {{ path = "../pkg_b/" }}
+        iniconfig = {{ index = "index-a" }}
 
         [[tool.uv.index]]
         name = "index-a"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "{proxy_uri}/simple"
         explicit = true
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Create pkg_b that depends on pkg_a. This is a circular dependency.
     let pkg_b = context.temp_dir.child("pkg_b");
@@ -32682,7 +34616,7 @@ fn lock_circular_path_dependency_explicit_index() -> Result<()> {
 
 #[test]
 fn lock_android() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-06-01T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-06-01T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -32779,7 +34713,7 @@ fn lock_android() -> Result<()> {
 
 #[test]
 fn lock_required_intersection() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -32882,7 +34816,7 @@ fn lock_required_intersection() -> Result<()> {
 
 #[test]
 fn lock_refresh() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -33109,7 +35043,7 @@ fn lock_refresh() -> Result<()> {
 /// Ensure conflicts on virtual packages (such as markers) give good error messages.
 #[test]
 fn collapsed_error_with_marker_packages() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = indoc! {r#"
         [project]
@@ -33144,7 +35078,7 @@ fn collapsed_error_with_marker_packages() -> Result<()> {
 /// <https://github.com/astral-sh/uv/issues/16148>
 #[test]
 fn no_warning_without_and_with_lower_bound() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -33174,7 +35108,7 @@ fn no_warning_without_and_with_lower_bound() -> Result<()> {
 
 #[test]
 fn lock_unsupported_wheel_url_requires_python() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -33202,8 +35136,50 @@ fn lock_unsupported_wheel_url_requires_python() -> Result<()> {
 }
 
 #[test]
+fn lock_unsupported_wheel_url_supported_platform() -> Result<()> {
+    let context = uv_test::test_context!("3.11");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["numpy @ https://files.pythonhosted.org/packages/4d/1a/e85f0eea4cf03d6a0228f5c0256b53f2df4bc794706e7df019fc622e47f1/numpy-2.3.5-cp311-cp311-macosx_14_0_arm64.whl"]
+
+        [tool.uv]
+        environments = ["sys_platform == 'win32'"]
+        "#,
+    )?;
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\n\n\s+hint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+
+    uv_snapshot!(filters, context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (markers: sys_platform == 'win32'):
+      ╰─▶ Because only numpy==2.3.5 is available and numpy==2.3.5 has no Windows-compatible wheels, we can conclude that all versions of numpy cannot be used.
+          And because your project depends on numpy, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = uv_test::test_context!("3.11");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -33233,17 +35209,281 @@ fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn lock_required_environment_cycle_reports_resolution_error() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [tool.uv]
+            required-environments = ["platform_machine == 'arm64'"]
+
+            [tool.uv.sources]
+            pkg-a = {{ workspace = true }}
+            pkg-b = {{ workspace = true }}
+
+            [tool.uv.workspace]
+            members = ["pkg-a", "pkg-b"]
+
+            [[tool.uv.index]]
+            name = "packse"
+            url = "{}"
+            default = true
+            "#,
+            packse_index_url()
+        })?;
+
+    let pkg_a = context.temp_dir.child("pkg-a");
+    pkg_a.create_dir_all()?;
+    pkg_a.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "no-sdist-no-wheels-with-matching-platform-a",
+            "pkg-b",
+        ]
+
+        [build-system]
+        requires = ["uv_build>=0.10,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    let pkg_b = context.temp_dir.child("pkg-b");
+    pkg_b.create_dir_all()?;
+    pkg_b.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "pkg-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [build-system]
+        requires = ["uv_build>=0.10,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\n\n\s+hint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+
+    uv_snapshot!(
+        filters,
+        context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (markers: platform_machine == 'arm64'):
+      ╰─▶ Because no-sdist-no-wheels-with-matching-platform-a==1.0.0 has no `platform_machine == 'arm64'`-compatible wheels and only no-sdist-no-wheels-with-matching-platform-a==1.0.0 is available, we can conclude that all versions of no-sdist-no-wheels-with-matching-platform-a cannot be used.
+          And because pkg-a depends on no-sdist-no-wheels-with-matching-platform-a and your workspace requires pkg-a, we can conclude that your workspace's requirements are unsatisfiable.
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn lock_supported_environment_wheel_only_package_requires_compatible_wheels() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "~=3.12.0"
+        dependencies = ["pywin32"]
+
+        [tool.uv]
+        environments = ["sys_platform == 'linux'"]
+        "#,
+    )?;
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\n\n\s+hint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+
+    uv_snapshot!(filters, context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (markers: sys_platform == 'linux'):
+      ╰─▶ Because only the following versions of pywin32 are available:
+              pywin32==222
+              pywin32==223
+              pywin32==224
+              pywin32==225
+              pywin32==226
+              pywin32==227
+              pywin32==228
+              pywin32==300
+              pywin32==301
+              pywin32==302
+              pywin32==303
+              pywin32==304
+              pywin32==305
+              pywin32==306
+              pywin32==307
+              pywin32==308
+          and pywin32<=305 has no wheels with a matching Python version tag (e.g., `cp312`), we can conclude that pywin32<=305 cannot be used.
+          And because pywin32>=306 has no Linux-compatible wheels and your project depends on pywin32, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: Wheels are available for `pywin32` (v305) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
+    ");
+
+    Ok(())
+}
+
+/// An abi3 wheel (e.g., `cp37-abi3`) should be considered compatible with any Python version at or
+/// above the tag's version. When `tool.uv.environments` constrains to a specific Python version
+/// (e.g., 3.12), the resolver should recognize that a `cp37-abi3` wheel covers that environment
+/// rather than treating the `cp37` tag as an exact Python 3.7 requirement.
+#[test]
+fn lock_supported_environment_abi3_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a local flat index with the abi3 test wheel.
+    let index_dir = context.temp_dir.child("local_index");
+    fs_err::create_dir_all(&index_dir)?;
+
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path
+            .file_name()
+            .and_then(|file_name| file_name.to_str())
+            .is_some_and(|file_name| file_name.starts_with("abi3_package"))
+        {
+            let dest = index_dir.join(path.file_name().unwrap());
+            fs_err::copy(&path, &dest)?;
+        }
+    }
+
+    let project = context.temp_dir.child("project");
+    fs_err::create_dir_all(&project)?;
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["abi3-package"]
+
+        [tool.uv]
+        environments = [
+            "sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.12'",
+        ]
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "{}"
+        format = "flat"
+        "#,
+        index_dir.portable_display()
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&project), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = fs_err::read_to_string(project.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        supported-markers = [
+            "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "abi3-package"
+        version = "1.0.0"
+        source = { registry = "[TEMP_DIR]/local_index" }
+        wheels = [
+            { path = "[TEMP_DIR]/local_index/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "abi3-package", marker = "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "abi3-package" }]
+        "#
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&project), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// If an index is filtered out (e.g., it's the second `default = true` index defined in the file),
 /// we should still consider the lockfile valid if it's referenced by name, regardless of whether
 /// it's defined in a dependency group or the top-level `project.dependencies` field.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/16843>
-#[test]
-fn lock_check_multiple_default_indexes_explicit_assignment_dependency_group() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+#[tokio::test]
+async fn lock_check_multiple_default_indexes_explicit_assignment_dependency_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "project"
@@ -33254,7 +35494,7 @@ fn lock_check_multiple_default_indexes_explicit_assignment_dependency_group() ->
         dev = ["iniconfig"]
 
         [tool.uv.sources]
-        iniconfig = { index = "second" }
+        iniconfig = {{ index = "second" }}
 
         [[tool.uv.index]]
         name = "first"
@@ -33263,11 +35503,78 @@ fn lock_check_multiple_default_indexes_explicit_assignment_dependency_group() ->
 
         [[tool.uv.index]]
         name = "second"
-        url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_auth_uri}/basic-auth/simple"
         default = true
+        "#,
+        proxy_auth_uri = proxy.authenticated_uri("public", "heron")
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 13, column 9
+       |
+    13 |         [[tool.uv.index]]
+       |         ^^^^^^^^^^^^^^^^^
+    found multiple indexes with `default = true`; only one index may be marked as default
+    ");
+
+    Ok(())
+}
+
+/// Do not panic with `u64::MAX` causing an `u64::MAX + 1` overflow.
+#[test]
+fn lock_tilde_equal_version_u64_max_rejected() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar~=18446744073709551615.0"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `foo @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse metadata from built wheel
+      ╰─▶ expected number less than or equal to 18446744073709551614, but number found in "18446744073709551615" exceeds it
+          bar ~=18446744073709551615.0
+              ^^^^^^^^^^^^^^^^^^^^^^^^
+    "#);
+
+    Ok(())
+}
+
+/// Test that `uv lock --frozen` and `UV_FROZEN=1` show a warning.
+///
+/// See: <https://github.com/astral-sh/uv/issues/12783>
+#[test]
+fn lock_frozen_warning() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
         "#,
     )?;
 
+    // Create the initial lockfile.
     uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
@@ -33277,54 +35584,24 @@ fn lock_check_multiple_default_indexes_explicit_assignment_dependency_group() ->
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = context.read("uv.lock");
-
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12"
-
-        [options]
-        exclude-newer = "2025-01-30T00:00:00Z"
-
-        [[package]]
-        name = "iniconfig"
-        version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
-        wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
-        ]
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { virtual = "." }
-
-        [package.dev-dependencies]
-        dev = [
-            { name = "iniconfig" },
-        ]
-
-        [package.metadata]
-
-        [package.metadata.requires-dev]
-        dev = [{ name = "iniconfig", index = "https://pypi-proxy.fly.dev/basic-auth/simple" }]
-        "#
-        );
-    });
-
-    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    // Running `uv lock --frozen` should show a warning.
+    uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    warning: The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `--frozen` was provided; use `--check` instead
+    ");
+
+    // Running `uv lock` with `UV_FROZEN=1` should show a warning.
+    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_FROZEN, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `UV_FROZEN=1` was provided; use `--check` instead
     ");
 
     Ok(())

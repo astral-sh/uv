@@ -1,6 +1,6 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 
 use serde::Deserialize;
 use uv_git::GIT;
@@ -39,7 +39,8 @@ impl VersionControlSystem {
                     return Err(VersionControlError::GitNotInstalled);
                 };
 
-                let output = Command::new(git)
+                let output = git
+                    .build_command()
                     .arg("init")
                     .current_dir(path)
                     .stdout(Stdio::piped())

@@ -19,9 +19,17 @@ uv run "$project_root/scripts/bump-workspace-crate-versions.py"
 echo "Updating crate READMEs..."
 uv run "$project_root/scripts/generate-crate-readmes.py"
 
-echo "Updating lockfile..."
+echo "Updating lockfiles..."
 cargo update -p uv
 pushd crates/uv-trampoline; cargo update -p uv-trampoline; popd
+uv lock
 
 echo "Generating JSON schema..."
 cargo dev generate-json-schema
+
+echo "Checking crates.io publish setup..."
+uv run "$project_root/scripts/setup-crates-io-publish.py" --quiet
+
+echo "Creating release branch..."
+git checkout -b "release/$(uv version --short)"
+git commit -am "Bump version to $(uv version --short)"

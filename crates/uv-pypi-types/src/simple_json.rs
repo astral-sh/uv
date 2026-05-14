@@ -87,12 +87,10 @@ impl<'de> Deserialize<'de> for PypiFile {
 
                 while let Some(key) = access.next_key::<Cow<'_, str>>()? {
                     match &*key {
-                        "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata" => {
-                            if core_metadata.is_none() {
-                                core_metadata = access.next_value()?;
-                            } else {
-                                let _: serde::de::IgnoredAny = access.next_value()?;
-                            }
+                        "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata"
+                            if core_metadata.is_none() =>
+                        {
+                            core_metadata = access.next_value()?;
                         }
                         "filename" => filename = Some(access.next_value()?),
                         "hashes" => hashes = Some(access.next_value()?),
@@ -190,12 +188,10 @@ impl<'de> Deserialize<'de> for PyxFile {
 
                 while let Some(key) = access.next_key::<Cow<'_, str>>()? {
                     match &*key {
-                        "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata" => {
-                            if core_metadata.is_none() {
-                                core_metadata = access.next_value()?;
-                            } else {
-                                let _: serde::de::IgnoredAny = access.next_value()?;
-                            }
+                        "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata"
+                            if core_metadata.is_none() =>
+                        {
+                            core_metadata = access.next_value()?;
                         }
                         "filename" => filename = Some(access.next_value()?),
                         "hashes" => hashes = Some(access.next_value()?),
@@ -649,7 +645,8 @@ impl From<Hashes> for HashDigests {
             usize::from(value.sha512.is_some())
                 + usize::from(value.sha384.is_some())
                 + usize::from(value.sha256.is_some())
-                + usize::from(value.md5.is_some()),
+                + usize::from(value.md5.is_some())
+                + usize::from(value.blake2b.is_some()),
         );
         if let Some(sha512) = value.sha512 {
             digests.push(HashDigest {
@@ -673,6 +670,12 @@ impl From<Hashes> for HashDigests {
             digests.push(HashDigest {
                 algorithm: HashAlgorithm::Md5,
                 digest: md5,
+            });
+        }
+        if let Some(blake2b) = value.blake2b {
+            digests.push(HashDigest {
+                algorithm: HashAlgorithm::Blake2b,
+                digest: blake2b,
             });
         }
         Self::from(digests)

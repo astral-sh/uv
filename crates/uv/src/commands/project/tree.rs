@@ -3,7 +3,6 @@ use std::path::Path;
 use anstream::print;
 use anyhow::{Error, Result};
 use futures::StreamExt;
-use tokio::sync::Semaphore;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
@@ -24,7 +23,8 @@ use crate::commands::pip::resolution_markers;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
+    default_dependency_groups,
 };
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{ExitStatus, diagnostics};
@@ -103,24 +103,32 @@ pub(crate) async fn tree(
             )
             .await?
             .into_interpreter(),
-            LockTarget::Workspace(workspace) => ProjectInterpreter::discover(
-                workspace,
-                project_dir,
-                &groups,
-                python.as_deref().map(PythonRequest::parse),
-                client_builder,
-                python_preference,
-                python_downloads,
-                &install_mirrors,
-                false,
-                no_config,
-                Some(false),
-                cache,
-                printer,
-                preview,
-            )
-            .await?
-            .into_interpreter(),
+            LockTarget::Workspace(workspace) => {
+                let workspace_python = WorkspacePython::from_request(
+                    python.as_deref().map(PythonRequest::parse),
+                    Some(workspace),
+                    &groups,
+                    project_dir,
+                    no_config,
+                )
+                .await?;
+                ProjectInterpreter::discover(
+                    workspace,
+                    &groups,
+                    workspace_python,
+                    client_builder,
+                    python_preference,
+                    python_downloads,
+                    &install_mirrors,
+                    false,
+                    Some(false),
+                    cache,
+                    printer,
+                    preview,
+                )
+                .await?
+                .into_interpreter()
+            }
         })
     };
 
@@ -147,9 +155,9 @@ pub(crate) async fn tree(
             client_builder,
             &state,
             Box::new(DefaultResolveLogger),
-            concurrency,
+            &concurrency,
             cache,
-            &WorkspaceCache::default(),
+            &workspace_cache,
             printer,
             preview,
         )
@@ -159,9 +167,11 @@ pub(crate) async fn tree(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -225,15 +235,18 @@ pub(crate) async fn tree(
             )
             .index_locations(index_locations.clone())
             .keyring(*keyring_provider)
-            .build();
-            let download_concurrency = Semaphore::new(concurrency.downloads);
+            .build()?;
+            let download_concurrency = concurrency.downloads_semaphore.clone();
+
+            let exclude_newer = lock.exclude_newer();
 
             // Initialize the client to fetch the latest version of each package.
             let client = LatestClient {
                 client: &client,
                 capabilities: &capabilities,
                 prerelease: lock.prerelease_mode(),
-                exclude_newer: &lock.exclude_newer(),
+                exclude_newer: &exclude_newer,
+                index_locations,
                 requires_python: Some(lock.requires_python()),
                 tags: None,
             };

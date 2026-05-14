@@ -8,6 +8,7 @@ use std::{
 use fs_err as fs;
 use thiserror::Error;
 
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Scheme;
 use uv_static::EnvVars;
 
@@ -33,6 +34,8 @@ pub struct VirtualEnvironment {
 /// A parsed `pyvenv.cfg`
 #[derive(Debug, Clone)]
 pub struct PyVenvConfiguration {
+    /// The `PYTHONHOME` directory containing the base Python executable.
+    pub(crate) home: Option<PathBuf>,
     /// Was the virtual environment created with the `virtualenv` package?
     pub(crate) virtualenv: bool,
     /// Was the virtual environment created with the `uv` package?
@@ -85,7 +88,7 @@ impl CondaEnvironmentKind {
     /// name, e.g., `base`, which does not match the `CONDA_PREFIX`, e.g., `/usr/local` instead of
     /// `/usr/local/conda/envs/<name>`. Note the name `CONDA_DEFAULT_ENV` is misleading, it's the
     /// active environment name, not a constant base environment name.
-    fn from_prefix_path(path: &Path) -> Self {
+    fn from_prefix_path(path: &Path, preview: Preview) -> Self {
         // Pixi never creates true "base" envs and names project envs "default", confusing our
         // heuristics, so treat Pixi prefixes as child envs outright.
         if is_pixi_environment(path) {
@@ -113,8 +116,10 @@ impl CondaEnvironmentKind {
         // If the environment name is "base" or "root", treat it as a base environment
         //
         // These are the expected names for the base environment; and is retained for backwards
-        // compatibility, but in a future breaking release we should remove this special-casing.
-        if current_env == "base" || current_env == "root" {
+        // compatibility, but can be removed with the `special-conda-env-names` preview feature.
+        if !preview.is_enabled(PreviewFeature::SpecialCondaEnvNames)
+            && (current_env == "base" || current_env == "root")
+        {
             return Self::Base;
         }
 
@@ -142,11 +147,14 @@ fn is_pixi_environment(path: &Path) -> bool {
 ///
 /// If `base` is true, the active environment must be the base environment or `None` is returned,
 /// and vice-versa.
-pub(crate) fn conda_environment_from_env(kind: CondaEnvironmentKind) -> Option<PathBuf> {
+pub(crate) fn conda_environment_from_env(
+    kind: CondaEnvironmentKind,
+    preview: Preview,
+) -> Option<PathBuf> {
     let dir = env::var_os(EnvVars::CONDA_PREFIX).filter(|value| !value.is_empty())?;
     let path = PathBuf::from(dir);
 
-    if kind != CondaEnvironmentKind::from_prefix_path(&path) {
+    if kind != CondaEnvironmentKind::from_prefix_path(&path, preview) {
         return None;
     }
 
@@ -225,6 +233,7 @@ pub(crate) fn virtualenv_python_executable(venv: impl AsRef<Path>) -> PathBuf {
 impl PyVenvConfiguration {
     /// Parse a `pyvenv.cfg` file into a [`PyVenvConfiguration`].
     pub fn parse(cfg: impl AsRef<Path>) -> Result<Self, Error> {
+        let mut home = None;
         let mut virtualenv = false;
         let mut uv = false;
         let mut relocatable = false;
@@ -242,6 +251,9 @@ impl PyVenvConfiguration {
                 continue;
             };
             match key.trim() {
+                "home" => {
+                    home = Some(PathBuf::from(value.trim()));
+                }
                 "virtualenv" => {
                     virtualenv = true;
                 }
@@ -268,6 +280,7 @@ impl PyVenvConfiguration {
         }
 
         Ok(Self {
+            home,
             virtualenv,
             uv,
             relocatable,
@@ -353,7 +366,7 @@ mod tests {
 
         with_vars(vars, || {
             assert_eq!(
-                CondaEnvironmentKind::from_prefix_path(prefix),
+                CondaEnvironmentKind::from_prefix_path(prefix, Preview::default()),
                 CondaEnvironmentKind::Child
             );
         });

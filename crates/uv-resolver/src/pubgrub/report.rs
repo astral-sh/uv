@@ -4,6 +4,7 @@ use std::ops::Bound;
 
 use indexmap::IndexSet;
 use itertools::Itertools;
+use jiff::Timestamp;
 use owo_colors::OwoColorize;
 use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
@@ -20,6 +21,7 @@ use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::{ErrorTree, PrefixMatch};
+use crate::exclude_newer::EffectiveExcludeNewerSource;
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
@@ -33,10 +35,13 @@ use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsRe
 
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
-    /// The versions that were available for each package.
+    /// See [`crate::error::NoSolutionError::included_versions`].
+    pub(crate) included_versions: &'a FxHashMap<PackageName, BTreeSet<Version>>,
+
+    /// See [`crate::error::NoSolutionError::available_versions`].
     pub(crate) available_versions: &'a FxHashMap<PackageName, BTreeSet<Version>>,
 
-    /// The versions that were available for each package.
+    /// The Python requirement for the resolution.
     pub(crate) python_requirement: &'a PythonRequirement,
 
     /// The members of the workspace.
@@ -88,11 +93,11 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 } else {
                     let complement = set.complement();
                     let range =
-                        // Note that sometimes we do not have a range of available versions, e.g.,
+                        // Note that sometimes we do not have a range of included versions, e.g.,
                         // when a package is from a non-registry source. In that case, we cannot
                         // perform further simplification of the range.
-                        if let Some(available_versions) = package.name().and_then(|name| self.available_versions.get(name)) {
-                            update_availability_range(&complement, available_versions)
+                        if let Some(included_versions) = package.name().and_then(|name| self.included_versions.get(name)) {
+                            update_availability_range(&complement, included_versions)
                         } else {
                             complement
                         };
@@ -120,7 +125,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                     match reason {
                         UnavailableReason::Package(reason) => {
                             let message = reason.singular_message();
-                            format!("{}{}", package, Padded::new(" ", &message, ""))
+                            format!("{}{}", package, padded(" ", &message, ""))
                         }
                         UnavailableReason::Version(reason) => {
                             let range = self.compatible_range(package, set);
@@ -134,9 +139,9 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                                 self.python_requirement.target().abi_tag(),
                             );
                             if let Some(context) = context {
-                                format!("{}{}{}", range, Padded::new(" ", &message, " "), context)
+                                format!("{}{}{}", range, padded(" ", &message, " "), context)
                             } else {
-                                format!("{}{}", range, Padded::new(" ", &message, ""))
+                                format!("{}{}", range, padded(" ", &message, ""))
                             }
                         }
                     }
@@ -172,7 +177,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
         let mut terms_vec: Vec<_> = terms.iter().collect();
         // We avoid relying on hashmap iteration order here by always sorting
         // by package first.
-        terms_vec.sort_by(|&(pkg1, _), &(pkg2, _)| pkg1.cmp(pkg2));
+        terms_vec.sort_by_key(|&(package, _)| package);
         match terms_vec.as_slice() {
             [] => "the requirements are unsatisfiable".into(),
             [(root, _)] if matches!(&**(*root), PubGrubPackageInner::Root(_)) => {
@@ -239,8 +244,8 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
 
         format!(
             "Because {}we can conclude that {}",
-            Padded::from_string("", &external, ", "),
-            Padded::from_string("", &terms, "."),
+            padded("", &external, ", "),
+            padded("", &terms, "."),
         )
     }
 
@@ -262,10 +267,10 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
         format!(
             "Because we know from ({}) that {}and we know from ({}) that {}{}",
             ref_id1,
-            Padded::new("", &derived1_terms, " "),
+            padded("", &derived1_terms, " "),
             ref_id2,
-            Padded::new("", &derived2_terms, ", "),
-            Padded::new("", &current_terms, "."),
+            padded("", &derived2_terms, ", "),
+            padded("", &current_terms, "."),
         )
     }
 
@@ -288,9 +293,9 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
         format!(
             "Because we know from ({}) that {}and {}we can conclude that {}",
             ref_id,
-            Padded::new("", &derived_terms, " "),
-            Padded::new("", &external, ", "),
-            Padded::new("", &current_terms, "."),
+            padded("", &derived_terms, " "),
+            padded("", &external, ", "),
+            padded("", &current_terms, "."),
         )
     }
 
@@ -305,8 +310,8 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
 
         format!(
             "And because {}we can conclude that {}",
-            Padded::from_string("", &external, ", "),
-            Padded::from_string("", &terms, "."),
+            padded("", &external, ", "),
+            padded("", &terms, "."),
         )
     }
 
@@ -323,8 +328,8 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
         format!(
             "And because we know from ({}) that {}we can conclude that {}",
             ref_id,
-            Padded::from_string("", &derived, ", "),
-            Padded::from_string("", &current, "."),
+            padded("", &derived, ", "),
+            padded("", &current, "."),
         )
     }
 
@@ -340,8 +345,8 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
 
         format!(
             "And because {}we can conclude that {}",
-            Padded::from_string("", &external, ", "),
-            Padded::from_string("", &terms, "."),
+            padded("", &external, ", "),
+            padded("", &terms, "."),
         )
     }
 }
@@ -482,7 +487,7 @@ impl PubGrubReportFormatter<'_> {
                 if let Some(root) = self.format_root_requires(package1) {
                     return format!(
                         "{root} {}and {}",
-                        Padded::new("", &dependency1, " "),
+                        padded("", &dependency1, " "),
                         dependency2,
                     );
                 }
@@ -510,11 +515,7 @@ impl PubGrubReportFormatter<'_> {
                 let external1 = self.format_external(external1);
                 let external2 = self.format_external(external2);
 
-                format!(
-                    "{}and {}",
-                    Padded::from_string("", &external1, " "),
-                    &external2,
-                )
+                format!("{}and {}", padded("", &external1, " "), &external2)
             }
         }
     }
@@ -540,6 +541,7 @@ impl PubGrubReportFormatter<'_> {
         tags: Option<&Tags>,
         workspace_members: &BTreeSet<PackageName>,
         options: &Options,
+        inherited_exclude_newer_ranges: &FxHashMap<PackageName, Range<Version>>,
         output_hints: &mut IndexSet<PubGrubHint>,
     ) {
         // Check for disjoint target hints (only applicable to universal resolution).
@@ -638,6 +640,60 @@ impl PubGrubReportFormatter<'_> {
                         incomplete_packages,
                         output_hints,
                     );
+
+                    let exclude_newer = if let Some(index) = fork_indexes.get(name) {
+                        options
+                            .exclude_newer
+                            .exclude_newer_package_for_index_with_source(
+                                name,
+                                index_locations.exclude_newer_for(index.url()),
+                            )
+                    } else {
+                        options
+                            .exclude_newer
+                            .exclude_newer_package(name)
+                            .map(|exclude_newer| {
+                                let source = if options.exclude_newer.package.contains_key(name) {
+                                    EffectiveExcludeNewerSource::Package
+                                } else {
+                                    EffectiveExcludeNewerSource::Global
+                                };
+                                (exclude_newer, source)
+                            })
+                    };
+
+                    if let Some((exclude_newer, source)) = exclude_newer {
+                        // Check if there are no included versions in the requested
+                        // range, but there are still available versions in that range
+                        // (i.e., they were filtered out by `exclude-newer`).
+                        let no_included_in_set = self
+                            .included_versions
+                            .get(name)
+                            .is_none_or(|versions| !versions.iter().any(|v| set.contains(v)));
+                        let available_has_versions_in_set = self
+                            .available_versions
+                            .get(name)
+                            .is_some_and(|versions| versions.iter().any(|v| set.contains(v)));
+                        if no_included_in_set && available_has_versions_in_set {
+                            let version_hint_set =
+                                inherited_exclude_newer_ranges.get(name).map_or_else(
+                                    || set.clone(),
+                                    |exclude_newer_range| set.union(exclude_newer_range),
+                                );
+                            let matching_version = self.exclude_newer_version_hint(
+                                name,
+                                &version_hint_set,
+                                index,
+                                fork_indexes,
+                            );
+                            output_hints.insert(PubGrubHint::ExcludeNewer {
+                                package: name.clone(),
+                                source,
+                                exclude_newer,
+                                matching_version,
+                            });
+                        }
+                    }
                 }
             }
             DerivationTree::External(External::FromDependencyOf(
@@ -691,6 +747,29 @@ impl PubGrubReportFormatter<'_> {
             }
             DerivationTree::External(External::NotRoot(..)) => {}
             DerivationTree::Derived(derived) => {
+                let cause1_exclude_newer_ranges =
+                    Self::subtree_exclude_newer_ranges(&derived.cause1);
+                let cause2_exclude_newer_ranges =
+                    Self::subtree_exclude_newer_ranges(&derived.cause2);
+
+                let mut cause1_inherited_exclude_newer_ranges =
+                    inherited_exclude_newer_ranges.clone();
+                for (name, range) in &cause2_exclude_newer_ranges {
+                    cause1_inherited_exclude_newer_ranges
+                        .entry(name.clone())
+                        .and_modify(|existing| *existing = existing.union(range))
+                        .or_insert_with(|| range.clone());
+                }
+
+                let mut cause2_inherited_exclude_newer_ranges =
+                    inherited_exclude_newer_ranges.clone();
+                for (name, range) in &cause1_exclude_newer_ranges {
+                    cause2_inherited_exclude_newer_ranges
+                        .entry(name.clone())
+                        .and_modify(|existing| *existing = existing.union(range))
+                        .or_insert_with(|| range.clone());
+                }
+
                 self.generate_hints(
                     &derived.cause1,
                     index,
@@ -707,6 +786,7 @@ impl PubGrubReportFormatter<'_> {
                     tags,
                     workspace_members,
                     options,
+                    &cause1_inherited_exclude_newer_ranges,
                     output_hints,
                 );
                 self.generate_hints(
@@ -725,10 +805,102 @@ impl PubGrubReportFormatter<'_> {
                     tags,
                     workspace_members,
                     options,
+                    &cause2_inherited_exclude_newer_ranges,
                     output_hints,
                 );
             }
         }
+    }
+
+    /// Collect the version ranges in `derivation_tree` that were excluded solely by
+    /// `exclude-newer`, grouped by package name.
+    fn subtree_exclude_newer_ranges(
+        derivation_tree: &ErrorTree,
+    ) -> FxHashMap<PackageName, Range<Version>> {
+        fn collect(
+            derivation_tree: &ErrorTree,
+            exclude_newer_ranges: &mut FxHashMap<PackageName, Range<Version>>,
+        ) {
+            match derivation_tree {
+                DerivationTree::External(External::Custom(package, versions, reason)) => {
+                    if matches!(
+                        reason,
+                        UnavailableReason::Version(UnavailableVersion::IncompatibleDist(
+                            IncompatibleDist::Wheel(IncompatibleWheel::ExcludeNewer(_))
+                                | IncompatibleDist::Source(IncompatibleSource::ExcludeNewer(_))
+                        ))
+                    ) {
+                        if let Some(name) = package.name() {
+                            exclude_newer_ranges
+                                .entry(name.clone())
+                                .and_modify(|set| *set = set.union(versions))
+                                .or_insert_with(|| versions.clone());
+                        }
+                    }
+                }
+                DerivationTree::External(_) => {}
+                DerivationTree::Derived(derived) => {
+                    collect(&derived.cause1, exclude_newer_ranges);
+                    collect(&derived.cause2, exclude_newer_ranges);
+                }
+            }
+        }
+
+        let mut exclude_newer_ranges = FxHashMap::default();
+        collect(derivation_tree, &mut exclude_newer_ranges);
+        exclude_newer_ranges
+    }
+
+    /// Return the latest version in `set` that is available for resolver error reporting,
+    /// along with the earliest known publish date for that version.
+    fn exclude_newer_version_hint(
+        &self,
+        name: &PackageName,
+        set: &Range<Version>,
+        index: &InMemoryIndex,
+        fork_indexes: &ForkIndexes,
+    ) -> Option<ExcludeNewerVersionDetail> {
+        let version = self.available_versions.get(name).and_then(|versions| {
+            versions
+                .iter()
+                .rfind(|version| set.contains(version))
+                .cloned()
+        })?;
+
+        let response = if let Some(url) = fork_indexes.get(name).map(IndexMetadata::url) {
+            index.explicit().get(&(name.clone(), url.clone()))
+        } else {
+            index.implicit().get(name)
+        }?;
+
+        let VersionsResponse::Found(version_maps) = &*response else {
+            return None;
+        };
+
+        let publish_date = version_maps
+            .iter()
+            .filter_map(|version_map| {
+                version_map.get(&version).and_then(|prioritized| {
+                    prioritized
+                        .files()
+                        .filter_map(|file| file.upload_time_utc_ms)
+                        .min()
+                })
+            })
+            .min()
+            .and_then(|upload_time| {
+                Some(
+                    jiff::Timestamp::from_millisecond(upload_time)
+                        .ok()?
+                        .to_string(),
+                )
+            });
+
+        Some(ExcludeNewerVersionDetail {
+            version,
+            publish_date,
+            singleton: set.as_singleton().is_some(),
+        })
     }
 
     /// Generate a [`PubGrubHint`] for a package that doesn't have any wheels matching the current
@@ -844,11 +1016,10 @@ impl PubGrubReportFormatter<'_> {
 
         // Add hints due to the package being entirely unavailable.
         match unavailable_packages.get(name) {
-            Some(UnavailablePackage::NoIndex) => {
-                if no_find_links {
-                    hints.insert(PubGrubHint::NoIndex);
-                }
+            Some(UnavailablePackage::NoIndex) if no_find_links => {
+                hints.insert(PubGrubHint::NoIndex);
             }
+            Some(UnavailablePackage::NoIndex) => {}
             Some(UnavailablePackage::Offline) => {
                 hints.insert(PubGrubHint::Offline);
             }
@@ -986,7 +1157,9 @@ impl PubGrubReportFormatter<'_> {
 
             let is_pre2 = match end {
                 Bound::Included(version) => version.any_prerelease(),
-                Bound::Excluded(version) => version.any_prerelease(),
+                Bound::Excluded(version) => {
+                    version.any_prerelease() && !is_compatible_release_upper_bound(version)
+                }
                 Bound::Unbounded => false,
             };
             if is_pre2 {
@@ -1012,7 +1185,7 @@ impl PubGrubReportFormatter<'_> {
                     });
                 }
             }
-        } else if let Some(version) = self.available_versions.get(name).and_then(|versions| {
+        } else if let Some(version) = self.included_versions.get(name).and_then(|versions| {
             versions
                 .iter()
                 .rev()
@@ -1036,6 +1209,21 @@ impl PubGrubReportFormatter<'_> {
             }
         }
     }
+}
+
+/// Return `true` for the excluded `.dev0` upper bounds used to desugar compatible releases.
+///
+/// For example, `~=3.6` becomes `>=3.6,<4.dev0`. The `<4.dev0` boundary preserves PEP 440's
+/// ordering semantics, but it does not mean the user requested pre-releases.
+fn is_compatible_release_upper_bound(version: &Version) -> bool {
+    version.dev() == Some(0) && !version.is_pre() && !version.is_post() && !version.is_local()
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ExcludeNewerVersionDetail {
+    version: Version,
+    publish_date: Option<String>,
+    singleton: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1204,6 +1392,15 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         tags: BTreeSet<PlatformTag>,
     },
+    /// Versions of a package were excluded by `exclude-newer`.
+    ExcludeNewer {
+        package: PackageName,
+        source: EffectiveExcludeNewerSource,
+        // excluded from `PartialEq` and `Hash`
+        exclude_newer: Timestamp,
+        // excluded from `PartialEq` and `Hash`
+        matching_version: Option<ExcludeNewerVersionDetail>,
+    },
     /// The resolution failed for a Python version that is different from the current Python version.
     DisjointPythonVersion {
         // excluded from `PartialEq` and `Hash`
@@ -1287,6 +1484,10 @@ enum PubGrubHintCore {
     PlatformTags {
         package: PackageName,
     },
+    ExcludeNewer {
+        package: PackageName,
+        source: EffectiveExcludeNewerSource,
+    },
     DisjointPythonVersion,
     DisjointEnvironment,
 }
@@ -1355,6 +1556,9 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::LanguageTags { package, .. } => Self::LanguageTags { package },
             PubGrubHint::AbiTags { package, .. } => Self::AbiTags { package },
             PubGrubHint::PlatformTags { package, .. } => Self::PlatformTags { package },
+            PubGrubHint::ExcludeNewer {
+                package, source, ..
+            } => Self::ExcludeNewer { package, source },
             PubGrubHint::DisjointPythonVersion { .. } => Self::DisjointPythonVersion,
             PubGrubHint::DisjointEnvironment => Self::DisjointEnvironment,
         }
@@ -1787,6 +1991,82 @@ impl std::fmt::Display for PubGrubHint {
                         .join(", "),
                 )
             }
+            Self::ExcludeNewer {
+                package,
+                source,
+                exclude_newer,
+                matching_version,
+            } => {
+                let latest = match matching_version {
+                    Some(ExcludeNewerVersionDetail {
+                        version,
+                        publish_date: Some(publish_date),
+                        singleton: true,
+                    }) => format!(
+                        " The requested version, {}, was published at {}.",
+                        format!("v{version}").cyan(),
+                        publish_date.cyan()
+                    ),
+                    Some(ExcludeNewerVersionDetail {
+                        version: _,
+                        publish_date: None,
+                        singleton: true,
+                    }) => String::new(),
+                    Some(ExcludeNewerVersionDetail {
+                        version,
+                        publish_date: Some(publish_date),
+                        singleton: false,
+                    }) => format!(
+                        " The latest version satisfying the requirement is {}, published at {}.",
+                        format!("v{version}").cyan(),
+                        publish_date.cyan()
+                    ),
+                    Some(ExcludeNewerVersionDetail {
+                        version,
+                        publish_date: None,
+                        singleton: false,
+                    }) => format!(
+                        " The latest version satisfying the requirement is {}.",
+                        format!("v{version}").cyan()
+                    ),
+                    None => String::new(),
+                };
+                match source {
+                    EffectiveExcludeNewerSource::Package => write!(
+                        f,
+                        "{}{} `{}` was filtered by `{}` to only include packages uploaded \
+                        before {}.{latest} Consider removing the setting or updating it to a later date.",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        "exclude-newer-package".green(),
+                        exclude_newer.cyan(),
+                    ),
+                    EffectiveExcludeNewerSource::Global => write!(
+                        f,
+                        "{}{} `{}` was filtered by `{}` to only include packages uploaded \
+                        before {}.{latest} Consider using `{}` to override the cutoff for this package.",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        "exclude-newer".green(),
+                        exclude_newer.cyan(),
+                        "exclude-newer-package".green(),
+                    ),
+                    EffectiveExcludeNewerSource::Index => write!(
+                        f,
+                        "{}{} `{}` was filtered by the index-specific `{}` setting to only include \
+                        packages uploaded before {}.{latest} Consider updating that index's cutoff, setting \
+                        it to `false`, or using `{}` to override the cutoff for this package.",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        "exclude-newer".green(),
+                        exclude_newer.cyan(),
+                        "exclude-newer-package".green(),
+                    ),
+                }
+            }
             Self::DisjointPythonVersion { python_version } => {
                 write!(
                     f,
@@ -1968,8 +2248,6 @@ fn update_availability_range(
         versions.contains(&version)
     }
 
-    let mut new_range = Range::empty();
-
     // Construct an available range to help guide simplification. Note this is not strictly correct,
     // as the available range should have many holes in it. However, for this use-case it should be
     // okay — we just may avoid simplifying some segments _inside_ the available range.
@@ -1994,61 +2272,53 @@ fn update_availability_range(
             (None, None) => return Range::empty(),
         };
 
-    for segment in range.iter() {
-        let (lower, upper) = segment;
-        let segment_range = Range::from_range_bounds((lower.clone(), upper.clone()));
+    range
+        .iter()
+        .filter_map(|(lower, upper)| {
+            let segment_range = Range::from_range_bounds((lower.clone(), upper.clone()));
 
-        // Drop the segment if it's disjoint with the available range, e.g., if the segment is
-        // `foo>999`, and the available versions are all `<10` it's useless to show.
-        if segment_range.is_disjoint(&available_range) {
-            continue;
-        }
+            // Drop the segment if it's disjoint with the available range, e.g., if the segment is
+            // `foo>999`, and the available versions are all `<10` it's useless to show.
+            if segment_range.is_disjoint(&available_range) {
+                return None;
+            }
 
-        // Replace the segment if it's captured by the available range, e.g., if the segment is
-        // `foo<1000` and the available versions are all `<10` we can simplify to `foo<10`.
-        if available_range.subset_of(&segment_range) {
-            // If the segment only has a lower or upper bound, only take the relevant part of the
-            // available range. This avoids replacing `foo<100` with `foo>1,<2`, instead using
-            // `foo<2` to avoid extra noise.
-            if matches!(lower, Bound::Unbounded) {
-                new_range = new_range.union(&Range::from_range_bounds((
-                    Bound::Unbounded,
-                    Bound::Included(last_available.clone()),
-                )));
-            } else if matches!(upper, Bound::Unbounded) {
-                new_range = new_range.union(&Range::from_range_bounds((
+            // Replace the segment if it's captured by the available range, e.g., if the segment is
+            // `foo<1000` and the available versions are all `<10` we can simplify to `foo<10`.
+            if available_range.subset_of(&segment_range) {
+                // If the segment only has a lower or upper bound, only take the relevant part of
+                // the available range. This avoids replacing `foo<100` with `foo>1,<2`, instead
+                // using `foo<2` to avoid extra noise.
+                if matches!(lower, Bound::Unbounded) {
+                    return Some((Bound::Unbounded, Bound::Included(last_available.clone())));
+                } else if matches!(upper, Bound::Unbounded) {
+                    return Some((Bound::Included(first_available.clone()), Bound::Unbounded));
+                }
+                return Some((
                     Bound::Included(first_available.clone()),
-                    Bound::Unbounded,
-                )));
-            } else {
-                new_range = new_range.union(&available_range);
+                    Bound::Included(last_available.clone()),
+                ));
             }
-            continue;
-        }
 
-        // If the bound is inclusive, and the version is _not_ available, change it to an exclusive
-        // bound to avoid confusion, e.g., if the segment is `foo<=10` and the available versions
-        // do not include `foo 10`, we should instead say `foo<10`.
-        let lower = match lower {
-            Bound::Included(version) if !version_contained_in(version, available_versions) => {
-                Bound::Excluded(version.clone())
-            }
-            _ => (*lower).clone(),
-        };
-        let upper = match upper {
-            Bound::Included(version) if !version_contained_in(version, available_versions) => {
-                Bound::Excluded(version.clone())
-            }
-            _ => (*upper).clone(),
-        };
+            // If the bound is inclusive, and the version is _not_ available, change it to an
+            // exclusive bound to avoid confusion, e.g., if the segment is `foo<=10` and the
+            // available versions do not include `foo 10`, we should instead say `foo<10`.
+            let lower = match lower {
+                Bound::Included(version) if !version_contained_in(version, available_versions) => {
+                    Bound::Excluded(version.clone())
+                }
+                _ => (*lower).clone(),
+            };
+            let upper = match upper {
+                Bound::Included(version) if !version_contained_in(version, available_versions) => {
+                    Bound::Excluded(version.clone())
+                }
+                _ => (*upper).clone(),
+            };
 
-        // Note this repeated-union construction is not particularly efficient, but there's not
-        // better API exposed by PubGrub. Since we're just generating an error message, it's
-        // probably okay, but we should investigate a better upstream API.
-        new_range = new_range.union(&Range::from_range_bounds((lower, upper)));
-    }
-
-    new_range
+            Some((lower, upper))
+        })
+        .collect()
 }
 
 impl std::fmt::Display for PackageRange<'_> {
@@ -2164,7 +2434,7 @@ impl<'a> DependsOn<'a> {
 
 impl std::fmt::Display for DependsOn<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", Padded::new("", self.package, " "))?;
+        write!(f, "{}", padded("", self.package, " "))?;
         if self.package.plural() {
             write!(f, "depend on ")?;
         } else {
@@ -2175,8 +2445,8 @@ impl std::fmt::Display for DependsOn<'_> {
             Some(ref dependency2) => write!(
                 f,
                 "{}and{}",
-                Padded::new("", &self.dependency1, " "),
-                Padded::new(" ", &dependency2, "")
+                padded("", &self.dependency1, " "),
+                padded(" ", &dependency2, "")
             )?,
             None => write!(f, "{}", self.dependency1)?,
         }
@@ -2187,52 +2457,28 @@ impl std::fmt::Display for DependsOn<'_> {
 
 /// Inserts the given padding on the left and right sides of the content if
 /// the content does not start and end with whitespace respectively.
-#[derive(Debug)]
-struct Padded<'a, T: std::fmt::Display> {
+fn padded<'a, T: std::fmt::Display + ?Sized>(
     left: &'a str,
     content: &'a T,
     right: &'a str,
-}
-
-impl<'a, T: std::fmt::Display> Padded<'a, T> {
-    fn new(left: &'a str, content: &'a T, right: &'a str) -> Self {
-        Padded {
-            left,
-            content,
-            right,
-        }
-    }
-}
-
-impl<'a> Padded<'a, String> {
-    fn from_string(left: &'a str, content: &'a String, right: &'a str) -> Self {
-        Padded {
-            left,
-            content,
-            right,
-        }
-    }
-}
-
-impl<T: std::fmt::Display> std::fmt::Display for Padded<'_, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut result = String::new();
-        let content = self.content.to_string();
+) -> impl std::fmt::Display + 'a {
+    std::fmt::from_fn(move |f| {
+        let content = content.to_string();
 
         if let Some(char) = content.chars().next() {
             if !char.is_whitespace() {
-                result.push_str(self.left);
+                f.write_str(left)?;
             }
         }
 
-        result.push_str(&content);
+        f.write_str(&content)?;
 
         if let Some(char) = content.chars().last() {
             if !char.is_whitespace() {
-                result.push_str(self.right);
+                f.write_str(right)?;
             }
         }
 
-        write!(f, "{result}")
-    }
+        Ok(())
+    })
 }

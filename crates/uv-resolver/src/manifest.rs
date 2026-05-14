@@ -98,6 +98,12 @@ impl Manifest {
         self
     }
 
+    #[must_use]
+    pub fn with_lookaheads(mut self, lookaheads: Vec<RequestedRequirements>) -> Self {
+        self.lookaheads = lookaheads;
+        self
+    }
+
     /// Return an iterator over all requirements, constraints, and overrides, in priority order,
     /// such that requirements come first, followed by constraints, followed by overrides.
     ///
