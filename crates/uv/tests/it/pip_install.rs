@@ -11854,8 +11854,17 @@ def main():
     // Set helper as a submodule
     Command::new("git")
         .args(["submodule", "add", "../utilities/helpers", "mylib/helpers"])
+        .env("GIT_ALLOW_PROTOCOL", "file:ext:http:https:ssh")
         .current_dir(mylib_dir.path())
-        .output()?;
+        .assert()
+        .success();
+    mylib_dir
+        .child(".gitmodules")
+        .assert(predicate::path::is_file());
+    mylib_package
+        .child("helpers")
+        .child("helper.py")
+        .assert(predicate::path::is_file());
 
     // Add and commit in mylib
     Command::new("git")
@@ -11895,12 +11904,13 @@ def main():
 
 #[test]
 #[cfg(feature = "test-git")]
-fn remote_git_submodule_relative_url() {
-    const TEST_REPO: &str = "Choudhry18/uv-test.git";
+fn remote_git_submodule() {
+    const TEST_REPO: &str = "astral-test/uv-submodule-pypackage.git";
+    const TEST_REV: &str = "d2c44b87eef25896dd30a6e55d4689b918180c7b";
     let context = uv_test::test_context!("3.13");
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(format!("git+https://github.com/{TEST_REPO}")), @r"
+        .arg(format!("git+https://github.com/{TEST_REPO}@{TEST_REV}")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11909,7 +11919,7 @@ fn remote_git_submodule_relative_url() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-test==0.1.0 (from git+https://github.com/Choudhry18/uv-test.git@043395dfdb441ebea950ea809a0c004c1abbf385)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-submodule-pypackage.git@d2c44b87eef25896dd30a6e55d4689b918180c7b)
     ");
 }
 
