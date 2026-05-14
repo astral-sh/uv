@@ -151,6 +151,24 @@ fn python_find() {
 }
 
 #[test]
+fn python_find_skips_download_metadata_when_python_is_found() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let missing_downloads = context.temp_dir.child("missing-downloads.json");
+
+    uv_snapshot!(context.filters(), context
+        .python_find()
+        .arg("--python-downloads-json-url")
+        .arg(missing_downloads.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
 fn python_find_pin() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
 

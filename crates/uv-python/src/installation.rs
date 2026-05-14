@@ -72,7 +72,7 @@ impl PythonInstallation {
     }
 
     /// Find an existing [`PythonInstallation`].
-    fn find_existing(
+    pub fn find_existing(
         request: &PythonRequest,
         environments: EnvironmentPreference,
         preference: PythonPreference,
@@ -149,16 +149,13 @@ impl PythonInstallation {
 
         let err = match Self::find_existing(request, environments, preference, cache, preview) {
             Ok(installation) => {
-                // Avoid parsing the download list unless we need it to surface a warning.
-                if installation.should_check_outdated_prerelease_warning(request) {
-                    let download_list_client = client_builder.build()?;
-                    let download_list = ManagedPythonDownloadList::new(
-                        &download_list_client,
+                installation
+                    .download_and_warn_if_outdated_prerelease(
+                        request,
+                        client_builder,
                         python_downloads_json_url,
                     )
                     .await?;
-                    installation.warn_if_outdated_prerelease(request, &download_list);
-                }
                 return Ok(installation);
             }
             Err(err) => err,
@@ -504,6 +501,30 @@ impl PythonInstallation {
                 version,
             );
         }
+    }
+
+    /// Emit a warning when the interpreter is a managed prerelease and a matching stable
+    /// build can be installed via `uv python upgrade`.
+    ///
+    /// Avoids loading the Python download list unless the discovered interpreter could require
+    /// the warning.
+    pub async fn download_and_warn_if_outdated_prerelease(
+        &self,
+        request: &PythonRequest,
+        client_builder: &BaseClientBuilder<'_>,
+        python_downloads_json_url: Option<&str>,
+    ) -> Result<(), Error> {
+        if !self.should_check_outdated_prerelease_warning(request) {
+            return Ok(());
+        }
+
+        let download_list_client = client_builder.build()?;
+        let download_list =
+            ManagedPythonDownloadList::new(&download_list_client, python_downloads_json_url)
+                .await?;
+        self.warn_if_outdated_prerelease(request, &download_list);
+
+        Ok(())
     }
 }
 

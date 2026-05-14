@@ -93,20 +93,30 @@ pub(crate) async fn pin(
     let Some(request) = request else {
         // Display the current pinned Python version
         if let Some(file) = version_file? {
-            for pin in file.versions() {
-                writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
-                if let Some(virtual_project) = &virtual_project {
-                    let download_list_client = client_builder.build()?;
-                    let download_list = ManagedPythonDownloadList::new(
+            let mut pins = file.versions().peekable();
+            let download_list = if virtual_project.is_some() && pins.peek().is_some() {
+                let download_list_client = client_builder.build()?;
+                Some(
+                    ManagedPythonDownloadList::new(
                         &download_list_client,
                         install_mirrors.python_downloads_json_url.as_deref(),
                     )
-                    .await?;
+                    .await?,
+                )
+            } else {
+                None
+            };
+
+            for pin in pins {
+                writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
+                if let Some(virtual_project) = &virtual_project
+                    && let Some(download_list) = &download_list
+                {
                     warn_if_existing_pin_incompatible_with_project(
                         pin,
                         virtual_project,
                         python_preference,
-                        &download_list,
+                        download_list,
                         cache,
                         preview,
                     );
