@@ -42,7 +42,7 @@ impl Authenticator {
 /// Represents the netrc file.
 #[derive(Debug, Default)]
 pub struct Netrc {
-    /// Dictionary mapping host names to the authentificators.
+    /// Dictionary mapping host names to the authenticators.
     pub hosts: HashMap<String, Authenticator>,
 
     /// Dictionary mapping macro names to string lists.

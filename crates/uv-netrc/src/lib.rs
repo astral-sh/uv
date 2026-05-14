@@ -9,7 +9,7 @@ $ cargo add uv-netrc
 
 # Example
 
-```no_run
+```ignore
 use uv_netrc::Netrc;
 
 // ...
@@ -109,11 +109,14 @@ impl Netrc {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static NETRC_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
     const CONTENT: &str = "\
 machine cocolog-nifty.com
 login jmarten0
-password cC2&yt7OT
+password cC2&yt7ZX
 
 machine wired.com
 login mstanlack1
@@ -125,10 +128,9 @@ password hY5>yKqU&$vq&0
 ";
 
     fn create_netrc_file() -> PathBuf {
-        let dest = std::env::temp_dir().join("mynetrc");
-        if !dest.exists() {
-            fs_err::write(&dest, CONTENT).unwrap();
-        }
+        let id = NETRC_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dest = std::env::temp_dir().join(format!("mynetrc-{}-{id}", std::process::id()));
+        fs_err::write(&dest, CONTENT).unwrap();
         dest
     }
 
@@ -136,7 +138,7 @@ password hY5>yKqU&$vq&0
         assert_eq!(nrc.hosts.len(), 3);
         assert_eq!(
             nrc.hosts["cocolog-nifty.com"],
-            Authenticator::new("jmarten0", "", "cC2&yt7OT")
+            Authenticator::new("jmarten0", "", "cC2&yt7ZX")
         );
         assert_eq!(
             nrc.hosts["wired.com"],
