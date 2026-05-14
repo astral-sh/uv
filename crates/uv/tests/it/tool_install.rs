@@ -5623,29 +5623,6 @@ fn tool_install_python_platform() {
     ");
 }
 
-#[test]
-#[cfg(feature = "test-git")]
-fn tool_install_git_submodules() {
-    const TEST_REPO: &str = "astral-test/uv-submodule-pypackage.git";
-    const TEST_REV: &str = "d2c44b87eef25896dd30a6e55d4689b918180c7b";
-    let context = uv_test::test_context!("3.13");
-
-    uv_snapshot!(context.filters(), context.tool_install()
-        .arg(format!("git+https://github.com/{TEST_REPO}@{TEST_REV}")), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-    No executables are provided by package `uv-public-pypackage`; removing tool
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-submodule-pypackage.git@d2c44b87eef25896dd30a6e55d4689b918180c7b)
-    error: Failed to install entrypoints for `uv-public-pypackage`
-    ");
-}
-
 /// Reinstalling a tool after the underlying Python has been removed.
 ///
 /// Regression test for <https://github.com/astral-sh/uv/issues/16252>.

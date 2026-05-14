@@ -11780,7 +11780,7 @@ fn unsupported_git_scheme() {
 #[test]
 #[cfg(unix)]
 #[cfg(feature = "test-git")]
-fn test_git_submodule_relative_url() -> Result<()> {
+fn install_git_submodule_relative_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let temp_dir = &context.temp_dir;
     let utilities_dir = temp_dir.child("utilities");
@@ -11947,7 +11947,7 @@ def main():
 
 #[test]
 #[cfg(feature = "test-git")]
-fn remote_git_submodule() {
+fn install_git_submodule_remote() {
     const TEST_REPO: &str = "astral-test/uv-submodule-pypackage.git";
     const TEST_REV: &str = "d2c44b87eef25896dd30a6e55d4689b918180c7b";
     let context = uv_test::test_context!("3.13");
