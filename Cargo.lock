@@ -6717,6 +6717,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-netrc"
+version = "0.0.47"
+dependencies = [
+ "fs-err",
+ "shellexpand",
+ "temp-env",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "uv-normalize"
 version = "0.0.47"
 dependencies = [

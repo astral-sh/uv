@@ -49,6 +49,7 @@ uv-keyring = { version = "0.0.47", path = "crates/uv-keyring" }
 uv-logging = { version = "0.0.47", path = "crates/uv-logging" }
 uv-macros = { version = "0.0.47", path = "crates/uv-macros" }
 uv-metadata = { version = "0.0.47", path = "crates/uv-metadata" }
+uv-netrc = { version = "0.0.47", path = "crates/uv-netrc" }
 uv-normalize = { version = "0.0.47", path = "crates/uv-normalize" }
 uv-once-map = { version = "0.0.47", path = "crates/uv-once-map" }
 uv-options-metadata = { version = "0.0.47", path = "crates/uv-options-metadata" }
@@ -242,6 +243,11 @@ same-file = { version = "1.0.6" }
 schemars = { version = "1.0.0", features = ["url2"] }
 seahash = { version = "4.1.0" }
 secret-service = { version = "5.0.0", features = ["rt-tokio-crypto-rust"] }
+shellexpand = { version = "3.1.0", default-features = false, features = [
+  "base-0",
+  "tilde",
+  "path",
+] }
 security-framework = { version = "3" }
 self-replace = { version = "1.5.0" }
 serde = { version = "1.0.210", features = ["derive", "rc"] }
