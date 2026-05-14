@@ -11966,6 +11966,29 @@ fn install_git_submodule_remote() {
     ");
 }
 
+/// Like `install_git_submodule_remote` but the submodule URL is relative.
+/// See: <https://github.com/astral-test/uv-submodule-pypackage/commit/377720a1a7f48279bbfc17988454132f13644e84>
+#[test]
+#[cfg(feature = "test-git")]
+fn install_git_submodule_remote_relative() {
+    const TEST_REPO: &str = "astral-test/uv-submodule-pypackage.git";
+    const TEST_REV: &str = "377720a1a7f48279bbfc17988454132f13644e84";
+    let context = uv_test::test_context!("3.13");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("git+https://github.com/{TEST_REPO}@{TEST_REV}")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-submodule-pypackage.git@377720a1a7f48279bbfc17988454132f13644e84)
+    ");
+}
+
 /// Modify a project to use a `src` layout.
 #[test]
 fn change_layout_src() -> Result<()> {
