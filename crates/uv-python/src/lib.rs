@@ -146,9 +146,8 @@ mod tests {
 
     use crate::{
         PythonDownloads, PythonNotFound, PythonRequest, PythonSource, PythonVersion,
-        downloads::ManagedPythonDownloadList, implementation::ImplementationName,
-        installation::PythonInstallation, managed::ManagedPythonInstallations,
-        virtualenv::virtualenv_python_executable,
+        implementation::ImplementationName, installation::PythonInstallation,
+        managed::ManagedPythonInstallations, virtualenv::virtualenv_python_executable,
     };
     use crate::{
         PythonPreference,
@@ -1052,12 +1051,6 @@ mod tests {
         preview: Preview,
     ) -> Result<PythonInstallation, crate::Error> {
         let client_builder = BaseClientBuilder::default();
-        let download_list = ManagedPythonDownloadList::new_only_embedded()?;
-        let client = client_builder
-            .clone()
-            .retries(0)
-            .build()
-            .expect("failed to build base client");
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -1067,10 +1060,9 @@ mod tests {
                 environments,
                 preference,
                 false,
-                &download_list,
-                &client,
-                &client_builder.retry_policy(),
+                &client_builder,
                 cache,
+                None,
                 None,
                 None,
                 None,

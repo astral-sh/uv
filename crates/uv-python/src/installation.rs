@@ -103,10 +103,6 @@ impl PythonInstallation {
         python_downloads_json_url: Option<&str>,
         preview: Preview,
     ) -> Result<Self, Error> {
-        let retry_policy = client_builder.retry_policy();
-        let client = client_builder.clone().retries(0).build()?;
-        let download_list =
-            ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
         let downloads_enabled = preference.allows_managed()
             && python_downloads.is_automatic()
             && client_builder.connectivity.is_online();
@@ -115,17 +111,22 @@ impl PythonInstallation {
             environments,
             preference,
             downloads_enabled,
-            &download_list,
-            &client,
-            &retry_policy,
+            client_builder,
             cache,
             reporter,
             python_install_mirror,
             pypy_install_mirror,
+            python_downloads_json_url,
             preview,
         )
         .await?;
-        installation.warn_if_outdated_prerelease(request, &download_list);
+        installation
+            .download_and_warn_if_outdated_prerelease(
+                request,
+                client_builder,
+                python_downloads_json_url,
+            )
+            .await?;
         Ok(installation)
     }
 
