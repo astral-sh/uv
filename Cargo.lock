@@ -3429,7 +3429,7 @@ version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e67ba7e9b2b56446f1d419b1d807906278ffa1a658a8a5d8a39dcb1f5a78614f"
 dependencies = [
- "toml_edit 0.25.4+spec-1.1.0",
+ "toml_edit",
 ]
 
 [[package]]
@@ -5259,28 +5259,16 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.24.0+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c740b185920170a6d9191122cafef7010bd6270a3824594bff6784c04d7f09e"
-dependencies = [
- "indexmap",
- "serde_core",
- "serde_spanned",
- "toml_datetime 0.7.5+spec-1.1.0",
- "toml_parser",
- "toml_writer",
- "winnow",
-]
-
-[[package]]
-name = "toml_edit"
 version = "0.25.4+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7193cbd0ce53dc966037f54351dbbcf0d5a642c7f0038c382ef9e677ce8c13f2"
 dependencies = [
  "indexmap",
+ "serde_core",
+ "serde_spanned",
  "toml_datetime 1.0.0+spec-1.1.0",
  "toml_parser",
+ "toml_writer",
  "winnow",
 ]
 
@@ -5756,7 +5744,7 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "toml",
- "toml_edit 0.24.0+spec-1.1.0",
+ "toml_edit",
  "tracing",
  "tracing-durations-export",
  "tracing-subscriber",
@@ -6024,7 +6012,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
- "toml_edit 0.24.0+spec-1.1.0",
+ "toml_edit",
  "tracing",
  "uv-auth",
  "uv-cache-key",
@@ -6896,7 +6884,7 @@ dependencies = [
  "serde-untagged",
  "serde_json",
  "thiserror 2.0.18",
- "toml_edit 0.24.0+spec-1.1.0",
+ "toml_edit",
  "tracing",
  "url",
  "uv-cache-key",
@@ -7081,7 +7069,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "toml",
- "toml_edit 0.24.0+spec-1.1.0",
+ "toml_edit",
  "tracing",
  "url",
  "uv-cache-key",
@@ -7261,7 +7249,7 @@ dependencies = [
  "serde",
  "thiserror 2.0.18",
  "toml",
- "toml_edit 0.24.0+spec-1.1.0",
+ "toml_edit",
  "tracing",
  "uv-cache",
  "uv-dirs",
@@ -7415,7 +7403,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "toml",
- "toml_edit 0.24.0+spec-1.1.0",
+ "toml_edit",
  "tracing",
  "uv-build-backend",
  "uv-cache-key",
