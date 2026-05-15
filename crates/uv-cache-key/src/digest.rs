@@ -39,7 +39,12 @@ fn to_hex(num: u64) -> String {
 /// Normalize a name for use in a cache entry.
 ///
 /// Replaces non-alphanumeric characters with dashes, and lowercases the name.
-pub fn cache_name(name: &str) -> Option<Cow<'_, str>> {
+///
+/// If `max_len` is provided, the output is truncated to at most that many bytes
+/// (trailing dashes from truncation are stripped).
+pub fn cache_name(name: &str, max_len: Option<usize>) -> Option<Cow<'_, str>> {
+    let limit = max_len.unwrap_or(usize::MAX);
+
     if name
         .bytes()
         .all(|char| matches!(char, b'0'..=b'9' | b'a'..=b'f'))
@@ -47,12 +52,12 @@ pub fn cache_name(name: &str) -> Option<Cow<'_, str>> {
         return if name.is_empty() {
             None
         } else {
-            Some(Cow::Borrowed(name))
+            Some(Cow::Borrowed(name.get(..limit).unwrap_or(name)))
         };
     }
-    let mut normalized = String::with_capacity(name.len());
+    let mut normalized = String::with_capacity(name.len().min(limit));
     let mut dash = false;
-    for char in name.bytes() {
+    for char in name.bytes().take(limit) {
         match char {
             b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' => {
                 dash = false;
@@ -82,12 +87,30 @@ mod tests {
 
     #[test]
     fn test_cache_name() {
-        assert_eq!(cache_name("foo"), Some("foo".into()));
-        assert_eq!(cache_name("foo-bar"), Some("foo-bar".into()));
-        assert_eq!(cache_name("foo_bar"), Some("foo-bar".into()));
-        assert_eq!(cache_name("foo-bar_baz"), Some("foo-bar-baz".into()));
-        assert_eq!(cache_name("foo-bar_baz_"), Some("foo-bar-baz".into()));
-        assert_eq!(cache_name("foo-_bar_baz"), Some("foo-bar-baz".into()));
-        assert_eq!(cache_name("_+-_"), None);
+        assert_eq!(cache_name("foo", None), Some("foo".into()));
+        assert_eq!(cache_name("foo-bar", None), Some("foo-bar".into()));
+        assert_eq!(cache_name("foo_bar", None), Some("foo-bar".into()));
+        assert_eq!(cache_name("foo-bar_baz", None), Some("foo-bar-baz".into()));
+        assert_eq!(cache_name("foo-bar_baz_", None), Some("foo-bar-baz".into()));
+        assert_eq!(cache_name("foo-_bar_baz", None), Some("foo-bar-baz".into()));
+        assert_eq!(cache_name("_+-_", None), None);
+    }
+
+    #[test]
+    fn test_cache_name_max_len() {
+        let long = "a".repeat(300);
+        assert_eq!(
+            cache_name(&long, Some(100)).as_deref().map(str::len),
+            Some(100)
+        );
+
+        let long_hex = "abcdef".repeat(50);
+        assert_eq!(
+            cache_name(&long_hex, Some(100)).as_deref().map(str::len),
+            Some(100)
+        );
+
+        assert_eq!(cache_name("aaaa_bbbb", Some(5)), Some("aaaa".into()));
+        assert_eq!(cache_name(&long, None).as_deref().map(str::len), Some(300));
     }
 }
