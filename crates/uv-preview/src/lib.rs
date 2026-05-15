@@ -256,6 +256,7 @@ pub enum PreviewFeature {
     Audit = 1 << 26,
     ProjectDirectoryMustExist = 1 << 27,
     IndexExcludeNewer = 1 << 28,
+    AzureEndpoint = 1 << 29,
 }
 
 impl PreviewFeature {
@@ -291,6 +292,7 @@ impl PreviewFeature {
             Self::Audit => "audit",
             Self::ProjectDirectoryMustExist => "project-directory-must-exist",
             Self::IndexExcludeNewer => "index-exclude-newer",
+            Self::AzureEndpoint => "azure-endpoint",
         }
     }
 }
@@ -339,6 +341,7 @@ impl FromStr for PreviewFeature {
             "audit" => Self::Audit,
             "project-directory-must-exist" => Self::ProjectDirectoryMustExist,
             "index-exclude-newer" => Self::IndexExcludeNewer,
+            "azure-endpoint" => Self::AzureEndpoint,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -592,6 +595,7 @@ mod tests {
             PreviewFeature::IndexExcludeNewer.as_str(),
             "index-exclude-newer"
         );
+        assert_eq!(PreviewFeature::AzureEndpoint.as_str(), "azure-endpoint");
     }
 
     #[test]

@@ -3799,6 +3799,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2f343280e2e5ce07f97f32ead07a68824cb9cea60093ad78f22664011f90ae47"
 dependencies = [
  "reqsign-aws-v4",
+ "reqsign-azure-storage",
  "reqsign-command-execute-tokio",
  "reqsign-core",
  "reqsign-file-read-tokio",
@@ -3824,6 +3825,28 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
+ "sha1",
+]
+
+[[package]]
+name = "reqsign-azure-storage"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a321980405d596bd34aaf95c4722a3de4128a67fd19e74a81a83aa3fdf082e6"
+dependencies = [
+ "anyhow",
+ "base64",
+ "bytes",
+ "form_urlencoded",
+ "http",
+ "jsonwebtoken",
+ "log",
+ "pem",
+ "percent-encoding",
+ "reqsign-core",
+ "rsa",
+ "serde",
+ "serde_json",
  "sha1",
 ]
 

@@ -203,6 +203,7 @@ regex-automata = { version = "0.4.8", default-features = false, features = [
 ] }
 reqsign = { version = "0.20.0", features = [
   "aws",
+  "azure",
   "google",
   "default-context",
 ], default-features = false }

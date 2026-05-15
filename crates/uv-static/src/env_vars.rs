@@ -1351,6 +1351,12 @@ impl EnvVars {
     #[attr_added_in("0.9.26")]
     pub const UV_GCS_ENDPOINT_URL: &'static str = "UV_GCS_ENDPOINT_URL";
 
+    /// The URL to treat as an Azure Blob Storage endpoint. Requests to this endpoint will be
+    /// signed using Azure workload identity based on the `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
+    /// and `AZURE_FEDERATED_TOKEN_FILE` environment variables.
+    #[attr_added_in("0.11.14")]
+    pub const UV_AZURE_ENDPOINT_URL: &'static str = "UV_AZURE_ENDPOINT_URL";
+
     /// The URL of the pyx Simple API server.
     #[attr_added_in("0.8.15")]
     pub const PYX_API_URL: &'static str = "PYX_API_URL";
