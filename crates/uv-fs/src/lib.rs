@@ -338,16 +338,86 @@ pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
 mod tests {
     use super::*;
 
+    fn create_directory_link_target(tempdir: &tempfile::TempDir) -> std::io::Result<PathBuf> {
+        let target = tempdir.path().join("target");
+        fs_err::create_dir(&target)?;
+        Ok(target)
+    }
+
     #[test]
     fn read_link_reads_created_directory_link() -> std::io::Result<()> {
         let tempdir = tempfile::tempdir()?;
-        let target = tempdir.path().join("target");
-        fs_err::create_dir(&target)?;
+        let target = create_directory_link_target(&tempdir)?;
         let link = tempdir.path().join("link");
 
         create_symlink(&target, &link)?;
 
         assert_eq!(read_link(&link)?, dunce::simplified(&target));
+        Ok(())
+    }
+
+    #[test]
+    fn replace_symlink_lenient_replaces_existing_file() -> std::io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let target = create_directory_link_target(&tempdir)?;
+        let link = tempdir.path().join("link");
+        fs_err::write(&link, "contents")?;
+
+        replace_symlink_lenient(&target, &link)?;
+
+        assert_eq!(read_link(&link)?, dunce::simplified(&target));
+        Ok(())
+    }
+
+    #[test]
+    fn replace_symlink_lenient_replaces_existing_empty_directory() -> std::io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let target = create_directory_link_target(&tempdir)?;
+        let link = tempdir.path().join("link");
+        fs_err::create_dir(&link)?;
+
+        replace_symlink_lenient(&target, &link)?;
+
+        assert_eq!(read_link(&link)?, dunce::simplified(&target));
+        Ok(())
+    }
+
+    #[test]
+    fn replace_symlink_lenient_preserves_non_empty_directory() -> std::io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let target = create_directory_link_target(&tempdir)?;
+        let link = tempdir.path().join("link");
+        fs_err::create_dir(&link)?;
+        let child = link.join("child.txt");
+        fs_err::write(&child, "contents")?;
+
+        let err = match replace_symlink_lenient(&target, &link) {
+            Ok(()) => {
+                return Err(std::io::Error::other(
+                    "expected non-empty destination directory to be preserved",
+                ));
+            }
+            Err(err) => err,
+        };
+
+        assert_eq!(err.kind(), std::io::ErrorKind::DirectoryNotEmpty);
+        assert_eq!(fs_err::read_to_string(&child)?, "contents");
+        Ok(())
+    }
+
+    #[test]
+    fn replace_symlink_lenient_replaces_existing_junction() -> std::io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let old_target = tempdir.path().join("old-target");
+        fs_err::create_dir(&old_target)?;
+        let new_target = tempdir.path().join("new-target");
+        fs_err::create_dir(&new_target)?;
+        let link = tempdir.path().join("link");
+        create_symlink(&old_target, &link)?;
+
+        replace_symlink_lenient(&new_target, &link)?;
+
+        assert_eq!(read_link(&link)?, dunce::simplified(&new_target));
         Ok(())
     }
 }
