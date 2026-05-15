@@ -298,7 +298,6 @@ pub(crate) async fn run(
 
     // If the user tries to invoke `uvx run ruff`, hint them towards `uvx ruff`, but only if
     // the `run` package is guaranteed to come from PyPI.
-    let (mut target, mut args) = (target, args);
     if from.is_none()
         && invocation_source == ToolRunCommand::Uvx
         && settings
@@ -326,13 +325,15 @@ pub(crate) async fn run(
                 ("python", "uv python"),
             ];
 
-            if let Some((_, suggested_command)) = typo_traps.iter().find(|(cmd, _)| *cmd == target) {
+            if let Some((_, suggested_command)) =
+                typo_traps.iter().find(|(cmd, _)| *cmd == target)
+            {
                 let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
                 let prompt = format!(
                     "`{}` invokes the `{}` package. Did you mean `{}`?",
-                    format!("uvx {} {}", target, rest).trim().green(),
+                    format!("uvx {target} {rest}").trim().green(),
                     target.cyan(),
-                    format!("{} {}", suggested_command, rest).trim().green()
+                    format!("{suggested_command} {rest}").trim().green()
                 );
                 let confirmation = uv_console::confirm(&prompt, &term, true)?;
                 if confirmation {
