@@ -7,7 +7,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 use serde::Serialize;
-use tracing::{debug, warn};
+use tracing::warn;
 use uv_cache::Cache;
 use uv_cli::SyncFormat;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -974,20 +974,11 @@ async fn store_credentials_from_target(
             continue;
         }
         let pyproject_path = install_path.join(relative).join("pyproject.toml");
-        let pyproject = match fs_err::tokio::read_to_string(&pyproject_path)
-            .await
-            .map_err(|err| err.to_string())
-            .and_then(|contents| {
-                PyProjectToml::from_string(contents, &pyproject_path).map_err(|err| err.to_string())
-            }) {
-            Ok(pyproject) => pyproject,
-            Err(err) => {
-                debug!(
-                    "Skipping credential discovery for `{}`: {err}",
-                    pyproject_path.display()
-                );
-                continue;
-            }
+        let Ok(contents) = fs_err::tokio::read_to_string(&pyproject_path).await else {
+            continue;
+        };
+        let Ok(pyproject) = PyProjectToml::from_string(contents, &pyproject_path) else {
+            continue;
         };
         let Some(sources) = pyproject
             .tool
