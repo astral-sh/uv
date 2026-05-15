@@ -3,12 +3,14 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileTouch, FileWriteBin, FileWriteStr, PathChild, PathCreateDir};
 use flate2::bufread::GzDecoder;
 use fs_err::File;
+use futures::io::AllowStdIo;
 use indoc::{formatdoc, indoc};
 use insta::{assert_json_snapshot, assert_snapshot};
 use std::io::BufReader;
 use std::path::Path;
 use std::process::Command;
 use tempfile::TempDir;
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 use uv_static::EnvVars;
 use uv_test::{uv_snapshot, venv_bin_path};
 
@@ -19,6 +21,17 @@ const BUILT_BY_UV_TEST_SCRIPT: &str = indoc! {r#"
     print(greet())
     print(f"Area of a circle with r=2: {area(2)}")
 "#};
+
+fn unpack_tar_gz(source_dist_path: &Path, target: &Path) -> Result<()> {
+    let sdist_reader = BufReader::new(File::open(source_dist_path)?);
+    let mut source_dist =
+        tokio_tar::Archive::new(AllowStdIo::new(GzDecoder::new(sdist_reader)).compat());
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(source_dist.unpack(target))?;
+    Ok(())
+}
 
 /// Test that build backend works if we invoke it directly.
 ///
@@ -102,10 +115,10 @@ fn built_by_uv_direct() -> Result<()> {
 
     let sdist_tree = TempDir::new()?;
 
-    let sdist_reader = BufReader::new(File::open(
-        sdist_dir.path().join("built_by_uv-0.1.0.tar.gz"),
-    )?);
-    tar::Archive::new(GzDecoder::new(sdist_reader)).unpack(sdist_tree.path())?;
+    unpack_tar_gz(
+        &sdist_dir.path().join("built_by_uv-0.1.0.tar.gz"),
+        sdist_tree.path(),
+    )?;
 
     drop(sdist_dir);
 

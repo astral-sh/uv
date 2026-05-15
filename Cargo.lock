@@ -4866,17 +4866,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eddb6b06d20fba9ed21fca3d696ee1b6e870bca0bcf9fa2971f6ae2436de576a"
 
 [[package]]
-name = "tar"
-version = "0.4.45"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22692a6476a21fa75fdfc11d452fda482af402c008cdbaf3476414e122040973"
-dependencies = [
- "filetime",
- "libc",
- "xattr",
-]
-
-[[package]]
 name = "target-lexicon"
 version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5681,6 +5670,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "assert_fs",
+ "astral-tokio-tar",
  "astral-version-ranges",
  "astral_async_zip",
  "axoupdater",
@@ -5724,7 +5714,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "tar",
  "tempfile",
  "textwrap",
  "thiserror",
@@ -5943,6 +5932,7 @@ dependencies = [
 name = "uv-build-backend"
 version = "0.0.47"
 dependencies = [
+ "astral-tokio-tar",
  "astral-version-ranges",
  "astral_async_zip",
  "base64",
@@ -5962,9 +5952,9 @@ dependencies = [
  "serde_json",
  "sha2",
  "spdx",
- "tar",
  "tempfile",
  "thiserror",
+ "tokio",
  "toml",
  "tracing",
  "uv-distribution-filename",

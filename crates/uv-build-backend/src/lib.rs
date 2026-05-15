@@ -442,7 +442,7 @@ mod tests {
     use async_zip::base::read::mem::ZipFileReader;
     use flate2::bufread::GzDecoder;
     use fs_err::File;
-    use futures_lite::future::block_on;
+    use futures_lite::{StreamExt, future::block_on};
     use indoc::indoc;
     use insta::assert_snapshot;
     use itertools::Itertools;
@@ -450,10 +450,13 @@ mod tests {
     use sha2::Digest;
     use std::io::BufReader;
     use std::iter;
+    use std::pin::Pin;
     use tempfile::TempDir;
     use uv_distribution_filename::{SourceDistFilename, WheelFilename};
     use uv_fs::{copy_dir_all, relative_to};
     use uv_preview::PreviewFeature;
+
+    use crate::source_dist::SyncReader;
 
     const MOCK_UV_VERSION: &str = "1.0.0+test";
 
@@ -515,9 +518,7 @@ mod tests {
 
         // Unpack the source distribution and build a wheel from it.
         let sdist_tree = TempDir::new()?;
-        let sdist_reader = BufReader::new(File::open(&source_dist_path)?);
-        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
-        source_dist.unpack(sdist_tree.path())?;
+        unpack_sdist(&source_dist_path, sdist_tree.path())?;
         let sdist_top_level_directory = sdist_tree.path().join(format!(
             "{}-{}",
             source_dist_filename.name.as_dist_info_name(),
@@ -565,22 +566,38 @@ mod tests {
 
     fn sdist_contents(source_dist_path: &Path) -> Vec<String> {
         let sdist_reader = BufReader::new(File::open(source_dist_path).unwrap());
-        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
-        let mut source_dist_contents: Vec<_> = source_dist
-            .entries()
-            .unwrap()
-            .map(|entry| {
-                entry
-                    .unwrap()
-                    .path()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .replace('\\', "/")
-            })
-            .collect();
+        let mut source_dist =
+            tokio_tar::Archive::new(SyncReader::new(GzDecoder::new(sdist_reader)));
+        let mut source_dist_contents = block_on(async {
+            let mut entries = source_dist.entries().unwrap();
+            let mut entries = Pin::new(&mut entries);
+            let mut contents = Vec::new();
+            while let Some(entry) = entries.next().await {
+                contents.push(
+                    entry
+                        .unwrap()
+                        .path()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .replace('\\', "/"),
+                );
+            }
+            contents
+        });
         source_dist_contents.sort();
         source_dist_contents
+    }
+
+    fn unpack_sdist(source_dist_path: &Path, target: &Path) -> Result<(), Error> {
+        let sdist_reader = BufReader::new(File::open(source_dist_path)?);
+        let mut source_dist =
+            tokio_tar::Archive::new(SyncReader::new(GzDecoder::new(sdist_reader)));
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(source_dist.unpack(target))?;
+        Ok(())
     }
 
     fn wheel_contents(direct_output_dir: &Path) -> Vec<String> {
@@ -881,9 +898,7 @@ mod tests {
         build_source_dist(src.path(), output_dir.path(), "0.5.15", false).unwrap();
         let sdist_tree = TempDir::new().unwrap();
         let source_dist_path = output_dir.path().join("pep_pep639_license-1.0.0.tar.gz");
-        let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
-        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
-        source_dist.unpack(sdist_tree.path()).unwrap();
+        unpack_sdist(&source_dist_path, sdist_tree.path()).unwrap();
         {
             let _preview = uv_preview::test::with_features(&[]);
             build_wheel(
