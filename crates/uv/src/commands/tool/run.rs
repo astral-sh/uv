@@ -325,7 +325,9 @@ pub(crate) async fn run(
                 ("python", "uv python"),
             ];
 
-            if let Some((_, suggested_command)) = typo_traps.iter().find(|(cmd, _)| *cmd == target) {
+            if let Some((_, suggested_command)) =
+                typo_traps.iter().find(|(cmd, _)| *cmd == target)
+            {
                 let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
                 let prompt = format!(
                     "`{}` invokes the `{}` package. Did you mean `{}`?",
