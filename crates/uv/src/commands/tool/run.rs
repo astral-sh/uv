@@ -301,7 +301,6 @@ pub(crate) async fn run(
     let (mut target, mut args) = (target, args);
     if from.is_none()
         && invocation_source == ToolRunCommand::Uvx
-        && target == "run"
         && settings
             .resolver
             .index_locations
@@ -310,25 +309,40 @@ pub(crate) async fn run(
     {
         let term = Term::stderr();
         if term.is_term() {
-            let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
-            let prompt = format!(
-                "`{}` invokes the `{}` package. Did you mean `{}`?",
-                format!("uvx run {rest}").green(),
-                "run".cyan(),
-                format!("uvx {rest}").green()
-            );
-            let confirmation = uv_console::confirm(&prompt, &term, true)?;
-            if confirmation {
-                let Some((next_target, next_args)) = args.split_first() else {
-                    return Err(anyhow::anyhow!("No tool command provided"));
-                };
-                let Some(next_target) = next_target.to_str() else {
+            // List of common uv subcommands that may be confused with package names
+            // See: https://github.com/astral-sh/uv/issues/18482
+            let typo_traps = [
+                ("run", "uv run"),
+                ("add", "uv add"),
+                ("install", "uv tool install"),
+                ("remove", "uv remove"),
+                ("sync", "uv sync"),
+                ("lock", "uv lock"),
+                ("venv", "uv venv"),
+                ("build", "uv build"),
+                ("init", "uv init"),
+                ("clean", "uv clean"),
+                ("pip", "uv pip"),
+                ("python", "uv python"),
+            ];
+
+            if let Some((_, suggested_command)) = typo_traps.iter().find(|(cmd, _)| *cmd == target) {
+                let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
+                let prompt = format!(
+                    "`{}` invokes the `{}` package. Did you mean `{}`?",
+                    format!("uvx {} {}", target, rest).trim().green(),
+                    target.cyan(),
+                    format!("{} {}", suggested_command, rest).trim().green()
+                );
+                let confirmation = uv_console::confirm(&prompt, &term, true)?;
+                if confirmation {
+                    // User wants to use the uv command instead
                     return Err(anyhow::anyhow!(
-                        "Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name"
+                        "Please use `{}` instead of `uvx {}`",
+                        suggested_command.green(),
+                        target
                     ));
-                };
-                target = next_target;
-                args = next_args;
+                }
             }
         }
     }
