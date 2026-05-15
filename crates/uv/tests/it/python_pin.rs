@@ -950,6 +950,40 @@ async fn python_pin_custom_ndjson_url_does_not_fallback() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+#[cfg(feature = "test-python-managed")]
+async fn python_pin_custom_ndjson_url_reports_parse_errors() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_sources()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw("{", "application/x-ndjson"))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .python_pin()
+        .arg("--resolved")
+        .arg("3.12")
+        .arg("--python-downloads-json-url")
+        .arg(format!("{}/versions.ndjson", server.uri()))
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "auto"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unable to parse NDJSON line at http://[LOCALHOST]/versions.ndjson
+      Caused by: EOF while parsing an object at line 1 column 1
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn python_pin_rm() {
     let context = uv_test::test_context_with_versions!(&["3.12"]);

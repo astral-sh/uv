@@ -1937,6 +1937,10 @@ async fn find_matching_download(
                 .await
                 {
                     Ok(download) => find_matching_or_implicit_embedded(source, download, request),
+                    Err(err @ Error::InvalidPythonDownloadsNdjsonLine(..)) => source
+                        .on_implicit_ndjson_parse_error(err, || {
+                            find_in_embedded_downloads(request)
+                        }),
                     Err(err) => {
                         if source.implicit {
                             debug!(
