@@ -1370,19 +1370,22 @@ impl ManagedPythonDownload {
                 )?;
             }
 
-            // If the distribution is missing a `python` -> `pythonX.Y` symlink, add it.
+            // If the distribution is missing a `python` -> `pythonX.Y` symlink and the target is
+            // not windows, add it.
             //
             // Pyodide releases never contain this link by default.
             //
             // PEP 394 permits it, and python-build-standalone releases after `20240726` include it,
             // but releases prior to that date do not.
-            match fs_err::os::unix::fs::symlink(
-                format!("python{}.{}", self.key.major, self.key.minor),
-                extracted.join("bin").join("python"),
-            ) {
-                Ok(()) => {}
-                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
-                Err(err) => return Err(err.into()),
+            if !self.os().is_windows() {
+                match fs_err::os::unix::fs::symlink(
+                    format!("python{}.{}", self.key.major, self.key.minor),
+                    extracted.join("bin").join("python"),
+                ) {
+                    Ok(()) => {}
+                    Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+                    Err(err) => return Err(err.into()),
+                }
             }
         }
 

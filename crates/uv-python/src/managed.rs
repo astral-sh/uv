@@ -604,7 +604,7 @@ impl ManagedPythonInstallation {
                 // sysconfig directly
                 return Ok(());
             }
-            if self.implementation() == ImplementationName::CPython {
+            if !self.key.os().is_windows() && self.implementation() == ImplementationName::CPython {
                 sysconfig::update_sysconfig(
                     self.path(),
                     self.key.major,
