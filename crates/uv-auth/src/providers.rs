@@ -177,13 +177,12 @@ impl AzureEndpointProvider {
         false
     }
 
-    /// Creates a new Azure signer using workload identity credentials.
+    /// Creates a new Azure signer using the default Azure credential chain.
     ///
-    /// This is potentially expensive as it may read the federated token file and fetch an access
-    /// token, so the result should be cached.
+    /// This is potentially expensive as it may invoke credential helpers, so the result
+    /// should be cached.
     pub(crate) fn create_signer() -> AzureDefaultSigner {
         reqsign::azure::default_signer()
-            .with_credential_provider(reqsign::azure::WorkloadIdentityCredentialProvider::new())
     }
 }
 
