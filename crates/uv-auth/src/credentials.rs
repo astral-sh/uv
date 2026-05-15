@@ -14,6 +14,7 @@ use reqsign::google::DefaultSigner as GcsDefaultSigner;
 use reqwest::Request;
 use reqwest::header::{HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use url::Url;
 
 use uv_netrc::Netrc;
@@ -401,6 +402,26 @@ pub(crate) enum Authentication {
     AzureSigner(AzureDefaultSigner),
 }
 
+#[derive(Debug, Error)]
+pub(crate) enum AuthenticationError {
+    #[error("Failed to convert request URL to URI")]
+    InvalidUri(#[from] http::uri::InvalidUri),
+
+    #[error("Failed to build request for {provider} signing")]
+    BuildRequest {
+        provider: &'static str,
+        #[source]
+        source: http::Error,
+    },
+
+    #[error("Failed to sign request with {provider} credentials")]
+    Sign {
+        provider: &'static str,
+        #[source]
+        source: reqsign::Error,
+    },
+}
+
 impl PartialEq for Authentication {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -493,27 +514,33 @@ impl Authentication {
     /// Apply the authentication to the given request.
     ///
     /// Any existing credentials will be overridden.
-    #[must_use]
-    pub(crate) async fn authenticate(&self, mut request: Request) -> Request {
+    pub(crate) async fn authenticate(
+        &self,
+        mut request: Request,
+    ) -> Result<Request, AuthenticationError> {
         match self {
-            Self::Credentials(credentials) => credentials.authenticate(request),
+            Self::Credentials(credentials) => Ok(credentials.authenticate(request)),
             Self::AwsSigner(signer) => {
                 // Build an `http::Request` from the `reqwest::Request`.
-                // SAFETY: If we have a valid `reqwest::Request`, we expect (e.g.) the URL to be valid.
-                let uri = Uri::from_str(request.url().as_str()).unwrap();
+                let uri = Uri::from_str(request.url().as_str())?;
                 let mut http_req = http::Request::builder()
                     .method(request.method().clone())
                     .uri(uri)
                     .body(())
-                    .unwrap();
+                    .map_err(|source| AuthenticationError::BuildRequest {
+                        provider: "AWS",
+                        source,
+                    })?;
                 *http_req.headers_mut() = request.headers().clone();
 
                 // Sign the parts.
                 let (mut parts, ()) = http_req.into_parts();
-                signer
-                    .sign(&mut parts, None)
-                    .await
-                    .expect("AWS signing should succeed");
+                signer.sign(&mut parts, None).await.map_err(|source| {
+                    AuthenticationError::Sign {
+                        provider: "AWS",
+                        source,
+                    }
+                })?;
 
                 // Copy over the signed headers.
                 request.headers_mut().extend(parts.headers);
@@ -523,25 +550,29 @@ impl Authentication {
                     request.url_mut().set_path(path_and_query.path());
                     request.url_mut().set_query(path_and_query.query());
                 }
-                request
+                Ok(request)
             }
             Self::GcsSigner(signer) => {
                 // Build an `http::Request` from the `reqwest::Request`.
-                // SAFETY: If we have a valid `reqwest::Request`, we expect (e.g.) the URL to be valid.
-                let uri = Uri::from_str(request.url().as_str()).unwrap();
+                let uri = Uri::from_str(request.url().as_str())?;
                 let mut http_req = http::Request::builder()
                     .method(request.method().clone())
                     .uri(uri)
                     .body(())
-                    .unwrap();
+                    .map_err(|source| AuthenticationError::BuildRequest {
+                        provider: "GCS",
+                        source,
+                    })?;
                 *http_req.headers_mut() = request.headers().clone();
 
                 // Sign the parts.
                 let (mut parts, ()) = http_req.into_parts();
-                signer
-                    .sign(&mut parts, None)
-                    .await
-                    .expect("GCS signing should succeed");
+                signer.sign(&mut parts, None).await.map_err(|source| {
+                    AuthenticationError::Sign {
+                        provider: "GCS",
+                        source,
+                    }
+                })?;
 
                 // Copy over the signed headers.
                 request.headers_mut().extend(parts.headers);
@@ -551,17 +582,19 @@ impl Authentication {
                     request.url_mut().set_path(path_and_query.path());
                     request.url_mut().set_query(path_and_query.query());
                 }
-                request
+                Ok(request)
             }
             Self::AzureSigner(signer) => {
                 // Build an `http::Request` from the `reqwest::Request`.
-                // SAFETY: If we have a valid `reqwest::Request`, we expect (e.g.) the URL to be valid.
-                let uri = Uri::from_str(request.url().as_str()).unwrap();
+                let uri = Uri::from_str(request.url().as_str())?;
                 let mut http_req = http::Request::builder()
                     .method(request.method().clone())
                     .uri(uri)
                     .body(())
-                    .unwrap();
+                    .map_err(|source| AuthenticationError::BuildRequest {
+                        provider: "Azure",
+                        source,
+                    })?;
                 *http_req.headers_mut() = request.headers().clone();
                 http_req
                     .headers_mut()
@@ -570,10 +603,12 @@ impl Authentication {
 
                 // Sign the parts.
                 let (mut parts, ()) = http_req.into_parts();
-                signer
-                    .sign(&mut parts, None)
-                    .await
-                    .expect("Azure signing should succeed");
+                signer.sign(&mut parts, None).await.map_err(|source| {
+                    AuthenticationError::Sign {
+                        provider: "Azure",
+                        source,
+                    }
+                })?;
 
                 // Copy over the signed headers.
                 request.headers_mut().extend(parts.headers);
@@ -583,7 +618,7 @@ impl Authentication {
                     request.url_mut().set_path(path_and_query.path());
                     request.url_mut().set_query(path_and_query.query());
                 }
-                request
+                Ok(request)
             }
         }
     }
@@ -592,8 +627,39 @@ impl Authentication {
 #[cfg(test)]
 mod tests {
     use insta::assert_debug_snapshot;
+    use reqsign::aws::Credential as AwsCredential;
+    use reqsign::azure::Credential as AzureCredential;
+    use reqsign::{Context, ProvideCredential};
 
     use super::*;
+
+    #[derive(Debug)]
+    struct EmptyAwsCredentialProvider;
+
+    impl ProvideCredential for EmptyAwsCredentialProvider {
+        type Credential = AwsCredential;
+
+        async fn provide_credential(
+            &self,
+            _ctx: &Context,
+        ) -> reqsign::Result<Option<Self::Credential>> {
+            Ok(None)
+        }
+    }
+
+    #[derive(Debug)]
+    struct EmptyAzureCredentialProvider;
+
+    impl ProvideCredential for EmptyAzureCredentialProvider {
+        type Credential = AzureCredential;
+
+        async fn provide_credential(
+            &self,
+            _ctx: &Context,
+        ) -> reqsign::Result<Option<Self::Credential>> {
+            Ok(None)
+        }
+    }
 
     #[test]
     fn from_url_no_credentials() {
@@ -726,7 +792,7 @@ mod tests {
             reqwest::Method::GET,
             Url::parse("https://account.blob.core.windows.net/container/blob.whl").unwrap(),
         );
-        let request = authentication.authenticate(request).await;
+        let request = authentication.authenticate(request).await.unwrap();
 
         let authorization = request
             .headers()
@@ -742,6 +808,42 @@ mod tests {
                 .to_str()
                 .unwrap(),
             AZURE_STORAGE_VERSION
+        );
+    }
+
+    #[tokio::test]
+    async fn authenticated_request_with_aws_signer_missing_credentials() {
+        let signer = reqsign::aws::default_signer("s3", "us-east-1")
+            .with_credential_provider(EmptyAwsCredentialProvider);
+        let authentication = Authentication::from(signer);
+
+        let request = Request::new(
+            reqwest::Method::GET,
+            Url::parse("https://s3.amazonaws.com/bucket/blob.whl").unwrap(),
+        );
+        let err = authentication.authenticate(request).await.unwrap_err();
+
+        insta::assert_snapshot!(
+            err.to_string(),
+            @"Failed to sign request with AWS credentials"
+        );
+    }
+
+    #[tokio::test]
+    async fn authenticated_request_with_azure_signer_missing_credentials() {
+        let signer =
+            reqsign::azure::default_signer().with_credential_provider(EmptyAzureCredentialProvider);
+        let authentication = Authentication::from(signer);
+
+        let request = Request::new(
+            reqwest::Method::GET,
+            Url::parse("https://account.blob.core.windows.net/container/blob.whl").unwrap(),
+        );
+        let err = authentication.authenticate(request).await.unwrap_err();
+
+        insta::assert_snapshot!(
+            err.to_string(),
+            @"Failed to sign request with Azure credentials"
         );
     }
 

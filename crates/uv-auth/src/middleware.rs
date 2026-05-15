@@ -13,7 +13,6 @@ use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::owo_colors::OwoColorize;
 
-use crate::credentials::Authentication;
 use crate::providers::{
     AzureEndpointProvider, GcsEndpointProvider, HuggingFaceProvider, S3EndpointProvider,
 };
@@ -21,7 +20,7 @@ use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use crate::{
     AccessToken, CredentialsCache, KeyringProvider,
     cache::FetchUrl,
-    credentials::{Credentials, Username},
+    credentials::{Authentication, AuthenticationError, Credentials, Username},
     index::{AuthPolicy, Indexes},
     realm::Realm,
 };
@@ -30,6 +29,12 @@ use crate::{Index, TextCredentialStore};
 /// Cached check for whether we're running in Dependabot.
 static IS_DEPENDABOT: LazyLock<bool> =
     LazyLock::new(|| std::env::var(EnvVars::DEPENDABOT).is_ok_and(|value| value == "true"));
+
+impl From<AuthenticationError> for Error {
+    fn from(err: AuthenticationError) -> Self {
+        Self::middleware(err)
+    }
+}
 
 /// Strategy for loading netrc files.
 enum NetrcMode {
@@ -383,7 +388,7 @@ impl Middleware for AuthMiddleware {
                 .cache()
                 .get_url(DisplaySafeUrl::ref_cast(request.url()), &Username::none());
             if let Some(credentials) = credentials.as_ref() {
-                request = credentials.authenticate(request).await;
+                request = credentials.authenticate(request).await?;
 
                 // If it's fully authenticated, finish the request
                 if credentials.is_authenticated() {
@@ -484,7 +489,7 @@ impl Middleware for AuthMiddleware {
         if let Some(credentials) = credentials.as_ref() {
             if credentials.is_authenticated() {
                 trace!("Retrying request for {url} with credentials from cache {credentials:?}");
-                retry_request = credentials.authenticate(retry_request).await;
+                retry_request = credentials.authenticate(retry_request).await?;
                 return self
                     .complete_request(None, retry_request, extensions, next, auth_policy)
                     .await;
@@ -502,7 +507,7 @@ impl Middleware for AuthMiddleware {
             )
             .await
         {
-            retry_request = credentials.authenticate(retry_request).await;
+            retry_request = credentials.authenticate(retry_request).await?;
             trace!("Retrying request for {url} with {credentials:?}");
             return self
                 .complete_request(
@@ -518,7 +523,7 @@ impl Middleware for AuthMiddleware {
         if let Some(credentials) = credentials.as_ref() {
             if !attempt_has_username {
                 trace!("Retrying request for {url} with username from cache {credentials:?}");
-                retry_request = credentials.authenticate(retry_request).await;
+                retry_request = credentials.authenticate(retry_request).await?;
                 return self
                     .complete_request(None, retry_request, extensions, next, auth_policy)
                     .await;
@@ -623,7 +628,7 @@ impl AuthMiddleware {
                 .get_realm(Realm::from(request.url()), credentials.to_username())
         };
         if let Some(credentials) = maybe_cached_credentials {
-            request = credentials.authenticate(request).await;
+            request = credentials.authenticate(request).await?;
             // Do not insert already-cached credentials
             let credentials = None;
             return self
@@ -635,7 +640,7 @@ impl AuthMiddleware {
             DisplaySafeUrl::ref_cast(request.url()),
             credentials.as_username().as_ref(),
         ) {
-            request = credentials.authenticate(request).await;
+            request = credentials.authenticate(request).await?;
             // Do not insert already-cached credentials
             None
         } else if let Some(credentials) = self
@@ -647,7 +652,7 @@ impl AuthMiddleware {
             )
             .await
         {
-            request = credentials.authenticate(request).await;
+            request = credentials.authenticate(request).await?;
             Some(credentials)
         } else if index.is_some() {
             // If this is a known index, we fall back to checking for the realm.
@@ -655,7 +660,7 @@ impl AuthMiddleware {
                 .cache()
                 .get_realm(Realm::from(request.url()), credentials.to_username())
             {
-                request = credentials.authenticate(request).await;
+                request = credentials.authenticate(request).await?;
                 Some(credentials)
             } else {
                 Some(credentials)
