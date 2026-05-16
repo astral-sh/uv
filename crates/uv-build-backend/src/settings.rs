@@ -61,7 +61,7 @@ pub struct BuildBackendSettings {
 
     /// If set to `false`, the default excludes aren't applied.
     ///
-    /// Default excludes: `__pycache__`, `*.pyc`, and `*.pyo`.
+    /// Default excludes: `__pycache__`, `*.pyc`, `*.pyo`, and hidden files and directories (`.*`).
     #[option(
         default = r#"true"#,
         value_type = "bool",

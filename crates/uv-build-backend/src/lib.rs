@@ -729,6 +729,14 @@ mod tests {
         fs_err::create_dir_all(module_root.join("__pycache__")).unwrap();
         File::create(module_root.join("__pycache__").join("compiled.pyc")).unwrap();
         File::create(module_root.join("arithmetic").join("circle.pyc")).unwrap();
+        fs_err::create_dir_all(module_root.join("arithmetic").join(".mypy_cache")).unwrap();
+        File::create(
+            module_root
+                .join("arithmetic")
+                .join(".mypy_cache")
+                .join("circle.meta.json"),
+        )
+        .unwrap();
 
         // Perform both the direct and the indirect build.
         let dist = TempDir::new().unwrap();
