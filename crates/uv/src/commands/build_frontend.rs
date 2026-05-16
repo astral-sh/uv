@@ -927,16 +927,13 @@ async fn build_sdist(
 ) -> Result<BuildMessage, Error> {
     let build_result = match action {
         BuildAction::List => {
-            let source_tree_ = source_tree.to_path_buf();
             let sources_enabled = sources.is_none();
-            let (filename, file_list) = tokio::task::spawn_blocking(move || {
-                uv_build_backend::list_source_dist(
-                    &source_tree_,
-                    uv_version::version(),
-                    sources_enabled,
-                )
-            })
-            .await??;
+            let (filename, file_list) = uv_build_backend::list_source_dist(
+                source_tree,
+                uv_version::version(),
+                sources_enabled,
+            )
+            .await?;
             let raw_filename = filename.to_string();
             BuildMessage::List {
                 normalized_filename: DistFilename::SourceDistFilename(filename),
@@ -956,18 +953,14 @@ async fn build_sdist(
                 )
                 .bold()
             )?;
-            let source_tree = source_tree.to_path_buf();
-            let output_dir_ = output_dir.to_path_buf();
             let sources_enabled = sources.is_none();
-            let filename = tokio::task::spawn_blocking(move || {
-                uv_build_backend::build_source_dist(
-                    &source_tree,
-                    &output_dir_,
-                    uv_version::version(),
-                    sources_enabled,
-                )
-            })
-            .await??
+            let filename = uv_build_backend::build_source_dist(
+                source_tree,
+                output_dir,
+                uv_version::version(),
+                sources_enabled,
+            )
+            .await?
             .to_string();
 
             BuildMessage::Build {
@@ -1039,12 +1032,10 @@ async fn build_wheel(
 ) -> Result<BuildMessage, Error> {
     let build_message = match action {
         BuildAction::List => {
-            let source_tree_ = source_tree.to_path_buf();
             let sources_enabled = sources.is_none();
-            let (filename, file_list) = tokio::task::spawn_blocking(move || {
-                uv_build_backend::list_wheel(&source_tree_, uv_version::version(), sources_enabled)
-            })
-            .await??;
+            let (filename, file_list) =
+                uv_build_backend::list_wheel(source_tree, uv_version::version(), sources_enabled)
+                    .await?;
             let raw_filename = filename.to_string();
             BuildMessage::List {
                 normalized_filename: DistFilename::WheelFilename(filename),
@@ -1064,19 +1055,15 @@ async fn build_wheel(
                 )
                 .bold()
             )?;
-            let source_tree = source_tree.to_path_buf();
-            let output_dir_ = output_dir.to_path_buf();
             let sources_enabled = sources.is_none();
-            let filename = tokio::task::spawn_blocking(move || {
-                uv_build_backend::build_wheel(
-                    &source_tree,
-                    &output_dir_,
-                    None,
-                    uv_version::version(),
-                    sources_enabled,
-                )
-            })
-            .await??;
+            let filename = uv_build_backend::build_wheel(
+                source_tree,
+                output_dir,
+                None,
+                uv_version::version(),
+                sources_enabled,
+            )
+            .await?;
 
             let raw_filename = filename.to_string();
             BuildMessage::Build {

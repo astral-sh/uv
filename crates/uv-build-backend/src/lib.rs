@@ -96,26 +96,26 @@ trait DirectoryWriter {
     /// Add a file with the given content.
     ///
     /// Files added through the method are considered generated when listing included files.
-    fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error>;
+    async fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error>;
 
     /// Add the file or directory to the path.
-    fn write_dir_entry(&mut self, entry: &DirEntry, target_path: &str) -> Result<(), Error> {
+    async fn write_dir_entry(&mut self, entry: &DirEntry, target_path: &str) -> Result<(), Error> {
         if entry.file_type().is_dir() {
-            self.write_directory(target_path)?;
+            self.write_directory(target_path).await?;
         } else {
-            self.write_file(target_path, entry.path())?;
+            self.write_file(target_path, entry.path()).await?;
         }
         Ok(())
     }
 
     /// Add a local file.
-    fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error>;
+    async fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error>;
 
     /// Create a directory.
-    fn write_directory(&mut self, directory: &str) -> Result<(), Error>;
+    async fn write_directory(&mut self, directory: &str) -> Result<(), Error>;
 
     /// Write the `RECORD` file and if applicable, the central directory.
-    fn close(self, dist_info_dir: &str) -> Result<(), Error>;
+    async fn close(self, dist_info_dir: &str) -> Result<(), Error>;
 }
 
 /// Name of the file in the archive and path outside, if it wasn't generated.
@@ -134,22 +134,22 @@ impl<'a> ListWriter<'a> {
 }
 
 impl DirectoryWriter for ListWriter<'_> {
-    fn write_bytes(&mut self, path: &str, _bytes: &[u8]) -> Result<(), Error> {
+    async fn write_bytes(&mut self, path: &str, _bytes: &[u8]) -> Result<(), Error> {
         self.files.push((path.to_string(), None));
         Ok(())
     }
 
-    fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
+    async fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
         self.files
             .push((path.to_string(), Some(file.to_path_buf())));
         Ok(())
     }
 
-    fn write_directory(&mut self, _directory: &str) -> Result<(), Error> {
+    async fn write_directory(&mut self, _directory: &str) -> Result<(), Error> {
         Ok(())
     }
 
-    fn close(self, _dist_info_dir: &str) -> Result<(), Error> {
+    async fn close(self, _dist_info_dir: &str) -> Result<(), Error> {
         Ok(())
     }
 }
@@ -442,7 +442,7 @@ mod tests {
     use async_zip::base::read::mem::ZipFileReader;
     use flate2::bufread::GzDecoder;
     use fs_err::File;
-    use futures_lite::{StreamExt, future::block_on};
+    use futures_lite::StreamExt;
     use indoc::indoc;
     use insta::assert_snapshot;
     use itertools::Itertools;
@@ -483,7 +483,7 @@ mod tests {
 
     /// Run both a direct wheel build and an indirect wheel build through a source distribution,
     /// while checking that directly built wheel and indirectly built wheel are the same.
-    fn build(
+    async fn build(
         source_root: &Path,
         dist: &Path,
         preview_features: &[PreviewFeature],
@@ -492,33 +492,34 @@ mod tests {
         // latest and remove it since it has the same filename as the indirect wheel.
         let (_name, direct_wheel_list_files) = {
             let _preview = uv_preview::test::with_features(preview_features);
-            list_wheel(source_root, MOCK_UV_VERSION, false)?
+            list_wheel(source_root, MOCK_UV_VERSION, false).await?
         };
         let direct_wheel_filename = {
             let _preview = uv_preview::test::with_features(preview_features);
-            build_wheel(source_root, dist, None, MOCK_UV_VERSION, false)?
+            build_wheel(source_root, dist, None, MOCK_UV_VERSION, false).await?
         };
         let direct_wheel_path = dist.join(direct_wheel_filename.to_string());
-        let direct_wheel_contents = wheel_contents(&direct_wheel_path);
+        let direct_wheel_contents = wheel_contents(&direct_wheel_path).await;
         let direct_wheel_hash = sha2::Sha256::digest(fs_err::read(&direct_wheel_path)?);
         fs_err::remove_file(&direct_wheel_path)?;
 
         // Build a source distribution.
         let (_name, source_dist_list_files) =
-            list_source_dist(source_root, MOCK_UV_VERSION, false)?;
+            list_source_dist(source_root, MOCK_UV_VERSION, false).await?;
         // TODO(konsti): This should run in the unpacked source dist tempdir, but we need to
         // normalize the path.
         let (_name, wheel_list_files) = {
             let _preview = uv_preview::test::with_features(preview_features);
-            list_wheel(source_root, MOCK_UV_VERSION, false)?
+            list_wheel(source_root, MOCK_UV_VERSION, false).await?
         };
-        let source_dist_filename = build_source_dist(source_root, dist, MOCK_UV_VERSION, false)?;
+        let source_dist_filename =
+            build_source_dist(source_root, dist, MOCK_UV_VERSION, false).await?;
         let source_dist_path = dist.join(source_dist_filename.to_string());
-        let source_dist_contents = sdist_contents(&source_dist_path);
+        let source_dist_contents = sdist_contents(&source_dist_path).await;
 
         // Unpack the source distribution and build a wheel from it.
         let sdist_tree = TempDir::new()?;
-        unpack_sdist(&source_dist_path, sdist_tree.path())?;
+        unpack_sdist(&source_dist_path, sdist_tree.path()).await?;
         let sdist_top_level_directory = sdist_tree.path().join(format!(
             "{}-{}",
             source_dist_filename.name.as_dist_info_name(),
@@ -532,9 +533,10 @@ mod tests {
                 None,
                 MOCK_UV_VERSION,
                 false,
-            )?
+            )
+            .await?
         };
-        let wheel_contents = wheel_contents(&dist.join(wheel_filename.to_string()));
+        let wheel_contents = wheel_contents(&dist.join(wheel_filename.to_string())).await;
 
         // Check that direct and indirect wheels are identical.
         assert_eq!(direct_wheel_filename, wheel_filename);
@@ -555,53 +557,47 @@ mod tests {
         })
     }
 
-    fn build_err(source_root: &Path) -> String {
+    async fn build_err(source_root: &Path) -> String {
         let dist = TempDir::new().unwrap();
-        let build_err = build(source_root, dist.path(), &[]).unwrap_err();
+        let build_err = build(source_root, dist.path(), &[]).await.unwrap_err();
         let err_message: String = format_err(&build_err)
             .replace(&source_root.user_display().to_string(), "[TEMP_PATH]")
             .replace('\\', "/");
         err_message
     }
 
-    fn sdist_contents(source_dist_path: &Path) -> Vec<String> {
+    async fn sdist_contents(source_dist_path: &Path) -> Vec<String> {
         let sdist_reader = BufReader::new(File::open(source_dist_path).unwrap());
         let mut source_dist =
             tokio_tar::Archive::new(SyncReader::new(GzDecoder::new(sdist_reader)));
-        let mut source_dist_contents = block_on(async {
-            let mut entries = source_dist.entries().unwrap();
-            let mut entries = Pin::new(&mut entries);
-            let mut contents = Vec::new();
-            while let Some(entry) = entries.next().await {
-                contents.push(
-                    entry
-                        .unwrap()
-                        .path()
-                        .unwrap()
-                        .to_str()
-                        .unwrap()
-                        .replace('\\', "/"),
-                );
-            }
-            contents
-        });
+        let mut entries = source_dist.entries().unwrap();
+        let mut entries = Pin::new(&mut entries);
+        let mut source_dist_contents = Vec::new();
+        while let Some(entry) = entries.next().await {
+            source_dist_contents.push(
+                entry
+                    .unwrap()
+                    .path()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .replace('\\', "/"),
+            );
+        }
         source_dist_contents.sort();
         source_dist_contents
     }
 
-    fn unpack_sdist(source_dist_path: &Path, target: &Path) -> Result<(), Error> {
+    async fn unpack_sdist(source_dist_path: &Path, target: &Path) -> Result<(), Error> {
         let sdist_reader = BufReader::new(File::open(source_dist_path)?);
         let mut source_dist =
             tokio_tar::Archive::new(SyncReader::new(GzDecoder::new(sdist_reader)));
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?
-            .block_on(source_dist.unpack(target))?;
+        source_dist.unpack(target).await?;
         Ok(())
     }
 
-    fn wheel_contents(direct_output_dir: &Path) -> Vec<String> {
-        let wheel = block_on(read_wheel(direct_output_dir));
+    async fn wheel_contents(direct_output_dir: &Path) -> Vec<String> {
+        let wheel = read_wheel(direct_output_dir).await;
         let mut wheel_contents: Vec<_> = wheel
             .file()
             .entries()
@@ -618,32 +614,30 @@ mod tests {
         wheel_contents
     }
 
-    fn wheel_entry(wheel_path: &Path, filename: &str) -> String {
-        block_on(async {
-            let wheel = read_wheel(wheel_path).await;
-            let index = wheel
-                .file()
-                .entries()
-                .iter()
-                .position(|entry| {
-                    entry
-                        .filename()
-                        .as_str()
-                        .is_ok_and(|entry_filename| entry_filename == filename)
-                })
-                .expect("wheel entry should exist");
+    async fn wheel_entry(wheel_path: &Path, filename: &str) -> String {
+        let wheel = read_wheel(wheel_path).await;
+        let index = wheel
+            .file()
+            .entries()
+            .iter()
+            .position(|entry| {
+                entry
+                    .filename()
+                    .as_str()
+                    .is_ok_and(|entry_filename| entry_filename == filename)
+            })
+            .expect("wheel entry should exist");
 
-            let mut reader = wheel
-                .reader_with_entry(index)
-                .await
-                .expect("wheel entry should be readable");
-            let mut contents = String::new();
-            reader
-                .read_to_string_checked(&mut contents)
-                .await
-                .expect("wheel entry should be valid UTF-8");
-            contents
-        })
+        let mut reader = wheel
+            .reader_with_entry(index)
+            .await
+            .expect("wheel entry should be readable");
+        let mut contents = String::new();
+        reader
+            .read_to_string_checked(&mut contents)
+            .await
+            .expect("wheel entry should be valid UTF-8");
+        contents
     }
 
     async fn read_wheel(wheel_path: &Path) -> ZipFileReader {
@@ -677,8 +671,8 @@ mod tests {
     /// independent of the build path or platform, with the caveat that we cannot serialize an
     /// executable bit on Window. This ensures reproducible builds and best-effort
     /// platform-independent deterministic builds.
-    #[test]
-    fn built_by_uv_building() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn built_by_uv_building() {
         let built_by_uv = Path::new("../../test/packages/built-by-uv");
         let src = TempDir::new().unwrap();
         for dir in [
@@ -732,7 +726,7 @@ mod tests {
 
         // Perform both the direct and the indirect build.
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path(), &[]).unwrap();
+        let build = build(src.path(), dist.path(), &[]).await.unwrap();
 
         let source_dist_path = dist.path().join(build.source_dist_filename.to_string());
         assert_eq!(
@@ -840,7 +834,7 @@ mod tests {
         built_by_uv-0.1.0.dist-info/METADATA (generated)
         ");
 
-        let record = wheel_entry(&wheel_path, "built_by_uv-0.1.0.dist-info/RECORD");
+        let record = wheel_entry(&wheel_path, "built_by_uv-0.1.0.dist-info/RECORD").await;
         assert_snapshot!(record, @"
         built_by_uv/__init__.py,sha256=AJ7XpTNWxYktP97ydb81UpnNqoebH7K4sHRakAMQKG4,44
         built_by_uv/arithmetic/__init__.py,sha256=x2agwFbJAafc9Z6TdJ0K6b6bLMApQdvRSQjP4iy7IEI,67
@@ -861,8 +855,8 @@ mod tests {
     }
 
     /// Test that `license = { file = "LICENSE" }` is supported.
-    #[test]
-    fn license_file_pre_pep639() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn license_file_pre_pep639() {
         let src = TempDir::new().unwrap();
         fs_err::write(
             src.path().join("pyproject.toml"),
@@ -895,10 +889,14 @@ mod tests {
 
         // Build a wheel from a source distribution
         let output_dir = TempDir::new().unwrap();
-        build_source_dist(src.path(), output_dir.path(), "0.5.15", false).unwrap();
+        build_source_dist(src.path(), output_dir.path(), "0.5.15", false)
+            .await
+            .unwrap();
         let sdist_tree = TempDir::new().unwrap();
         let source_dist_path = output_dir.path().join("pep_pep639_license-1.0.0.tar.gz");
-        unpack_sdist(&source_dist_path, sdist_tree.path()).unwrap();
+        unpack_sdist(&source_dist_path, sdist_tree.path())
+            .await
+            .unwrap();
         {
             let _preview = uv_preview::test::with_features(&[]);
             build_wheel(
@@ -908,12 +906,13 @@ mod tests {
                 "0.5.15",
                 false,
             )
+            .await
             .unwrap();
         }
         let wheel = output_dir
             .path()
             .join("pep_pep639_license-1.0.0-py3-none-any.whl");
-        let metadata = wheel_entry(&wheel, "pep_pep639_license-1.0.0.dist-info/METADATA");
+        let metadata = wheel_entry(&wheel, "pep_pep639_license-1.0.0.dist-info/METADATA").await;
 
         assert_snapshot!(metadata, @"
         Metadata-Version: 2.3
@@ -925,8 +924,8 @@ mod tests {
     }
 
     /// Test that `build_wheel` works after the `prepare_metadata_for_build_wheel` hook.
-    #[test]
-    fn prepare_metadata_then_build_wheel() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn prepare_metadata_then_build_wheel() {
         let src = TempDir::new().unwrap();
         fs_err::write(
             src.path().join("pyproject.toml"),
@@ -958,7 +957,9 @@ mod tests {
         };
         let dist_info_dir = {
             let _preview = uv_preview::test::with_features(&[]);
-            metadata(src.path(), metadata_dir.path(), "0.5.15").unwrap()
+            metadata(src.path(), metadata_dir.path(), "0.5.15")
+                .await
+                .unwrap()
         };
         let metadata_prepared =
             fs_err::read_to_string(metadata_dir.path().join(&dist_info_dir).join("METADATA"))
@@ -975,12 +976,13 @@ mod tests {
                 "0.5.15",
                 false,
             )
+            .await
             .unwrap();
         }
         let wheel = output_dir
             .path()
             .join("two_step_build-1.0.0-py3-none-any.whl");
-        let metadata_wheel = wheel_entry(&wheel, "two_step_build-1.0.0.dist-info/METADATA");
+        let metadata_wheel = wheel_entry(&wheel, "two_step_build-1.0.0.dist-info/METADATA").await;
 
         assert_eq!(metadata_prepared, metadata_wheel);
 
@@ -992,8 +994,8 @@ mod tests {
     }
 
     /// Check that non-normalized paths for `module-root` work with the glob inclusions.
-    #[test]
-    fn test_glob_path_normalization() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_glob_path_normalization() {
         let src = TempDir::new().unwrap();
         fs_err::write(
             src.path().join("pyproject.toml"),
@@ -1017,7 +1019,7 @@ mod tests {
         File::create(src.path().join("two_step_build").join("__init__.py")).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build1 = build(src.path(), dist.path(), &[]).unwrap();
+        let build1 = build(src.path(), dist.path(), &[]).await.unwrap();
 
         assert_snapshot!(build1.source_dist_contents.join("\n"), @"
         two_step_build-1.0.0/
@@ -1056,13 +1058,13 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build2 = build(src.path(), dist.path(), &[]).unwrap();
+        let build2 = build(src.path(), dist.path(), &[]).await.unwrap();
         assert_eq!(build1, build2);
     }
 
     /// Check that upper case letters in module names work.
-    #[test]
-    fn test_camel_case() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_camel_case() {
         let src = TempDir::new().unwrap();
         let pyproject_toml = indoc! {r#"
             [project]
@@ -1083,7 +1085,7 @@ mod tests {
         File::create(src.path().join("src").join("camelCase").join("__init__.py")).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build1 = build(src.path(), dist.path(), &[]).unwrap();
+        let build1 = build(src.path(), dist.path(), &[]).await.unwrap();
 
         assert_snapshot!(build1.wheel_contents.join("\n"), @"
         camelCase/
@@ -1100,7 +1102,7 @@ mod tests {
             pyproject_toml.replace("camelCase", "camel_case"),
         )
         .unwrap();
-        let build_err = build(src.path(), dist.path(), &[]).unwrap_err();
+        let build_err = build(src.path(), dist.path(), &[]).await.unwrap_err();
         let err_message = format_err(&build_err)
             .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
             .replace('\\', "/");
@@ -1111,8 +1113,8 @@ mod tests {
     }
 
     /// Test that no partial files are left in dist directory when build fails.
-    #[test]
-    fn no_partial_files_on_build_failure() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn no_partial_files_on_build_failure() {
         let src = TempDir::new().unwrap();
 
         // Create a minimal pyproject.toml without __init__.py (will fail)
@@ -1133,13 +1135,13 @@ mod tests {
         let dist = TempDir::new().unwrap();
 
         // Source dist build should fail
-        let sdist_result = build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false);
+        let sdist_result = build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false).await;
         assert!(sdist_result.is_err());
 
         // Wheel build should fail
         let wheel_result = {
             let _preview = uv_preview::test::with_features(&[]);
-            build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false)
+            build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false).await
         };
         assert!(wheel_result.is_err());
 
@@ -1152,8 +1154,8 @@ mod tests {
     }
 
     /// Test that pre-existing files in the dist directory are deleted before build starts.
-    #[test]
-    fn existing_files_deleted_on_build_failure() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn existing_files_deleted_on_build_failure() {
         let src = TempDir::new().unwrap();
 
         // Create a minimal pyproject.toml without __init__.py (will fail)
@@ -1181,12 +1183,12 @@ mod tests {
         fs_err::write(&wheel_path, old_content).unwrap();
 
         // Build should fail and delete existing files
-        let sdist_result = build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false);
+        let sdist_result = build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false).await;
         assert!(sdist_result.is_err());
 
         let wheel_result = {
             let _preview = uv_preview::test::with_features(&[]);
-            build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false)
+            build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false).await
         };
         assert!(wheel_result.is_err());
 
@@ -1202,8 +1204,8 @@ mod tests {
     }
 
     /// Test that existing files are overwritten on successful build.
-    #[test]
-    fn existing_files_overwritten_on_success() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn existing_files_overwritten_on_success() {
         let src = TempDir::new().unwrap();
 
         // Create a valid project
@@ -1239,10 +1241,14 @@ mod tests {
         fs_err::write(&wheel_path, old_content).unwrap();
 
         // Build should succeed and overwrite existing files
-        build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false).unwrap();
+        build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false)
+            .await
+            .unwrap();
         {
             let _preview = uv_preview::test::with_features(&[]);
-            build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false).unwrap();
+            build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false)
+                .await
+                .unwrap();
         }
 
         // Verify files were overwritten (content should be different)
@@ -1259,17 +1265,17 @@ mod tests {
 
         // Verify the new files are valid archives
         assert!(
-            !sdist_contents(&sdist_path).is_empty(),
+            !sdist_contents(&sdist_path).await.is_empty(),
             "sdist should be a valid archive"
         );
         assert!(
-            !wheel_contents(&wheel_path).is_empty(),
+            !wheel_contents(&wheel_path).await.is_empty(),
             "wheel should be a valid archive"
         );
     }
 
-    #[test]
-    fn invalid_stubs_name() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn invalid_stubs_name() {
         let src = TempDir::new().unwrap();
         let pyproject_toml = indoc! {r#"
             [project]
@@ -1287,7 +1293,7 @@ mod tests {
         fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build_err = build(src.path(), dist.path(), &[]).unwrap_err();
+        let build_err = build(src.path(), dist.path(), &[]).await.unwrap_err();
         let err_message = format_err(&build_err);
         assert_snapshot!(
             err_message,
@@ -1299,8 +1305,8 @@ mod tests {
     }
 
     /// Stubs packages use a special name and `__init__.pyi`.
-    #[test]
-    fn stubs_package() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn stubs_package() {
         let src = TempDir::new().unwrap();
         let pyproject_toml = indoc! {r#"
             [project]
@@ -1323,7 +1329,7 @@ mod tests {
         File::create(&regular_init_py).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build_err = build(src.path(), dist.path(), &[]).unwrap_err();
+        let build_err = build(src.path(), dist.path(), &[]).await.unwrap_err();
         let err_message = format_err(&build_err)
             .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
             .replace('\\', "/");
@@ -1342,7 +1348,7 @@ mod tests {
         )
         .unwrap();
 
-        let build1 = build(src.path(), dist.path(), &[]).unwrap();
+        let build1 = build(src.path(), dist.path(), &[]).await.unwrap();
         assert_snapshot!(build1.wheel_contents.join("\n"), @"
         stuffed_bird-stubs/
         stuffed_bird-stubs/__init__.pyi
@@ -1368,13 +1374,13 @@ mod tests {
         };
         fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
 
-        let build2 = build(src.path(), dist.path(), &[]).unwrap();
+        let build2 = build(src.path(), dist.path(), &[]).await.unwrap();
         assert_eq!(build1.wheel_contents, build2.wheel_contents);
     }
 
     /// A simple namespace package with a single root `__init__.py`.
-    #[test]
-    fn simple_namespace_package() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn simple_namespace_package() {
         let src = TempDir::new().unwrap();
         let pyproject_toml = indoc! {r#"
             [project]
@@ -1394,7 +1400,7 @@ mod tests {
             .unwrap();
 
         assert_snapshot!(
-            build_err(src.path()),
+            build_err(src.path()).await,
             @"Expected a Python module at: [TEMP_PATH]/src/simple_namespace/part/__init__.py"
         );
 
@@ -1416,13 +1422,13 @@ mod tests {
             .join("__init__.py");
         File::create(&bogus_init_py).unwrap();
         assert_snapshot!(
-            build_err(src.path()),
+            build_err(src.path()).await,
             @"For namespace packages, `__init__.py[i]` is not allowed in parent directory: [TEMP_PATH]/src/simple_namespace"
         );
         fs_err::remove_file(bogus_init_py).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build1 = build(src.path(), dist.path(), &[]).unwrap();
+        let build1 = build(src.path(), dist.path(), &[]).await.unwrap();
         assert_snapshot!(build1.source_dist_contents.join("\n"), @"
         simple_namespace_part-1.0.0/
         simple_namespace_part-1.0.0/PKG-INFO
@@ -1459,13 +1465,13 @@ mod tests {
         };
         fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
 
-        let build2 = build(src.path(), dist.path(), &[]).unwrap();
+        let build2 = build(src.path(), dist.path(), &[]).await.unwrap();
         assert_eq!(build1, build2);
     }
 
     /// A complex namespace package with a multiple root `__init__.py`.
-    #[test]
-    fn complex_namespace_package() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn complex_namespace_package() {
         let src = TempDir::new().unwrap();
         let pyproject_toml = indoc! {r#"
             [project]
@@ -1513,7 +1519,7 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build1 = build(src.path(), dist.path(), &[]).unwrap();
+        let build1 = build(src.path(), dist.path(), &[]).await.unwrap();
         assert_snapshot!(build1.wheel_contents.join("\n"), @"
         complex_namespace-1.0.0.dist-info/
         complex_namespace-1.0.0.dist-info/METADATA
@@ -1543,13 +1549,13 @@ mod tests {
         };
         fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
 
-        let build2 = build(src.path(), dist.path(), &[]).unwrap();
+        let build2 = build(src.path(), dist.path(), &[]).await.unwrap();
         assert_eq!(build1, build2);
     }
 
     /// Stubs for a namespace package.
-    #[test]
-    fn stubs_namespace() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn stubs_namespace() {
         let src = TempDir::new().unwrap();
         let pyproject_toml = indoc! {r#"
             [project]
@@ -1584,7 +1590,7 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path(), &[]).unwrap();
+        let build = build(src.path(), dist.path(), &[]).await.unwrap();
         assert_snapshot!(build.wheel_contents.join("\n"), @"
         cloud-stubs/
         cloud-stubs/db/
@@ -1598,8 +1604,8 @@ mod tests {
     }
 
     /// A package with multiple modules, one a regular module and two namespace modules.
-    #[test]
-    fn multiple_module_names() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn multiple_module_names() {
         let src = TempDir::new().unwrap();
         let pyproject_toml = indoc! {r#"
             [project]
@@ -1636,7 +1642,7 @@ mod tests {
 
         // The first module is missing an `__init__.py`.
         assert_snapshot!(
-            build_err(src.path()),
+            build_err(src.path()).await,
             @"Expected a Python module at: [TEMP_PATH]/src/foo/__init__.py"
         );
 
@@ -1645,7 +1651,7 @@ mod tests {
 
         // The second module, a namespace, is missing an `__init__.py`.
         assert_snapshot!(
-            build_err(src.path()),
+            build_err(src.path()).await,
             @"Expected a Python module at: [TEMP_PATH]/src/simple_namespace/part_a/__init__.py"
         );
 
@@ -1675,13 +1681,13 @@ mod tests {
             .join("__init__.py");
         File::create(&bogus_init_py).unwrap();
         assert_snapshot!(
-            build_err(src.path()),
+            build_err(src.path()).await,
             @"For namespace packages, `__init__.py[i]` is not allowed in parent directory: [TEMP_PATH]/src/simple_namespace"
         );
         fs_err::remove_file(bogus_init_py).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path(), &[]).unwrap();
+        let build = build(src.path(), dist.path(), &[]).await.unwrap();
         assert_snapshot!(build.source_dist_contents.join("\n"), @"
         simple_namespace_part-1.0.0/
         simple_namespace_part-1.0.0/PKG-INFO
@@ -1765,8 +1771,8 @@ mod tests {
     }
 
     /// A package with duplicate module names.
-    #[test]
-    fn duplicate_module_names() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn duplicate_module_names() {
         let src = TempDir::new().unwrap();
         let pyproject_toml = indoc! {r#"
             [project]
@@ -1795,7 +1801,7 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path(), &[]).unwrap();
+        let build = build(src.path(), dist.path(), &[]).await.unwrap();
         assert_snapshot!(build.source_dist_contents.join("\n"), @"
         duplicate-1.0.0/
         duplicate-1.0.0/PKG-INFO
@@ -1821,8 +1827,8 @@ mod tests {
     }
 
     /// Check that JSON metadata files are present.
-    #[test]
-    fn metadata_json_preview() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn metadata_json_preview() {
         let src = TempDir::new().unwrap();
         fs_err::write(
             src.path().join("pyproject.toml"),
@@ -1848,7 +1854,9 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path(), &[PreviewFeature::MetadataJson]).unwrap();
+        let build = build(src.path(), dist.path(), &[PreviewFeature::MetadataJson])
+            .await
+            .unwrap();
 
         assert_snapshot!(build.wheel_contents.join("\n"), @"
         metadata_json_preview-1.0.0.dist-info/

@@ -18,7 +18,6 @@ use clap::{CommandFactory, Parser};
 use futures::FutureExt;
 use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
-use tokio::task::spawn_blocking;
 use tracing::{debug, instrument, trace};
 
 #[cfg(not(feature = "self-update"))]
@@ -1966,24 +1965,30 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 commands::list(&project_dir, args.paths, &workspace_cache, printer).await
             }
         },
-        Commands::BuildBackend { command } => spawn_blocking(move || match command {
+        Commands::BuildBackend { command } => match command {
             BuildBackendCommand::BuildSdist { sdist_directory } => {
-                commands::build_backend::build_sdist(&sdist_directory)
+                commands::build_backend::build_sdist(&sdist_directory).await
             }
             BuildBackendCommand::BuildWheel {
                 wheel_directory,
                 metadata_directory,
-            } => commands::build_backend::build_wheel(
-                &wheel_directory,
-                metadata_directory.as_deref(),
-            ),
+            } => {
+                commands::build_backend::build_wheel(
+                    &wheel_directory,
+                    metadata_directory.as_deref(),
+                )
+                .await
+            }
             BuildBackendCommand::BuildEditable {
                 wheel_directory,
                 metadata_directory,
-            } => commands::build_backend::build_editable(
-                &wheel_directory,
-                metadata_directory.as_deref(),
-            ),
+            } => {
+                commands::build_backend::build_editable(
+                    &wheel_directory,
+                    metadata_directory.as_deref(),
+                )
+                .await
+            }
             BuildBackendCommand::GetRequiresForBuildSdist => {
                 commands::build_backend::get_requires_for_build_sdist()
             }
@@ -1991,17 +1996,15 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 commands::build_backend::get_requires_for_build_wheel()
             }
             BuildBackendCommand::PrepareMetadataForBuildWheel { wheel_directory } => {
-                commands::build_backend::prepare_metadata_for_build_wheel(&wheel_directory)
+                commands::build_backend::prepare_metadata_for_build_wheel(&wheel_directory).await
             }
             BuildBackendCommand::GetRequiresForBuildEditable => {
                 commands::build_backend::get_requires_for_build_editable()
             }
             BuildBackendCommand::PrepareMetadataForBuildEditable { wheel_directory } => {
-                commands::build_backend::prepare_metadata_for_build_editable(&wheel_directory)
+                commands::build_backend::prepare_metadata_for_build_editable(&wheel_directory).await
             }
-        })
-        .await
-        .expect("tokio threadpool exited unexpectedly"),
+        },
     }
 }
 

@@ -775,6 +775,7 @@ pub fn is_virtualenv_base(path: impl AsRef<Path>) -> bool {
 }
 
 /// Whether the error is due to a lock being held.
+#[cfg(feature = "tokio")]
 fn is_known_already_locked_error(err: &std::fs::TryLockError) -> bool {
     match err {
         std::fs::TryLockError::WouldBlock => true,

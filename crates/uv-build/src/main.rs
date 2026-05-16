@@ -15,7 +15,8 @@ use tracing_subscriber::{EnvFilter, Layer};
 use uv_logging::UvFormat;
 
 /// Entrypoint for the `uv-build` Python package.
-fn main() -> Result<()> {
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<()> {
     // Support configuring the log level with `RUST_LOG` (shows only the error level by default) and
     // color.
     //
@@ -76,7 +77,8 @@ fn main() -> Result<()> {
                 &sdist_directory,
                 uv_version::version(),
                 false,
-            )?;
+            )
+            .await?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
         }
@@ -89,7 +91,8 @@ fn main() -> Result<()> {
                 metadata_directory.as_deref(),
                 uv_version::version(),
                 false,
-            )?;
+            )
+            .await?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
         }
@@ -102,7 +105,8 @@ fn main() -> Result<()> {
                 metadata_directory.as_deref(),
                 uv_version::version(),
                 false,
-            )?;
+            )
+            .await?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
         }
@@ -112,7 +116,8 @@ fn main() -> Result<()> {
                 &env::current_dir()?,
                 &wheel_directory,
                 uv_version::version(),
-            )?;
+            )
+            .await?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
         }
@@ -122,7 +127,8 @@ fn main() -> Result<()> {
                 &env::current_dir()?,
                 &wheel_directory,
                 uv_version::version(),
-            )?;
+            )
+            .await?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
         }

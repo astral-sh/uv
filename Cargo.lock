@@ -5942,6 +5942,7 @@ version = "0.11.14"
 dependencies = [
  "anstream",
  "anyhow",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "uv-build-backend",

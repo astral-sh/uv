@@ -43,7 +43,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 spdx = { workspace = true }
-tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
@@ -67,3 +66,5 @@ uv-preview = { workspace = true, features = ["testing"] }
 indoc = { workspace = true }
 insta = { workspace = true }
 regex = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }

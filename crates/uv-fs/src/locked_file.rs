@@ -1,20 +1,30 @@
+#[cfg(feature = "tokio")]
 use std::convert::Into;
+#[cfg(feature = "tokio")]
+use std::env;
 use std::fmt::Display;
-use std::path::{Path, PathBuf};
+use std::io;
+#[cfg(feature = "tokio")]
+use std::path::Path;
+use std::path::PathBuf;
+#[cfg(feature = "tokio")]
 use std::sync::LazyLock;
 use std::time::Duration;
-use std::{env, io};
 
 use thiserror::Error;
+#[cfg(feature = "tokio")]
 use tracing::{debug, error, info, trace, warn};
 
 use uv_static::EnvVars;
 #[cfg(windows)]
 use windows::Win32::Foundation::ERROR_LOCK_VIOLATION;
 
-use crate::{Simplified, is_known_already_locked_error};
+use crate::Simplified;
+#[cfg(feature = "tokio")]
+use crate::is_known_already_locked_error;
 
 /// Parsed value of `UV_LOCK_TIMEOUT`, with a default of 5 min.
+#[cfg(feature = "tokio")]
 static LOCK_TIMEOUT: LazyLock<Duration> = LazyLock::new(|| {
     let default_timeout = Duration::from_mins(5);
     let Some(lock_timeout) = env::var_os(EnvVars::UV_LOCK_TIMEOUT) else {
@@ -97,6 +107,7 @@ pub enum LockedFileMode {
     Exclusive,
 }
 
+#[cfg(feature = "tokio")]
 impl LockedFileMode {
     /// Try to lock the file and return an error if the lock is already acquired by another process
     /// and cannot be acquired immediately.

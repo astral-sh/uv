@@ -22,14 +22,11 @@ const BUILT_BY_UV_TEST_SCRIPT: &str = indoc! {r#"
     print(f"Area of a circle with r=2: {area(2)}")
 "#};
 
-fn unpack_tar_gz(source_dist_path: &Path, target: &Path) -> Result<()> {
+async fn unpack_tar_gz(source_dist_path: &Path, target: &Path) -> Result<()> {
     let sdist_reader = BufReader::new(File::open(source_dist_path)?);
     let mut source_dist =
         tokio_tar::Archive::new(AllowStdIo::new(GzDecoder::new(sdist_reader)).compat());
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?
-        .block_on(source_dist.unpack(target))?;
+    source_dist.unpack(target).await?;
     Ok(())
 }
 
@@ -92,9 +89,9 @@ fn built_by_uv_direct_wheel() -> Result<()> {
 ///
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel,
 /// so we call the build backend directly.
-#[test]
+#[tokio::test(flavor = "current_thread")]
 #[cfg(feature = "test-pypi")]
-fn built_by_uv_direct() -> Result<()> {
+async fn built_by_uv_direct() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let built_by_uv = Path::new("../../test/packages/built-by-uv");
 
@@ -118,7 +115,8 @@ fn built_by_uv_direct() -> Result<()> {
     unpack_tar_gz(
         &sdist_dir.path().join("built_by_uv-0.1.0.tar.gz"),
         sdist_tree.path(),
-    )?;
+    )
+    .await?;
 
     drop(sdist_dir);
 

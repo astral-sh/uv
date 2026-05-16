@@ -579,42 +579,43 @@ impl BuildContext for BuildDispatch<'_> {
 
         debug!("Performing direct build for {identifier}");
 
-        let output_dir = output_dir.to_path_buf();
-        let filename = tokio::task::spawn_blocking(move || -> Result<_> {
-            let filename = match build_kind {
-                BuildKind::Wheel => {
-                    let wheel = uv_build_backend::build_wheel(
-                        &source_tree,
-                        &output_dir,
-                        None,
-                        uv_version::version(),
-                        sources.is_none(),
-                    )?;
-                    DistFilename::WheelFilename(wheel)
-                }
-                BuildKind::Sdist => {
-                    let source_dist = uv_build_backend::build_source_dist(
-                        &source_tree,
-                        &output_dir,
-                        uv_version::version(),
-                        sources.is_none(),
-                    )?;
-                    DistFilename::SourceDistFilename(source_dist)
-                }
-                BuildKind::Editable => {
-                    let wheel = uv_build_backend::build_editable(
-                        &source_tree,
-                        &output_dir,
-                        None,
-                        uv_version::version(),
-                        sources.is_none(),
-                    )?;
-                    DistFilename::WheelFilename(wheel)
-                }
-            };
-            Ok(filename)
-        })
-        .await??;
+        let filename = match build_kind {
+            BuildKind::Wheel => {
+                let wheel = uv_build_backend::build_wheel(
+                    &source_tree,
+                    output_dir,
+                    None,
+                    uv_version::version(),
+                    sources.is_none(),
+                )
+                .await
+                .map_err(anyhow::Error::from)?;
+                DistFilename::WheelFilename(wheel)
+            }
+            BuildKind::Sdist => {
+                let source_dist = uv_build_backend::build_source_dist(
+                    &source_tree,
+                    output_dir,
+                    uv_version::version(),
+                    sources.is_none(),
+                )
+                .await
+                .map_err(anyhow::Error::from)?;
+                DistFilename::SourceDistFilename(source_dist)
+            }
+            BuildKind::Editable => {
+                let wheel = uv_build_backend::build_editable(
+                    &source_tree,
+                    output_dir,
+                    None,
+                    uv_version::version(),
+                    sources.is_none(),
+                )
+                .await
+                .map_err(anyhow::Error::from)?;
+                DistFilename::WheelFilename(wheel)
+            }
+        };
 
         Ok(Some(filename))
     }

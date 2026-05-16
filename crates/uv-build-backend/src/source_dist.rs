@@ -7,7 +7,6 @@ use crate::{
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use fs_err::File;
-use futures_lite::future::block_on;
 use globset::{Glob, GlobSet};
 use std::io;
 use std::io::{BufReader, Cursor, Read, Write};
@@ -24,7 +23,7 @@ use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 
 /// Build a source distribution from the source tree and place it in the output directory.
-pub fn build_source_dist(
+pub async fn build_source_dist(
     source_tree: &Path,
     source_dist_directory: &Path,
     uv_version: &str,
@@ -44,7 +43,7 @@ pub fn build_source_dist(
 
     let temp_file = uv_fs::tempfile_in(source_dist_directory)?;
     let writer = TarGzWriter::new(temp_file.as_file(), &source_dist_path);
-    write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+    write_source_dist(source_tree, writer, uv_version, show_warnings).await?;
     temp_file
         .persist(&source_dist_path)
         .map_err(|err| Error::Persist(source_dist_path.clone(), err.error))?;
@@ -53,7 +52,7 @@ pub fn build_source_dist(
 }
 
 /// List the files that would be included in a source distribution and their origin.
-pub fn list_source_dist(
+pub async fn list_source_dist(
     source_tree: &Path,
     uv_version: &str,
     show_warnings: bool,
@@ -66,7 +65,7 @@ pub fn list_source_dist(
     };
     let mut files = FileList::new();
     let writer = ListWriter::new(&mut files);
-    write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+    write_source_dist(source_tree, writer, uv_version, show_warnings).await?;
     Ok((filename, files))
 }
 
@@ -191,7 +190,7 @@ fn source_dist_matcher(
 }
 
 /// Shared implementation for building and listing a source distribution.
-fn write_source_dist(
+async fn write_source_dist(
     source_tree: &Path,
     mut writer: impl DirectoryWriter,
     uv_version: &str,
@@ -222,13 +221,15 @@ fn write_source_dist(
     let metadata_email = metadata.core_metadata_format();
 
     debug!("Adding content files to source distribution");
-    writer.write_bytes(
-        &Path::new(&top_level)
-            .join("PKG-INFO")
-            .portable_display()
-            .to_string(),
-        metadata_email.as_bytes(),
-    )?;
+    writer
+        .write_bytes(
+            &Path::new(&top_level)
+                .join("PKG-INFO")
+                .portable_display()
+                .to_string(),
+            metadata_email.as_bytes(),
+        )
+        .await?;
 
     let (include_matcher, exclude_matcher) =
         source_dist_matcher(source_tree, &pyproject_toml, settings, show_warnings)?;
@@ -283,11 +284,11 @@ fn write_source_dist(
             .portable_display()
             .to_string();
         debug!("Adding to sdist: {}", relative.user_display());
-        writer.write_dir_entry(&entry, &entry_path)?;
+        writer.write_dir_entry(&entry, &entry_path).await?;
     }
     debug!("Visited {files_visited} files for source dist build");
 
-    writer.close(&top_level)?;
+    writer.close(&top_level).await?;
 
     Ok(filename)
 }
@@ -364,7 +365,7 @@ impl<W: Write + Unpin + Send> TarGzWriter<W> {
 }
 
 impl<W: Write + Unpin + Send> DirectoryWriter for TarGzWriter<W> {
-    fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
+    async fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         let mut header = Header::new_gnu();
         // Work around bug in Python's std tar module
         // https://github.com/python/cpython/issues/141707
@@ -374,15 +375,14 @@ impl<W: Write + Unpin + Send> DirectoryWriter for TarGzWriter<W> {
         // Reasonable default to avoid 0o000 permissions, the user's umask will be applied on
         // unpacking.
         header.set_mode(0o644);
-        block_on(
-            self.tar
-                .append_data(&mut header, path, SyncReader::new(Cursor::new(bytes))),
-        )
-        .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
+        self.tar
+            .append_data(&mut header, path, SyncReader::new(Cursor::new(bytes)))
+            .await
+            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         Ok(())
     }
 
-    fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
+    async fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
         let metadata = fs_err::metadata(file)?;
         let mut header = Header::new_gnu();
         // Work around bug in Python's std tar module
@@ -409,32 +409,33 @@ impl<W: Write + Unpin + Send> DirectoryWriter for TarGzWriter<W> {
         }
         header.set_size(metadata.len());
         let reader = BufReader::new(File::open(file)?);
-        block_on(
-            self.tar
-                .append_data(&mut header, path, SyncReader::new(reader)),
-        )
-        .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
+        self.tar
+            .append_data(&mut header, path, SyncReader::new(reader))
+            .await
+            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         Ok(())
     }
 
-    fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
+    async fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
         let mut header = Header::new_gnu();
         // Directories are always executable, which means they can be listed.
         header.set_mode(0o755);
         header.set_entry_type(EntryType::Directory);
         header.set_size(0);
-        block_on(
-            self.tar
-                .append_data(&mut header, directory, SyncReader::new(io::empty())),
-        )
-        .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
+        self.tar
+            .append_data(&mut header, directory, SyncReader::new(io::empty()))
+            .await
+            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         Ok(())
     }
 
-    fn close(self, _dist_info_dir: &str) -> Result<(), Error> {
+    async fn close(self, _dist_info_dir: &str) -> Result<(), Error> {
         let path = self.path;
-        let writer =
-            block_on(self.tar.into_inner()).map_err(|err| Error::TarWrite(path.clone(), err))?;
+        let writer = self
+            .tar
+            .into_inner()
+            .await
+            .map_err(|err| Error::TarWrite(path.clone(), err))?;
         writer
             .into_inner()
             .finish()
