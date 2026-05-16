@@ -628,7 +628,7 @@ impl Version {
     #[must_use]
     pub fn only_release_trimmed(&self) -> Self {
         if let Some(last_non_zero) = self.release().iter().rposition(|segment| *segment != 0) {
-            if last_non_zero == self.release().len() {
+            if last_non_zero + 1 == self.release().len() {
                 // Already trimmed.
                 self.clone()
             } else {
