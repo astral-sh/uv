@@ -36,6 +36,14 @@ pub fn uninstall_wheel(
         read_record(&mut record_file)?
     };
 
+    // Build the set of paths that are also claimed by some other installed package's
+    // `RECORD`. Some package pairs (e.g. `opencv-python` and `opencv-contrib-python`,
+    // which both ship a top-level `cv2/` package) overlap on disk. When the user
+    // removes one of them, we must NOT delete files that the remaining package
+    // also claims, otherwise `import cv2` (or the equivalent) breaks until the
+    // user re-installs from scratch. See issue #19412.
+    let shared_paths = collect_shared_paths(site_packages, dist_info);
+
     let mut file_count = 0usize;
     let mut dir_count = 0usize;
 
@@ -48,6 +56,16 @@ pub fn uninstall_wheel(
         let path = site_packages.join(&entry.path);
 
         if !is_path_in_scheme(&entry.path, site_packages, &distribution, layout) {
+            continue;
+        }
+
+        // Skip files that another installed package's `RECORD` also claims; the
+        // remaining package still needs them. See issue #19412.
+        if shared_paths.contains(&path) {
+            trace!(
+                "Skipping shared file (also owned by another installed package): {}",
+                path.display()
+            );
             continue;
         }
 
@@ -238,6 +256,51 @@ fn is_valid_top_level_entry(entry: &str, distribution: impl Display) -> bool {
 
 fn is_safe_top_level_entry(entry: &str) -> bool {
     !entry.is_empty() && entry != "." && entry != ".." && !entry.contains(['/', '\\'])
+}
+
+/// Collect the set of paths under `site_packages` that are listed in some OTHER
+/// installed package's `RECORD`, excluding the one we are about to uninstall
+/// (`dist_info_being_removed`).
+///
+/// This walks every `*.dist-info` directory in `site_packages` other than the
+/// one being removed and reads each `RECORD`. Any `RECORD` we cannot read (e.g.
+/// missing, malformed, or a path we cannot resolve) is silently skipped, since
+/// the existing uninstall logic already tolerates missing-on-disk entries via
+/// `ErrorKind::NotFound` and the worst case from skipping a malformed `RECORD`
+/// here is reverting to the pre-fix behavior for those specific files. This is
+/// strictly an additive safety check.
+///
+/// Returns an empty set if `site_packages` cannot be read at all.
+fn collect_shared_paths(site_packages: &Path, dist_info_being_removed: &Path) -> HashSet<PathBuf> {
+    let mut shared = HashSet::new();
+    let Ok(entries) = fs_err::read_dir(site_packages) else {
+        return shared;
+    };
+    for entry in entries.flatten() {
+        let entry_path = entry.path();
+        if entry_path == dist_info_being_removed {
+            continue;
+        }
+        // Only consider sibling `.dist-info` directories.
+        if !entry_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.ends_with(".dist-info"))
+        {
+            continue;
+        }
+        let other_record_path = entry_path.join("RECORD");
+        let Ok(mut other_record_file) = fs_err::File::open(&other_record_path) else {
+            continue;
+        };
+        let Ok(other_record) = read_record(&mut other_record_file) else {
+            continue;
+        };
+        for other_entry in other_record {
+            shared.insert(site_packages.join(&other_entry.path));
+        }
+    }
+    shared
 }
 
 /// Uninstall the egg represented by the `.egg-info` directory.
@@ -456,6 +519,8 @@ fn normalize_path(path: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use assert_fs::prelude::*;
 
     use uv_pypi_types::Scheme;
@@ -652,5 +717,102 @@ mod tests {
             "uninstall must not remove site-packages itself"
         );
         assert!(sibling_init.exists(), "sibling package must not be removed");
+    }
+
+    /// Build a layout whose install scheme points at `site_packages`.
+    fn layout_for(venv: &Path, site_packages: &Path) -> Layout {
+        Layout {
+            sys_executable: venv.join("bin/python"),
+            python_version: (3, 12),
+            os_name: "posix".to_string(),
+            scheme: Scheme {
+                purelib: site_packages.to_path_buf(),
+                platlib: site_packages.to_path_buf(),
+                scripts: venv.join("bin"),
+                data: venv.to_path_buf(),
+                include: venv.join("include/python3.12"),
+            },
+        }
+    }
+
+    /// Two installed wheels sharing a file (the `opencv-python` / `opencv-contrib-python`
+    /// pattern reported in #19412): uninstalling one must not delete the shared file.
+    #[test]
+    fn shared_files_are_preserved_when_one_overlapping_wheel_is_uninstalled() {
+        let venv = assert_fs::TempDir::new().unwrap();
+        let site_packages = venv.child("lib/python3.12/site-packages");
+        site_packages.create_dir_all().unwrap();
+
+        let shared = site_packages.child("cv2/__init__.py");
+        shared.touch().unwrap();
+        let pkg_a_only = site_packages.child("pkg_a_only.py");
+        pkg_a_only.touch().unwrap();
+        let pkg_b_only = site_packages.child("pkg_b_only.py");
+        pkg_b_only.touch().unwrap();
+
+        let dist_a = site_packages.child("pkg_a-1.0.dist-info");
+        dist_a.create_dir_all().unwrap();
+        dist_a
+            .child("RECORD")
+            .write_str(
+                "cv2/__init__.py,,\n\
+                 pkg_a_only.py,,\n\
+                 pkg_a-1.0.dist-info/RECORD,,\n",
+            )
+            .unwrap();
+
+        let dist_b = site_packages.child("pkg_b-1.0.dist-info");
+        dist_b.create_dir_all().unwrap();
+        dist_b
+            .child("RECORD")
+            .write_str(
+                "cv2/__init__.py,,\n\
+                 pkg_b_only.py,,\n\
+                 pkg_b-1.0.dist-info/RECORD,,\n",
+            )
+            .unwrap();
+
+        uninstall_wheel(
+            dist_a.path(),
+            "pkg_a 1.0",
+            &layout_for(venv.path(), site_packages.path()),
+        )
+        .unwrap();
+
+        assert!(!pkg_a_only.exists());
+        assert!(pkg_b_only.exists());
+        assert!(
+            shared.exists(),
+            "shared cv2/__init__.py was deleted when uninstalling pkg_a, but pkg_b still needs it"
+        );
+    }
+
+    /// A wheel with no overlapping dist-info should still have its files removed normally.
+    #[test]
+    fn unique_files_are_removed_when_no_overlap_exists() {
+        let venv = assert_fs::TempDir::new().unwrap();
+        let site_packages = venv.child("lib/python3.12/site-packages");
+        site_packages.create_dir_all().unwrap();
+
+        let solo = site_packages.child("solo/__init__.py");
+        solo.touch().unwrap();
+
+        let dist = site_packages.child("solo-1.0.dist-info");
+        dist.create_dir_all().unwrap();
+        dist.child("RECORD")
+            .write_str(
+                "solo/__init__.py,,\n\
+                 solo-1.0.dist-info/RECORD,,\n",
+            )
+            .unwrap();
+
+        uninstall_wheel(
+            dist.path(),
+            "solo 1.0",
+            &layout_for(venv.path(), site_packages.path()),
+        )
+        .unwrap();
+
+        assert!(!solo.exists());
     }
 }
