@@ -4,7 +4,7 @@ use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifierBuildError}
 pub enum Error {
     #[error("Constraint must be a tilde equal specifier, got {0:?}")]
     InvalidConstraint(Operator),
-    #[error("Version specifier build error: {0}")]
+    #[error(transparent)]
     VersionSpecifierBuildError(#[from] VersionSpecifierBuildError),
 }
 
