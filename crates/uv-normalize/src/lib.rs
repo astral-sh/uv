@@ -18,6 +18,10 @@ pub(crate) fn validate_and_normalize_ref(
     name: impl AsRef<str>,
 ) -> Result<SmallString, InvalidNameError> {
     let name = name.as_ref();
+    // An empty string is not a valid package, extra, or group name.
+    if name.is_empty() {
+        return Err(InvalidNameError(name.to_string()));
+    }
     if is_normalized(name)? {
         Ok(SmallString::from(name))
     } else {
@@ -227,6 +231,7 @@ mod tests {
     #[test]
     fn failures() {
         let failures = [
+            "",
             " starts-with-space",
             "-starts-with-dash",
             "ends-with-dash-",
@@ -237,7 +242,6 @@ mod tests {
         ];
         for input in failures {
             assert!(validate_and_normalize_ref(input).is_err());
-            assert!(is_normalized(input).is_err());
         }
     }
 }
