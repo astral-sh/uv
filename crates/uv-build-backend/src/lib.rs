@@ -18,7 +18,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use thiserror::Error;
 use tracing::debug;
-use walkdir::DirEntry;
 
 use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::PortableGlobError;
@@ -97,16 +96,6 @@ trait DirectoryWriter {
     ///
     /// Files added through the method are considered generated when listing included files.
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error>;
-
-    /// Add the file or directory to the path.
-    fn write_dir_entry(&mut self, entry: &DirEntry, target_path: &str) -> Result<(), Error> {
-        if entry.file_type().is_dir() {
-            self.write_directory(target_path)?;
-        } else {
-            self.write_file(target_path, entry.path())?;
-        }
-        Ok(())
-    }
 
     /// Add a local file.
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error>;
@@ -729,6 +718,15 @@ mod tests {
         fs_err::create_dir_all(module_root.join("__pycache__")).unwrap();
         File::create(module_root.join("__pycache__").join("compiled.pyc")).unwrap();
         File::create(module_root.join("arithmetic").join("circle.pyc")).unwrap();
+        fs_err::create_dir_all(module_root.join("empty")).unwrap();
+        fs_err::create_dir_all(module_root.join("stale").join("__pycache__")).unwrap();
+        File::create(
+            module_root
+                .join("stale")
+                .join("__pycache__")
+                .join("compiled.pyc"),
+        )
+        .unwrap();
 
         // Perform both the direct and the indirect build.
         let dist = TempDir::new().unwrap();

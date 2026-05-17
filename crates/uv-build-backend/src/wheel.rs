@@ -5,8 +5,8 @@ use fs_err::File;
 use futures_lite::future::block_on;
 use futures_lite::io::{AsyncSeek, AsyncWrite, AsyncWriteExt};
 use globset::{GlobSet, GlobSetBuilder};
-use rustc_hash::FxHashSet;
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
@@ -171,19 +171,8 @@ fn write_wheel(
     )?;
 
     let mut files_visited = 0;
-    let mut prefix_directories = FxHashSet::default();
+    let mut included_entries = BTreeMap::<PathBuf, Option<PathBuf>>::new();
     for module_relative in module_relative {
-        // For convenience, have directories for the whole tree in the wheel
-        for ancestor in module_relative.ancestors().skip(1) {
-            if ancestor == Path::new("") {
-                continue;
-            }
-            // Avoid duplicate directories in the zip.
-            if prefix_directories.insert(ancestor.to_path_buf()) {
-                wheel_writer.write_directory(&ancestor.portable_display().to_string())?;
-            }
-        }
-
         for entry in WalkDir::new(src_root.join(module_relative))
             .sort_by_file_name()
             .into_iter()
@@ -219,12 +208,32 @@ fn write_wheel(
 
             error_on_venv(entry.file_name(), entry.path())?;
 
-            let entry_path = entry_path.portable_display().to_string();
-            debug!("Adding to wheel: {entry_path}");
-            wheel_writer.write_dir_entry(&entry, &entry_path)?;
+            if entry.file_type().is_dir() {
+                continue;
+            }
+
+            for ancestor in entry_path.ancestors().skip(1) {
+                if ancestor == Path::new("") {
+                    continue;
+                }
+                included_entries
+                    .entry(ancestor.to_path_buf())
+                    .or_insert(None);
+            }
+            included_entries.insert(entry_path.to_path_buf(), Some(entry.path().to_path_buf()));
         }
     }
     debug!("Visited {files_visited} files for wheel build");
+
+    for (entry_path, source) in included_entries {
+        let entry_path = entry_path.portable_display().to_string();
+        debug!("Adding to wheel: {entry_path}");
+        if let Some(source) = source {
+            wheel_writer.write_file(&entry_path, &source)?;
+        } else {
+            wheel_writer.write_directory(&entry_path)?;
+        }
+    }
 
     // Add the license files
     if pyproject_toml.license_files_wheel().next().is_some() {
@@ -561,7 +570,7 @@ fn wheel_subdir_from_globs(
             source: err,
         })?;
 
-    wheel_writer.write_directory(target)?;
+    let mut included_entries = BTreeMap::<PathBuf, Option<PathBuf>>::new();
 
     for entry in WalkDir::new(src)
         .sort_by_file_name()
@@ -602,12 +611,35 @@ fn wheel_subdir_from_globs(
 
         error_on_venv(entry.file_name(), entry.path())?;
 
-        let license_path = Path::new(target)
-            .join(relative)
+        if entry.file_type().is_dir() {
+            continue;
+        }
+
+        if included_entries.is_empty() {
+            included_entries.insert(PathBuf::new(), None);
+        }
+        for ancestor in relative.ancestors().skip(1) {
+            if ancestor == Path::new("") {
+                continue;
+            }
+            included_entries
+                .entry(ancestor.to_path_buf())
+                .or_insert(None);
+        }
+        included_entries.insert(relative.to_path_buf(), Some(entry.path().to_path_buf()));
+    }
+
+    for (relative, source) in included_entries {
+        let entry_path = Path::new(target)
+            .join(&relative)
             .portable_display()
             .to_string();
         debug!("Adding for {}: {}", globs_field, relative.user_display());
-        wheel_writer.write_dir_entry(&entry, &license_path)?;
+        if let Some(source) = source {
+            wheel_writer.write_file(&entry_path, &source)?;
+        } else {
+            wheel_writer.write_directory(&entry_path)?;
+        }
     }
     Ok(())
 }
