@@ -961,6 +961,10 @@ impl EnvVars {
     #[attr_added_in("0.4.16")]
     pub const GITHUB_ACTIONS: &'static str = "GITHUB_ACTIONS";
 
+    /// The GitHub host to use when resolving GitHub Enterprise Gist URLs.
+    #[attr_added_in("0.11.15")]
+    pub const GH_HOST: &'static str = "GH_HOST";
+
     /// Indicates that the current process is running in GitLab CI.
     ///
     /// `uv publish` may attempt trusted publishing flows when set

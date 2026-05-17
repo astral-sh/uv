@@ -1646,7 +1646,7 @@ impl ParsedRunCommand {
 
         let gist_url;
         // If it's a Gist URL, use the GitHub API to get the raw URL.
-        if response.url().host_str() == Some("gist.github.com") {
+        if is_gist_url(response.url()) {
             gist_url =
                 resolve_gist_url(DisplaySafeUrl::ref_cast(response.url()), client_builder).await?;
             url = &gist_url;
@@ -1947,27 +1947,228 @@ impl std::fmt::Display for RunCommand {
     }
 }
 
+#[derive(Clone, Copy)]
+enum GistPathKind {
+    Host,
+    Path,
+}
+
+struct GistApiBase {
+    scheme: &'static str,
+    host: String,
+    kind: GistPathKind,
+}
+
+fn normalize_github_host(host: &str) -> Option<String> {
+    let host = host.trim();
+    if host.is_empty() {
+        return None;
+    }
+
+    if let Ok(url) = Url::parse(host) {
+        if let Some(host) = url.host_str() {
+            return Some(host.to_ascii_lowercase());
+        }
+    }
+
+    let host = host
+        .trim_end_matches('/')
+        .split('/')
+        .next()
+        .filter(|host| !host.is_empty())?;
+
+    Some(host.to_ascii_lowercase())
+}
+
+fn github_host_from_env() -> Option<String> {
+    std::env::var(EnvVars::GH_HOST)
+        .ok()
+        .and_then(|host| normalize_github_host(&host))
+}
+
+fn gist_api_base(url: &Url, github_host: Option<&str>) -> Option<GistApiBase> {
+    let host = url.host_str()?;
+    if host == "gist.github.com" {
+        return Some(GistApiBase {
+            scheme: "https",
+            host: "api.github.com".to_string(),
+            kind: GistPathKind::Host,
+        });
+    }
+
+    let github_host = github_host.and_then(normalize_github_host)?;
+    let scheme = match url.scheme() {
+        "http" => "http",
+        _ => "https",
+    };
+
+    if host == format!("gist.{github_host}") {
+        return Some(GistApiBase {
+            scheme,
+            host: github_host,
+            kind: GistPathKind::Host,
+        });
+    }
+
+    if host == github_host && github_host != "github.com" {
+        let prefix = url.path_segments()?.next()?;
+        if matches!(prefix, "gist" | "gists") {
+            return Some(GistApiBase {
+                scheme,
+                host: github_host,
+                kind: GistPathKind::Path,
+            });
+        }
+    }
+
+    None
+}
+
+fn gist_id(url: &Url, kind: GistPathKind) -> Option<&str> {
+    let segments = url
+        .path_segments()?
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+
+    match kind {
+        GistPathKind::Host => match segments.as_slice() {
+            [] => None,
+            [gist_id] => Some(*gist_id),
+            [_, gist_id, ..] => Some(*gist_id),
+        },
+        GistPathKind::Path => match segments.as_slice() {
+            ["gist" | "gists", gist_id] => Some(*gist_id),
+            ["gist" | "gists", _, gist_id, ..] => Some(*gist_id),
+            _ => None,
+        },
+    }
+}
+
+fn gist_api_url(url: &Url, github_host: Option<&str>) -> anyhow::Result<Option<DisplaySafeUrl>> {
+    let Some(api_base) = gist_api_base(url, github_host) else {
+        return Ok(None);
+    };
+    let gist_id = gist_id(url, api_base.kind).ok_or_else(|| anyhow!("Invalid Gist URL format"))?;
+
+    let api_url = if api_base.host == "api.github.com" {
+        format!("https://api.github.com/gists/{gist_id}")
+    } else {
+        format!(
+            "{}://{}/api/v3/gists/{gist_id}",
+            api_base.scheme, api_base.host
+        )
+    };
+
+    Ok(Some(DisplaySafeUrl::parse(&api_url)?))
+}
+
+fn is_gist_url(url: &Url) -> bool {
+    gist_api_base(url, github_host_from_env().as_deref()).is_some()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{gist_api_url, normalize_github_host};
+    use url::Url;
+
+    fn api_url(url: &str, github_host: Option<&str>) -> anyhow::Result<Option<String>> {
+        Ok(gist_api_url(&Url::parse(url)?, github_host)?.map(|url| url.to_string()))
+    }
+
+    #[test]
+    fn gist_api_url_resolves_github_dot_com_urls() -> anyhow::Result<()> {
+        assert_eq!(
+            api_url("https://gist.github.com/astral-sh/abcdef", None)?,
+            Some("https://api.github.com/gists/abcdef".to_string())
+        );
+        assert_eq!(
+            api_url("https://gist.github.com/abcdef", None)?,
+            Some("https://api.github.com/gists/abcdef".to_string())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn gist_api_url_resolves_enterprise_subdomain_urls() -> anyhow::Result<()> {
+        assert_eq!(
+            api_url(
+                "https://gist.github.my-company.com/astral-sh/abcdef",
+                Some("github.my-company.com"),
+            )?,
+            Some("https://github.my-company.com/api/v3/gists/abcdef".to_string())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn gist_api_url_resolves_enterprise_path_urls() -> anyhow::Result<()> {
+        assert_eq!(
+            api_url(
+                "https://github.my-company.com/gist/astral-sh/abcdef",
+                Some("github.my-company.com"),
+            )?,
+            Some("https://github.my-company.com/api/v3/gists/abcdef".to_string())
+        );
+        assert_eq!(
+            api_url(
+                "https://github.my-company.com/gists/astral-sh/abcdef",
+                Some("github.my-company.com"),
+            )?,
+            Some("https://github.my-company.com/api/v3/gists/abcdef".to_string())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn gist_api_url_ignores_mismatched_enterprise_hosts() -> anyhow::Result<()> {
+        assert_eq!(
+            api_url(
+                "https://github.my-company.com/gists/astral-sh/abcdef",
+                Some("github.other-company.com"),
+            )?,
+            None
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn gist_api_url_ignores_github_dot_com_path_urls() -> anyhow::Result<()> {
+        assert_eq!(
+            api_url(
+                "https://github.com/gists/astral-sh/abcdef",
+                Some("github.com"),
+            )?,
+            None
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn github_host_allows_url_syntax() {
+        assert_eq!(
+            normalize_github_host("https://github.my-company.com/"),
+            Some("github.my-company.com".to_string())
+        );
+    }
+}
+
 /// Resolve a GitHub Gist URL to its raw file URL using the GitHub API.
 async fn resolve_gist_url(
     url: &DisplaySafeUrl,
     client_builder: &BaseClientBuilder<'_>,
 ) -> anyhow::Result<DisplaySafeUrl> {
-    // Extract the Gist ID from the URL.
-    let gist_id = url
-        .path_segments()
-        .and_then(|mut segments| segments.nth(1))
+    let api_url = gist_api_url(url, github_host_from_env().as_deref())?
         .ok_or_else(|| anyhow!("Invalid Gist URL format"))?;
-
-    // Build the API URL.
-    let api_url = format!("https://api.github.com/gists/{gist_id}");
 
     let client = client_builder.build()?;
 
     // Build the request with appropriate headers.
-    let api_url_parsed = DisplaySafeUrl::parse(&api_url)?;
-    let mut request = client
-        .for_host(&api_url_parsed)
-        .get(Url::from(api_url_parsed));
+    let mut request = client.for_host(&api_url).get(Url::from(api_url));
     request = request.header("Accept", "application/vnd.github.v3+json");
 
     // Add GitHub token, if available.
