@@ -494,7 +494,7 @@ class PyPyFinder(Finder):
 class PyodideFinder(Finder):
     implementation = ImplementationName.CPYTHON
 
-    RELEASE_URL = "https://api.github.com/repos/pyodide/pyodide/releases"
+    RELEASE_URL = "https://api.github.com/repos/pyodide/pyodide/releases?per_page=100"
     METADATA_URL = (
         "https://pyodide.github.io/pyodide/api/pyodide-cross-build-environments.json"
     )
