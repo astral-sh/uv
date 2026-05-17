@@ -2,14 +2,14 @@ use crate::metadata::DEFAULT_EXCLUDES;
 use crate::wheel::build_exclude_matcher;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
-    error_on_venv, find_roots,
+    error_on_venv, find_roots, write_directory_once, write_file_with_directories,
 };
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use fs_err::File;
 use futures_lite::future::block_on;
 use globset::{Glob, GlobSet};
-use std::collections::BTreeMap;
+use rustc_hash::FxHashSet;
 use std::io;
 use std::io::{BufReader, Cursor, Read, Write};
 use std::path::{Component, Path, PathBuf};
@@ -235,8 +235,9 @@ fn write_source_dist(
         source_dist_matcher(source_tree, &pyproject_toml, settings, show_warnings)?;
 
     let mut files_visited = 0;
-    let mut included_entries = BTreeMap::<PathBuf, Option<PathBuf>>::new();
-    included_entries.insert(PathBuf::new(), None);
+    let mut written_directories = FxHashSet::<PathBuf>::default();
+    let top_level_directory = PathBuf::from(&top_level).join("");
+    write_directory_once(&mut writer, &mut written_directories, &top_level_directory)?;
     for entry in WalkDir::new(source_tree)
         .sort_by_file_name()
         .into_iter()
@@ -285,30 +286,16 @@ fn write_source_dist(
             continue;
         }
 
-        for ancestor in relative.ancestors().skip(1) {
-            if ancestor == Path::new("") {
-                continue;
-            }
-            included_entries
-                .entry(ancestor.to_path_buf())
-                .or_insert(None);
-        }
-        included_entries.insert(relative.to_path_buf(), Some(entry.path().to_path_buf()));
+        debug!("Adding to sdist: {}", relative.user_display());
+        write_file_with_directories(
+            &mut writer,
+            &mut written_directories,
+            Path::new(&top_level),
+            relative,
+            entry.path(),
+        )?;
     }
     debug!("Visited {files_visited} files for source dist build");
-
-    for (relative, source) in included_entries {
-        let entry_path = Path::new(&top_level)
-            .join(&relative)
-            .portable_display()
-            .to_string();
-        debug!("Adding to sdist: {}", relative.user_display());
-        if let Some(source) = source {
-            writer.write_file(&entry_path, &source)?;
-        } else {
-            writer.write_directory(&entry_path)?;
-        }
-    }
 
     writer.close(&top_level)?;
 

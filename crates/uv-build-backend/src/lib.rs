@@ -11,6 +11,7 @@ pub use source_dist::{build_source_dist, list_source_dist};
 use uv_warnings::warn_user_once;
 pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
 
+use rustc_hash::FxHashSet;
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::io;
@@ -105,6 +106,37 @@ trait DirectoryWriter {
 
     /// Write the `RECORD` file and if applicable, the central directory.
     fn close(self, dist_info_dir: &str) -> Result<(), Error>;
+}
+
+fn write_directory_once(
+    writer: &mut impl DirectoryWriter,
+    directories: &mut FxHashSet<PathBuf>,
+    directory: &Path,
+) -> Result<(), Error> {
+    if directories.insert(directory.to_path_buf()) {
+        debug!("Adding directory: {}", directory.user_display());
+        writer.write_directory(&directory.portable_display().to_string())?;
+    }
+    Ok(())
+}
+
+fn write_file_with_directories(
+    writer: &mut impl DirectoryWriter,
+    directories: &mut FxHashSet<PathBuf>,
+    prefix: &Path,
+    relative: &Path,
+    source: &Path,
+) -> Result<(), Error> {
+    if let Some(parent) = relative.parent() {
+        let mut directory = PathBuf::new();
+        for component in parent.components() {
+            directory.push(component);
+            write_directory_once(writer, directories, &prefix.join(&directory))?;
+        }
+    }
+
+    let entry_path = prefix.join(relative).portable_display().to_string();
+    writer.write_file(&entry_path, source)
 }
 
 /// Name of the file in the archive and path outside, if it wasn't generated.
