@@ -427,13 +427,20 @@ pub(crate) fn error_on_venv(file_name: &OsStr, path: &Path) -> Result<(), Error>
         return Ok(());
     };
 
-    if parent.join("bin").join("python").is_symlink()
-        || parent.join("Scripts").join("python.exe").is_file()
-    {
+    if has_virtualenv_interpreter(parent) {
         return Err(Error::VenvInSourceTree(parent.to_path_buf()));
     }
 
     Ok(())
+}
+
+pub(crate) fn is_virtualenv_directory(path: &Path) -> bool {
+    path.join("pyvenv.cfg").is_file() && has_virtualenv_interpreter(path)
+}
+
+fn has_virtualenv_interpreter(path: &Path) -> bool {
+    path.join("bin").join("python").is_symlink()
+        || path.join("Scripts").join("python.exe").is_file()
 }
 
 #[cfg(test)]

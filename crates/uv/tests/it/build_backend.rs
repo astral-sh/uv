@@ -1091,7 +1091,7 @@ fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
 
 /// Show an explicit error when there is a venv in source tree.
 #[test]
-fn venv_in_source_tree() {
+fn venv_in_source_tree() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     context
@@ -1129,6 +1129,31 @@ fn venv_in_source_tree() {
       × Failed to build `[TEMP_DIR]/`
       ╰─▶ Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
     ");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let pyproject_toml_contents = fs_err::read_to_string(pyproject_toml.path())?;
+    pyproject_toml.write_str(&format!(
+        "{pyproject_toml_contents}\n[tool.uv.build-backend]\nsource-exclude = [\"src/foo/.venv\"]\n"
+    ))?;
+
+    let dist = TempDir::new()?;
+    context
+        .build()
+        .arg("--out-dir")
+        .arg(dist.path())
+        .assert()
+        .success();
+
+    let wheel_dist = TempDir::new()?;
+    context
+        .build()
+        .arg("--wheel")
+        .arg("--out-dir")
+        .arg(wheel_dist.path())
+        .assert()
+        .success();
+
+    Ok(())
 }
 
 /// Show a warning when the build backend is passed redundant module names

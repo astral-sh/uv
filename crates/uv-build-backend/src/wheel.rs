@@ -26,7 +26,7 @@ use uv_warnings::warn_user_once;
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
-    error_on_venv, find_roots,
+    error_on_venv, find_roots, is_virtualenv_directory,
 };
 
 // Files at or below this size are buffered and written with `write_entry_whole`,
@@ -140,13 +140,17 @@ fn write_wheel(
 
     // Wheel excludes
     let mut excludes: Vec<String> = Vec::new();
+    let mut explicit_excludes: Vec<String> = Vec::new();
     if settings.default_excludes {
         excludes.extend(DEFAULT_EXCLUDES.iter().map(ToString::to_string));
     }
-    for exclude in settings.wheel_exclude {
+    for exclude in &settings.wheel_exclude {
         // Avoid duplicate entries.
-        if !excludes.contains(&exclude) {
-            excludes.push(exclude);
+        if !excludes.contains(exclude) {
+            excludes.push(exclude.clone());
+        }
+        if !explicit_excludes.contains(exclude) {
+            explicit_excludes.push(exclude.clone());
         }
     }
     // The wheel must not include any files excluded by the source distribution (at least until we
@@ -156,9 +160,13 @@ fn write_wheel(
         if !excludes.contains(exclude) {
             excludes.push(exclude.clone());
         }
+        if !explicit_excludes.contains(exclude) {
+            explicit_excludes.push(exclude.clone());
+        }
     }
     debug!("Wheel excludes: {:?}", excludes);
     let exclude_matcher = build_exclude_matcher(excludes)?;
+    let explicit_exclude_matcher = build_exclude_matcher(explicit_excludes)?;
 
     debug!("Adding content files to wheel");
     let (src_root, module_relative) = find_roots(
@@ -187,7 +195,22 @@ fn write_wheel(
         for entry in WalkDir::new(src_root.join(module_relative))
             .sort_by_file_name()
             .into_iter()
-            .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
+            .filter_entry(|entry| {
+                let match_path = entry
+                    .path()
+                    .strip_prefix(source_tree)
+                    .expect("walkdir starts with root");
+                let excluded = exclude_matcher.is_match(match_path);
+                if excluded
+                    && entry.file_type().is_dir()
+                    && is_virtualenv_directory(entry.path())
+                    && !explicit_exclude_matcher.is_match(match_path)
+                {
+                    return true;
+                }
+
+                !excluded
+            })
         {
             let entry = entry.map_err(|err| Error::WalkDir {
                 root: source_tree.to_path_buf(),
@@ -213,6 +236,9 @@ fn write_wheel(
                 .strip_prefix(&src_root)
                 .expect("walkdir starts with root");
             if exclude_matcher.is_match(match_path) {
+                if !explicit_exclude_matcher.is_match(match_path) {
+                    error_on_venv(entry.file_name(), entry.path())?;
+                }
                 trace!("Excluding from module: {}", match_path.user_display());
                 continue;
             }

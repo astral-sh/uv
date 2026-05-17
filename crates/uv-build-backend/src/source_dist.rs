@@ -2,7 +2,7 @@ use crate::metadata::DEFAULT_EXCLUDES;
 use crate::wheel::build_exclude_matcher;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
-    error_on_venv, find_roots,
+    error_on_venv, find_roots, is_virtualenv_directory,
 };
 use flate2::Compression;
 use flate2::write::GzEncoder;
@@ -76,7 +76,7 @@ fn source_dist_matcher(
     pyproject_toml: &PyProjectToml,
     settings: BuildBackendSettings,
     show_warnings: bool,
-) -> Result<(GlobDirFilter, GlobSet), Error> {
+) -> Result<(GlobDirFilter, GlobSet, GlobSet), Error> {
     // File and directories to include in the source directory
     let mut include_globs = Vec::new();
     let mut includes: Vec<String> = settings.source_include;
@@ -173,21 +173,26 @@ fn source_dist_matcher(
         })?;
 
     let mut excludes: Vec<String> = Vec::new();
+    let mut explicit_excludes: Vec<String> = Vec::new();
     if settings.default_excludes {
         excludes.extend(DEFAULT_EXCLUDES.iter().map(ToString::to_string));
     }
-    for exclude in settings.source_exclude {
+    for exclude in &settings.source_exclude {
         // Avoid duplicate entries.
-        if !excludes.contains(&exclude) {
-            excludes.push(exclude);
+        if !excludes.contains(exclude) {
+            excludes.push(exclude.clone());
+        }
+        if !explicit_excludes.contains(exclude) {
+            explicit_excludes.push(exclude.clone());
         }
     }
     debug!("Source dist excludes: {:?}", excludes);
     let exclude_matcher = build_exclude_matcher(excludes)?;
+    let explicit_exclude_matcher = build_exclude_matcher(explicit_excludes)?;
     if exclude_matcher.is_match("pyproject.toml") {
         return Err(Error::PyprojectTomlExcluded);
     }
-    Ok((include_matcher, exclude_matcher))
+    Ok((include_matcher, exclude_matcher, explicit_exclude_matcher))
 }
 
 /// Shared implementation for building and listing a source distribution.
@@ -230,7 +235,7 @@ fn write_source_dist(
         metadata_email.as_bytes(),
     )?;
 
-    let (include_matcher, exclude_matcher) =
+    let (include_matcher, exclude_matcher, explicit_exclude_matcher) =
         source_dist_matcher(source_tree, &pyproject_toml, settings, show_warnings)?;
 
     let mut files_visited = 0;
@@ -250,7 +255,16 @@ fn write_source_dist(
             // directories that often exist on the top level of a project. This is especially noticeable
             // on network file systems with high latencies per operation (while contiguous reading may
             // still be fast).
-            include_matcher.match_directory(relative) && !exclude_matcher.is_match(relative)
+            let excluded = exclude_matcher.is_match(relative);
+            if excluded
+                && entry.file_type().is_dir()
+                && is_virtualenv_directory(entry.path())
+                && !explicit_exclude_matcher.is_match(relative)
+            {
+                return include_matcher.match_directory(relative);
+            }
+
+            include_matcher.match_directory(relative) && !excluded
         })
     {
         let entry = entry.map_err(|err| Error::WalkDir {
@@ -271,7 +285,15 @@ fn write_source_dist(
             .strip_prefix(source_tree)
             .expect("walkdir starts with root");
 
-        if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
+        if !include_matcher.match_path(relative) {
+            trace!("Excluding from sdist: {}", relative.user_display());
+            continue;
+        }
+
+        if exclude_matcher.is_match(relative) {
+            if !explicit_exclude_matcher.is_match(relative) {
+                error_on_venv(entry.file_name(), entry.path())?;
+            }
             trace!("Excluding from sdist: {}", relative.user_display());
             continue;
         }
