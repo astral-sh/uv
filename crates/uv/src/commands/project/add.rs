@@ -22,8 +22,8 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    Identifier, Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirement,
+    Identifier, Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Origin,
+    ProjectOrigin, Requirement, RequirementSource, UnresolvedRequirement,
 };
 use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_git::GIT_STORE;
@@ -504,18 +504,33 @@ pub(crate) async fn add(
         }
     }
 
-    // Store the content prior to any modifications.
-    let snapshot = target.snapshot().await?;
-
-    // If the user provides a single, named index, pin all requirements to that index.
-    let index = indexes
+    // `uv add` only pins added requirements to an index when a single named
+    // index was provided. If multiple indexes were provided, or the index is
+    // unnamed, we do not write a `tool.uv.sources` entry.
+    let pinned_index_name = indexes
         .first()
         .as_ref()
         .and_then(|index| index.name.as_ref())
         .filter(|_| indexes.len() == 1)
-        .inspect(|index| {
-            debug!("Pinning all requirements to index: `{index}`");
+        .inspect(|index_name| {
+            debug!("Pinning all requirements to index: `{index_name}`");
         });
+
+    // Raw requirements do not create `tool.uv.sources`, so they do not need a
+    // named index that can be represented in the `pyproject.toml`.
+    if !raw
+        && let Some(index_name) = pinned_index_name
+        && indexes.first().is_some_and(|index| {
+            matches!(index.origin, Some(Origin::Project(ProjectOrigin::UvToml)))
+        })
+    {
+        bail!(
+            "Index `{index_name}` was found in a project-level `uv.toml`, but `uv add` can only write `tool.uv.sources` entries for indexes defined in `pyproject.toml`. Move the index definition into `pyproject.toml` or use `--raw`."
+        );
+    }
+
+    // Store the content prior to any modifications.
+    let snapshot = target.snapshot().await?;
 
     // Track modification status, for reverts.
     let mut modified = false;
@@ -640,7 +655,7 @@ pub(crate) async fn add(
         branch.as_deref(),
         lfs,
         &extras_of_dependency,
-        index,
+        pinned_index_name,
         &mut toml,
     )?;
 
@@ -680,13 +695,19 @@ pub(crate) async fn add(
     }
     let indexes = valid_indexes;
 
-    // Add any indexes that were provided on the command-line, in priority order.
+    // Add any indexes not already declared in `pyproject.toml`, in priority order.
     if !raw {
         let urls = IndexUrls::from_indexes(indexes);
         let mut indexes = urls.defined_indexes().collect::<Vec<_>>();
         indexes.reverse();
         for index in indexes {
-            toml.add_index(index)?;
+            match index.origin {
+                Some(Origin::Project(ProjectOrigin::PyprojectToml | ProjectOrigin::UvToml)) => {}
+                Some(Origin::Cli | Origin::User | Origin::System | Origin::RequirementsTxt)
+                | None => {
+                    toml.add_index(index)?;
+                }
+            }
         }
     }
 

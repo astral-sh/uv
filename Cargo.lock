@@ -6099,6 +6099,7 @@ dependencies = [
  "fs-err",
  "insta",
  "serde",
+ "tracing",
  "url",
  "uv-audit",
  "uv-auth",
@@ -6398,6 +6399,7 @@ dependencies = [
 name = "uv-distribution-types"
 version = "0.0.47"
 dependencies = [
+ "anstream",
  "arcstr",
  "astral-version-ranges",
  "bitflags",
@@ -6428,6 +6430,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
+ "uv-preview",
  "uv-pypi-types",
  "uv-redacted",
  "uv-small-str",
