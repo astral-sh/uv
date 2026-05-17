@@ -759,6 +759,16 @@ mod tests {
                 .join("compiled.pyc"),
         )
         .unwrap();
+        // Hidden directories in subdirectories must be excluded (e.g., .mypy_cache from running
+        // mypy inside the module directory).
+        fs_err::create_dir_all(module_root.join("arithmetic").join(".mypy_cache")).unwrap();
+        File::create(
+            module_root
+                .join("arithmetic")
+                .join(".mypy_cache")
+                .join("builtins.json"),
+        )
+        .unwrap();
 
         // Perform both the direct and the indirect build.
         let dist = TempDir::new().unwrap();

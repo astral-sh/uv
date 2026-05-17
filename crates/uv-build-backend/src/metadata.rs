@@ -24,8 +24,9 @@ use uv_pypi_types::{Keywords, Metadata23, ProjectUrls, VerbatimParsedUrl};
 use crate::serde_verbatim::SerdeVerbatim;
 use crate::{BuildBackendSettings, Error, error_on_venv};
 
-/// By default, we ignore generated python files.
-pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
+/// By default, we ignore generated python files and hidden files and directories (starting with
+/// `.`), matching the behavior of setuptools which uses `glob.glob` that ignores dotfiles.
+pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo", ".*"];
 
 /// No breaking changes were introduced to the uv build backend since these releases, so we can use
 /// the fast path for them too.

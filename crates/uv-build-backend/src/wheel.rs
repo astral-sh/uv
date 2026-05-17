@@ -176,7 +176,15 @@ fn write_wheel(
         for entry in WalkDir::new(src_root.join(module_relative))
             .sort_by_file_name()
             .into_iter()
-            .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
+            .filter_entry(|entry| {
+                // Do not prune virtual environments even if they match the exclude pattern (e.g.,
+                // `.venv` would be excluded by the default `.*` rule) - we need to detect them
+                // and report an error.
+                if entry.file_type().is_dir() && entry.path().join("pyvenv.cfg").is_file() {
+                    return true;
+                }
+                !exclude_matcher.is_match(entry.path())
+            })
         {
             let entry = entry.map_err(|err| Error::WalkDir {
                 root: source_tree.to_path_buf(),

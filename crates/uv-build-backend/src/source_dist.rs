@@ -254,6 +254,13 @@ fn write_source_dist(
             // directories that often exist on the top level of a project. This is especially noticeable
             // on network file systems with high latencies per operation (while contiguous reading may
             // still be fast).
+            //
+            // Do not prune virtual environments even if they match the exclude pattern (e.g.,
+            // `.venv` would be excluded by the default `.*` rule) - we need to detect them and
+            // report an error.
+            if entry.file_type().is_dir() && entry.path().join("pyvenv.cfg").is_file() {
+                return include_matcher.match_directory(relative);
+            }
             include_matcher.match_directory(relative) && !exclude_matcher.is_match(relative)
         })
     {

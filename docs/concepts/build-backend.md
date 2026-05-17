@@ -201,7 +201,7 @@ To determine which files to include in a source distribution, uv first adds the 
 directories, then removes the excluded files and directories. This means that exclusions always take
 precedence over inclusions.
 
-By default, uv excludes `__pycache__`, `*.pyc`, and `*.pyo`.
+By default, uv excludes `__pycache__`, `*.pyc`, `*.pyo`, and `.*` (hidden files and directories).
 
 When building a source distribution, the following files and directories are included:
 
