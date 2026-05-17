@@ -16479,9 +16479,7 @@ fn sync_reinstalls_on_version_change() -> Result<()> {
 }
 
 /// Regression test for #19419: `uv sync --frozen` must honor credentials
-/// declared in a workspace member's `[tool.uv.sources]`. Under `--frozen`,
-/// project discovery skips members, so credentials have to be re-collected
-/// from each member's `pyproject.toml` on disk.
+/// declared in a workspace member's `[tool.uv.sources]`.
 #[test]
 #[cfg(feature = "test-git")]
 fn sync_frozen_workspace_member_git_credentials() -> Result<()> {
@@ -16529,8 +16527,8 @@ fn sync_frozen_workspace_member_git_credentials() -> Result<()> {
     ");
 
     // `uv sync --frozen` must propagate credentials from the member's
-    // `[tool.uv.sources]` to `GIT_STORE`, even though member discovery is
-    // disabled. Use `--reinstall --no-cache` so the git fetch actually runs.
+    // `[tool.uv.sources]` to `GIT_STORE`. Use `--reinstall --no-cache` so the
+    // git fetch actually runs.
     uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r"
     success: true
     exit_code: 0

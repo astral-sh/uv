@@ -3657,15 +3657,6 @@ impl Package {
             is_local: self.id.source.is_local(),
         }
     }
-
-    /// If this package represents a workspace member, return its path relative
-    /// to the workspace install root.
-    pub fn as_workspace_member(&self) -> Option<&Path> {
-        match &self.id.source {
-            Source::Editable(path) | Source::Virtual(path) => Some(path),
-            _ => None,
-        }
-    }
 }
 
 /// Attempts to construct a `VerbatimUrl` from the given normalized `Path`.

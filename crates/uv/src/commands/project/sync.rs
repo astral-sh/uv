@@ -31,7 +31,7 @@ use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
-use uv_workspace::pyproject::{PyProjectToml, Source, Sources, ToolUvSources};
+use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::editable::apply_editable_mode;
@@ -101,7 +101,7 @@ pub(crate) async fn sync(
             VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions {
-                    members: MemberDiscovery::None,
+                    members: MemberDiscovery::Existing,
                     ..DiscoveryOptions::default()
                 },
                 workspace_cache,
@@ -784,7 +784,7 @@ pub(super) async fn do_sync(
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
 
     // Populate credentials from the target.
-    store_credentials_from_target(target, &client_builder).await;
+    store_credentials_from_target(target, &client_builder);
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
@@ -905,20 +905,7 @@ fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
 ///
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
-async fn store_credentials_from_target(
-    target: InstallTarget<'_>,
-    client_builder: &BaseClientBuilder<'_>,
-) {
-    let dispatch = |source: &Source| match source {
-        Source::Git { git, .. } => {
-            uv_git::store_credentials_from_url(git);
-        }
-        Source::Url { url, .. } => {
-            client_builder.store_credentials_from_url(url);
-        }
-        _ => {}
-    };
-
+fn store_credentials_from_target(target: InstallTarget<'_>, client_builder: &BaseClientBuilder) {
     // Iterate over any indexes in the target.
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
@@ -931,7 +918,15 @@ async fn store_credentials_from_target(
 
     // Iterate over any sources in the target.
     for source in target.sources() {
-        dispatch(source);
+        match source {
+            Source::Git { git, .. } => {
+                uv_git::store_credentials_from_url(git);
+            }
+            Source::Url { url, .. } => {
+                client_builder.store_credentials_from_url(url);
+            }
+            _ => {}
+        }
     }
 
     // Iterate over any dependencies defined in the target.
@@ -947,50 +942,6 @@ async fn store_credentials_from_target(
                 client_builder.store_credentials_from_url(url);
             }
             _ => {}
-        }
-    }
-
-    // Under `--frozen` (and similar), workspace members aren't loaded into
-    // `workspace.packages()`, so their `[tool.uv.sources]` entries are
-    // invisible to the iteration above. Re-discover them via the lockfile.
-    let (workspace, lock) = match target {
-        InstallTarget::Project {
-            workspace, lock, ..
-        }
-        | InstallTarget::Projects {
-            workspace, lock, ..
-        }
-        | InstallTarget::Workspace { workspace, lock }
-        | InstallTarget::NonProjectWorkspace { workspace, lock } => (workspace, lock),
-        InstallTarget::Script { .. } => return,
-    };
-    let loaded = workspace.packages();
-    let install_path = workspace.install_path();
-    for package in lock.packages() {
-        let Some(relative) = package.as_workspace_member() else {
-            continue;
-        };
-        if loaded.contains_key(package.name()) {
-            continue;
-        }
-        let pyproject_path = install_path.join(relative).join("pyproject.toml");
-        let Ok(contents) = fs_err::tokio::read_to_string(&pyproject_path).await else {
-            continue;
-        };
-        let Ok(pyproject) = PyProjectToml::from_string(contents, &pyproject_path) else {
-            continue;
-        };
-        let Some(sources) = pyproject
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.sources.as_ref())
-            .map(ToolUvSources::inner)
-        else {
-            continue;
-        };
-        for source in sources.values().flat_map(Sources::iter) {
-            dispatch(source);
         }
     }
 }
