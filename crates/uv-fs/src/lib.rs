@@ -361,6 +361,48 @@ pub fn tempfile_in(path: &Path) -> std::io::Result<NamedTempFile> {
     tempfile::Builder::new().tempfile_in(path)
 }
 
+/// Return a [`NamedTempFile`] in the specified directory without blocking the async runtime.
+#[cfg(feature = "tokio")]
+pub async fn tempfile_in_async(path: &Path) -> std::io::Result<NamedTempFile<fs_err::tokio::File>> {
+    let path = path.to_path_buf();
+    let temp_file = tokio::task::spawn_blocking({
+        let path = path.clone();
+        move || tempfile_in(&path)
+    })
+    .await
+    .map_err(std::io::Error::other)??;
+    let (file, path) = temp_file.into_parts();
+    let file = fs_err::File::from_parts(file, path.to_path_buf());
+    Ok(NamedTempFile::from_parts(
+        fs_err::tokio::File::from_std(file),
+        path,
+    ))
+}
+
+/// Return an unnamed temporary file in the specified directory without blocking the async runtime.
+#[cfg(feature = "tokio")]
+pub async fn anonymous_tempfile_in_async(path: &Path) -> std::io::Result<fs_err::tokio::File> {
+    let path = path.to_path_buf();
+    let temp_file = tokio::task::spawn_blocking({
+        let path = path.clone();
+        move || tempfile::tempfile_in(&path)
+    })
+    .await
+    .map_err(std::io::Error::other)??;
+    Ok(fs_err::tokio::File::from_std(fs_err::File::from_parts(
+        temp_file, path,
+    )))
+}
+
+/// Return a temporary directory in the specified directory without blocking the async runtime.
+#[cfg(feature = "tokio")]
+pub async fn tempdir_in_async(path: &Path) -> std::io::Result<tempfile::TempDir> {
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || tempfile::tempdir_in(&path))
+        .await
+        .map_err(std::io::Error::other)?
+}
+
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
 #[cfg(feature = "tokio")]
 pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {

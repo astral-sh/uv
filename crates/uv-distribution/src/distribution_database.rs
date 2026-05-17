@@ -23,7 +23,7 @@ use uv_distribution_types::{
     InstalledDist, Name, SourceDist, ToUrlError,
 };
 use uv_extract::hash::Hasher;
-use uv_fs::write_atomic;
+use uv_fs::{anonymous_tempfile_in_async, tempdir_in_async, write_atomic};
 use uv_install_wheel::validate_and_heal_record;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
@@ -684,7 +684,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
 
                 // Download and unzip the wheel to a temporary directory.
-                let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
+                let temp_dir = tempdir_in_async(self.build_context.cache().root())
+                    .await
                     .map_err(Error::CacheWrite)?;
 
                 let files = match progress {
@@ -856,12 +857,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .into_async_read();
 
                 // Download the wheel to a temporary file.
-                let temp_file = tempfile::tempfile_in(self.build_context.cache().root())
+                let temp_file = anonymous_tempfile_in_async(self.build_context.cache().root())
+                    .await
                     .map_err(Error::CacheWrite)?;
-                let mut writer = tokio::io::BufWriter::new(fs_err::tokio::File::from_std(
-                    // It's an unnamed file on Linux so that's the best approximation.
-                    fs_err::File::from_parts(temp_file, self.build_context.cache().root()),
-                ));
+                let mut writer = tokio::io::BufWriter::new(temp_file);
 
                 match progress {
                     Some((reporter, progress)) => {
@@ -883,7 +882,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 }
 
                 // Unzip the wheel to a temporary directory.
-                let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
+                let temp_dir = tempdir_in_async(self.build_context.cache().root())
+                    .await
                     .map_err(Error::CacheWrite)?;
                 let mut file = writer.into_inner();
                 file.seek(io::SeekFrom::Start(0))
@@ -1100,7 +1100,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let file = fs_err::tokio::File::open(path)
                 .await
                 .map_err(Error::CacheRead)?;
-            let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
+            let temp_dir = tempdir_in_async(self.build_context.cache().root())
+                .await
                 .map_err(Error::CacheWrite)?;
 
             // Create a hasher for each hash algorithm.
