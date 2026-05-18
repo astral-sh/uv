@@ -2,7 +2,7 @@
 //! [installer][`uv_installer`] and [build][`uv_build`] through [`BuildDispatch`]
 //! implementing [`BuildContext`].
 
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -103,7 +103,6 @@ pub struct BuildDispatch<'a> {
     hasher: &'a HashStrategy,
     exclude_newer: ExcludeNewer,
     source_build_context: SourceBuildContext,
-    build_extra_env_vars: FxHashMap<OsString, OsString>,
     sources: NoSources,
     source_tree_editable_policy: SourceTreeEditablePolicy,
     workspace_cache: WorkspaceCache,
@@ -157,28 +156,12 @@ impl<'a> BuildDispatch<'a> {
             hasher,
             exclude_newer,
             source_build_context: SourceBuildContext::new(concurrency.builds_semaphore.clone()),
-            build_extra_env_vars: FxHashMap::default(),
             sources,
             source_tree_editable_policy,
             workspace_cache,
             concurrency,
             preview,
         }
-    }
-
-    /// Set the environment variables to be used when building a source distribution.
-    #[must_use]
-    pub fn with_build_extra_env_vars<I, K, V>(mut self, sdist_build_env_variables: I) -> Self
-    where
-        I: IntoIterator<Item = (K, V)>,
-        K: AsRef<OsStr>,
-        V: AsRef<OsStr>,
-    {
-        self.build_extra_env_vars = sdist_build_env_variables
-            .into_iter()
-            .map(|(key, value)| (key.as_ref().to_owned(), value.as_ref().to_owned()))
-            .collect();
-        self
     }
 }
 
@@ -516,7 +499,7 @@ impl BuildContext for BuildDispatch<'_> {
         };
 
         // Get package-specific environment variables if available.
-        let mut environment_variables = self.build_extra_env_vars.clone();
+        let mut environment_variables = FxHashMap::default();
         if let Some(name) = dist_name {
             if let Some(package_vars) = self.extra_build_variables.get(name) {
                 environment_variables.extend(
