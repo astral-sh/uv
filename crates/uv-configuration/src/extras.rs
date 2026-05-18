@@ -141,11 +141,6 @@ impl ExtrasSpecificationInner {
         !self.exclude.contains(extra) && self.include.contains(extra)
     }
 
-    /// Iterate over all extras that we think should exist.
-    pub fn desugarred_names(&self) -> impl Iterator<Item = &ExtraName> {
-        self.include.names().chain(&self.exclude)
-    }
-
     /// Returns an iterator over all extras that are included in the specification,
     /// assuming `all_names` is an iterator over all extras.
     pub fn extra_names<'a, Names>(
