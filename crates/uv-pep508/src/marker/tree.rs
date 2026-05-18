@@ -304,7 +304,7 @@ impl MarkerOperator {
     }
 
     /// Returns the marker operator and value whose union represents the given range.
-    pub fn from_bounds(
+    pub(crate) fn from_bounds(
         bounds: (&Bound<ArcStr>, &Bound<ArcStr>),
     ) -> impl Iterator<Item = (Self, ArcStr)> {
         let (b1, b2) = match bounds {
@@ -321,7 +321,7 @@ impl MarkerOperator {
     }
 
     /// Returns a value specifier representing the given lower bound.
-    pub fn from_lower_bound(bound: &Bound<ArcStr>) -> Option<(Self, ArcStr)> {
+    fn from_lower_bound(bound: &Bound<ArcStr>) -> Option<(Self, ArcStr)> {
         match bound {
             Bound::Included(value) => Some((Self::GreaterEqual, value.clone())),
             Bound::Excluded(value) => Some((Self::GreaterThan, value.clone())),
@@ -330,7 +330,7 @@ impl MarkerOperator {
     }
 
     /// Returns a value specifier representing the given upper bound.
-    pub fn from_upper_bound(bound: &Bound<ArcStr>) -> Option<(Self, ArcStr)> {
+    fn from_upper_bound(bound: &Bound<ArcStr>) -> Option<(Self, ArcStr)> {
         match bound {
             Bound::Included(value) => Some((Self::LessEqual, value.clone())),
             Bound::Excluded(value) => Some((Self::LessThan, value.clone())),
