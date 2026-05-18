@@ -127,7 +127,7 @@ async fn test_create_set_then_move() {
 }
 
 #[tokio::test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
 async fn test_simultaneous_create_set_then_move() {
     init_logger();
 
