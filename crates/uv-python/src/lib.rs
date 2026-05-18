@@ -317,7 +317,10 @@ mod tests {
                     path.to_str().expect("Path can be represented as string"),
                 )
                 .replace("{FULL_VERSION}", &version.to_string())
-                .replace("{VERSION}", &version.without_patch().to_string())
+                .replace(
+                    "{VERSION}",
+                    &format!("{}.{}", version.major(), version.minor()),
+                )
                 .replace("{FREE_THREADED}", &free_threaded.to_string())
                 .replace("{IMPLEMENTATION}", (&implementation).into());
 
@@ -403,7 +406,10 @@ mod tests {
                     path.to_str().expect("Path can be represented as string"),
                 )
                 .replace("{FULL_VERSION}", &version.to_string())
-                .replace("{VERSION}", &version.without_patch().to_string());
+                .replace(
+                    "{VERSION}",
+                    &format!("{}.{}", version.major(), version.minor()),
+                );
 
             fs_err::create_dir_all(path.parent().unwrap())?;
             fs_err::write(
