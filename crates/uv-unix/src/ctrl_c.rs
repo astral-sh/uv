@@ -4,7 +4,7 @@ use std::os::fd::AsRawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
-use nix::fcntl::{FcntlArg, FdFlag, fcntl};
+use nix::fcntl::{FcntlArg, FdFlag, OFlag, fcntl};
 use nix::sys::signal;
 use nix::unistd;
 
@@ -77,6 +77,13 @@ fn set_cloexec(fd: &impl std::os::fd::AsFd) -> Result<(), nix::Error> {
     Ok(())
 }
 
+/// Sets `O_NONBLOCK` on a file descriptor.
+fn set_nonblocking(fd: &impl std::os::fd::AsFd) -> Result<(), nix::Error> {
+    let flags = OFlag::from_bits_retain(fcntl(fd, FcntlArg::F_GETFL)?);
+    fcntl(fd, FcntlArg::F_SETFL(flags | OFlag::O_NONBLOCK))?;
+    Ok(())
+}
+
 /// Registers a callback to be invoked when the user presses Ctrl+C (SIGINT).
 ///
 /// Uses the self-pipe trick: installs a signal handler that writes to a pipe,
@@ -99,6 +106,9 @@ where
     // Set close-on-exec so these fds are not inherited by child processes.
     set_cloexec(&pipe_read)?;
     set_cloexec(&pipe_write)?;
+
+    // Keep the async-signal-safe writer from ever blocking if the pipe fills.
+    set_nonblocking(&pipe_write)?;
 
     // Store the raw fds. The `OwnedFd`s are leaked below to ensure the file
     // descriptors remain valid for the lifetime of the process.
