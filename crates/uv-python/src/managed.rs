@@ -815,7 +815,7 @@ impl PythonMinorVersionLink {
         Self::from_executable(installation.executable(false).as_path(), installation.key())
     }
 
-    pub fn create_directory(&self) -> Result<(), Error> {
+    fn create_directory(&self) -> Result<(), Error> {
         match replace_symlink(
             self.target_directory.as_path(),
             self.symlink_directory.as_path(),
