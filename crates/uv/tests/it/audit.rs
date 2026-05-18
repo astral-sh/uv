@@ -88,7 +88,8 @@ async fn audit_no_vulnerabilities() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
     success: true
@@ -247,7 +248,8 @@ async fn audit_vulnerability_found() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
     success: false
@@ -295,7 +297,8 @@ async fn audit_no_dependencies() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
     success: true
@@ -351,7 +354,8 @@ async fn audit_best_id_selection() {
     // The output should show PYSEC-2023-0042 as the display ID (PYSEC preferred over GHSA, CVE).
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
     success: false
@@ -415,7 +419,8 @@ async fn audit_no_fix_versions() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
     success: false
@@ -515,7 +520,8 @@ async fn audit_multiple_vulnerabilities_same_package() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
     success: false
@@ -579,7 +585,8 @@ async fn audit_no_dev() {
     // With --no-dev, only "iniconfig" should be audited (not "typing-extensions").
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--no-dev")
         .arg("--service-url")
         .arg(server.uri()), @"
@@ -595,7 +602,8 @@ async fn audit_no_dev() {
     // Without --no-dev, both packages should be audited.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
     success: true
@@ -642,7 +650,8 @@ async fn audit_extras() {
     // By default, extras are included: both iniconfig and typing-extensions are audited.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
     success: true
@@ -657,7 +666,8 @@ async fn audit_extras() {
     // With --no-extra web, only iniconfig should be audited.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--no-extra")
         .arg("web")
         .arg("--service-url")
@@ -708,7 +718,8 @@ async fn audit_dependency_groups() {
     // Default: all groups are included (iniconfig + typing-extensions + sniffio = 3).
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
     success: true
@@ -723,7 +734,8 @@ async fn audit_dependency_groups() {
     // --no-dev: excludes the dev group (iniconfig + sniffio = 2).
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--no-dev")
         .arg("--service-url")
         .arg(server.uri()), @"
@@ -739,7 +751,8 @@ async fn audit_dependency_groups() {
     // --no-group lint: excludes the lint group (iniconfig + typing-extensions = 2).
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--no-group")
         .arg("lint")
         .arg("--service-url")
@@ -756,7 +769,8 @@ async fn audit_dependency_groups() {
     // --only-group lint: only the "lint" group, project deps omitted (sniffio = 1).
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--only-group")
         .arg("lint")
         .arg("--service-url")
@@ -821,7 +835,8 @@ async fn audit_ignore_by_id() {
     // Without --ignore, the vulnerability is reported.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
     success: false
@@ -847,7 +862,8 @@ async fn audit_ignore_by_id() {
     // With --ignore, the vulnerability is suppressed.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--ignore")
         .arg("PYSEC-2023-0001")
         .arg("--service-url")
@@ -904,7 +920,8 @@ async fn audit_ignore_by_alias() {
     // Ignoring by alias (CVE-2023-9999) should suppress the vulnerability.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--ignore")
         .arg("CVE-2023-9999")
         .arg("--service-url")
@@ -961,7 +978,8 @@ async fn audit_ignore_until_fixed() {
     // With --ignore-until-fixed and no fix versions, the vulnerability is suppressed.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--ignore-until-fixed")
         .arg("VULN-NO-FIX")
         .arg("--service-url")
@@ -1027,7 +1045,8 @@ async fn audit_ignore_until_fixed_with_fix() {
     // With --ignore-until-fixed but a fix IS available, the vulnerability is still reported.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--ignore-until-fixed")
         .arg("PYSEC-2023-0001")
         .arg("--service-url")
@@ -1106,7 +1125,8 @@ async fn audit_ignore_config() {
     // The vulnerability is suppressed by the config.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
     success: true
@@ -1163,7 +1183,8 @@ async fn audit_ignore_until_fixed_config() {
     // The vulnerability is suppressed because no fix is available.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
     success: true
@@ -1245,7 +1266,8 @@ async fn audit_ignore_partial() {
     // Ignoring VULN-A should still report VULN-B.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--ignore")
         .arg("VULN-A")
         .arg("--service-url")
@@ -1302,7 +1324,8 @@ async fn audit_ignore_unmatched() {
     // Ignoring a non-existent vulnerability should warn.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--ignore")
         .arg("CVE-XXXX-YYYY")
         .arg("--service-url")
@@ -1349,7 +1372,8 @@ async fn audit_ignore_until_fixed_unmatched() {
     // Ignoring a non-existent vulnerability with --ignore-until-fixed should warn.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--ignore-until-fixed")
         .arg("CVE-XXXX-YYYY")
         .arg("--service-url")
@@ -1416,7 +1440,8 @@ async fn audit_ignore_mixed_matched_unmatched() {
     // and the non-existent one triggers a warning.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--ignore")
         .arg("PYSEC-2023-0001")
         .arg("--ignore")
@@ -1488,7 +1513,8 @@ async fn audit_script_no_vulnerabilities() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--script")
         .arg("script.py")
         .arg("--service-url")
@@ -1580,7 +1606,8 @@ async fn audit_script_vulnerability_found() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--script")
         .arg("script.py")
         .arg("--service-url")
@@ -1641,7 +1668,8 @@ async fn audit_script_no_dependencies() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--script")
         .arg("script.py")
         .arg("--service-url")
@@ -1680,7 +1708,8 @@ async fn audit_script_frozen_missing_lockfile() {
     uv_snapshot!(context.filters(), context
         .audit()
         .arg("--frozen")
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--script")
         .arg("script.py")
         .arg("--service-url")
@@ -1761,7 +1790,8 @@ async fn audit_script_multiple_dependencies() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--script")
         .arg("script.py")
         .arg("--service-url")
@@ -1850,7 +1880,8 @@ async fn audit_script_extras() {
     // typing-extensions (reachable only via the `test` extra) should be audited.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--script")
         .arg("script.py")
         .arg("--service-url")
@@ -1900,7 +1931,8 @@ async fn audit_project_status_deprecated_with_reason() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @r"
     success: true
@@ -1951,7 +1983,8 @@ async fn audit_project_status_archived_no_reason() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @r"
     success: true
@@ -2002,7 +2035,8 @@ async fn audit_project_status_quarantined() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @r"
     success: true
@@ -2053,7 +2087,8 @@ async fn audit_project_status_active_not_reported() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
     success: true
@@ -2120,7 +2155,8 @@ async fn audit_vulnerability_and_project_status() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @r"
     success: false

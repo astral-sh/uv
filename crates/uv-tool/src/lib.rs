@@ -18,7 +18,6 @@ use uv_pep440::Version;
 use uv_python::{BrokenLink, Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
-use uv_virtualenv::remove_virtualenv;
 
 pub use receipt::ToolReceipt;
 pub use tool::{Tool, ToolEntrypoint};
@@ -251,7 +250,7 @@ impl InstalledTools {
             environment_path.user_display()
         );
 
-        remove_virtualenv(environment_path.as_path())?;
+        uv_fs::remove_virtualenv(environment_path.as_path()).map_err(uv_virtualenv::Error::from)?;
 
         Ok(())
     }
@@ -324,15 +323,15 @@ impl InstalledTools {
         let environment_path = self.tool_dir(name);
 
         // Remove any existing environment.
-        match remove_virtualenv(&environment_path) {
+        match uv_fs::remove_virtualenv(&environment_path) {
             Ok(()) => {
                 debug!(
                     "Removed existing environment for tool `{name}`: {}",
                     environment_path.user_display()
                 );
             }
-            Err(uv_virtualenv::Error::Io(err)) if err.kind() == io::ErrorKind::NotFound => (),
-            Err(err) => return Err(err.into()),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+            Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
         }
 
         debug!(

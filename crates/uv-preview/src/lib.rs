@@ -256,7 +256,9 @@ pub enum PreviewFeature {
     Audit = 1 << 26,
     ProjectDirectoryMustExist = 1 << 27,
     IndexExcludeNewer = 1 << 28,
-    MalwareCheck = 1 << 29,
+    AzureEndpoint = 1 << 29,
+    TomlBackwardsCompatibility = 1 << 30,
+    MalwareCheck = 1 << 31,
 }
 
 impl PreviewFeature {
@@ -292,6 +294,8 @@ impl PreviewFeature {
             Self::Audit => "audit",
             Self::ProjectDirectoryMustExist => "project-directory-must-exist",
             Self::IndexExcludeNewer => "index-exclude-newer",
+            Self::AzureEndpoint => "azure-endpoint",
+            Self::TomlBackwardsCompatibility => "toml-backwards-compatibility",
             Self::MalwareCheck => "malware-check",
         }
     }
@@ -341,6 +345,8 @@ impl FromStr for PreviewFeature {
             "audit" => Self::Audit,
             "project-directory-must-exist" => Self::ProjectDirectoryMustExist,
             "index-exclude-newer" => Self::IndexExcludeNewer,
+            "azure-endpoint" => Self::AzureEndpoint,
+            "toml-backwards-compatibility" => Self::TomlBackwardsCompatibility,
             "malware-check" => Self::MalwareCheck,
             _ => return Err(PreviewFeatureParseError),
         })
@@ -594,6 +600,11 @@ mod tests {
         assert_eq!(
             PreviewFeature::IndexExcludeNewer.as_str(),
             "index-exclude-newer"
+        );
+        assert_eq!(PreviewFeature::AzureEndpoint.as_str(), "azure-endpoint");
+        assert_eq!(
+            PreviewFeature::TomlBackwardsCompatibility.as_str(),
+            "toml-backwards-compatibility"
         );
         assert_eq!(PreviewFeature::MalwareCheck.as_str(), "malware-check");
     }

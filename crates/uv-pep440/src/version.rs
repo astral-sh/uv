@@ -628,8 +628,16 @@ impl Version {
     #[must_use]
     pub fn only_release_trimmed(&self) -> Self {
         if let Some(last_non_zero) = self.release().iter().rposition(|segment| *segment != 0) {
-            if last_non_zero == self.release().len() {
-                // Already trimmed.
+            if last_non_zero + 1 == self.release().len()
+                && self.epoch() == 0
+                && self.pre().is_none()
+                && self.post().is_none()
+                && self.dev().is_none()
+                && self.local().is_empty()
+                && self.min().is_none()
+                && self.max().is_none()
+            {
+                // Already a trimmed release-only version.
                 self.clone()
             } else {
                 Self::new(self.release().iter().take(last_non_zero + 1).copied())
@@ -4256,6 +4264,35 @@ mod tests {
         let v2: Version = "1.2".parse().unwrap();
         assert_eq!(&*v2.release(), &[1, 2]);
         assert_eq!(v2.to_string(), "1.2");
+    }
+
+    #[test]
+    fn only_release_trimmed_discards_non_release_segments() {
+        for version in ["1.2a1", "1.2.post1", "1!1.2", "1.2+local", "1.2.dev1"] {
+            let version = version.parse::<Version>().unwrap();
+            assert_eq!(version.only_release_trimmed(), Version::new([1, 2]));
+        }
+
+        assert_eq!(
+            Version::new([1, 2])
+                .with_min(Some(0))
+                .only_release_trimmed(),
+            Version::new([1, 2])
+        );
+        assert_eq!(
+            Version::new([1, 2])
+                .with_max(Some(0))
+                .only_release_trimmed(),
+            Version::new([1, 2])
+        );
+        assert_eq!(
+            Version::new([1, 2, 0]).only_release_trimmed(),
+            Version::new([1, 2])
+        );
+        assert_eq!(
+            Version::new([1, 2]).only_release_trimmed(),
+            Version::new([1, 2])
+        );
     }
 
     #[test]

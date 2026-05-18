@@ -138,6 +138,9 @@
       matchManagers: ["custom.regex"],
       matchDepNames: ["maturin"],
       commitMessageTopic: "maturin",
+      // Maturin upgrades can change release wheel contents, so keep release
+      // binary validation enabled.
+      labels: ["internal", "build:skip-docker"],
     },
   ],
   customManagers: [

@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::sync::LazyLock;
 
 use reqsign::aws::DefaultSigner as AwsDefaultSigner;
+use reqsign::azure::DefaultSigner as AzureDefaultSigner;
 use reqsign::google::DefaultSigner as GcsDefaultSigner;
 use tracing::debug;
 use url::Url;
@@ -145,7 +146,47 @@ impl GcsEndpointProvider {
     }
 }
 
-/// Returns `true` if `url` is within the configured S3 or GCS-compatible endpoint URL.
+/// The [`Url`] for the Azure endpoint, if set.
+static AZURE_ENDPOINT_URL: LazyLock<Option<Url>> = LazyLock::new(|| {
+    let azure_endpoint_url = std::env::var(EnvVars::UV_AZURE_ENDPOINT_URL).ok()?;
+    let url = Url::parse(&azure_endpoint_url).expect("Failed to parse Azure endpoint URL");
+    Some(url)
+});
+
+/// A provider for authentication credentials for Azure endpoints.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AzureEndpointProvider;
+
+impl AzureEndpointProvider {
+    /// Returns `true` if the URL matches the configured Azure endpoint.
+    pub(crate) fn is_azure_endpoint(url: &Url, preview: Preview) -> bool {
+        if let Some(azure_endpoint_url) = AZURE_ENDPOINT_URL.as_ref() {
+            if !preview.is_enabled(PreviewFeature::AzureEndpoint) {
+                warn_user_once!(
+                    "The `azure-endpoint` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                    PreviewFeature::AzureEndpoint
+                );
+            }
+
+            // Treat any URL under the endpoint path on the same domain or subdomain as available
+            // for Azure signing.
+            if is_endpoint_url(url, azure_endpoint_url) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Creates a new Azure signer using the default Azure credential chain.
+    ///
+    /// This is potentially expensive as it may invoke credential helpers, so the result
+    /// should be cached.
+    pub(crate) fn create_signer() -> AzureDefaultSigner {
+        reqsign::azure::default_signer()
+    }
+}
+
+/// Returns `true` if `url` is within the configured S3, GCS, or Azure-compatible endpoint URL.
 ///
 /// The URL must be in the same realm, or a subdomain of the endpoint realm, and must be under the
 /// endpoint path using complete path-segment prefix matching.

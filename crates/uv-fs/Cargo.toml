@@ -44,6 +44,7 @@ rustix = { workspace = true }
 backon = { workspace = true }
 junction = { workspace = true }
 uv-windows = { workspace = true }
+self-replace = { workspace = true }
 windows = { workspace = true }
 
 [features]

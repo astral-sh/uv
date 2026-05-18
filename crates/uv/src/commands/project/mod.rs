@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -11,7 +10,7 @@ use uv_audit::service::osv;
 use uv_audit::types::{Dependency, VulnerabilityID};
 use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket};
-use uv_cache_key::cache_digest;
+use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
@@ -47,7 +46,6 @@ use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{TorchSource, TorchStrategy};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
-use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
@@ -701,7 +699,7 @@ impl ScriptInterpreter {
                         .path
                         .file_stem()
                         .and_then(|name| name.to_str())
-                        .and_then(cache_name)
+                        .and_then(|name| cache_name(name, None))
                     {
                         format!("{file_name}-{digest}")
                     } else {
@@ -1546,7 +1544,7 @@ impl ProjectEnvironment {
 
                 // Remove the existing virtual environment if it doesn't meet the requirements.
                 if replace {
-                    match remove_virtualenv(&root) {
+                    match uv_fs::remove_virtualenv(&root) {
                         Ok(()) => {
                             writeln!(
                                 printer.stderr(),
@@ -1554,9 +1552,8 @@ impl ProjectEnvironment {
                                 root.user_display().cyan()
                             )?;
                         }
-                        Err(uv_virtualenv::Error::Io(err))
-                            if err.kind() == std::io::ErrorKind::NotFound => {}
-                        Err(err) => return Err(err.into()),
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
                     }
                 }
 
@@ -1738,7 +1735,7 @@ impl ScriptEnvironment {
                 }
 
                 // Remove the existing virtual environment.
-                let replaced = match remove_virtualenv(&root) {
+                let replaced = match uv_fs::remove_virtualenv(&root) {
                     Ok(()) => {
                         debug!(
                             "Removed virtual environment at: {}",
@@ -1746,12 +1743,8 @@ impl ScriptEnvironment {
                         );
                         true
                     }
-                    Err(uv_virtualenv::Error::Io(err))
-                        if err.kind() == std::io::ErrorKind::NotFound =>
-                    {
-                        false
-                    }
-                    Err(err) => return Err(err.into()),
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
+                    Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
                 };
 
                 debug!(
@@ -2997,43 +2990,6 @@ fn warn_on_requirements_txt_setting(spec: &RequirementsSpecification, settings: 
     }
 }
 
-/// Normalize a filename for use in a cache entry.
-///
-/// Replaces non-alphanumeric characters with dashes, and lowercases the filename.
-fn cache_name(name: &str) -> Option<Cow<'_, str>> {
-    if name.bytes().all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f')) {
-        return if name.is_empty() {
-            None
-        } else {
-            Some(Cow::Borrowed(name))
-        };
-    }
-    let mut normalized = String::with_capacity(name.len());
-    let mut dash = false;
-    for char in name.bytes() {
-        match char {
-            b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' => {
-                dash = false;
-                normalized.push(char.to_ascii_lowercase() as char);
-            }
-            _ => {
-                if !dash {
-                    normalized.push('-');
-                    dash = true;
-                }
-            }
-        }
-    }
-    if normalized.ends_with('-') {
-        normalized.pop();
-    }
-    if normalized.is_empty() {
-        None
-    } else {
-        Some(Cow::Owned(normalized))
-    }
-}
-
 fn format_requires_python_sources(conflicts: &RequiresPythonSources) -> String {
     conflicts
         .iter()
@@ -3076,20 +3032,4 @@ fn format_optional_requires_python_sources(
     }
     // Otherwise don't elaborate
     String::new()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_cache_name() {
-        assert_eq!(cache_name("foo"), Some("foo".into()));
-        assert_eq!(cache_name("foo-bar"), Some("foo-bar".into()));
-        assert_eq!(cache_name("foo_bar"), Some("foo-bar".into()));
-        assert_eq!(cache_name("foo-bar_baz"), Some("foo-bar-baz".into()));
-        assert_eq!(cache_name("foo-bar_baz_"), Some("foo-bar-baz".into()));
-        assert_eq!(cache_name("foo-_bar_baz"), Some("foo-bar-baz".into()));
-        assert_eq!(cache_name("_+-_"), None);
-    }
 }

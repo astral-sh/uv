@@ -1,0 +1,25 @@
+[package]
+name = "uv-netrc"
+version = "0.0.47"
+description = "A vendored netrc parser for uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = "MIT"
+
+[lib]
+name = "uv_netrc"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+shellexpand = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+fs-err = { workspace = true }
+temp-env = { workspace = true }

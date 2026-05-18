@@ -25,8 +25,10 @@ uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-version = { workspace = true }
+uv-toml = { workspace = true }
 uv-warnings = { workspace = true }
 
+astral-tokio-tar = { workspace = true }
 async_zip = { workspace = true }
 base64 = { workspace = true }
 csv = { workspace = true }
@@ -42,9 +44,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 spdx = { workspace = true }
-tar = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
 version-ranges = { workspace = true }

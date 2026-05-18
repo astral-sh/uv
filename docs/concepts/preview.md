@@ -64,6 +64,7 @@ The following preview features are available:
   [installing `python` and `python3` executables](./python-versions.md#installing-python-executables).
 - `format`: Allows using `uv format`.
 - `index-exclude-newer`: Allows setting `exclude-newer` on configured package indexes.
+- `azure-endpoint`: Allows signing requests to Azure Blob Storage endpoints with Azure credentials.
 - `native-auth`: Enables storage of credentials in a
   [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
 - `auth-helper`: Allows using `uv auth helper` as a credential helper for external tools.

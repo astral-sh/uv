@@ -10,6 +10,7 @@ use anyhow::{Context, Result, anyhow};
 use cargo_util::{ProcessBuilder, paths};
 use owo_colors::OwoColorize;
 use tracing::{debug, instrument, warn};
+use url::Url;
 
 use uv_fs::Simplified;
 use uv_git_types::{GitOid, GitReference};
@@ -160,6 +161,8 @@ pub(crate) struct GitRemote {
 /// A local clone of a remote repository's database. Multiple [`GitCheckout`]s
 /// can be cloned from a single [`GitDatabase`].
 pub(crate) struct GitDatabase {
+    /// The remote repository where this database is fetched from.
+    remote: GitRemote,
     /// Underlying Git repository instance for this database.
     repo: GitRepository,
     /// Git LFS artifacts have been initialized (if requested).
@@ -294,7 +297,7 @@ impl GitRemote {
     /// populated the database with the latest version of `reference`, so
     /// return that database and the rev we resolve to.
     pub(crate) fn checkout(
-        &self,
+        self,
         into: &Path,
         db: Option<GitDatabase>,
         reference: &GitReference,
@@ -349,14 +352,21 @@ impl GitRemote {
             })
             .transpose()?;
 
-        Ok((GitDatabase { repo, lfs_ready }, rev))
+        Ok((
+            GitDatabase {
+                remote: self,
+                repo,
+                lfs_ready,
+            },
+            rev,
+        ))
     }
 
     /// Creates a [`GitDatabase`] of this remote at `db_path`.
-    #[expect(clippy::unused_self)]
     pub(crate) fn db_at(&self, db_path: &Path) -> Result<GitDatabase> {
         let repo = GitRepository::open(db_path)?;
         Ok(GitDatabase {
+            remote: self.clone(),
             repo,
             lfs_ready: None,
         })
@@ -376,7 +386,7 @@ impl GitDatabase {
             .filter(GitCheckout::is_fresh)
         {
             Some(co) => co.with_lfs_ready(self.lfs_ready),
-            None => GitCheckout::clone_into(destination, self, rev)?,
+            None => GitCheckout::clone_into(destination, self, rev, self.remote.url())?,
         };
         Ok(checkout)
     }
@@ -430,7 +440,12 @@ impl GitCheckout {
 
     /// Clone a repo for a `revision` into a local path from a `database`.
     /// This is a filesystem-to-filesystem clone.
-    fn clone_into(into: &Path, database: &GitDatabase, revision: GitOid) -> Result<Self> {
+    fn clone_into(
+        into: &Path,
+        database: &GitDatabase,
+        revision: GitOid,
+        original_remote_url: &DisplaySafeUrl,
+    ) -> Result<Self> {
         let dirname = into.parent().unwrap();
         fs_err::create_dir_all(dirname)?;
         match fs_err::remove_dir_all(into) {
@@ -468,7 +483,7 @@ impl GitCheckout {
 
         let repo = GitRepository::open(into)?;
         let checkout = Self::new(revision, repo);
-        let lfs_ready = checkout.reset(database.lfs_ready)?;
+        let lfs_ready = checkout.reset(database.lfs_ready, original_remote_url)?;
         Ok(checkout.with_lfs_ready(lfs_ready))
     }
 
@@ -495,20 +510,26 @@ impl GitCheckout {
         self
     }
 
-    /// This performs `git reset --hard` to the revision of this checkout, with
-    /// additional interrupt protection by a dummy file [`CHECKOUT_READY_LOCK`].
+    /// This performs `git reset --hard` to the revision of this checkout and updates submodules,
+    /// with additional interrupt protection by a dummy file [`CHECKOUT_READY_LOCK`].
     ///
-    /// If we're interrupted while performing a `git reset` (e.g., we die
+    /// If we're interrupted while performing any of the processes in this method (e.g., we die
     /// because of a signal) uv needs to be sure to try to check out this
     /// repo again on the next go-round.
     ///
     /// To enable this we have a dummy file in our checkout, [`.ok`],
-    /// which if present means that the repo has been successfully reset and is
-    /// ready to go. Hence, if we start to do a reset, we make sure this file
+    /// which if present means that the repo has been successfully checked out and is
+    /// ready to go. Hence if we start to update submodules, we make sure this file
     /// *doesn't* exist, and then once we're done we create the file.
     ///
     /// [`.ok`]: CHECKOUT_READY_LOCK
-    fn reset(&self, with_lfs: Option<bool>) -> Result<Option<bool>> {
+    /// `git reset --hard [<commit>]` can break relative submodule URLs, so we update submodules
+    /// using the original remote URL.
+    fn reset(
+        &self,
+        with_lfs: Option<bool>,
+        original_remote_url: &DisplaySafeUrl,
+    ) -> Result<Option<bool>> {
         let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
         let _ = paths::remove_file(&ok_file);
 
@@ -516,6 +537,7 @@ impl GitCheckout {
         // as smudge filters can trigger on a reset even if lfs artifacts
         // were not originally "fetched".
         let lfs_skip_smudge = if with_lfs == Some(true) { "0" } else { "1" };
+
         debug!("Reset {} to {}", self.repo.path.display(), self.revision);
 
         // Perform the hard reset.
@@ -528,9 +550,37 @@ impl GitCheckout {
             .cwd(&self.repo.path)
             .exec_with_output()?;
 
-        // Update submodules (`git submodule update --recursive`).
-        GIT.as_ref()
-            .cloned()?
+        // Initialize direct submodules using the original remote URL so Git can resolve relative
+        // submodule URLs, but don't write it to `remote.origin.url`. Git persists resolved submodule
+        // URLs during initialization, so writing a credentialed parent remote can leak credentials
+        // into checkout configuration.
+        //
+        // Do not use `--recursive` here: command-local `remote.origin.url` config is inherited by
+        // Git commands run inside submodules, which would make nested relative URLs resolve against
+        // the top-level remote instead of their immediate parent submodule.
+        let mut submodule_update = GIT.as_ref().cloned()?;
+        for config in submodule_update_config(original_remote_url) {
+            submodule_update.arg("-c").arg(config);
+        }
+
+        submodule_update
+            .arg("submodule")
+            .arg("update")
+            .arg("--init")
+            .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
+            .cwd(&self.repo.path)
+            .exec_with_output()
+            .map(drop)?;
+
+        // Recursively update nested submodules without overriding `remote.origin.url`, so each
+        // nested relative URL resolves against its immediate parent submodule. The transient
+        // credential rewrite is still safe to inherit because it only affects transport.
+        let mut submodule_update = GIT.as_ref().cloned()?;
+        for config in submodule_auth_config(original_remote_url) {
+            submodule_update.arg("-c").arg(config);
+        }
+
+        submodule_update
             .arg("submodule")
             .arg("update")
             .arg("--recursive")
@@ -557,6 +607,59 @@ impl GitCheckout {
 
         Ok(lfs_validation)
     }
+}
+
+/// Return command-local Git configuration for initializing direct submodules in a checkout.
+///
+/// Relative submodule URLs are resolved from `remote.origin.url`, but writing the original remote
+/// URL into checkout configuration can persist credentials in the parent repository or submodule
+/// remotes. Instead, callers pass these values via `git -c`, using a credential-stripped origin URL
+/// for resolution and a transient `url.*.insteadOf` rewrite when credentials are needed for
+/// transport.
+fn submodule_update_config(original_remote_url: &DisplaySafeUrl) -> Vec<String> {
+    let remote_url = original_remote_url.without_credentials();
+    let mut config = vec![format!("remote.origin.url={}", remote_url.as_str())];
+
+    config.extend(submodule_auth_config(original_remote_url));
+    config
+}
+
+/// Return command-local Git authentication configuration for updating submodules.
+///
+/// Unlike `remote.origin.url`, these rewrites are safe to inherit during recursive submodule
+/// updates: they rewrite transport URLs for authentication, but do not change the base URL that Git
+/// uses to resolve nested relative submodule URLs.
+fn submodule_auth_config(original_remote_url: &DisplaySafeUrl) -> Vec<String> {
+    let remote_url = original_remote_url.without_credentials();
+    let mut config = Vec::new();
+
+    if remote_url.as_str() != original_remote_url.as_str() {
+        let safe_root = remote_url_root(remote_url.as_ref());
+        let credentialed_root = remote_url_root(original_remote_url);
+
+        if safe_root.as_str() != credentialed_root.as_str() {
+            config.push(format!(
+                "url.{}.insteadOf={}",
+                credentialed_root.as_str(),
+                safe_root.as_str()
+            ));
+        }
+    }
+
+    config
+}
+
+/// Return the scheme, authority, and root path of a remote URL.
+///
+/// This is used as the rewrite prefix for `url.*.insteadOf`, so a credentialed parent URL can
+/// authenticate sibling submodule URLs without making the credentials part of any persisted
+/// submodule URL.
+fn remote_url_root(url: &Url) -> Url {
+    let mut root = url.clone();
+    root.set_path("/");
+    root.set_query(None);
+    root.set_fragment(None);
+    root
 }
 
 /// Attempts to fetch the given git `reference` for a Git repository.
@@ -831,5 +934,33 @@ fn is_short_hash_of(rev: &str, oid: GitOid) -> bool {
     match long_hash.get(..rev.len()) {
         Some(truncated_long_hash) => truncated_long_hash.eq_ignore_ascii_case(rev),
         None => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn submodule_update_config_strips_credentials_from_origin_override() {
+        let url = DisplaySafeUrl::parse("https://user:password@example.com/org/repo.git").unwrap();
+
+        assert_eq!(
+            submodule_update_config(&url),
+            vec![
+                "remote.origin.url=https://example.com/org/repo.git".to_string(),
+                "url.https://user:password@example.com/.insteadOf=https://example.com/".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn submodule_update_config_preserves_git_ssh_user() {
+        let url = DisplaySafeUrl::parse("ssh://git@example.com/org/repo.git").unwrap();
+
+        assert_eq!(
+            submodule_update_config(&url),
+            vec!["remote.origin.url=ssh://git@example.com/org/repo.git".to_string()]
+        );
     }
 }

@@ -92,6 +92,8 @@ pub enum MemberDiscovery {
     /// Discover all workspace members.
     #[default]
     All,
+    /// Discover workspace members that are present, but ignore missing members.
+    Existing,
     /// Don't discover any workspace members.
     None,
     /// Discover workspace members, but ignore the given paths.
@@ -1005,7 +1007,7 @@ impl Workspace {
 
                 // If the directory is explicitly ignored, skip it.
                 let skip = match &options.members {
-                    MemberDiscovery::All => false,
+                    MemberDiscovery::All | MemberDiscovery::Existing => false,
                     MemberDiscovery::None => true,
                     MemberDiscovery::Ignore(ignore) => ignore.contains(member_root.as_path()),
                 };
@@ -1036,7 +1038,21 @@ impl Workspace {
                 let contents = match fs_err::tokio::read_to_string(&pyproject_path).await {
                     Ok(contents) => contents,
                     Err(err) => {
-                        if !fs_err::metadata(&member_root)?.is_dir() {
+                        let metadata = match fs_err::metadata(&member_root) {
+                            Ok(metadata) => metadata,
+                            Err(err)
+                                if matches!(options.members, MemberDiscovery::Existing)
+                                    && err.kind() == std::io::ErrorKind::NotFound =>
+                            {
+                                debug!(
+                                    "Ignoring missing workspace member: `{}`",
+                                    member_root.simplified_display()
+                                );
+                                continue;
+                            }
+                            Err(err) => return Err(err.into()),
+                        };
+                        if !metadata.is_dir() {
                             warn!(
                                 "Ignoring non-directory workspace member: `{}`",
                                 member_root.simplified_display()
@@ -1064,6 +1080,14 @@ impl Workspace {
                             if has_only_gitignored_files(&member_root) {
                                 debug!(
                                     "Ignoring workspace member with only gitignored files: `{}`",
+                                    member_root.simplified_display()
+                                );
+                                continue;
+                            }
+
+                            if matches!(options.members, MemberDiscovery::Existing) {
+                                debug!(
+                                    "Ignoring missing workspace member: `{}`",
                                     member_root.simplified_display()
                                 );
                                 continue;

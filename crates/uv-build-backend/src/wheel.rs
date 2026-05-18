@@ -26,7 +26,7 @@ use uv_warnings::warn_user_once;
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
-    error_on_venv, find_roots,
+    error_on_venv, find_roots, write_directory_once, write_file_with_directories,
 };
 
 // Files at or below this size are buffered and written with `write_entry_whole`,
@@ -171,19 +171,8 @@ fn write_wheel(
     )?;
 
     let mut files_visited = 0;
-    let mut prefix_directories = FxHashSet::default();
+    let mut written_directories = FxHashSet::<PathBuf>::default();
     for module_relative in module_relative {
-        // For convenience, have directories for the whole tree in the wheel
-        for ancestor in module_relative.ancestors().skip(1) {
-            if ancestor == Path::new("") {
-                continue;
-            }
-            // Avoid duplicate directories in the zip.
-            if prefix_directories.insert(ancestor.to_path_buf()) {
-                wheel_writer.write_directory(&ancestor.portable_display().to_string())?;
-            }
-        }
-
         for entry in WalkDir::new(src_root.join(module_relative))
             .sort_by_file_name()
             .into_iter()
@@ -219,9 +208,18 @@ fn write_wheel(
 
             error_on_venv(entry.file_name(), entry.path())?;
 
-            let entry_path = entry_path.portable_display().to_string();
-            debug!("Adding to wheel: {entry_path}");
-            wheel_writer.write_dir_entry(&entry, &entry_path)?;
+            if entry.file_type().is_dir() {
+                continue;
+            }
+
+            debug!("Adding to wheel: {}", entry_path.user_display());
+            write_file_with_directories(
+                &mut wheel_writer,
+                &mut written_directories,
+                Path::new(""),
+                entry_path,
+                entry.path(),
+            )?;
         }
     }
     debug!("Visited {files_visited} files for wheel build");
@@ -561,7 +559,8 @@ fn wheel_subdir_from_globs(
             source: err,
         })?;
 
-    wheel_writer.write_directory(target)?;
+    let mut written_directories = FxHashSet::<PathBuf>::default();
+    let target = Path::new(target);
 
     for entry in WalkDir::new(src)
         .sort_by_file_name()
@@ -602,12 +601,19 @@ fn wheel_subdir_from_globs(
 
         error_on_venv(entry.file_name(), entry.path())?;
 
-        let license_path = Path::new(target)
-            .join(relative)
-            .portable_display()
-            .to_string();
+        if entry.file_type().is_dir() {
+            continue;
+        }
+
         debug!("Adding for {}: {}", globs_field, relative.user_display());
-        wheel_writer.write_dir_entry(&entry, &license_path)?;
+        write_directory_once(wheel_writer, &mut written_directories, target)?;
+        write_file_with_directories(
+            wheel_writer,
+            &mut written_directories,
+            target,
+            relative,
+            entry.path(),
+        )?;
     }
     Ok(())
 }
