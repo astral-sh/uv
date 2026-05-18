@@ -89,6 +89,24 @@ impl GitReference {
             Self::DefaultBranch => "default branch",
         }
     }
+
+    /// Returns `true` if this reference is pinned to an immutable point in history.
+    ///
+    /// Immutable references are safe to cache across re-resolutions because they will always
+    /// resolve to the same commit. Mutable references (branches, default branch) can move
+    /// and must be re-fetched when re-resolving from a stale or invalidated lockfile.
+    pub fn is_immutable(&self) -> bool {
+        match self {
+            // Tags are conventionally immutable.
+            Self::Tag(_) => true,
+            // A revision that looks like a full or abbreviated commit hash is immutable.
+            Self::BranchOrTagOrCommit(rev) => looks_like_commit_hash(rev),
+            // Branches and the default branch can move.
+            Self::Branch(_) | Self::BranchOrTag(_) | Self::NamedRef(_) | Self::DefaultBranch => {
+                false
+            }
+        }
+    }
 }
 
 impl Display for GitReference {
