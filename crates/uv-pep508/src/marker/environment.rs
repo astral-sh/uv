@@ -182,16 +182,6 @@ impl MarkerEnvironment {
 
 /// APIs for setting specific parts of a marker environment.
 impl MarkerEnvironment {
-    /// Set the name of the Python implementation for this environment.
-    ///
-    /// See also [`MarkerEnvironment::implementation_name`].
-    #[inline]
-    #[must_use]
-    pub fn with_implementation_name(mut self, value: impl Into<String>) -> Self {
-        Arc::make_mut(&mut self.inner).implementation_name = value.into();
-        self
-    }
-
     /// Set the Python implementation version for this environment.
     ///
     /// See also [`MarkerEnvironment::implementation_version`].
@@ -219,17 +209,6 @@ impl MarkerEnvironment {
     #[must_use]
     pub fn with_platform_machine(mut self, value: impl Into<String>) -> Self {
         Arc::make_mut(&mut self.inner).platform_machine = value.into();
-        self
-    }
-
-    /// Set the name of the Python implementation for this environment's
-    /// platform.
-    ///
-    /// See also [`MarkerEnvironment::platform_python_implementation`].
-    #[inline]
-    #[must_use]
-    pub fn with_platform_python_implementation(mut self, value: impl Into<String>) -> Self {
-        Arc::make_mut(&mut self.inner).platform_python_implementation = value.into();
         self
     }
 
