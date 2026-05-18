@@ -719,10 +719,10 @@ pub(super) async fn do_sync(
     }
     .into_inner();
 
-    // Save a reference to the base client builder for the post-install malware check,
-    // before we clone-and-modify it for the registry client below.
-    let malware_check_client_builder = client_builder;
     let client_builder = client_builder.clone().keyring(keyring_provider);
+    // Save an authenticated builder for the malware check before moving the
+    // primary builder into the registry client below.
+    let malware_check_client_builder = client_builder.clone();
 
     // Validate that the Python version is supported by the lockfile.
     if !target
@@ -869,7 +869,7 @@ pub(super) async fn do_sync(
         check_malware(
             &target,
             &resolution,
-            malware_check_client_builder,
+            &malware_check_client_builder,
             concurrency,
             malware_settings.malware_check_url.clone(),
             cache,

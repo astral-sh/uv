@@ -8,7 +8,7 @@ use serde_json::json;
 use std::process::Command;
 use tempfile::tempdir_in;
 use url::Url;
-use wiremock::matchers::{body_string_contains, method, path};
+use wiremock::matchers::{basic_auth, body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_fs::Simplified;
@@ -16578,6 +16578,94 @@ async fn sync_malware_check_clean() {
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     ");
+}
+
+/// Ensure that malware checks can authenticate through the configured keyring provider.
+#[tokio::test]
+async fn sync_malware_check_keyring_auth() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Install our keyring plugin.
+    context
+        .pip_install()
+        .arg(
+            context
+                .workspace_root
+                .join("test")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})?;
+
+    context
+        .lock()
+        .env(EnvVars::UV_DEFAULT_INDEX, "https://pypi.org/simple")
+        .assert()
+        .success();
+
+    let server = MockServer::start().await;
+    let mut malware_check_url = Url::parse(&server.uri())?;
+    malware_check_url
+        .set_username("public")
+        .map_err(|()| anyhow!("failed to set malware check URL username"))?;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(basic_auth("public", "heron"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "MAL-2026-1234"}]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/MAL-2026-1234"))
+        .and(basic_auth("public", "heron"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "MAL-2026-1234",
+            "modified": "2026-01-01T00:00:00Z",
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features").arg("malware-check")
+        .arg("--keyring-provider").arg("subprocess")
+        .env(EnvVars::UV_MALWARE_CHECK, "1")
+        .env(EnvVars::UV_MALWARE_CHECK_URL, malware_check_url.as_str())
+        .env(EnvVars::UV_DEFAULT_INDEX, "https://pypi.org/simple")
+        .env(
+            EnvVars::KEYRING_TEST_CREDENTIALS,
+            format!(
+                r#"{{"{}/v1/querybatch": {{"public": "heron"}}}}"#,
+                server.uri()
+            )
+        )
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Keyring request for public@http://[LOCALHOST]/v1/querybatch
+    warning: Malware detected in locked dependencies:
+      - `iniconfig==2.0.0`: MAL-2026-1234 (https://osv.dev/vulnerability/MAL-2026-1234)
+    error: Malware detected in one or more dependencies that would be installed; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check.
+    ");
+
+    Ok(())
 }
 
 /// Ensure that the malware check only reports `MAL-` prefixed IDs and skips others.
