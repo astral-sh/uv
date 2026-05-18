@@ -240,7 +240,7 @@ impl CachePolicyBuilder {
 /// about it) are proxy cache semantics.
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
-pub struct CachePolicy {
+pub(crate) struct CachePolicy {
     /// The configuration controlling the behavior of the cache.
     config: CacheConfig,
     /// A subset of information from the HTTP request that we will store. This
