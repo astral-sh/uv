@@ -136,7 +136,7 @@ impl Shell {
     /// assert_eq!(Shell::from_shell_path("/usr/bin/zsh"), Some(Shell::Zsh));
     /// assert_eq!(Shell::from_shell_path("/opt/my_custom_shell"), None);
     /// ```
-    pub fn from_shell_path(path: impl AsRef<Path>) -> Option<Self> {
+    fn from_shell_path(path: impl AsRef<Path>) -> Option<Self> {
         parse_shell_from_path(path.as_ref())
     }
 
