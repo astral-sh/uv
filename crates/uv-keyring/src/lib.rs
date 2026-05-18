@@ -47,7 +47,7 @@ by two types (with associated traits):
 
 This crate runs on several different platforms, and on each one
 it provides (by default) an implementation of a default credential store used
-on that platform (see [`default_credential_builder`]).
+on that platform.
 These implementations work by mapping the data used to identify an entry
 to data used to identify platform-specific storage objects.
 For example, on macOS, the service and user provided for an entry
@@ -90,19 +90,10 @@ will fail unless the client brings their own keystore (see next section).
 ## Client-provided Credential Stores
 
 In addition to the keystores implemented by this crate, clients
-are free to provide their own keystores and use those.  There are
-two mechanisms provided for this:
-
-- Clients can give their desired credential builder to the crate
-  for use by the [`Entry::new`] and [`Entry::new_with_target`] calls.
-  This is done by making a call to [`set_default_credential_builder`].
-  The major advantage of this approach is that client code remains
-  independent of the credential builder being used.
-
-- Clients can construct their concrete credentials directly and
-  then turn them into entries by using the [`Entry::new_with_credential`]
-  call. The major advantage of this approach is that credentials
-  can be identified however clients want, rather than being restricted
+are free to provide their own keystores and use those. Clients can construct
+their concrete credentials directly and then turn them into entries by using the
+[`Entry::new_with_credential`] call. The major advantage of this approach is
+that credentials can be identified however clients want, rather than being restricted
   to the simple model used by this crate.
 
 ## Tests
@@ -188,32 +179,7 @@ mod windows;
 mod credential;
 mod error;
 
-#[derive(Default, Debug)]
-struct EntryBuilder {
-    inner: Option<Box<CredentialBuilder>>,
-}
-
-static DEFAULT_BUILDER: std::sync::RwLock<EntryBuilder> =
-    std::sync::RwLock::new(EntryBuilder { inner: None });
-
-/// Set the credential builder used by default to create entries.
-///
-/// This is really meant for use by clients who bring their own credential
-/// store and want to use it everywhere.  If you are using multiple credential
-/// stores and want precise control over which credential is in which store,
-/// then use [`new_with_credential`](Entry::new_with_credential).
-///
-/// This will block waiting for all other threads currently creating entries
-/// to complete what they are doing. It's really meant to be called
-/// at app startup before you start creating entries.
-pub fn set_default_credential_builder(new: Box<CredentialBuilder>) {
-    let mut guard = DEFAULT_BUILDER
-        .write()
-        .expect("Poisoned RwLock in keyring-rs: please report a bug!");
-    guard.inner = Some(new);
-}
-
-pub fn default_credential_builder() -> Box<CredentialBuilder> {
+fn default_credential_builder() -> Box<CredentialBuilder> {
     #[cfg(any(
         all(target_os = "linux", feature = "secret-service"),
         all(target_os = "freebsd", feature = "secret-service"),
@@ -237,11 +203,7 @@ pub fn default_credential_builder() -> Box<CredentialBuilder> {
 fn build_default_credential(target: Option<&str>, service: &str, user: &str) -> Result<Entry> {
     static DEFAULT: std::sync::LazyLock<Box<CredentialBuilder>> =
         std::sync::LazyLock::new(default_credential_builder);
-    let guard = DEFAULT_BUILDER
-        .read()
-        .expect("Poisoned RwLock in keyring-rs: please report a bug!");
-    let builder = guard.inner.as_ref().unwrap_or_else(|| &DEFAULT);
-    let credential = builder.build(target, service, user)?;
+    let credential = DEFAULT.build(target, service, user)?;
     Ok(Entry { inner: credential })
 }
 

@@ -7,15 +7,9 @@ that is platform-independent, provides no persistence, and allows tests
 to specify the return values (including errors) for each call. The credentials
 in this store have no attributes at all.
 
-To use this credential store instead of the default in unit tests, call
-[`set_default_credential_builder`](crate::set_default_credential_builder)
-with [`default_credential_builder`] during application startup
-_before_ creating any entries.
-
-You can then create entries as you usually do, and call their usual methods
-to set, get, and delete passwords.  There is no persistence other than
-in the entry itself, so getting a password before setting it will always result
-in a [`NoEntry`](Error::NoEntry) error.
+The crate uses this store internally for unit tests. There is no persistence
+other than in the entry itself, so getting a password before setting it will
+always result in a [`NoEntry`](Error::NoEntry) error.
 
 If you want a method call on an entry to fail in a specific way, you can
 downcast the entry to a [`MockCredential`] and then call [`set_error`](MockCredential::set_error)
