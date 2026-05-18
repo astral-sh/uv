@@ -905,7 +905,7 @@ pub struct ToolUvWorkspace {
             members = ["member1", "path/to/member2", "libs/*"]
         "#
     )]
-    pub members: Option<Vec<SerdePattern>>,
+    pub(crate) members: Option<Vec<SerdePattern>>,
     /// Packages to exclude as workspace members. If a package matches both `members` and
     /// `exclude`, it will be excluded.
     ///
@@ -919,12 +919,12 @@ pub struct ToolUvWorkspace {
             exclude = ["member1", "path/to/member2", "libs/*"]
         "#
     )]
-    pub exclude: Option<Vec<SerdePattern>>,
+    pub(crate) exclude: Option<Vec<SerdePattern>>,
 }
 
 /// (De)serialize globs as strings.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SerdePattern(Pattern);
+pub(crate) struct SerdePattern(Pattern);
 
 impl serde::ser::Serialize for SerdePattern {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
