@@ -983,19 +983,6 @@ pub enum DownloadResult {
     Fetched(PathBuf),
 }
 
-/// A wrapper type to display a `ManagedPythonDownload` with its build information.
-pub struct ManagedPythonDownloadWithBuild<'a>(&'a ManagedPythonDownload);
-
-impl Display for ManagedPythonDownloadWithBuild<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(build) = self.0.build {
-            write!(f, "{}+{}", self.0.key, build)
-        } else {
-            write!(f, "{}", self.0.key)
-        }
-    }
-}
-
 impl ManagedPythonDownloadList {
     /// Iterate over all [`ManagedPythonDownload`]s.
     fn iter_all(&self) -> impl Iterator<Item = &ManagedPythonDownload> {
@@ -1129,11 +1116,6 @@ async fn fetch_bytes_from_url(client: &BaseClient, url: &DisplaySafeUrl) -> Resu
 }
 
 impl ManagedPythonDownload {
-    /// Return a display type that includes the build information.
-    pub fn to_display_with_build(&self) -> ManagedPythonDownloadWithBuild<'_> {
-        ManagedPythonDownloadWithBuild(self)
-    }
-
     pub fn url(&self) -> &Cow<'static, str> {
         &self.url
     }
@@ -2386,52 +2368,6 @@ mod tests {
             .expect("download URLs should be valid");
 
         assert_eq!(default_urls, empty_urls);
-    }
-
-    /// Test build display
-    #[test]
-    fn test_managed_python_download_build_display() {
-        // Create a test download with a build
-        let key = PythonInstallationKey::new(
-            LenientImplementationName::Known(crate::implementation::ImplementationName::CPython),
-            3,
-            12,
-            0,
-            None,
-            Platform::new(
-                Os::from_str("linux").unwrap(),
-                Arch::from_str("x86_64").unwrap(),
-                Libc::from_str("gnu").unwrap(),
-            ),
-            crate::PythonVariant::default(),
-        );
-
-        let download_with_build = ManagedPythonDownload {
-            key,
-            url: Cow::Borrowed("https://example.com/python.tar.gz"),
-            sha256: Some(Cow::Borrowed("abc123")),
-            build: Some("20240101"),
-        };
-
-        // Test display with build
-        assert_eq!(
-            download_with_build.to_display_with_build().to_string(),
-            "cpython-3.12.0-linux-x86_64-gnu+20240101"
-        );
-
-        // Test download without build
-        let download_without_build = ManagedPythonDownload {
-            key: download_with_build.key.clone(),
-            url: Cow::Borrowed("https://example.com/python.tar.gz"),
-            sha256: Some(Cow::Borrowed("abc123")),
-            build: None,
-        };
-
-        // Test display without build
-        assert_eq!(
-            download_without_build.to_display_with_build().to_string(),
-            "cpython-3.12.0-linux-x86_64-gnu"
-        );
     }
 
     /// A hash mismatch is a post-download integrity failure — retrying a different URL cannot fix
