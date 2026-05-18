@@ -163,3 +163,18 @@ where
 
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_nonblocking_updates_fd_flags() {
+        let (_, pipe_write) = unistd::pipe().unwrap();
+
+        set_nonblocking(&pipe_write).unwrap();
+
+        let flags = OFlag::from_bits_retain(fcntl(&pipe_write, FcntlArg::F_GETFL).unwrap());
+        assert!(flags.contains(OFlag::O_NONBLOCK));
+    }
+}
