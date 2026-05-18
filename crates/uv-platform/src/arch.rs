@@ -95,7 +95,7 @@ impl Arch {
         matches!(self.family, target_lexicon::Architecture::Arm(_))
     }
 
-    pub fn is_wasm(&self) -> bool {
+    pub(crate) fn is_wasm(self) -> bool {
         matches!(self.family, target_lexicon::Architecture::Wasm32)
     }
 }
