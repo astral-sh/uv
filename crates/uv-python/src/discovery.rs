@@ -1773,8 +1773,8 @@ impl PythonVariant {
 }
 impl PythonRequest {
     /// Create a request from a `Requires-Python` constraint.
-    pub fn from_requires_python(requires_python: RequiresPython) -> Option<Self> {
-        let specifiers = requires_python.into_specifiers();
+    pub fn from_requires_python(requires_python: &RequiresPython) -> Option<Self> {
+        let specifiers = requires_python.specifiers().clone();
         if specifiers.is_empty() {
             return None;
         }
