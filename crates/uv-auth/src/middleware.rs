@@ -39,7 +39,9 @@ impl From<AuthenticationError> for Error {
 /// Strategy for loading netrc files.
 enum NetrcMode {
     Automatic(LazyLock<Option<Netrc>>),
+    #[cfg(test)]
     Enabled(Netrc),
+    #[cfg(test)]
     Disabled,
 }
 
@@ -64,7 +66,9 @@ impl NetrcMode {
     fn get(&self) -> Option<&Netrc> {
         match self {
             Self::Automatic(lock) => lock.as_ref(),
+            #[cfg(test)]
             Self::Enabled(netrc) => Some(netrc),
+            #[cfg(test)]
             Self::Disabled => None,
         }
     }
@@ -73,7 +77,9 @@ impl NetrcMode {
 /// Strategy for loading text-based credential files.
 enum TextStoreMode {
     Automatic(tokio::sync::OnceCell<Option<TextCredentialStore>>),
+    #[cfg(test)]
     Enabled(TextCredentialStore),
+    #[cfg(test)]
     Disabled,
 }
 
@@ -121,7 +127,9 @@ impl TextStoreMode {
             // TODO(zanieb): Reconsider this pattern. We're just mirroring the [`NetrcMode`]
             // implementation for now.
             Self::Automatic(lock) => lock.get_or_init(Self::load_default_store).await.as_ref(),
+            #[cfg(test)]
             Self::Enabled(store) => Some(store),
+            #[cfg(test)]
             Self::Disabled => None,
         }
     }
@@ -223,7 +231,8 @@ impl AuthMiddleware {
     ///
     /// `None` disables authentication via netrc.
     #[must_use]
-    pub fn with_netrc(mut self, netrc: Option<Netrc>) -> Self {
+    #[cfg(test)]
+    fn with_netrc(mut self, netrc: Option<Netrc>) -> Self {
         self.netrc = if let Some(netrc) = netrc {
             NetrcMode::Enabled(netrc)
         } else {
@@ -236,7 +245,8 @@ impl AuthMiddleware {
     ///
     /// `None` disables authentication via text store.
     #[must_use]
-    pub fn with_text_store(mut self, store: Option<TextCredentialStore>) -> Self {
+    #[cfg(test)]
+    fn with_text_store(mut self, store: Option<TextCredentialStore>) -> Self {
         self.text_store = if let Some(store) = store {
             TextStoreMode::Enabled(store)
         } else {
