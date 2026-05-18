@@ -235,7 +235,7 @@ impl RequirementsSpecification {
 
     /// Read the requirements and constraints from a source, using a cache for file contents.
     #[instrument(skip_all, level = tracing::Level::DEBUG, fields(source = % source))]
-    pub async fn from_source_with_cache(
+    async fn from_source_with_cache(
         source: &RequirementsSource,
         client_builder: &BaseClientBuilder<'_>,
         cache: &mut SourceCache,
