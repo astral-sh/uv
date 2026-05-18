@@ -940,7 +940,7 @@ impl From<ParseErrorKind> for VersionSpecifierParseError {
 }
 
 /// Parse a list of specifiers such as `>= 1.0, != 1.3.*, < 2.0`.
-pub(crate) fn parse_version_specifiers(
+fn parse_version_specifiers(
     spec: &str,
 ) -> Result<Vec<VersionSpecifier>, VersionSpecifiersParseError> {
     let mut version_ranges = Vec::new();
