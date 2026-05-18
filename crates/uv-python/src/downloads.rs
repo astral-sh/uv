@@ -322,7 +322,7 @@ impl PythonDownloadRequest {
     }
 
     #[must_use]
-    pub fn with_implementation(mut self, implementation: ImplementationName) -> Self {
+    pub(crate) fn with_implementation(mut self, implementation: ImplementationName) -> Self {
         match implementation {
             // Pyodide is actually CPython with an Emscripten OS, we paper over that for usability
             ImplementationName::Pyodide => {
@@ -370,12 +370,6 @@ impl PythonDownloadRequest {
     #[must_use]
     pub fn with_prereleases(mut self, prereleases: bool) -> Self {
         self.prereleases = Some(prereleases);
-        self
-    }
-
-    #[must_use]
-    pub fn with_build(mut self, build: String) -> Self {
-        self.build = Some(build);
         self
     }
 
@@ -523,7 +517,7 @@ impl PythonDownloadRequest {
 
     /// Drop patch and prerelease information so the request can be re-used for upgrades.
     #[must_use]
-    pub fn without_patch(mut self) -> Self {
+    pub(crate) fn without_patch(mut self) -> Self {
         self.version = self.version.take().map(VersionRequest::only_minor);
         self.prereleases = None;
         self.build = None;
@@ -631,18 +625,18 @@ impl PythonDownloadRequest {
     }
 
     /// Whether this download request opts-in to a debug Python version.
-    pub fn allows_debug(&self) -> bool {
+    pub(crate) fn allows_debug(&self) -> bool {
         self.version.as_ref().is_some_and(VersionRequest::is_debug)
     }
 
     /// Whether this download request opts-in to alternative Python implementations.
-    pub fn allows_alternative_implementations(&self) -> bool {
+    pub(crate) fn allows_alternative_implementations(&self) -> bool {
         self.implementation
             .is_some_and(|implementation| !matches!(implementation, ImplementationName::CPython))
             || self.os.is_some_and(|os| os.is_emscripten())
     }
 
-    pub fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
+    pub(crate) fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
         let executable = interpreter.sys_executable().display();
         if let Some(version) = self.version() {
             if !version.matches_interpreter(interpreter) {
@@ -2066,10 +2060,10 @@ mod tests {
     /// Test that build filtering works correctly
     #[tokio::test]
     async fn test_python_download_request_build_filtering() {
-        let request = PythonDownloadRequest::default()
+        let mut request = PythonDownloadRequest::default()
             .with_version(VersionRequest::from_str("3.12").unwrap())
-            .with_implementation(ImplementationName::CPython)
-            .with_build("20240814".to_string());
+            .with_implementation(ImplementationName::CPython);
+        request.build = Some("20240814".to_string());
 
         let client = uv_client::BaseClientBuilder::default()
             .build()
@@ -2094,10 +2088,10 @@ mod tests {
     #[tokio::test]
     async fn test_python_download_request_invalid_build() {
         // Create a request with a non-existent build
-        let request = PythonDownloadRequest::default()
+        let mut request = PythonDownloadRequest::default()
             .with_version(VersionRequest::from_str("3.12").unwrap())
-            .with_implementation(ImplementationName::CPython)
-            .with_build("99999999".to_string());
+            .with_implementation(ImplementationName::CPython);
+        request.build = Some("99999999".to_string());
 
         let client = uv_client::BaseClientBuilder::default()
             .build()
