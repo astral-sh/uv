@@ -104,7 +104,7 @@ pub struct GitUrl {
 
 impl GitUrl {
     /// Create a new [`GitUrl`] from a repository URL and a reference.
-    pub fn from_reference(
+    fn from_reference(
         url: DisplaySafeUrl,
         reference: GitReference,
         lfs: GitLfs,
