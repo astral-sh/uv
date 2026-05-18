@@ -708,7 +708,7 @@ pub struct ToolUv {
     /// Note that those settings only apply when using the `uv_build` backend, other build backends
     /// (such as hatchling) have their own configuration.
     #[option_group]
-    pub build_backend: Option<BuildBackendSettingsSchema>,
+    pub(crate) build_backend: Option<BuildBackendSettingsSchema>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -1856,7 +1856,7 @@ pub enum DependencyType {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(Serialize))]
-pub struct BuildBackendSettingsSchema;
+pub(crate) struct BuildBackendSettingsSchema;
 
 impl<'de> Deserialize<'de> for BuildBackendSettingsSchema {
     fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
