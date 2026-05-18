@@ -336,7 +336,7 @@ pub enum DevMode {
 
 impl DevMode {
     /// Returns the flag that was used to request development dependencies.
-    pub fn as_flag(&self) -> &'static str {
+    fn as_flag(self) -> &'static str {
         match self {
             Self::Exclude => "--no-dev",
             Self::Include => "--dev",
