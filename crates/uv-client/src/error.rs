@@ -242,7 +242,7 @@ impl Error {
     }
 
     /// Returns `true` if the error is due to the server not supporting HTTP range requests.
-    pub fn is_http_range_requests_unsupported(
+    pub(crate) fn is_http_range_requests_unsupported(
         &self,
         url: &DisplaySafeUrl,
         index: Option<&IndexUrl>,

@@ -134,7 +134,7 @@ pub enum RedirectPolicy {
 }
 
 impl RedirectPolicy {
-    pub fn reqwest_policy(self) -> reqwest::redirect::Policy {
+    fn reqwest_policy(self) -> reqwest::redirect::Policy {
         match self {
             Self::BypassMiddleware => reqwest::redirect::Policy::default(),
             Self::RetriggerMiddleware => reqwest::redirect::Policy::none(),
