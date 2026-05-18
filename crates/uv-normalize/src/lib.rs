@@ -135,13 +135,6 @@ impl Error for InvalidNameError {}
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InvalidPipGroupPathError(String);
 
-impl InvalidPipGroupPathError {
-    /// Returns the invalid path.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
 impl Display for InvalidPipGroupPathError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
