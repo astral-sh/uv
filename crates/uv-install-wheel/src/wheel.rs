@@ -347,7 +347,7 @@ impl WheelFile {
     }
 
     /// Whether the wheel should be installed into the `purelib` or `platlib` directory.
-    pub fn lib_kind(&self) -> LibKind {
+    pub(crate) fn lib_kind(&self) -> LibKind {
         // Determine whether Root-Is-Purelib == ‘true’.
         // If it is, the wheel is pure, and should be installed into purelib.
         let root_is_purelib = self
@@ -370,7 +370,7 @@ impl WheelFile {
 
 /// Whether the wheel should be installed into the `purelib` or `platlib` directory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LibKind {
+pub(crate) enum LibKind {
     /// Install into the `purelib` directory.
     Pure,
     /// Install into the `platlib` directory.
