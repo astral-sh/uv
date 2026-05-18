@@ -42,15 +42,6 @@ impl Pep723Item {
         }
     }
 
-    /// Consume the item and return the associated [`Pep723Metadata`].
-    pub fn into_metadata(self) -> Pep723Metadata {
-        match self {
-            Self::Script(script) => script.metadata,
-            Self::Stdin(metadata) => metadata,
-            Self::Remote(metadata, ..) => metadata,
-        }
-    }
-
     /// Return the path of the PEP 723 item, if any.
     pub fn path(&self) -> Option<&Path> {
         match self {
