@@ -100,6 +100,7 @@ pub(crate) async fn pin(
                     ManagedPythonDownloadList::new(
                         &download_list_client,
                         install_mirrors.python_downloads_json_url.as_deref(),
+                        Some(cache),
                     )
                     .await?,
                 )
