@@ -513,7 +513,7 @@ impl Version {
     /// Set the epoch and return the updated version.
     #[inline]
     #[must_use]
-    pub fn with_epoch(mut self, value: u64) -> Self {
+    pub(crate) fn with_epoch(mut self, value: u64) -> Self {
         if let VersionInner::Small { small } = &mut self.inner {
             if small.set_epoch(value) {
                 return self;
@@ -552,7 +552,7 @@ impl Version {
     /// Set the dev-release component and return the updated version.
     #[inline]
     #[must_use]
-    pub fn with_dev(mut self, value: Option<u64>) -> Self {
+    pub(crate) fn with_dev(mut self, value: Option<u64>) -> Self {
         if let VersionInner::Small { small } = &mut self.inner {
             if small.set_dev(value) {
                 return self;
@@ -565,7 +565,7 @@ impl Version {
     /// Set the local segments and return the updated version.
     #[inline]
     #[must_use]
-    pub fn with_local_segments(mut self, value: Vec<LocalSegment>) -> Self {
+    pub(crate) fn with_local_segments(mut self, value: Vec<LocalSegment>) -> Self {
         if value.is_empty() {
             self.without_local()
         } else {
@@ -577,7 +577,7 @@ impl Version {
     /// Set the local version and return the updated version.
     #[inline]
     #[must_use]
-    pub fn with_local(mut self, value: LocalVersion) -> Self {
+    pub(crate) fn with_local(mut self, value: LocalVersion) -> Self {
         match value {
             LocalVersion::Segments(segments) => self.with_local_segments(segments),
             LocalVersion::Max => {
@@ -1624,7 +1624,7 @@ impl VersionPattern {
 
     /// Returns true if and only if this pattern contains a wildcard.
     #[inline]
-    pub fn is_wildcard(&self) -> bool {
+    pub(crate) fn is_wildcard(&self) -> bool {
         self.wildcard
     }
 }
