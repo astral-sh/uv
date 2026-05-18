@@ -7188,7 +7188,6 @@ dependencies = [
 name = "uv-state"
 version = "0.0.47"
 dependencies = [
- "fs-err",
  "tempfile",
  "uv-dirs",
 ]

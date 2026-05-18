@@ -37,7 +37,7 @@ use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
 use uv_python::{PythonEnvironment, PythonInstallation};
 use uv_requirements::{
     GroupsSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTree, SourceTreeResolver,
+    RequirementsSpecification, SourceTree, SourceTreeResolution, SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
@@ -217,7 +217,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             requirements.extend(
                 resolutions
                     .into_iter()
-                    .flat_map(|resolution| resolution.into_requirements()),
+                    .flat_map(SourceTreeResolution::into_requirements),
             );
         }
 
