@@ -223,7 +223,8 @@ pub struct GlobalArgs {
     /// Use verbose output.
     ///
     /// You can configure fine-grained logging using the `RUST_LOG` environment variable.
-    /// (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
+    /// See the [environment variable documentation](https://docs.astral.sh/uv/configuration/environment/#rust_log)
+    /// for details.
     #[arg(global = true, action = clap::ArgAction::Count, long, short, conflicts_with = "quiet")]
     pub verbose: u8,
 
