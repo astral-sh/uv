@@ -46,12 +46,6 @@ impl From<nix::Error> for CtrlCError {
 /// Stored as a raw fd so it can be accessed from the async-signal-safe handler.
 static PIPE_WRITE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
 
-/// Read-end of the self-pipe, read by the blocking thread.
-///
-/// Stored as a raw fd. Both ends of the pipe are leaked (never closed) to
-/// ensure the file descriptors remain valid for the lifetime of the process.
-static PIPE_READ: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
-
 /// Whether a handler has already been registered.
 static INITIALIZED: AtomicBool = AtomicBool::new(false);
 
@@ -100,62 +94,72 @@ where
         return Err(CtrlCError::AlreadyRegistered);
     }
 
-    // Create the self-pipe.
-    let (pipe_read, pipe_write) = unistd::pipe()?;
+    let result = (|| {
+        // Create the self-pipe.
+        let (pipe_read, pipe_write) = unistd::pipe()?;
 
-    // Set close-on-exec so these fds are not inherited by child processes.
-    set_cloexec(&pipe_read)?;
-    set_cloexec(&pipe_write)?;
+        // Set close-on-exec so these fds are not inherited by child processes.
+        set_cloexec(&pipe_read)?;
+        set_cloexec(&pipe_write)?;
 
-    // Keep the async-signal-safe writer from ever blocking if the pipe fills.
-    set_nonblocking(&pipe_write)?;
+        // Keep the async-signal-safe writer from ever blocking if the pipe fills.
+        set_nonblocking(&pipe_write)?;
 
-    // Store the raw fds. The `OwnedFd`s are leaked below to ensure the file
-    // descriptors remain valid for the lifetime of the process.
-    PIPE_READ.store(pipe_read.as_raw_fd(), Ordering::Relaxed);
-    PIPE_WRITE.store(pipe_write.as_raw_fd(), Ordering::Relaxed);
-    std::mem::forget(pipe_read);
-    std::mem::forget(pipe_write);
-
-    // Install the signal handler for SIGINT.
-    let sig_handler = signal::SigHandler::Handler(signal_handler);
-    let sig_action = signal::SigAction::new(
-        sig_handler,
-        signal::SaFlags::SA_RESTART,
-        signal::SigSet::empty(),
-    );
-
-    // SAFETY: We're installing a valid signal handler. The handler is
-    // async-signal-safe (only calls `write`).
-    unsafe {
-        signal::sigaction(signal::Signal::SIGINT, &sig_action)?;
-    }
-
-    // Spawn the blocking thread that reads from the pipe.
-    thread::Builder::new()
-        .name("ctrl-c".into())
-        .spawn({
-            let mut handler = handler;
-            move || {
-                let mut buf = [0u8; 1];
-                loop {
-                    let fd = PIPE_READ.load(Ordering::Relaxed);
-                    // SAFETY: `fd` is a valid file descriptor for the read end
-                    // of our pipe. It is leaked and never closed.
-                    let result = unsafe { nix::libc::read(fd, buf.as_mut_ptr().cast(), 1) };
-                    match result {
-                        1 => handler(),
-                        -1 if std::io::Error::last_os_error().raw_os_error()
-                            == Some(nix::libc::EINTR) =>
-                        {
-                            // Interrupted by signal, retry.
+        // Start the reader thread before installing the process-wide handler. If
+        // this step fails, signal handling is still untouched.
+        thread::Builder::new()
+            .name("ctrl-c".into())
+            .spawn({
+                let mut handler = handler;
+                move || {
+                    let mut buf = [0u8; 1];
+                    loop {
+                        // SAFETY: `pipe_read` owns a valid file descriptor for
+                        // the lifetime of this thread.
+                        let result = unsafe {
+                            nix::libc::read(pipe_read.as_raw_fd(), buf.as_mut_ptr().cast(), 1)
+                        };
+                        match result {
+                            1 => handler(),
+                            -1 if std::io::Error::last_os_error().raw_os_error()
+                                == Some(nix::libc::EINTR) =>
+                            {
+                                // Interrupted by signal, retry.
+                            }
+                            _ => break,
                         }
-                        _ => break,
                     }
                 }
-            }
-        })
-        .map_err(CtrlCError::System)?;
+            })
+            .map_err(CtrlCError::System)?;
 
-    Ok(())
+        PIPE_WRITE.store(pipe_write.as_raw_fd(), Ordering::Relaxed);
+
+        // Install the signal handler for SIGINT.
+        let sig_handler = signal::SigHandler::Handler(signal_handler);
+        let sig_action = signal::SigAction::new(
+            sig_handler,
+            signal::SaFlags::SA_RESTART,
+            signal::SigSet::empty(),
+        );
+
+        // SAFETY: We're installing a valid signal handler. The handler is
+        // async-signal-safe (only calls `write`).
+        if let Err(err) = unsafe { signal::sigaction(signal::Signal::SIGINT, &sig_action) } {
+            PIPE_WRITE.store(-1, Ordering::Relaxed);
+            drop(pipe_write);
+            return Err(CtrlCError::from(err));
+        }
+
+        // Keep the write end alive for the lifetime of the process.
+        std::mem::forget(pipe_write);
+
+        Ok(())
+    })();
+
+    if result.is_err() {
+        INITIALIZED.store(false, Ordering::SeqCst);
+    }
+
+    result
 }

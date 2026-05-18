@@ -117,30 +117,28 @@ where
         return Err(CtrlCError::AlreadyRegistered);
     }
 
-    // SAFETY: Creating a semaphore with no security attributes and no name.
-    let semaphore = unsafe { CreateSemaphoreW(None, 0, i32::MAX, None) }
-        .map_err(|e| CtrlCError::System(e.code().0))?;
+    let result = (|| {
+        // SAFETY: Creating a semaphore with no security attributes and no name.
+        let semaphore = unsafe { CreateSemaphoreW(None, 0, i32::MAX, None) }
+            .map_err(|e| CtrlCError::System(e.code().0))?;
 
-    SEMAPHORE.store(semaphore.0 as isize, Ordering::Release);
+        SEMAPHORE.store(semaphore.0 as isize, Ordering::Release);
 
-    // SAFETY: We're registering a valid handler function.
-    unsafe { SetConsoleCtrlHandler(Some(os_handler), true) }.map_err(|e| {
-        // Clean up the semaphore on failure.
-        let raw = SEMAPHORE.swap(0, Ordering::SeqCst);
-        if raw != 0 {
-            // SAFETY: The semaphore handle is valid and we created it above.
-            unsafe {
-                let _ = CloseHandle(HANDLE(raw as *mut _));
+        // SAFETY: We're registering a valid handler function.
+        unsafe { SetConsoleCtrlHandler(Some(os_handler), true) }.map_err(|e| {
+            // Clean up the semaphore on failure.
+            let raw = SEMAPHORE.swap(0, Ordering::SeqCst);
+            if raw != 0 {
+                // SAFETY: The semaphore handle is valid and we created it above.
+                unsafe {
+                    let _ = CloseHandle(HANDLE(raw as *mut _));
+                }
             }
-        }
-        INITIALIZED.store(false, Ordering::SeqCst);
-        CtrlCError::System(e.code().0)
-    })?;
+            CtrlCError::System(e.code().0)
+        })?;
 
-    // Spawn the blocking thread.
-    thread::Builder::new()
-        .name("ctrl-c".into())
-        .spawn({
+        // Spawn the blocking thread.
+        if let Err(err) = thread::Builder::new().name("ctrl-c".into()).spawn({
             let mut handler = handler;
             move || loop {
                 let raw = SEMAPHORE.load(Ordering::Acquire);
@@ -150,8 +148,27 @@ where
                     handler();
                 }
             }
-        })
-        .map_err(|e| CtrlCError::System(e.raw_os_error().unwrap_or(0)))?;
+        }) {
+            // SAFETY: Unregistering the exact handler we installed above.
+            let _ = unsafe { SetConsoleCtrlHandler(Some(os_handler), false) };
 
-    Ok(())
+            let raw = SEMAPHORE.swap(0, Ordering::SeqCst);
+            if raw != 0 {
+                // SAFETY: The semaphore handle is valid and we created it above.
+                unsafe {
+                    let _ = CloseHandle(HANDLE(raw as *mut _));
+                }
+            }
+
+            return Err(CtrlCError::System(err.raw_os_error().unwrap_or(0)));
+        }
+
+        Ok(())
+    })();
+
+    if result.is_err() {
+        INITIALIZED.store(false, Ordering::SeqCst);
+    }
+
+    result
 }
