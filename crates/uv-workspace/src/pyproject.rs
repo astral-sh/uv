@@ -384,7 +384,7 @@ pub struct ToolUv {
             managed = false
         "#
     )]
-    pub managed: Option<bool>,
+    pub(crate) managed: Option<bool>,
 
     /// Whether the project should be considered a Python package, or a non-package ("virtual")
     /// project.
@@ -403,7 +403,7 @@ pub struct ToolUv {
             package = false
         "#
     )]
-    pub package: Option<bool>,
+    pub(crate) package: Option<bool>,
 
     /// The list of `dependency-groups` to install by default.
     ///
