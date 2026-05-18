@@ -369,7 +369,7 @@ fn python_executables_from_installed<'a>(
                     "Searching for managed installations at `{}`",
                     installed_installations.root().user_display()
                 );
-                let installations = installed_installations.find_matching_current_platform()?;
+                let installations = ManagedPythonInstallations::find_matching_current_platform()?;
 
                 let build_versions = python_build_versions_from_env()?;
 

@@ -244,9 +244,8 @@ impl ManagedPythonInstallations {
     }
 
     /// Iterate over Python installations that support the current platform.
-    pub fn find_matching_current_platform(
-        &self,
-    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
+    pub(crate) fn find_matching_current_platform()
+    -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
         let platform = Platform::from_env()?;
 
         let iter = Self::from_settings(None)?
@@ -273,8 +272,7 @@ impl ManagedPythonInstallations {
         version: &'a PythonVersion,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + 'a, Error> {
         let request = VersionRequest::from(version);
-        Ok(self
-            .find_matching_current_platform()?
+        Ok(Self::find_matching_current_platform()?
             .filter(move |installation| request.matches_installation_key(installation.key())))
     }
 
