@@ -199,7 +199,7 @@ impl<'a> BaseClientBuilder<'a> {
     /// Note that some configuration options from this builder will still be applied
     /// to the client via middleware.
     #[must_use]
-    pub fn custom_client(mut self, client: Client) -> Self {
+    pub(crate) fn custom_client(mut self, client: Client) -> Self {
         self.custom_client = Some(client);
         self
     }
@@ -318,7 +318,7 @@ impl<'a> BaseClientBuilder<'a> {
     /// leakage to untrusted domains.
     #[cfg(test)]
     #[must_use]
-    pub fn allow_cross_origin_credentials(mut self) -> Self {
+    pub(crate) fn allow_cross_origin_credentials(mut self) -> Self {
         self.cross_origin_credential_policy = CrossOriginCredentialsPolicy::Insecure;
         self
     }

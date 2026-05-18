@@ -110,7 +110,7 @@ where
     /// This can fail if creating an archive for the given type fails.
     /// Currently, this, at minimum, includes cases where an `A` contains a
     /// `PathBuf` that is not valid UTF-8.
-    pub fn from_unarchived(unarchived: &A) -> Result<Self, Error> {
+    pub(crate) fn from_unarchived(unarchived: &A) -> Result<Self, Error> {
         let raw = rkyv::to_bytes::<rancor::Error>(unarchived)
             .map_err(|e| ErrorKind::ArchiveWrite(e.to_string()))?;
         Ok(Self {

@@ -130,7 +130,7 @@ impl<'a> RegistryClientBuilder<'a> {
     /// leakage to untrusted domains.
     #[cfg(test)]
     #[must_use]
-    pub fn allow_cross_origin_credentials(mut self) -> Self {
+    pub(crate) fn allow_cross_origin_credentials(mut self) -> Self {
         self.base_client_builder = self.base_client_builder.allow_cross_origin_credentials();
         self
     }
