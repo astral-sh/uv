@@ -178,7 +178,7 @@ impl Credentials {
         }
     }
 
-    pub fn is_authenticated(&self) -> bool {
+    pub(crate) fn is_authenticated(&self) -> bool {
         match self {
             Self::Basic {
                 username: _,
