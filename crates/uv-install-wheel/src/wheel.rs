@@ -347,7 +347,7 @@ impl WheelFile {
     }
 
     /// Whether the wheel should be installed into the `purelib` or `platlib` directory.
-    pub fn lib_kind(&self) -> LibKind {
+    pub(crate) fn lib_kind(&self) -> LibKind {
         // Determine whether Root-Is-Purelib == ‘true’.
         // If it is, the wheel is pure, and should be installed into purelib.
         let root_is_purelib = self
@@ -370,7 +370,7 @@ impl WheelFile {
 
 /// Whether the wheel should be installed into the `purelib` or `platlib` directory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LibKind {
+pub(crate) enum LibKind {
     /// Install into the `purelib` directory.
     Pure,
     /// Install into the `platlib` directory.
@@ -378,7 +378,7 @@ pub enum LibKind {
 }
 
 /// Moves the files and folders in src to dest, updating the RECORD in the process
-pub(crate) fn move_folder_recorded(
+fn move_folder_recorded(
     src_dir: &Path,
     dest_dir: &Path,
     site_packages: &Path,
@@ -732,7 +732,7 @@ pub(crate) fn install_data(
 ///
 /// We still the path in the absolute path to the site packages and the relative path in the
 /// site packages because we must only record the relative path in RECORD
-pub(crate) fn write_file_recorded(
+fn write_file_recorded(
     site_packages: &Path,
     relative_path: &Path,
     content: impl AsRef<[u8]>,
@@ -811,7 +811,7 @@ pub(crate) fn write_installer_metadata<Cache: serde::Serialize, Build: serde::Se
 ///
 /// Returns `sys.executable` if the wheel is not relocatable; otherwise, returns a path relative
 /// to the scripts directory.
-pub(crate) fn get_relocatable_executable(
+fn get_relocatable_executable(
     executable: PathBuf,
     layout: &Layout,
     relocatable: bool,

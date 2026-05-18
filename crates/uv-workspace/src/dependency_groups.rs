@@ -267,7 +267,7 @@ pub struct DependencyGroupError {
 }
 
 #[derive(Debug, Error)]
-pub enum DependencyGroupErrorInner {
+enum DependencyGroupErrorInner {
     #[error("Failed to parse entry in group `{0}`: `{1}`")]
     GroupParseError(
         GroupName,
@@ -295,7 +295,7 @@ pub enum DependencyGroupErrorInner {
 impl DependencyGroupErrorInner {
     /// Enrich a [`DependencyGroupError`] with the `tool.uv.dev-dependencies` metadata, if applicable.
     #[must_use]
-    pub fn with_dev_dependencies(
+    fn with_dev_dependencies(
         self,
         dev_dependencies: Option<&Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     ) -> Self {
@@ -317,7 +317,7 @@ impl DependencyGroupErrorInner {
 
 /// A cycle in the `dependency-groups` table.
 #[derive(Debug)]
-pub struct Cycle(Vec<GroupName>);
+struct Cycle(Vec<GroupName>);
 
 /// Display a cycle, e.g., `a -> b -> c -> a`.
 impl std::fmt::Display for Cycle {

@@ -33,8 +33,10 @@ use uv_python::{
     PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonSource,
     PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
 };
-use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
-use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
+use uv_requirements::{
+    LockedRequirements, NamedRequirementsResolver, RequirementsSpecification,
+    read_lock_requirements,
+};
 use uv_resolver::{
     FlatIndex, Installable, Lock, OptionsBuilder, Preference, PythonRequirement,
     ResolverEnvironment, ResolverOutput,
@@ -1215,7 +1217,7 @@ impl WorkspacePython {
         } else {
             // (3) `requires-python` in `pyproject.toml`
             let request = requires_python
-                .clone()
+                .as_ref()
                 .and_then(PythonRequest::from_requires_python);
             let source = PythonRequestSource::RequiresPython;
             (source, request)
@@ -1318,7 +1320,7 @@ impl ScriptPython {
         } else {
             // (4) `requires-python` from workspace `pyproject.toml`
             let request = workspace_requires_python
-                .clone()
+                .as_ref()
                 .and_then(PythonRequest::from_requires_python);
             (PythonRequestSource::RequiresPython, request)
         };

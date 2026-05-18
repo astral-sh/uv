@@ -277,7 +277,7 @@ impl PyProjectToml {
     }
 
     /// See [`BuildSystem::check_build_system`].
-    pub fn check_build_system(&self, uv_version: &str) -> Vec<String> {
+    pub(crate) fn check_build_system(&self, uv_version: &str) -> Vec<String> {
         self.build_system.check_build_system(uv_version)
     }
 

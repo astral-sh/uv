@@ -37,7 +37,7 @@ impl IndexStatusCodeStrategy {
     }
 
     /// Derive a strategy from a list of status codes to ignore.
-    pub fn from_ignored_error_codes(status_codes: &[SerializableStatusCode]) -> Self {
+    pub(crate) fn from_ignored_error_codes(status_codes: &[SerializableStatusCode]) -> Self {
         Self::IgnoreErrorCodes {
             status_codes: status_codes
                 .iter()

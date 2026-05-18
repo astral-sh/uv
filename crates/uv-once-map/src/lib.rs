@@ -26,20 +26,6 @@ impl<K: Eq + Hash + Debug, V: Debug, S: BuildHasher + Clone> Debug for OnceMap<K
 }
 
 impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
-    /// Create a [`OnceMap`] with the specified hasher.
-    pub fn with_hasher(hasher: H) -> Self {
-        Self {
-            items: DashMap::with_hasher(hasher),
-        }
-    }
-
-    /// Create a [`OnceMap`] with the specified capacity and hasher.
-    pub fn with_capacity_and_hasher(capacity: usize, hasher: H) -> Self {
-        Self {
-            items: DashMap::with_capacity_and_hasher(capacity, hasher),
-        }
-    }
-
     /// Register that you want to start a job.
     ///
     /// If this method returns `true`, you need to start a job and call [`OnceMap::done`] eventually

@@ -1368,7 +1368,7 @@ impl LocalArchivePointer {
     }
 
     /// Write an [`LocalArchivePointer`] to the cache.
-    pub async fn write_to(&self, entry: &CacheEntry) -> Result<(), Error> {
+    pub(crate) async fn write_to(&self, entry: &CacheEntry) -> Result<(), Error> {
         write_atomic(entry.path(), rmp_serde::to_vec(&self)?)
             .await
             .map_err(Error::CacheWrite)

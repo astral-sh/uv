@@ -5,10 +5,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use uv_static::EnvVars;
 
 /// The default minimum stack size for uv threads.
-pub const UV_DEFAULT_STACK_SIZE: usize = 4 * 1024 * 1024;
+const UV_DEFAULT_STACK_SIZE: usize = 4 * 1024 * 1024;
 /// We don't allow setting a smaller stack size than 1MB.
 #[expect(clippy::identity_op)]
-pub const UV_MIN_STACK_SIZE: usize = 1 * 1024 * 1024;
+const UV_MIN_STACK_SIZE: usize = 1 * 1024 * 1024;
 
 /// Running out of stack has been an issue for us. We box types and futures in various places
 /// to mitigate this.

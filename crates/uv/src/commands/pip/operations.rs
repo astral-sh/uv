@@ -37,7 +37,7 @@ use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
 use uv_python::{PythonEnvironment, PythonInstallation};
 use uv_requirements::{
     GroupsSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTree, SourceTreeResolver,
+    RequirementsSpecification, SourceTree, SourceTreeResolution, SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
@@ -187,7 +187,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             // If we resolved a single project, use it for the project name.
             project = project.or_else(|| {
                 if let [resolution] = &resolutions[..] {
-                    Some(resolution.project.clone())
+                    Some(resolution.project().clone())
                 } else {
                     None
                 }
@@ -199,7 +199,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 .filter(|extra| {
                     !resolutions
                         .iter()
-                        .any(|resolution| resolution.extras.contains(extra))
+                        .any(|resolution| resolution.extras().contains(extra))
                 })
                 .collect::<Vec<_>>();
             if !unused_extras.is_empty() {
@@ -217,7 +217,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             requirements.extend(
                 resolutions
                     .into_iter()
-                    .flat_map(|resolution| resolution.requirements),
+                    .flat_map(SourceTreeResolution::into_requirements),
             );
         }
 
@@ -504,7 +504,7 @@ pub(crate) struct Changelog {
 
 impl Changelog {
     /// Create a [`Changelog`] from two iterators of [`ChangedDist`]s.
-    pub(crate) fn new<I, U>(installed: I, uninstalled: U) -> Self
+    fn new<I, U>(installed: I, uninstalled: U) -> Self
     where
         I: IntoIterator<Item = ChangedDist>,
         U: IntoIterator<Item = ChangedDist>,
@@ -526,7 +526,7 @@ impl Changelog {
     }
 
     /// Create a [`Changelog`] from a list of local distributions.
-    pub(crate) fn from_local(installed: Vec<CachedDist>, uninstalled: Vec<InstalledDist>) -> Self {
+    fn from_local(installed: Vec<CachedDist>, uninstalled: Vec<InstalledDist>) -> Self {
         Self::new(
             installed
                 .into_iter()

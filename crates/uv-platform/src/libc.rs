@@ -156,7 +156,7 @@ impl From<&uv_platform_tags::Os> for Libc {
 ///
 /// A platform can have both musl and glibc installed. We determine the preferred platform by
 /// inspecting core binaries.
-pub(crate) fn detect_linux_libc() -> Result<LibcVersion, LibcDetectionError> {
+fn detect_linux_libc() -> Result<LibcVersion, LibcDetectionError> {
     let ld_path = find_ld_path()?;
     trace!("Found `ld` path: {}", ld_path.user_display());
 

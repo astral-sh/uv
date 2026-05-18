@@ -766,7 +766,8 @@ impl Cache {
     /// On Windows, we write structured data ([`Link`]) to a file containing the archive ID and
     /// version. On Unix, we create a symlink to the target directory.
     #[cfg(windows)]
-    pub fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
+    #[expect(clippy::unused_self)]
+    fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
         // Serialize the link.
         let link = Link::new(id.clone());
         let contents = link.to_string();
@@ -824,7 +825,7 @@ impl Cache {
     /// On Windows, we write structured data ([`Link`]) to a file containing the archive ID and
     /// version. On Unix, we create a symlink to the target directory.
     #[cfg(unix)]
-    pub fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
+    fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
         // Construct the link target.
         let src = self.archive(id);
         let dst = dst.as_ref();
@@ -1350,10 +1351,6 @@ pub enum Freshness {
 impl Freshness {
     pub const fn is_fresh(self) -> bool {
         matches!(self, Self::Fresh)
-    }
-
-    pub const fn is_stale(self) -> bool {
-        matches!(self, Self::Stale)
     }
 }
 

@@ -49,11 +49,28 @@ impl SourceTree {
 #[derive(Debug, Clone)]
 pub struct SourceTreeResolution {
     /// The requirements sourced from the source trees.
-    pub requirements: Box<[Requirement]>,
+    requirements: Box<[Requirement]>,
     /// The names of the projects that were resolved.
-    pub project: PackageName,
+    project: PackageName,
     /// The extras used when resolving the requirements.
-    pub extras: Box<[ExtraName]>,
+    extras: Box<[ExtraName]>,
+}
+
+impl SourceTreeResolution {
+    /// Return the name of the project that was resolved.
+    pub fn project(&self) -> &PackageName {
+        &self.project
+    }
+
+    /// Return the extras used when resolving the requirements.
+    pub fn extras(&self) -> &[ExtraName] {
+        &self.extras
+    }
+
+    /// Return the requirements sourced from the source tree.
+    pub fn into_requirements(self) -> Box<[Requirement]> {
+        self.requirements
+    }
 }
 
 /// A resolver for requirements specified via source trees.

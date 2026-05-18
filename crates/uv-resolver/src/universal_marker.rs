@@ -408,7 +408,7 @@ impl ConflictMarker {
     };
 
     /// Creates a new conflict marker from the declared conflicts provided.
-    pub fn from_conflicts(conflicts: &Conflicts) -> Self {
+    pub(crate) fn from_conflicts(conflicts: &Conflicts) -> Self {
         if conflicts.is_empty() {
             return Self::TRUE;
         }
@@ -426,7 +426,7 @@ impl ConflictMarker {
 
     /// Create a conflict marker that is true only when the given extra or
     /// group (for a specific package) is activated.
-    pub fn from_conflict_item(item: &ConflictItem) -> Self {
+    pub(crate) fn from_conflict_item(item: &ConflictItem) -> Self {
         match *item.kind() {
             ConflictKind::Extra(ref extra) => Self::extra(item.package(), extra),
             ConflictKind::Group(ref group) => Self::group(item.package(), group),

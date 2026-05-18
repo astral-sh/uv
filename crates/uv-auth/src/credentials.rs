@@ -91,13 +91,8 @@ impl Password {
     }
 
     /// Return the [`Password`] as a string slice.
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         self.0.as_str()
-    }
-
-    /// Convert the [`Password`] into its underlying [`String`].
-    pub fn into_string(self) -> String {
-        self.0
     }
 }
 
@@ -112,22 +107,22 @@ impl fmt::Debug for Password {
 pub struct Token(Vec<u8>);
 
 impl Token {
-    pub fn new(token: Vec<u8>) -> Self {
+    pub(crate) fn new(token: Vec<u8>) -> Self {
         Self(token)
     }
 
     /// Return the [`Token`] as a byte slice.
-    pub fn as_slice(&self) -> &[u8] {
+    pub(crate) fn as_slice(&self) -> &[u8] {
         self.0.as_slice()
     }
 
     /// Convert the [`Token`] into its underlying [`Vec<u8>`].
-    pub fn into_bytes(self) -> Vec<u8> {
+    pub(crate) fn into_bytes(self) -> Vec<u8> {
         self.0
     }
 
     /// Return whether the [`Token`] is empty.
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 }
@@ -183,7 +178,7 @@ impl Credentials {
         }
     }
 
-    pub fn is_authenticated(&self) -> bool {
+    pub(crate) fn is_authenticated(&self) -> bool {
         match self {
             Self::Basic {
                 username: _,
@@ -293,7 +288,7 @@ impl Credentials {
     /// Panics if the authentication is not conformant to the HTTP Basic Authentication scheme:
     /// - The contents must be base64 encoded
     /// - There must be a `:` separator
-    pub(crate) fn from_header_value(header: &HeaderValue) -> Option<Self> {
+    fn from_header_value(header: &HeaderValue) -> Option<Self> {
         // Parse a `Basic` authentication header.
         if let Some(mut value) = header.as_bytes().strip_prefix(b"Basic ") {
             let mut decoder = DecoderReader::new(&mut value, &BASE64_STANDARD);

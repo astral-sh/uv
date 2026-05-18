@@ -583,7 +583,7 @@ impl RequirementsTxt {
     }
 
     /// Merge the data from a nested `requirements` file (`other`) into this one.
-    pub fn update_from(&mut self, other: Self) {
+    fn update_from(&mut self, other: Self) {
         let Self {
             requirements,
             constraints,

@@ -15,7 +15,7 @@ mod oid;
 mod reference;
 
 /// Initialize [`GitLfs`] mode from `UV_GIT_LFS` environment.
-pub static UV_GIT_LFS: LazyLock<GitLfs> = LazyLock::new(|| {
+static UV_GIT_LFS: LazyLock<GitLfs> = LazyLock::new(|| {
     // TODO(konsti): Parse this in `EnvironmentOptions`.
     if std::env::var_os(EnvVars::UV_GIT_LFS)
         .and_then(|v| v.to_str().map(str::to_lowercase))
@@ -104,7 +104,7 @@ pub struct GitUrl {
 
 impl GitUrl {
     /// Create a new [`GitUrl`] from a repository URL and a reference.
-    pub fn from_reference(
+    fn from_reference(
         url: DisplaySafeUrl,
         reference: GitReference,
         lfs: GitLfs,

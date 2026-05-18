@@ -380,11 +380,6 @@ impl NoSolutionError {
         NoSolutionHeader::new(self.env.clone())
     }
 
-    /// Get the conflict derivation tree for external analysis
-    pub fn derivation_tree(&self) -> &ErrorTree {
-        &self.error
-    }
-
     /// Get the packages that are involved in this error.
     pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
         self.error
@@ -1092,7 +1087,7 @@ impl<'range> From<&'range Range<Version>> for SentinelRange<'range> {
 
 impl SentinelRange<'_> {
     /// Returns `true` if the range appears to be, e.g., `>=1.0.0, <1.0.0+[max]`.
-    pub fn is_sentinel(&self) -> bool {
+    pub(crate) fn is_sentinel(&self) -> bool {
         self.0.iter().all(|(lower, upper)| {
             let (Bound::Included(lower), Bound::Excluded(upper)) = (lower, upper) else {
                 return false;

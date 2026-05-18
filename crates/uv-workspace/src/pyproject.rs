@@ -116,7 +116,7 @@ pub struct PyProjectToml {
 
     /// Used to determine whether a `build-system` section is present.
     #[serde(default, skip_serializing)]
-    pub build_system: Option<serde::de::IgnoredAny>,
+    pub(crate) build_system: Option<serde::de::IgnoredAny>,
 }
 
 impl PyProjectToml {
@@ -373,7 +373,7 @@ pub struct ToolUv {
 
     /// The workspace definition for the project, if any.
     #[option_group]
-    pub workspace: Option<ToolUvWorkspace>,
+    pub(crate) workspace: Option<ToolUvWorkspace>,
 
     /// Whether the project is managed by uv. If `false`, uv will ignore the project when
     /// `uv run` is invoked.
@@ -384,7 +384,7 @@ pub struct ToolUv {
             managed = false
         "#
     )]
-    pub managed: Option<bool>,
+    pub(crate) managed: Option<bool>,
 
     /// Whether the project should be considered a Python package, or a non-package ("virtual")
     /// project.
@@ -403,7 +403,7 @@ pub struct ToolUv {
             package = false
         "#
     )]
-    pub package: Option<bool>,
+    pub(crate) package: Option<bool>,
 
     /// The list of `dependency-groups` to install by default.
     ///
@@ -433,7 +433,7 @@ pub struct ToolUv {
             my-group = {requires-python = ">=3.12"}
         "#
     )]
-    pub dependency_groups: Option<ToolUvDependencyGroups>,
+    pub(crate) dependency_groups: Option<ToolUvDependencyGroups>,
 
     /// The project's development dependencies.
     ///
@@ -612,7 +612,7 @@ pub struct ToolUv {
             environments = ["sys_platform == 'darwin'"]
         "#
     )]
-    pub environments: Option<SupportedEnvironments>,
+    pub(crate) environments: Option<SupportedEnvironments>,
 
     /// A list of required platforms, for packages that lack source distributions.
     ///
@@ -655,7 +655,7 @@ pub struct ToolUv {
             ]
         "#
     )]
-    pub required_environments: Option<SupportedEnvironments>,
+    pub(crate) required_environments: Option<SupportedEnvironments>,
 
     /// Declare collections of extras or dependency groups that are conflicting
     /// (i.e., mutually exclusive).
@@ -699,7 +699,7 @@ pub struct ToolUv {
             ]
         "#
     )]
-    pub conflicts: Option<SchemaConflicts>,
+    pub(crate) conflicts: Option<SchemaConflicts>,
 
     // Only exists on this type for schema and docs generation, the build backend settings are
     // never merged in a workspace and read separately by the backend code.
@@ -708,7 +708,7 @@ pub struct ToolUv {
     /// Note that those settings only apply when using the `uv_build` backend, other build backends
     /// (such as hatchling) have their own configuration.
     #[option_group]
-    pub build_backend: Option<BuildBackendSettingsSchema>,
+    pub(crate) build_backend: Option<BuildBackendSettingsSchema>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -745,18 +745,12 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct ToolUvDependencyGroups(BTreeMap<GroupName, DependencyGroupSettings>);
+pub(crate) struct ToolUvDependencyGroups(BTreeMap<GroupName, DependencyGroupSettings>);
 
 impl ToolUvDependencyGroups {
     /// Returns the underlying `BTreeMap` of group names to settings.
-    pub fn inner(&self) -> &BTreeMap<GroupName, DependencyGroupSettings> {
+    pub(crate) fn inner(&self) -> &BTreeMap<GroupName, DependencyGroupSettings> {
         &self.0
-    }
-
-    /// Convert the [`ToolUvDependencyGroups`] into its inner `BTreeMap`.
-    #[must_use]
-    pub fn into_inner(self) -> BTreeMap<GroupName, DependencyGroupSettings> {
-        self.0
     }
 }
 
@@ -777,16 +771,16 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvDependencyGroups {
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
-pub struct DependencyGroupSettings {
+pub(crate) struct DependencyGroupSettings {
     /// Version of python to require when installing this group
     #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
-    pub requires_python: Option<VersionSpecifiers>,
+    pub(crate) requires_python: Option<VersionSpecifiers>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged, rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub enum ExtraBuildDependencyWire {
+enum ExtraBuildDependencyWire {
     Unannotated(uv_pep508::Requirement<VerbatimParsedUrl>),
     #[serde(rename_all = "kebab-case")]
     Annotated {
@@ -892,7 +886,7 @@ impl<'de> serde::de::Deserialize<'de> for ExtraBuildDependencies {
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct ToolUvWorkspace {
+pub(crate) struct ToolUvWorkspace {
     /// Packages to include as workspace members.
     ///
     /// Supports both globs and explicit paths.
@@ -905,7 +899,7 @@ pub struct ToolUvWorkspace {
             members = ["member1", "path/to/member2", "libs/*"]
         "#
     )]
-    pub members: Option<Vec<SerdePattern>>,
+    pub(crate) members: Option<Vec<SerdePattern>>,
     /// Packages to exclude as workspace members. If a package matches both `members` and
     /// `exclude`, it will be excluded.
     ///
@@ -919,12 +913,12 @@ pub struct ToolUvWorkspace {
             exclude = ["member1", "path/to/member2", "libs/*"]
         "#
     )]
-    pub exclude: Option<Vec<SerdePattern>>,
+    pub(crate) exclude: Option<Vec<SerdePattern>>,
 }
 
 /// (De)serialize globs as strings.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SerdePattern(Pattern);
+pub(crate) struct SerdePattern(Pattern);
 
 impl serde::ser::Serialize for SerdePattern {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -1856,7 +1850,7 @@ pub enum DependencyType {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(Serialize))]
-pub struct BuildBackendSettingsSchema;
+pub(crate) struct BuildBackendSettingsSchema;
 
 impl<'de> Deserialize<'de> for BuildBackendSettingsSchema {
     fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>

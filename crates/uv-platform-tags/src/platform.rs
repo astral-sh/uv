@@ -212,7 +212,7 @@ impl FromStr for Arch {
 impl Arch {
     /// Returns the oldest possible `manylinux` tag for this architecture, if it supports
     /// `manylinux`.
-    pub fn get_minimum_manylinux_minor(&self) -> Option<u16> {
+    pub(crate) fn get_minimum_manylinux_minor(self) -> Option<u16> {
         match self {
             // manylinux 2014
             Self::Aarch64 | Self::Armv7L | Self::Powerpc64 | Self::Powerpc64Le | Self::S390X => {

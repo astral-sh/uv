@@ -23,7 +23,8 @@ use uv_types::{BuildContext, HashStrategy};
 
 use crate::Error;
 
-/// Like [`RequirementsSpecification`], but with concrete names for all requirements.
+/// Like [`RequirementsSpecification`](crate::RequirementsSpecification), but with concrete names
+/// for all requirements.
 pub struct NamedRequirementsResolver<'a, Context: BuildContext> {
     /// Whether to check hashes for distributions.
     hasher: &'a HashStrategy,

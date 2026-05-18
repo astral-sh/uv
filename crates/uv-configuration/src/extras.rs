@@ -102,14 +102,6 @@ impl ExtrasSpecification {
         })
     }
 
-    /// Helper to make a spec from just --all-extras
-    pub fn from_all_extras() -> Self {
-        Self::from_history(ExtrasSpecificationHistory {
-            all_extras: true,
-            ..Default::default()
-        })
-    }
-
     /// Apply defaults to a base [`ExtrasSpecification`].
     pub fn with_defaults(&self, defaults: DefaultExtras) -> ExtrasSpecificationWithDefaults {
         // Explicitly clone the inner history and set the defaults, then remake the result.
@@ -147,11 +139,6 @@ impl ExtrasSpecificationInner {
     pub fn contains(&self, extra: &ExtraName) -> bool {
         // exclude always trumps include
         !self.exclude.contains(extra) && self.include.contains(extra)
-    }
-
-    /// Iterate over all extras that we think should exist.
-    pub fn desugarred_names(&self) -> impl Iterator<Item = &ExtraName> {
-        self.include.names().chain(&self.exclude)
     }
 
     /// Returns an iterator over all extras that are included in the specification,

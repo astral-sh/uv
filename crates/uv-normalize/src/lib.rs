@@ -111,13 +111,6 @@ fn is_normalized(name: impl AsRef<str>) -> Result<bool, InvalidNameError> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InvalidNameError(String);
 
-impl InvalidNameError {
-    /// Returns the invalid name.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
 impl Display for InvalidNameError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -134,13 +127,6 @@ impl Error for InvalidNameError {}
 /// Path didn't end with `pyproject.toml`
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InvalidPipGroupPathError(String);
-
-impl InvalidPipGroupPathError {
-    /// Returns the invalid path.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
 
 impl Display for InvalidPipGroupPathError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

@@ -528,6 +528,7 @@ async fn build_package(
         if let Ok(workspace) = workspace {
             let groups = DependencyGroupsWithDefaults::none();
             interpreter_request = find_requires_python(workspace, &groups)?
+                .as_ref()
                 .and_then(PythonRequest::from_requires_python);
         }
     }

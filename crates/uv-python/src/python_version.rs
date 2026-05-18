@@ -210,17 +210,10 @@ impl PythonVersion {
             .copied()
             .map(|patch| u8::try_from(patch).expect("invalid patch version"))
     }
-
-    /// Returns a copy of the Python version without the patch version
-    #[must_use]
-    pub fn without_patch(&self) -> Self {
-        Self::from_str(format!("{}.{}", self.major(), self.minor()).as_str())
-            .expect("dropping a patch should always be valid")
-    }
 }
 
 /// Get the environment variable name for the build constraint for a given implementation.
-pub(crate) fn python_build_version_variable(implementation: ImplementationName) -> &'static str {
+fn python_build_version_variable(implementation: ImplementationName) -> &'static str {
     match implementation {
         ImplementationName::CPython => EnvVars::UV_PYTHON_CPYTHON_BUILD,
         ImplementationName::PyPy => EnvVars::UV_PYTHON_PYPY_BUILD,

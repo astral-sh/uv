@@ -34,7 +34,7 @@ impl KnownPlatform {
     }
 
     /// Determine the [`KnownPlatform`] from a marker tree.
-    pub fn from_marker(marker: MarkerTree) -> Option<Self> {
+    pub(crate) fn from_marker(marker: MarkerTree) -> Option<Self> {
         if marker == Self::Linux.marker() {
             Some(Self::Linux)
         } else if marker == Self::Windows.marker() {

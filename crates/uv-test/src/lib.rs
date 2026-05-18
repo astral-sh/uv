@@ -759,19 +759,6 @@ impl TestContext {
     }
 
     /// Use a working directory on the filesystem specified by
-    /// [`EnvVars::UV_INTERNAL__TEST_ALT_FS`].
-    ///
-    /// Returns `Ok(None)` if the environment variable is not set.
-    ///
-    /// Note a virtual environment is not created automatically.
-    pub fn with_working_dir_on_alt_fs(self) -> anyhow::Result<Option<Self>> {
-        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_ALT_FS).ok() else {
-            return Ok(None);
-        };
-        self.with_working_dir_on_fs(&dir, "ALT_FS").map(Some)
-    }
-
-    /// Use a working directory on the filesystem specified by
     /// [`EnvVars::UV_INTERNAL__TEST_NOCOW_FS`].
     ///
     /// Returns `Ok(None)` if the environment variable is not set.
