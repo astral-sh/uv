@@ -629,7 +629,7 @@ impl Display for ContainerOperator {
 
 impl MarkerExpression {
     /// Parse a [`MarkerExpression`] from a string with the given reporter.
-    pub fn parse_reporter(
+    pub(crate) fn parse_reporter(
         s: &str,
         reporter: &mut impl Reporter,
     ) -> Result<Option<Self>, Pep508Error> {
@@ -808,14 +808,6 @@ impl MarkerTree {
     /// Like [`FromStr::from_str`], but the caller chooses the return type generic.
     pub fn parse_str<T: Pep508Url>(markers: &str) -> Result<Self, Pep508Error<T>> {
         parse::parse_markers(markers, &mut TracingReporter)
-    }
-
-    /// Parse a [`MarkerTree`] from a string with the given reporter.
-    pub fn parse_reporter(
-        markers: &str,
-        reporter: &mut impl Reporter,
-    ) -> Result<Self, Pep508Error> {
-        parse::parse_markers(markers, reporter)
     }
 
     /// An empty marker that always evaluates to `true`.
