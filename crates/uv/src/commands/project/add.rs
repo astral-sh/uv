@@ -714,7 +714,7 @@ pub(crate) async fn add(
     let target = target.update(&content)?;
 
     // Set the Ctrl-C handler to revert changes on exit.
-    let _ = ctrlc::set_handler({
+    if let Err(err) = uv_sys::on_ctrl_c({
         let snapshot = snapshot.clone();
         move || {
             if modified {
@@ -728,7 +728,9 @@ pub(crate) async fn add(
                 130
             });
         }
-    });
+    }) {
+        warn!("Failed to install Ctrl-C rollback handler: {err}");
+    }
 
     // Use separate state for locking and syncing.
     let lock_state = state.fork();
