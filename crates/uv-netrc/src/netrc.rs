@@ -610,7 +610,8 @@ mod tests {
         );
     }
 
-   #[test]
+
+    #[test]
     fn test_lineno_after_macdef() {
         let nrc = Netrc::from_str("macdef mymacro\nline1\nline2\n\nbad_token foo");
         let err = nrc.unwrap_err();
