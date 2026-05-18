@@ -67,14 +67,14 @@ impl Binary {
     }
 
     /// Get the ordered list of download URLs for a specific version and platform.
-    pub fn download_urls(
-        &self,
+    fn download_urls(
+        self,
         version: &Version,
         platform: &str,
         format: ArchiveFormat,
     ) -> Result<Vec<DisplaySafeUrl>, Error> {
         let custom_astral_mirror = astral_mirror_url_from_env();
-        (*self).download_urls_with_astral_mirror(
+        self.download_urls_with_astral_mirror(
             version,
             platform,
             format,
@@ -180,14 +180,14 @@ impl fmt::Display for Binary {
 
 /// Archive formats for binary downloads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ArchiveFormat {
+enum ArchiveFormat {
     Zip,
     TarGz,
 }
 
 impl ArchiveFormat {
     /// Get the file extension for this archive format.
-    pub fn extension(&self) -> &'static str {
+    fn extension(self) -> &'static str {
         match self {
             Self::Zip => "zip",
             Self::TarGz => "tar.gz",
@@ -295,9 +295,9 @@ pub struct ResolvedVersion {
     /// The version number.
     pub version: Version,
     /// The ordered list of download URLs to try for this version and current platform.
-    pub artifact_urls: Vec<DisplaySafeUrl>,
+    artifact_urls: Vec<DisplaySafeUrl>,
     /// The archive format.
-    pub archive_format: ArchiveFormat,
+    archive_format: ArchiveFormat,
 }
 
 impl ResolvedVersion {
