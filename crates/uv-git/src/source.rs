@@ -44,7 +44,7 @@ impl GitSource {
 
     /// Disable SSL verification for this [`GitSource`].
     #[must_use]
-    pub fn dangerous(self) -> Self {
+    pub(crate) fn dangerous(self) -> Self {
         Self {
             disable_ssl: true,
             ..self
