@@ -37,7 +37,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
-use crate::base_client::{BaseClientBuilder, ClientBuildError, ExtraMiddleware, RedirectPolicy};
+use crate::base_client::{BaseClientBuilder, ClientBuildError, RedirectPolicy};
 use crate::cached_client::CacheControl;
 use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleDetailHTML;
@@ -102,12 +102,6 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn cache(mut self, cache: Cache) -> Self {
         self.cache = cache;
-        self
-    }
-
-    #[must_use]
-    pub fn extra_middleware(mut self, middleware: ExtraMiddleware) -> Self {
-        self.base_client_builder = self.base_client_builder.extra_middleware(middleware);
         self
     }
 
