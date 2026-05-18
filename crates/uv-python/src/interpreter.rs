@@ -49,11 +49,9 @@ pub struct Interpreter {
     virtualenv: Scheme,
     manylinux_compatible: bool,
     sys_prefix: PathBuf,
-    sys_base_exec_prefix: PathBuf,
     sys_base_prefix: PathBuf,
     sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
-    sys_path: Vec<PathBuf>,
     site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     standalone: bool,
@@ -84,14 +82,12 @@ impl Interpreter {
             virtualenv: info.virtualenv,
             manylinux_compatible: info.manylinux_compatible,
             sys_prefix: info.sys_prefix,
-            sys_base_exec_prefix: info.sys_base_exec_prefix,
             pointer_size: info.pointer_size,
             gil_disabled: info.gil_disabled,
             debug_enabled: info.debug_enabled,
             sys_base_prefix: info.sys_base_prefix,
             sys_base_executable: info.sys_base_executable,
             sys_executable: info.sys_executable,
-            sys_path: info.sys_path,
             site_packages: info.site_packages,
             stdlib: info.stdlib,
             standalone: info.standalone,
@@ -409,7 +405,7 @@ impl Interpreter {
     }
 
     /// Return the patch version component of this Python version.
-    pub fn python_patch(&self) -> u8 {
+    pub(crate) fn python_patch(&self) -> u8 {
         let minor = self.markers.python_full_version().version.release()[2];
         u8::try_from(minor).expect("invalid patch version")
     }
@@ -441,11 +437,6 @@ impl Interpreter {
         self.markers.implementation_name()
     }
 
-    /// Return the `sys.base_exec_prefix` path for this Python interpreter.
-    pub fn sys_base_exec_prefix(&self) -> &Path {
-        &self.sys_base_exec_prefix
-    }
-
     /// Return the `sys.base_prefix` path for this Python interpreter.
     pub fn sys_base_prefix(&self) -> &Path {
         &self.sys_base_prefix
@@ -458,7 +449,7 @@ impl Interpreter {
 
     /// Return the `sys._base_executable` path for this Python interpreter. Some platforms do not
     /// have this attribute, so it may be `None`.
-    pub fn sys_base_executable(&self) -> Option<&Path> {
+    pub(crate) fn sys_base_executable(&self) -> Option<&Path> {
         self.sys_base_executable.as_deref()
     }
 
@@ -470,11 +461,6 @@ impl Interpreter {
     /// Return the "real" queried executable path for this Python interpreter.
     pub fn real_executable(&self) -> &Path {
         &self.real_executable
-    }
-
-    /// Return the `sys.path` for this Python interpreter.
-    pub fn sys_path(&self) -> &[PathBuf] {
-        &self.sys_path
     }
 
     /// Return the `site.getsitepackages` for this Python interpreter.
