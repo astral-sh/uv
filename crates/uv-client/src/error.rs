@@ -70,7 +70,7 @@ impl ProblemDetails {
     /// Returns `None` if the content type is not `application/problem+json`
     /// or if parsing fails. Only consumes the response body if the content
     /// type matches.
-    pub async fn try_from_response(response: Response) -> Option<Self> {
+    pub(crate) async fn try_from_response(response: Response) -> Option<Self> {
         let is_problem = response
             .headers()
             .get(reqwest::header::CONTENT_TYPE)
