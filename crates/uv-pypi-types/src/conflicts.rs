@@ -662,7 +662,7 @@ impl SchemaConflicts {
 /// name.
 #[derive(Debug, Default, Clone, Eq, PartialEq, serde::Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct SchemaConflictSet(Vec<SchemaConflictItem>);
+struct SchemaConflictSet(Vec<SchemaConflictItem>);
 
 /// Like [`ConflictItem`], but for deserialization in `pyproject.toml`.
 ///
@@ -678,7 +678,7 @@ pub struct SchemaConflictSet(Vec<SchemaConflictItem>);
     try_from = "ConflictItemWire",
     into = "ConflictItemWire"
 )]
-pub struct SchemaConflictItem {
+struct SchemaConflictItem {
     package: Option<PackageName>,
     kind: ConflictKind,
 }
