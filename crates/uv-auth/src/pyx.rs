@@ -286,7 +286,7 @@ impl PyxTokenStore {
     ///
     /// If no access token is found, but an API key is present, the API key will be used to
     /// bootstrap an access token.
-    pub async fn init(
+    async fn init(
         &self,
         client: &ClientWithMiddleware,
         tolerance_secs: u64,
