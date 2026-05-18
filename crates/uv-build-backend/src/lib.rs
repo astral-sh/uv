@@ -1988,23 +1988,17 @@ mod tests {
 
         // Extract the sdist to verify the contents of both files.
         let source_dist_path = dist.path().join(build.source_dist_filename.to_string());
-        let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
-        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
-
-        let mut pyproject_toml_content = String::new();
-        let mut pyproject_toml_orig_content = String::new();
-        for entry in source_dist.entries().unwrap() {
-            let mut entry = entry.unwrap();
-            let path = entry.path().unwrap().to_string_lossy().to_string();
-
-            if path.ends_with("pyproject.toml") {
-                entry.read_to_string(&mut pyproject_toml_content).unwrap();
-            } else if path.ends_with("pyproject.toml.orig") {
-                entry
-                    .read_to_string(&mut pyproject_toml_orig_content)
-                    .unwrap();
-            }
-        }
+        let sdist_tree = TempDir::new().unwrap();
+        unpack_sdist(&source_dist_path, sdist_tree.path()).unwrap();
+        let sdist_top_level_directory = sdist_tree.path().join(format!(
+            "{}-{}",
+            build.source_dist_filename.name.as_dist_info_name(),
+            build.source_dist_filename.version
+        ));
+        let pyproject_toml_content =
+            fs_err::read_to_string(sdist_top_level_directory.join("pyproject.toml")).unwrap();
+        let pyproject_toml_orig_content =
+            fs_err::read_to_string(sdist_top_level_directory.join("pyproject.toml.orig")).unwrap();
 
         assert_eq!(pyproject_toml_orig_content, pyproject_toml);
         assert_snapshot!(pyproject_toml_content, @r#"
@@ -2085,23 +2079,17 @@ mod tests {
 
         // Extract the sdist to verify the contents of both files.
         let source_dist_path = dist.path().join(build.source_dist_filename.to_string());
-        let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
-        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
-
-        let mut pyproject_toml_content = String::new();
-        let mut pyproject_toml_orig_content = String::new();
-        for entry in source_dist.entries().unwrap() {
-            let mut entry = entry.unwrap();
-            let path = entry.path().unwrap().to_string_lossy().to_string();
-
-            if path.ends_with("pyproject.toml") {
-                entry.read_to_string(&mut pyproject_toml_content).unwrap();
-            } else if path.ends_with("pyproject.toml.orig") {
-                entry
-                    .read_to_string(&mut pyproject_toml_orig_content)
-                    .unwrap();
-            }
-        }
+        let sdist_tree = TempDir::new().unwrap();
+        unpack_sdist(&source_dist_path, sdist_tree.path()).unwrap();
+        let sdist_top_level_directory = sdist_tree.path().join(format!(
+            "{}-{}",
+            build.source_dist_filename.name.as_dist_info_name(),
+            build.source_dist_filename.version
+        ));
+        let pyproject_toml_content =
+            fs_err::read_to_string(sdist_top_level_directory.join("pyproject.toml")).unwrap();
+        let pyproject_toml_orig_content =
+            fs_err::read_to_string(sdist_top_level_directory.join("pyproject.toml.orig")).unwrap();
 
         assert_eq!(pyproject_toml_orig_content, pyproject_toml);
         assert_snapshot!(pyproject_toml_content, @r#"

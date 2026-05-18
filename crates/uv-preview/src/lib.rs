@@ -599,6 +599,10 @@ mod tests {
             "index-exclude-newer"
         );
         assert_eq!(PreviewFeature::AzureEndpoint.as_str(), "azure-endpoint");
+        assert_eq!(
+            PreviewFeature::TomlBackwardsCompatibility.as_str(),
+            "toml-backwards-compatibility"
+        );
     }
 
     #[test]
