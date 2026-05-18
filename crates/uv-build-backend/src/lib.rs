@@ -1954,6 +1954,9 @@ mod tests {
                 { name = "Platypus", email = "platypus@example.com", },
             ]
 
+            [tool.foo]
+            when = 1969-06-20T20:17Z
+
             [build-system]
             requires = ["uv_build>=0.5.15,<0.6.0"]
             build-backend = "uv_build"
@@ -2018,6 +2021,9 @@ mod tests {
         [[project.authors]]
         name = "Platypus"
         email = "platypus@example.com"
+
+        [tool.foo]
+        when = 1969-06-20T20:17:00Z
 
         [build-system]
         requires = ["uv_build>=0.5.15,<0.6.0"]
@@ -2045,6 +2051,9 @@ mod tests {
                 { name = "Platypus", email = "platypus@example.com", },
             ]
 
+            [tool.foo]
+            when = 1969-06-20T20:17Z
+
             [build-system]
             requires = ["uv_build>=0.5.15,<0.6.0"]
             build-backend = "uv_build"
@@ -2109,6 +2118,9 @@ mod tests {
         [[project.authors]]
         name = "Platypus"
         email = "platypus@example.com"
+
+        [tool.foo]
+        when = 1969-06-20T20:17:00Z
 
         [build-system]
         requires = ["uv_build>=0.5.15,<0.6.0"]

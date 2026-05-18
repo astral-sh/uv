@@ -262,9 +262,10 @@ fn write_source_dist(
             false
         };
     if toml_backwards_compatibility {
-        let pyproject_value: toml::Value = toml::from_str(&pyproject_contents)
+        let mut pyproject_value: toml::Value = toml::from_str(&pyproject_contents)
             .map_err(|err| Error::Toml(pyproject_path.clone(), err))?;
         // See https://github.com/toml-rs/toml/issues/1088 for `to_string_pretty`.
+        normalize_toml10_datetimes(&mut pyproject_value);
         let pyproject_rewritten =
             toml::to_string_pretty(&pyproject_value).map_err(Error::TomlSerialize)?;
         writer.write_bytes(
@@ -433,6 +434,32 @@ impl<W: Write + Unpin + Send> TarGzWriter<W> {
         let enc = GzEncoder::new(writer, Compression::default());
         let tar = tokio_tar::Builder::new_non_terminated(SyncWriter::new(enc));
         Self { path, tar }
+    }
+}
+
+fn normalize_toml10_datetimes(value: &mut toml::Value) {
+    match value {
+        toml::Value::Datetime(datetime) => {
+            if let Some(time) = datetime.time.as_mut()
+                && time.second.is_none()
+            {
+                time.second = Some(0);
+            }
+        }
+        toml::Value::Array(values) => {
+            for value in values {
+                normalize_toml10_datetimes(value);
+            }
+        }
+        toml::Value::Table(values) => {
+            for (_, value) in values.iter_mut() {
+                normalize_toml10_datetimes(value);
+            }
+        }
+        toml::Value::String(_)
+        | toml::Value::Integer(_)
+        | toml::Value::Float(_)
+        | toml::Value::Boolean(_) => {}
     }
 }
 

@@ -7233,8 +7233,9 @@ dependencies = [
 
 [[package]]
 name = "uv-toml"
-version = "0.0.40"
+version = "0.0.45"
 dependencies = [
+ "toml_datetime",
  "toml_parser",
 ]
 

@@ -1,3 +1,4 @@
+use toml_datetime::Datetime;
 use toml_parser::decoder::Encoding;
 use toml_parser::lexer::Token;
 use toml_parser::parser::{EventReceiver, parse_document};
@@ -109,8 +110,15 @@ impl EventReceiver for DetectToml11<'_> {
         self.state.pop();
     }
 
-    fn simple_key(&mut self, _span: Span, _kind: Option<Encoding>, _error: &mut dyn ErrorSink) {
+    fn simple_key(&mut self, span: Span, kind: Option<Encoding>, _error: &mut dyn ErrorSink) {
         self.set_sep(false);
+
+        if matches!(kind, Some(Encoding::BasicString | Encoding::MlBasicString))
+            && has_toml11_escapes(self.raw_at(span))
+        {
+            // TOML 1.1 introduces new escape sequences
+            self.flag_11();
+        }
     }
 
     fn scalar(&mut self, span: Span, kind: Option<Encoding>, _error: &mut dyn ErrorSink) {
@@ -121,6 +129,9 @@ impl EventReceiver for DetectToml11<'_> {
                 // TOML 1.1 introduces new escape sequences
                 self.flag_11();
             }
+        } else if has_toml11_optional_second_time(self.raw_at(span)) {
+            // TOML 1.1 makes seconds optional in times and datetimes.
+            self.flag_11();
         }
     }
 
@@ -149,6 +160,19 @@ fn has_toml11_escapes(raw: &str) -> bool {
         }
     }
     false
+}
+
+/// Scan for the TOML 1.1 optional-second time syntax, such as `12:34` and `1969-06-20T20:17Z`.
+fn has_toml11_optional_second_time(raw: &str) -> bool {
+    // Non-datetime scalars, such as booleans and integers, fail to parse as date and/or time.
+    let Ok(datetime) = raw.parse::<Datetime>() else {
+        return false;
+    };
+
+    datetime
+        .time
+        .as_ref()
+        .is_some_and(|time| time.second.is_none())
 }
 
 #[cfg(test)]
@@ -235,6 +259,16 @@ mod tests {
     }
 
     #[test]
+    fn features_hex_escape_in_quoted_key() {
+        assert!(has_toml11_features("\"\\x62ar\" = \"baz\"\n"));
+    }
+
+    #[test]
+    fn features_hex_escape_in_dotted_quoted_key() {
+        assert!(has_toml11_features("foo.\"\\x62ar\" = \"baz\"\n"));
+    }
+
+    #[test]
     fn features_esc_escape() {
         assert!(has_toml11_features("x = \"val \\e\"\n"));
     }
@@ -257,5 +291,22 @@ mod tests {
     #[test]
     fn features_trailing_comma_in_array_is_not_11() {
         assert!(!has_toml11_features("x = [1, 2, 3,]\n"));
+    }
+
+    #[test]
+    fn features_optional_second_time_values() {
+        assert!(has_toml11_features("x = 20:17\n"));
+        assert!(has_toml11_features("x = 1969-06-20T20:17\n"));
+        assert!(has_toml11_features("x = 1969-06-20 20:17\n"));
+        assert!(has_toml11_features("x = 1969-06-20T20:17Z\n"));
+        assert!(has_toml11_features("x = 1969-06-20T20:17z\n"));
+        assert!(has_toml11_features("x = 1969-06-20T20:17-07:00\n"));
+    }
+
+    #[test]
+    fn features_toml10_time_values_are_not_11() {
+        assert!(!has_toml11_features("x = 20:17:00\n"));
+        assert!(!has_toml11_features("x = 1969-06-20T20:17:00Z\n"));
+        assert!(!has_toml11_features("x = 1969-06-20\n"));
     }
 }
