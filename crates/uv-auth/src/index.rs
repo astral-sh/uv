@@ -62,7 +62,7 @@ pub struct Index {
 }
 
 impl Index {
-    pub fn is_prefix_for(&self, url: &Url) -> bool {
+    fn is_prefix_for(&self, url: &Url) -> bool {
         if self.root_url.scheme() != url.scheme()
             || self.root_url.host_str() != url.host_str()
             || self.root_url.port_or_known_default() != url.port_or_known_default()
