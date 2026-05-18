@@ -21,7 +21,7 @@ impl GitStore {
     }
 
     /// Get the [`Credentials`] for the given URL, if they exist.
-    pub fn get(&self, url: &RepositoryUrl) -> Option<Arc<Credentials>> {
+    pub(crate) fn get(&self, url: &RepositoryUrl) -> Option<Arc<Credentials>> {
         self.0.read().unwrap().get(url).cloned()
     }
 }
