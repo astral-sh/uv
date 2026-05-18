@@ -85,16 +85,7 @@ default feature set:
 If you suppress the default feature set when building this crate, and you
 don't separately specify one of the included keystore features for your platform,
 then no keystore will be built in, and calls to [`Entry::new`] and [`Entry::new_with_target`]
-will fail unless the client brings their own keystore (see next section).
-
-## Client-provided Credential Stores
-
-In addition to the keystores implemented by this crate, clients
-are free to provide their own keystores and use those. Clients can construct
-their concrete credentials directly and then turn them into entries by using the
-[`Entry::new_with_credential`] call. The major advantage of this approach is
-that credentials can be identified however clients want, rather than being restricted
-  to the simple model used by this crate.
+will fail.
 
 ## Tests
 
@@ -240,8 +231,8 @@ impl Entry {
         Ok(entry)
     }
 
-    /// Create an entry from a credential that may be in any credential store.
-    pub fn new_with_credential(credential: Box<Credential>) -> Self {
+    #[cfg(test)]
+    fn new_with_credential(credential: Box<Credential>) -> Self {
         Self { inner: credential }
     }
 
