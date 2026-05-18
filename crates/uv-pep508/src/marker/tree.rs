@@ -1041,17 +1041,6 @@ impl MarkerTree {
         }
     }
 
-    /// Same as [`Self::evaluate`], but instead of using logging to warn, you can pass your own
-    /// handler for warnings
-    pub fn evaluate_reporter(
-        self,
-        env: &MarkerEnvironment,
-        extras: &[ExtraName],
-        reporter: &mut impl Reporter,
-    ) -> bool {
-        self.evaluate_reporter_impl(env, ExtrasEnvironment::from_extras(extras), reporter)
-    }
-
     fn evaluate_reporter_impl(
         self,
         env: &MarkerEnvironment,
@@ -1447,120 +1436,6 @@ impl fmt::Debug for MarkerTree {
             return write!(f, "false");
         }
         write!(f, "{}", self.contents().unwrap())
-    }
-}
-
-impl MarkerTree {
-    /// Formats a [`MarkerTree`] as a graph.
-    ///
-    /// This is useful for debugging when one wants to look at a
-    /// representation of a `MarkerTree` that is more faithful to its
-    /// internal representation.
-    pub fn debug_graph(&self) -> impl fmt::Debug + '_ {
-        fmt::from_fn(|f| self.fmt_graph(f, 0))
-    }
-
-    /// Formats a [`MarkerTree`] in its "raw" representation.
-    ///
-    /// This is useful for debugging when one wants to look at a
-    /// representation of a `MarkerTree` that is precisely identical
-    /// to its internal representation.
-    pub fn debug_raw(&self) -> impl fmt::Debug + '_ {
-        fmt::from_fn(|f| {
-            let node = INTERNER.shared.node(self.0);
-            f.debug_tuple("MarkerTreeDebugRaw").field(node).finish()
-        })
-    }
-
-    fn fmt_graph(self, f: &mut Formatter<'_>, level: usize) -> fmt::Result {
-        match self.kind() {
-            MarkerTreeKind::True => return write!(f, "true"),
-            MarkerTreeKind::False => return write!(f, "false"),
-            MarkerTreeKind::Version(kind) => {
-                for (tree, range) in simplify::collect_edges(kind.edges()) {
-                    writeln!(f)?;
-                    for _ in 0..level {
-                        write!(f, "  ")?;
-                    }
-
-                    write!(f, "{key}{range} -> ", key = kind.key())?;
-                    tree.fmt_graph(f, level + 1)?;
-                }
-            }
-            MarkerTreeKind::String(kind) => {
-                for (tree, range) in simplify::collect_edges(kind.children()) {
-                    writeln!(f)?;
-                    for _ in 0..level {
-                        write!(f, "  ")?;
-                    }
-
-                    write!(f, "{key}{range} -> ", key = kind.key())?;
-                    tree.fmt_graph(f, level + 1)?;
-                }
-            }
-            MarkerTreeKind::In(kind) => {
-                writeln!(f)?;
-                for _ in 0..level {
-                    write!(f, "  ")?;
-                }
-                write!(f, "{} in {} -> ", kind.key(), kind.value())?;
-                kind.edge(true).fmt_graph(f, level + 1)?;
-
-                writeln!(f)?;
-                for _ in 0..level {
-                    write!(f, "  ")?;
-                }
-                write!(f, "{} not in {} -> ", kind.key(), kind.value())?;
-                kind.edge(false).fmt_graph(f, level + 1)?;
-            }
-            MarkerTreeKind::Contains(kind) => {
-                writeln!(f)?;
-                for _ in 0..level {
-                    write!(f, "  ")?;
-                }
-                write!(f, "{} in {} -> ", kind.value(), kind.key())?;
-                kind.edge(true).fmt_graph(f, level + 1)?;
-
-                writeln!(f)?;
-                for _ in 0..level {
-                    write!(f, "  ")?;
-                }
-                write!(f, "{} not in {} -> ", kind.value(), kind.key())?;
-                kind.edge(false).fmt_graph(f, level + 1)?;
-            }
-            MarkerTreeKind::List(kind) => {
-                writeln!(f)?;
-                for _ in 0..level {
-                    write!(f, "  ")?;
-                }
-                write!(f, "{} in {} -> ", kind.value(), kind.key())?;
-                kind.edge(true).fmt_graph(f, level + 1)?;
-
-                writeln!(f)?;
-                for _ in 0..level {
-                    write!(f, "  ")?;
-                }
-                write!(f, "{} not in {} -> ", kind.value(), kind.key())?;
-                kind.edge(false).fmt_graph(f, level + 1)?;
-            }
-            MarkerTreeKind::Extra(kind) => {
-                writeln!(f)?;
-                for _ in 0..level {
-                    write!(f, "  ")?;
-                }
-                write!(f, "extra == {} -> ", kind.name())?;
-                kind.edge(true).fmt_graph(f, level + 1)?;
-
-                writeln!(f)?;
-                for _ in 0..level {
-                    write!(f, "  ")?;
-                }
-                write!(f, "extra != {} -> ", kind.name())?;
-                kind.edge(false).fmt_graph(f, level + 1)?;
-            }
-        }
-
-        Ok(())
     }
 }
 
