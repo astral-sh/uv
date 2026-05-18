@@ -13,7 +13,7 @@ use crate::archive::Archive;
 use crate::{HttpArchivePointer, LocalArchivePointer};
 
 #[derive(Debug, Clone)]
-pub struct ResolvedWheel {
+pub(crate) struct ResolvedWheel {
     /// The filename of the wheel.
     pub filename: WheelFilename,
     /// The [`CacheEntry`] for the wheel.
@@ -22,7 +22,7 @@ pub struct ResolvedWheel {
 
 impl ResolvedWheel {
     /// Try to parse a distribution from a cached directory name (like `typing-extensions-4.8.0-py3-none-any`).
-    pub fn from_built_source(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
+    pub(crate) fn from_built_source(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
         let path = path.as_ref();
 
         // Determine the wheel filename.
@@ -52,7 +52,7 @@ pub struct CachedWheel {
 
 impl CachedWheel {
     /// Create a [`CachedWheel`] from a [`ResolvedWheel`].
-    pub fn from_entry(
+    pub(crate) fn from_entry(
         wheel: ResolvedWheel,
         hashes: HashDigests,
         cache_info: CacheInfo,
@@ -68,7 +68,7 @@ impl CachedWheel {
     }
 
     /// Read a cached wheel from a `.http` pointer
-    pub fn from_http_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
+    pub(crate) fn from_http_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
         let path = path.as_ref();
 
         // Read the pointer.
@@ -96,7 +96,7 @@ impl CachedWheel {
     }
 
     /// Read a cached wheel from a `.rev` pointer
-    pub fn from_local_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
+    pub(crate) fn from_local_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
         let path = path.as_ref();
 
         // Read the pointer.
@@ -124,7 +124,7 @@ impl CachedWheel {
     }
 
     /// Convert a [`CachedWheel`] into a [`CachedRegistryDist`].
-    pub fn into_registry_dist(self) -> CachedRegistryDist {
+    pub(crate) fn into_registry_dist(self) -> CachedRegistryDist {
         CachedRegistryDist {
             filename: self.filename,
             path: self.entry.into_path_buf().into_boxed_path(),
