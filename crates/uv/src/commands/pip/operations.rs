@@ -187,7 +187,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             // If we resolved a single project, use it for the project name.
             project = project.or_else(|| {
                 if let [resolution] = &resolutions[..] {
-                    Some(resolution.project.clone())
+                    Some(resolution.project().clone())
                 } else {
                     None
                 }
@@ -199,7 +199,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 .filter(|extra| {
                     !resolutions
                         .iter()
-                        .any(|resolution| resolution.extras.contains(extra))
+                        .any(|resolution| resolution.extras().contains(extra))
                 })
                 .collect::<Vec<_>>();
             if !unused_extras.is_empty() {
@@ -217,7 +217,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             requirements.extend(
                 resolutions
                     .into_iter()
-                    .flat_map(|resolution| resolution.requirements),
+                    .flat_map(|resolution| resolution.into_requirements()),
             );
         }
 
