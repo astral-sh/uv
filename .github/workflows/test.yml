@@ -38,6 +38,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
@@ -103,7 +104,6 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
           cargo nextest run \
-            --cargo-profile fast-build \
             --features test-python-patch,native-auth,secret-service \
             --workspace \
             --profile ci-linux
@@ -140,6 +140,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
@@ -178,7 +179,6 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
           cargo nextest run \
-            --cargo-profile fast-build \
             --no-default-features \
             --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
             --workspace \
@@ -233,6 +233,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           workspaces: ${{ env.UV_WORKSPACE }}
           # Use the same cache entry across the partitions
           add-job-id-key: false
@@ -266,7 +267,6 @@ jobs:
         shell: bash
         run: |
           cargo nextest run \
-            --cargo-profile fast-build \
             --no-default-features \
             --features test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native \
             --workspace \
