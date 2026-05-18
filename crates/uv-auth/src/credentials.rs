@@ -288,7 +288,7 @@ impl Credentials {
     /// Panics if the authentication is not conformant to the HTTP Basic Authentication scheme:
     /// - The contents must be base64 encoded
     /// - There must be a `:` separator
-    pub(crate) fn from_header_value(header: &HeaderValue) -> Option<Self> {
+    fn from_header_value(header: &HeaderValue) -> Option<Self> {
         // Parse a `Basic` authentication header.
         if let Some(mut value) = header.as_bytes().strip_prefix(b"Basic ") {
             let mut decoder = DecoderReader::new(&mut value, &BASE64_STANDARD);
