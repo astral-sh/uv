@@ -428,7 +428,7 @@ impl PythonDownloadRequest {
     }
 
     /// Fill the build field from the environment variable relevant for the [`ImplementationName`].
-    pub fn fill_build_from_env(mut self) -> Result<Self, Error> {
+    fn fill_build_from_env(mut self) -> Result<Self, Error> {
         if self.build.is_some() {
             return Ok(self);
         }
@@ -504,12 +504,12 @@ impl PythonDownloadRequest {
     }
 
     #[cfg(test)]
-    pub(crate) fn unset_defaults_for_host(self, host: &Platform) -> Self {
+    fn unset_defaults_for_host(self, host: &Platform) -> Self {
         self.unset_non_platform_defaults()
             .unset_platform_defaults(host)
     }
 
-    pub(crate) fn unset_platform_defaults(mut self, host: &Platform) -> Self {
+    fn unset_platform_defaults(mut self, host: &Platform) -> Self {
         self.os = self.os.filter(|os| *os != host.os);
 
         self.libc = self.libc.filter(|libc| *libc != host.libc);
