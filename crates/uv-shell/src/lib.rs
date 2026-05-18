@@ -1,8 +1,12 @@
-pub mod runnable;
+mod runnable;
 mod shlex;
-pub mod windows;
+#[cfg(windows)]
+mod windows;
 
+pub use runnable::WindowsRunnable;
 pub use shlex::{escape_posix_for_single_quotes, shlex_posix, shlex_windows};
+#[cfg(windows)]
+pub use windows::prepend_path;
 
 use std::env::home_dir;
 use std::path::{Path, PathBuf};
