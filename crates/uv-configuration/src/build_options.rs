@@ -89,7 +89,7 @@ impl BuildOptions {
         }
     }
 
-    pub fn no_build_all(&self) -> bool {
+    fn no_build_all(&self) -> bool {
         matches!(self.no_build, NoBuild::All)
     }
 
