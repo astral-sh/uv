@@ -612,7 +612,7 @@ pub struct ToolUv {
             environments = ["sys_platform == 'darwin'"]
         "#
     )]
-    pub environments: Option<SupportedEnvironments>,
+    pub(crate) environments: Option<SupportedEnvironments>,
 
     /// A list of required platforms, for packages that lack source distributions.
     ///
@@ -655,7 +655,7 @@ pub struct ToolUv {
             ]
         "#
     )]
-    pub required_environments: Option<SupportedEnvironments>,
+    pub(crate) required_environments: Option<SupportedEnvironments>,
 
     /// Declare collections of extras or dependency groups that are conflicting
     /// (i.e., mutually exclusive).
@@ -699,7 +699,7 @@ pub struct ToolUv {
             ]
         "#
     )]
-    pub conflicts: Option<SchemaConflicts>,
+    pub(crate) conflicts: Option<SchemaConflicts>,
 
     // Only exists on this type for schema and docs generation, the build backend settings are
     // never merged in a workspace and read separately by the backend code.
