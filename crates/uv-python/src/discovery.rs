@@ -1572,7 +1572,7 @@ fn warn_on_unsupported_python(interpreter: &Interpreter) {
 ///
 /// See: <https://github.com/astral-sh/rye/blob/b0e9eccf05fe4ff0ae7b0250a248c54f2d780b4d/rye/src/cli/shim.rs#L108>
 #[cfg(windows)]
-pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
+fn is_windows_store_shim(path: &Path) -> bool {
     use std::os::windows::fs::MetadataExt;
     use std::os::windows::prelude::OsStrExt;
     use windows::Win32::Foundation::CloseHandle;
@@ -2305,7 +2305,7 @@ impl PythonSource {
     /// This enables targeting the virtual environment with uv by putting its `bin/` on the `PATH`
     /// without setting `VIRTUAL_ENV` — but if there's another interpreter before it we will ignore
     /// it.
-    pub(crate) fn is_maybe_virtualenv(self) -> bool {
+    fn is_maybe_virtualenv(self) -> bool {
         match self {
             Self::ProvidedPath
             | Self::ActiveEnvironment
@@ -2320,7 +2320,7 @@ impl PythonSource {
 
     /// Whether this source is "explicit", e.g., it was directly provided by the user or is
     /// an active virtual environment.
-    pub(crate) fn is_explicit(self) -> bool {
+    fn is_explicit(self) -> bool {
         match self {
             Self::ProvidedPath
             | Self::ParentInterpreter
@@ -2837,7 +2837,7 @@ impl VersionRequest {
     /// Check if the request is for a version supported by uv.
     ///
     /// If not, an `Err` is returned with an explanatory message.
-    pub(crate) fn check_supported(&self) -> Result<(), String> {
+    fn check_supported(&self) -> Result<(), String> {
         match self {
             Self::Any | Self::Default => (),
             Self::Major(major, _) => {
