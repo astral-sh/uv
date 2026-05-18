@@ -220,7 +220,7 @@ impl PythonVersion {
 }
 
 /// Get the environment variable name for the build constraint for a given implementation.
-pub(crate) fn python_build_version_variable(implementation: ImplementationName) -> &'static str {
+fn python_build_version_variable(implementation: ImplementationName) -> &'static str {
     match implementation {
         ImplementationName::CPython => EnvVars::UV_PYTHON_CPYTHON_BUILD,
         ImplementationName::PyPy => EnvVars::UV_PYTHON_PYPY_BUILD,
