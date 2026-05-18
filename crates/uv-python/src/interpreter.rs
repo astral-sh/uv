@@ -274,12 +274,12 @@ impl Interpreter {
     }
 
     /// Returns `true` if the environment is a `--target` environment.
-    pub fn is_target(&self) -> bool {
+    fn is_target(&self) -> bool {
         self.target.is_some()
     }
 
     /// Returns `true` if the environment is a `--prefix` environment.
-    pub fn is_prefix(&self) -> bool {
+    fn is_prefix(&self) -> bool {
         self.prefix.is_some()
     }
 
@@ -392,7 +392,7 @@ impl Interpreter {
 
     /// Returns the Python version up to the patch component.
     #[inline]
-    pub fn python_patch_version(&self) -> Version {
+    pub(crate) fn python_patch_version(&self) -> Version {
         Version::new(self.python_version().release().iter().take(3).copied())
     }
 
@@ -420,13 +420,13 @@ impl Interpreter {
     }
 
     /// Return the major version of the implementation (e.g., `CPython` or `PyPy`).
-    pub fn implementation_major(&self) -> u8 {
+    fn implementation_major(&self) -> u8 {
         let major = self.markers.implementation_version().version.release()[0];
         u8::try_from(major).expect("invalid major version")
     }
 
     /// Return the minor version of the implementation (e.g., `CPython` or `PyPy`).
-    pub fn implementation_minor(&self) -> u8 {
+    fn implementation_minor(&self) -> u8 {
         let minor = self.markers.implementation_version().version.release()[1];
         u8::try_from(minor).expect("invalid minor version")
     }
