@@ -487,15 +487,13 @@ pub(crate) async fn pip_compile(
             LockedRequirements::default()
         };
 
-    // Populate the Git resolver with pinned references from the existing lockfile.
-    // Mutable references (branches, default branch) are intentionally excluded: they
-    // can move between resolutions, and pre-seeding them would cause the resolver to
-    // use a stale commit hash even when the lockfile is being regenerated.
+    // Populate the Git resolver.
+    // For `pip compile`, the existing output file is treated as an explicit preference
+    // source: re-running without `--upgrade` is expected to preserve pinned SHAs,
+    // including those for branch/default-branch dependencies.
     for ResolvedRepositoryReference { reference, sha } in git {
-        if reference.reference.is_immutable() {
-            debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
-            state.git().insert(reference, sha);
-        }
+        debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
+        state.git().insert(reference, sha);
     }
 
     // Combine the `--no-binary` and `--no-build` flags from the requirements files.
