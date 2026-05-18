@@ -44,6 +44,7 @@ Discord = "https://discord.gg/astral-sh"
 
 [tool.maturin]
 bindings = "bin"
+editable-profile = "dev"
 manifest-path = "crates/uv/Cargo.toml"
 module-name = "uv"
 python-source = "python"
@@ -108,6 +109,15 @@ docs = [
 ]
 docker = [
   "cargo-zigbuild>=0.19.8",
+]
+
+[tool.uv]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "Cargo.toml" },
+    { file = "Cargo.lock" },
+    { file = "crates/**/*.rs" },
+    { file = "crates/**/Cargo.toml" },
 ]
 
 [tool.uv.dependency-groups]
