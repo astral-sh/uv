@@ -504,7 +504,7 @@ pub(crate) struct Changelog {
 
 impl Changelog {
     /// Create a [`Changelog`] from two iterators of [`ChangedDist`]s.
-    pub(crate) fn new<I, U>(installed: I, uninstalled: U) -> Self
+    fn new<I, U>(installed: I, uninstalled: U) -> Self
     where
         I: IntoIterator<Item = ChangedDist>,
         U: IntoIterator<Item = ChangedDist>,
@@ -526,7 +526,7 @@ impl Changelog {
     }
 
     /// Create a [`Changelog`] from a list of local distributions.
-    pub(crate) fn from_local(installed: Vec<CachedDist>, uninstalled: Vec<InstalledDist>) -> Self {
+    fn from_local(installed: Vec<CachedDist>, uninstalled: Vec<InstalledDist>) -> Self {
         Self::new(
             installed
                 .into_iter()
