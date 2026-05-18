@@ -1750,7 +1750,7 @@ impl PythonVariant {
 
     /// Return the lib suffix for the variant, e.g., `t` for `python3.13t` but an empty string for
     /// `python3.13d` or `python3.13`.
-    pub fn lib_suffix(self) -> &'static str {
+    pub(crate) fn lib_suffix(self) -> &'static str {
         match self {
             Self::Default | Self::Debug | Self::Gil | Self::GilDebug => "",
             Self::Freethreaded | Self::FreethreadedDebug => "t",
