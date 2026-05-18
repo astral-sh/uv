@@ -121,7 +121,7 @@ impl Manifest {
     }
 
     /// Like [`Self::requirements`], but without the overrides.
-    pub fn requirements_no_overrides<'a>(
+    pub(crate) fn requirements_no_overrides<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
         mode: DependencyMode,
@@ -211,7 +211,7 @@ impl Manifest {
     /// At time of writing, this is used for:
     /// - Determining which packages should use the "lowest-compatible version" of a package, when
     ///   the `lowest-direct` strategy is in use.
-    pub fn user_requirements<'a>(
+    pub(crate) fn user_requirements<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
         mode: DependencyMode,
