@@ -18,8 +18,6 @@ pub struct Installer<'a> {
     link_mode: LinkMode,
     cache: Option<&'a Cache>,
     reporter: Option<Arc<dyn Reporter>>,
-    /// The name of the [`Installer`].
-    name: Option<String>,
     /// The metadata associated with the [`Installer`].
     metadata: bool,
     /// Preview settings for the installer.
@@ -34,7 +32,6 @@ impl<'a> Installer<'a> {
             link_mode: LinkMode::default(),
             cache: None,
             reporter: None,
-            name: Some("uv".to_string()),
             metadata: true,
             preview,
         }
@@ -64,15 +61,6 @@ impl<'a> Installer<'a> {
         }
     }
 
-    /// Set the `installer_name` to something other than `"uv"`.
-    #[must_use]
-    pub fn with_installer_name(self, installer_name: Option<String>) -> Self {
-        Self {
-            name: installer_name,
-            ..self
-        }
-    }
-
     /// Set whether to install uv-specifier files in the dist-info directory.
     #[must_use]
     pub fn with_installer_metadata(self, installer_metadata: bool) -> Self {
@@ -90,7 +78,6 @@ impl<'a> Installer<'a> {
             cache,
             link_mode,
             reporter,
-            name: installer_name,
             metadata: installer_metadata,
             preview,
         } = self;
@@ -113,7 +100,7 @@ impl<'a> Installer<'a> {
             let result = install(
                 wheels,
                 &layout,
-                installer_name.as_deref(),
+                Some("uv"),
                 link_mode,
                 reporter.as_ref(),
                 relocatable,
@@ -144,7 +131,7 @@ impl<'a> Installer<'a> {
         install(
             wheels,
             &self.venv.interpreter().layout(),
-            self.name.as_deref(),
+            Some("uv"),
             self.link_mode,
             self.reporter.as_ref(),
             self.venv.relocatable(),
