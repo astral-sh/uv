@@ -249,20 +249,6 @@ impl Manifest {
         }
     }
 
-    /// Returns an iterator over the direct requirements, with overrides applied.
-    ///
-    /// At time of writing, this is used for:
-    /// - Determining which packages should have development dependencies included in the
-    ///   resolution (assuming the user enabled development dependencies).
-    pub fn direct_requirements<'a>(
-        &'a self,
-        env: &'a ResolverEnvironment,
-    ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
-        self.overrides
-            .apply(self.requirements.iter())
-            .filter(move |requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
-    }
-
     /// Apply the overrides and constraints to a set of requirements.
     ///
     /// Constraints are always applied _on top_ of overrides, such that constraints are applied
