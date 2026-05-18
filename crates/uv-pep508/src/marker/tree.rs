@@ -1121,7 +1121,7 @@ impl MarkerTree {
     /// Checks if the requirement should be activated with the given set of active extras without evaluating
     /// the remaining environment markers, i.e. if there is potentially an environment that could activate this
     /// requirement.
-    pub fn evaluate_extras(self, extras: &[ExtraName]) -> bool {
+    fn evaluate_extras(self, extras: &[ExtraName]) -> bool {
         match self.kind() {
             MarkerTreeKind::True => true,
             MarkerTreeKind::False => false,
