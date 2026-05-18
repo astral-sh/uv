@@ -62,7 +62,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
     }
 
     /// Fetch, build, and unzip the distributions in parallel.
-    pub fn prepare_stream<'stream>(
+    fn prepare_stream<'stream>(
         &'stream self,
         distributions: Vec<Arc<Dist>>,
         in_flight: &'stream InFlight,
