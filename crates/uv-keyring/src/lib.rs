@@ -435,7 +435,7 @@ mod tests {
     }
 
     /// A basic round-trip unit test given an entry and a password.
-    pub(crate) async fn test_round_trip(case: &str, entry: &Entry, in_pass: &str) {
+    async fn test_round_trip(case: &str, entry: &Entry, in_pass: &str) {
         test_round_trip_no_delete(case, entry, in_pass).await;
         entry
             .delete_credential()
@@ -449,7 +449,7 @@ mod tests {
     }
 
     /// A basic round-trip unit test given an entry and a password.
-    pub(crate) async fn test_round_trip_secret(case: &str, entry: &Entry, in_secret: &[u8]) {
+    async fn test_round_trip_secret(case: &str, entry: &Entry, in_secret: &[u8]) {
         entry
             .set_secret(in_secret)
             .await
