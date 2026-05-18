@@ -1351,14 +1351,14 @@ impl SimpleIndexMetadata {
     /// Create a [`SimpleIndexMetadata`] from a [`PypiSimpleIndex`].
     fn from_pypi_index(index: PypiSimpleIndex) -> Self {
         Self {
-            projects: index.projects.into_iter().map(|entry| entry.name).collect(),
+            projects: index.into_project_names(),
         }
     }
 
     /// Create a [`SimpleIndexMetadata`] from a [`PyxSimpleIndex`].
     fn from_pyx_index(index: PyxSimpleIndex) -> Self {
         Self {
-            projects: index.projects.into_iter().map(|entry| entry.name).collect(),
+            projects: index.into_project_names(),
         }
     }
 
