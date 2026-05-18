@@ -13348,7 +13348,6 @@ fn reject_wheel_entrypoint_paths() -> Result<()> {
         &escaped_entrypoint.path().portable_display().to_string(),
     )?;
 
-    #[cfg(unix)]
     uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
     success: false
     exit_code: 2
@@ -13359,20 +13358,6 @@ fn reject_wheel_entrypoint_paths() -> Result<()> {
     Prepared 1 package in [TIME]
     error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
       Caused by: The wheel is invalid: Script path must resolve to a file within the scripts directory: `[TEMP_DIR]/escaped-entrypoint`
-    "
-    );
-
-    #[cfg(windows)]
-    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
-      Caused by: The wheel is invalid: invalid console script: '/uv-tmp/uv/tests/[TMP]/escaped-entrypoint = foo:main'
     "
     );
 
