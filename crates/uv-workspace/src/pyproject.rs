@@ -373,7 +373,7 @@ pub struct ToolUv {
 
     /// The workspace definition for the project, if any.
     #[option_group]
-    pub workspace: Option<ToolUvWorkspace>,
+    pub(crate) workspace: Option<ToolUvWorkspace>,
 
     /// Whether the project is managed by uv. If `false`, uv will ignore the project when
     /// `uv run` is invoked.
@@ -886,7 +886,7 @@ impl<'de> serde::de::Deserialize<'de> for ExtraBuildDependencies {
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct ToolUvWorkspace {
+pub(crate) struct ToolUvWorkspace {
     /// Packages to include as workspace members.
     ///
     /// Supports both globs and explicit paths.
