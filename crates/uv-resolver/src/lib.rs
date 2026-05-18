@@ -23,7 +23,7 @@ pub use resolution::{
 };
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{
-    BuildId, DefaultResolverProvider, DerivationChainBuilder, InMemoryIndex, MetadataResponse,
+    DefaultResolverProvider, DerivationChainBuilder, InMemoryIndex, MetadataResponse,
     PackageVersionsResult, Reporter as ResolverReporter, Resolver, ResolverEnvironment,
     ResolverProvider, VersionsResponse, WheelMetadataResult,
 };
