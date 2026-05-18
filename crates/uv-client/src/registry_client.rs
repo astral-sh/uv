@@ -44,8 +44,7 @@ use crate::html::SimpleDetailHTML;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{
-    BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, FlatIndexEntries,
-    RedirectClientWithMiddleware,
+    BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, RedirectClientWithMiddleware,
 };
 
 /// A builder for an [`RegistryClient`].
@@ -460,15 +459,18 @@ impl RegistryClient {
         let client = FlatIndexClient::new(self.cached_client(), self.connectivity, &self.cache);
 
         // Fetch the entries for the index.
-        let FlatIndexEntries { entries, .. } =
-            client.fetch_index(index).await.map_err(ErrorKind::Flat)?;
+        let (entries, _) = client
+            .fetch_index(index)
+            .await
+            .map_err(ErrorKind::Flat)?
+            .into_parts();
 
         // Index by package name.
         let mut entries_by_package: FxHashMap<PackageName, Vec<FlatIndexEntry>> =
             FxHashMap::default();
         for entry in entries {
             entries_by_package
-                .entry(entry.filename.name().clone())
+                .entry(entry.filename().name().clone())
                 .or_default()
                 .push(entry);
         }
