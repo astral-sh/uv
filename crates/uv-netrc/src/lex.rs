@@ -26,7 +26,7 @@ impl<'a> Lex<'a> {
 
     pub(crate) fn read_line(&mut self) -> String {
         let mut s = String::new();
-        for ch in &mut self.instream {
+        while let Some(ch) = self.read_char() {
             if ch == '\n' {
                 return s;
             }

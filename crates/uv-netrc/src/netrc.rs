@@ -609,4 +609,23 @@ mod tests {
             Authenticator::new("foo", "", "pass")
         );
     }
+
+    #[test]
+    fn test_lineno_after_macdef() {
+        let nrc = Netrc::from_str("macdef mymacro\nline1\nline2\n\nbad_token foo");
+        let err = nrc.unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "parsing error: bad toplevel token 'bad_token' (line 5)"
+        );
+    }
+    #[test]
+    fn test_lineno_after_comment() {
+        let nrc = Netrc::from_str("# comment\n# comment\nbad_token foo");
+        let err = nrc.unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "parsing error: bad toplevel token 'bad_token' (line 3)"
+        );
+    }
 }
