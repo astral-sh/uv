@@ -685,7 +685,7 @@ impl Lock {
     }
 
     /// Returns `true` if this [`Lock`] includes entries for empty `dependency-group` metadata.
-    pub fn includes_empty_groups(&self) -> bool {
+    fn includes_empty_groups(&self) -> bool {
         // Empty dependency groups are included as of https://github.com/astral-sh/uv/pull/8598,
         // but Version 1 Revision 1 is the first revision published after that change.
         (self.version(), self.revision()) >= (1, 1)
