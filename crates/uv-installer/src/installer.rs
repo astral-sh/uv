@@ -18,6 +18,8 @@ pub struct Installer<'a> {
     link_mode: LinkMode,
     cache: Option<&'a Cache>,
     reporter: Option<Arc<dyn Reporter>>,
+    /// The name of the [`Installer`].
+    name: Option<String>,
     /// The metadata associated with the [`Installer`].
     metadata: bool,
     /// Preview settings for the installer.
@@ -32,6 +34,7 @@ impl<'a> Installer<'a> {
             link_mode: LinkMode::default(),
             cache: None,
             reporter: None,
+            name: Some("uv".to_string()),
             metadata: true,
             preview,
         }
@@ -61,6 +64,15 @@ impl<'a> Installer<'a> {
         }
     }
 
+    /// Set the `installer_name` to something other than `"uv"`.
+    #[must_use]
+    pub fn with_installer_name(self, installer_name: Option<String>) -> Self {
+        Self {
+            name: installer_name,
+            ..self
+        }
+    }
+
     /// Set whether to install uv-specifier files in the dist-info directory.
     #[must_use]
     pub fn with_installer_metadata(self, installer_metadata: bool) -> Self {
@@ -78,6 +90,7 @@ impl<'a> Installer<'a> {
             cache,
             link_mode,
             reporter,
+            name: installer_name,
             metadata: installer_metadata,
             preview,
         } = self;
@@ -100,7 +113,7 @@ impl<'a> Installer<'a> {
             let result = install(
                 wheels,
                 &layout,
-                Some("uv"),
+                installer_name.as_deref(),
                 link_mode,
                 reporter.as_ref(),
                 relocatable,
@@ -131,7 +144,7 @@ impl<'a> Installer<'a> {
         install(
             wheels,
             &self.venv.interpreter().layout(),
-            Some("uv"),
+            self.name.as_deref(),
             self.link_mode,
             self.reporter.as_ref(),
             self.venv.relocatable(),
@@ -198,4 +211,53 @@ pub trait Reporter: Send + Sync {
 
     /// Callback to invoke when the resolution is complete.
     fn on_install_complete(&self);
+}
+
+#[cfg(test)]
+mod tests {
+    use uv_cache::Cache;
+    use uv_preview::Preview;
+    use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
+
+    use super::Installer;
+
+    fn environment() -> PythonEnvironment {
+        let cache = Cache::temp().expect("cache should be available");
+        PythonEnvironment::find(
+            &PythonRequest::Any,
+            EnvironmentPreference::Any,
+            PythonPreference::System,
+            &cache,
+            Preview::default(),
+        )
+        .expect("Python environment should be available")
+    }
+
+    #[test]
+    fn default_installer_name() {
+        let environment = environment();
+
+        let installer = Installer::new(&environment, Preview::default());
+
+        assert_eq!(installer.name.as_deref(), Some("uv"));
+    }
+
+    #[test]
+    fn custom_installer_name() {
+        let environment = environment();
+
+        let installer = Installer::new(&environment, Preview::default())
+            .with_installer_name(Some("client".to_string()));
+
+        assert_eq!(installer.name.as_deref(), Some("client"));
+    }
+
+    #[test]
+    fn disabled_installer_name() {
+        let environment = environment();
+
+        let installer = Installer::new(&environment, Preview::default()).with_installer_name(None);
+
+        assert_eq!(installer.name, None);
+    }
 }
