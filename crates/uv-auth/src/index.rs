@@ -112,12 +112,12 @@ impl Indexes {
     }
 
     /// Get the index for a URL if one exists.
-    pub fn index_for(&self, url: &Url) -> Option<&Index> {
+    pub(crate) fn index_for(&self, url: &Url) -> Option<&Index> {
         self.find_prefix_index(url)
     }
 
     /// Get the [`AuthPolicy`] for a URL.
-    pub fn auth_policy_for(&self, url: &Url) -> AuthPolicy {
+    pub(crate) fn auth_policy_for(&self, url: &Url) -> AuthPolicy {
         self.find_prefix_index(url)
             .map(|index| index.auth_policy)
             .unwrap_or(AuthPolicy::Auto)

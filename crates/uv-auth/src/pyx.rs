@@ -340,7 +340,7 @@ impl PyxTokenStore {
     }
 
     /// Returns `true` if the user appears to have OAuth tokens stored on disk.
-    pub fn has_oauth_tokens(&self) -> bool {
+    fn has_oauth_tokens(&self) -> bool {
         self.subdirectory.join("tokens.json").is_file()
     }
 
