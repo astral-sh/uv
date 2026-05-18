@@ -102,14 +102,6 @@ impl ExtrasSpecification {
         })
     }
 
-    /// Helper to make a spec from just --all-extras
-    pub fn from_all_extras() -> Self {
-        Self::from_history(ExtrasSpecificationHistory {
-            all_extras: true,
-            ..Default::default()
-        })
-    }
-
     /// Apply defaults to a base [`ExtrasSpecification`].
     pub fn with_defaults(&self, defaults: DefaultExtras) -> ExtrasSpecificationWithDefaults {
         // Explicitly clone the inner history and set the defaults, then remake the result.
