@@ -2337,7 +2337,7 @@ impl PythonSource {
     }
 
     /// Whether this source **could** be a system interpreter.
-    pub(crate) fn is_maybe_system(self) -> bool {
+    fn is_maybe_system(self) -> bool {
         match self {
             Self::CondaPrefix
             | Self::BaseCondaPrefix
@@ -2898,7 +2898,7 @@ impl VersionRequest {
     /// [`VersionRequest::Any`] for sources that should allow non-default interpreters like
     /// free-threaded variants.
     #[must_use]
-    pub(crate) fn into_request_for_source(self, source: PythonSource) -> Self {
+    fn into_request_for_source(self, source: PythonSource) -> Self {
         match self {
             Self::Default => match source {
                 PythonSource::ParentInterpreter

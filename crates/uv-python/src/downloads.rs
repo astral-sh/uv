@@ -283,7 +283,7 @@ impl Display for ArchRequest {
 }
 
 impl ArchRequest {
-    pub(crate) fn satisfied_by(self, platform: &Platform) -> bool {
+    fn satisfied_by(self, platform: &Platform) -> bool {
         match self {
             Self::Explicit(request) => request == platform.arch,
             Self::Environment(env) => {
