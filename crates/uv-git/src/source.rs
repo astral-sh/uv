@@ -13,7 +13,7 @@ use uv_cache_key::cache_digest;
 use uv_git_types::{GitOid, GitReference, GitUrl};
 use uv_redacted::DisplaySafeUrl;
 
-use crate::GIT_STORE;
+use crate::credentials::GIT_STORE;
 use crate::git::{GitDatabase, GitRemote};
 
 /// A remote Git source that can be checked out locally.
