@@ -3201,38 +3201,6 @@ impl VersionRequest {
         }
     }
 
-    /// Return a new [`VersionRequest`] with the [`PythonVariant`] if it has one.
-    ///
-    /// This is useful for converting the string representation to pep440.
-    #[must_use]
-    pub fn without_python_variant(self) -> Self {
-        // TODO(zanieb): Replace this entire function with a utility that casts this to a version
-        // without using `VersionRequest::to_string`.
-        match self {
-            Self::Any | Self::Default => self,
-            Self::Major(major, _) => Self::Major(major, PythonVariant::Default),
-            Self::MajorMinor(major, minor, _) => {
-                Self::MajorMinor(major, minor, PythonVariant::Default)
-            }
-            Self::MajorMinorPatch(major, minor, patch, _) => {
-                Self::MajorMinorPatch(major, minor, patch, PythonVariant::Default)
-            }
-            Self::MajorMinorPrerelease(major, minor, prerelease, _) => {
-                Self::MajorMinorPrerelease(major, minor, prerelease, PythonVariant::Default)
-            }
-            Self::MajorMinorPatchPrerelease(major, minor, patch, prerelease, _) => {
-                Self::MajorMinorPatchPrerelease(
-                    major,
-                    minor,
-                    patch,
-                    prerelease,
-                    PythonVariant::Default,
-                )
-            }
-            Self::Range(specifiers, _) => Self::Range(specifiers, PythonVariant::Default),
-        }
-    }
-
     /// Return the [`PythonVariant`] of the request, if any.
     pub(crate) fn variant(&self) -> Option<PythonVariant> {
         match self {
@@ -3563,18 +3531,6 @@ impl PythonPreference {
                     &[PythonSource::SearchPath]
                 }
             }
-        }
-    }
-
-    /// Return the canonical name.
-    // TODO(zanieb): This should be a `Display` impl and we should have a different view for
-    // the sources
-    pub fn canonical_name(&self) -> &'static str {
-        match self {
-            Self::OnlyManaged => "only managed",
-            Self::Managed => "prefer managed",
-            Self::System => "prefer system",
-            Self::OnlySystem => "only system",
         }
     }
 }
