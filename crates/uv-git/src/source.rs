@@ -203,14 +203,6 @@ impl Fetch {
     pub fn lfs_ready(&self) -> &bool {
         &self.lfs_ready
     }
-
-    pub fn into_git(self) -> GitUrl {
-        self.git
-    }
-
-    pub fn into_path(self) -> PathBuf {
-        self.path
-    }
 }
 
 pub trait Reporter: Send + Sync {
