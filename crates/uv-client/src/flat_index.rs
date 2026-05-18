@@ -140,7 +140,10 @@ impl<'a> FlatIndexClient<'a> {
     }
 
     /// Fetch a flat remote index from a `--find-links` URL.
-    pub async fn fetch_index(&self, index: &IndexUrl) -> Result<FlatIndexEntries, FlatIndexError> {
+    pub(crate) async fn fetch_index(
+        &self,
+        index: &IndexUrl,
+    ) -> Result<FlatIndexEntries, FlatIndexError> {
         match index {
             IndexUrl::Path(url) => {
                 let path = url
