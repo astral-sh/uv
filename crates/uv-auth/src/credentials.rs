@@ -91,13 +91,8 @@ impl Password {
     }
 
     /// Return the [`Password`] as a string slice.
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         self.0.as_str()
-    }
-
-    /// Convert the [`Password`] into its underlying [`String`].
-    pub fn into_string(self) -> String {
-        self.0
     }
 }
 
@@ -117,17 +112,17 @@ impl Token {
     }
 
     /// Return the [`Token`] as a byte slice.
-    pub fn as_slice(&self) -> &[u8] {
+    pub(crate) fn as_slice(&self) -> &[u8] {
         self.0.as_slice()
     }
 
     /// Convert the [`Token`] into its underlying [`Vec<u8>`].
-    pub fn into_bytes(self) -> Vec<u8> {
+    pub(crate) fn into_bytes(self) -> Vec<u8> {
         self.0
     }
 
     /// Return whether the [`Token`] is empty.
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 }
