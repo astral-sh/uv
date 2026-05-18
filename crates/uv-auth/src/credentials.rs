@@ -112,7 +112,7 @@ impl fmt::Debug for Password {
 pub struct Token(Vec<u8>);
 
 impl Token {
-    pub fn new(token: Vec<u8>) -> Self {
+    pub(crate) fn new(token: Vec<u8>) -> Self {
         Self(token)
     }
 
