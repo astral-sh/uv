@@ -3632,7 +3632,7 @@ impl Package {
     }
 
     /// Returns an [`InstallTarget`] view for filtering decisions.
-    pub fn as_install_target(&self) -> InstallTarget<'_> {
+    pub(crate) fn as_install_target(&self) -> InstallTarget<'_> {
         InstallTarget {
             name: self.name(),
             is_local: self.id.source.is_local(),
