@@ -346,12 +346,8 @@ impl Entry {
         self.inner.delete_credential().await
     }
 
-    /// Return a reference to this entry's wrapped credential.
-    ///
-    /// The reference is of the [Any](std::any::Any) type, so it can be
-    /// downgraded to a concrete credential object.  The client must know
-    /// what type of concrete object to cast to.
-    pub fn get_credential(&self) -> &dyn std::any::Any {
+    #[cfg(all(test, feature = "native-auth"))]
+    fn get_credential(&self) -> &dyn std::any::Any {
         self.inner.as_any()
     }
 }
