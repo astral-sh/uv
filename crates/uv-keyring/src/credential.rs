@@ -164,22 +164,8 @@ impl std::fmt::Debug for CredentialBuilder {
 /// A thread-safe implementation of the [`CredentialBuilder` API](CredentialBuilderApi).
 pub type CredentialBuilder = dyn CredentialBuilderApi + Send + Sync;
 
-#[cfg(not(any(
-    all(target_os = "linux", feature = "secret-service"),
-    all(target_os = "freebsd", feature = "secret-service"),
-    all(target_os = "openbsd", feature = "secret-service"),
-    all(target_os = "macos", feature = "apple-native"),
-    all(target_os = "windows", feature = "windows-native"),
-)))]
 struct NopCredentialBuilder;
 
-#[cfg(not(any(
-    all(target_os = "linux", feature = "secret-service"),
-    all(target_os = "freebsd", feature = "secret-service"),
-    all(target_os = "openbsd", feature = "secret-service"),
-    all(target_os = "macos", feature = "apple-native"),
-    all(target_os = "windows", feature = "windows-native"),
-)))]
 impl CredentialBuilderApi for NopCredentialBuilder {
     fn build(&self, _: Option<&str>, _: &str, _: &str) -> Result<Box<Credential>> {
         Err(super::Error::NoDefaultCredentialBuilder)
@@ -196,13 +182,6 @@ impl CredentialBuilderApi for NopCredentialBuilder {
 
 // Return a credential builder that always fails. This is the builder
 // used if none of the crate-supplied keystores were included in the build.
-#[cfg(not(any(
-    all(target_os = "linux", feature = "secret-service"),
-    all(target_os = "freebsd", feature = "secret-service"),
-    all(target_os = "openbsd", feature = "secret-service"),
-    all(target_os = "macos", feature = "apple-native"),
-    all(target_os = "windows", feature = "windows-native"),
-)))]
-pub(super) fn nop_credential_builder() -> Box<CredentialBuilder> {
+pub fn nop_credential_builder() -> Box<CredentialBuilder> {
     Box::new(NopCredentialBuilder)
 }
