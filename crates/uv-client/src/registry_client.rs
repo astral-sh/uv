@@ -142,7 +142,7 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     /// Add all authenticated sources to the cache.
-    pub fn cache_index_credentials(&mut self) {
+    fn cache_index_credentials(&mut self) {
         for index in self.index_locations.known_indexes() {
             if let Some(credentials) = index.credentials() {
                 trace!(
