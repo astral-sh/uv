@@ -42,10 +42,10 @@ use security_framework::os::macos::passwords::find_generic_password;
 /// not represented here.  There's no way to use this
 /// module to get at those attributes.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MacCredential {
-    pub domain: MacKeychainDomain,
-    pub service: String,
-    pub account: String,
+struct MacCredential {
+    domain: MacKeychainDomain,
+    service: String,
+    account: String,
 }
 
 #[async_trait::async_trait]
@@ -166,7 +166,8 @@ impl MacCredential {
     /// On Mac, this is basically a no-op, because we represent any attributes
     /// other than the ones we use to find the generic credential.
     /// But at least this checks whether the underlying credential exists.
-    pub async fn get_credential(&self) -> Result<Self> {
+    #[cfg(all(feature = "native-auth", test))]
+    async fn get_credential(&self) -> Result<Self> {
         let service = self.service.clone();
         let account = self.account.clone();
         let domain = self.domain;
@@ -190,7 +191,7 @@ impl MacCredential {
     /// This will fail if the service or user strings are empty,
     /// because empty attribute values act as wildcards in the
     /// Keychain Services API.
-    pub fn new_with_target(
+    fn new_with_target(
         target: Option<MacKeychainDomain>,
         service: &str,
         user: &str,
@@ -221,13 +222,13 @@ impl MacCredential {
 }
 
 /// The builder for Mac keychain credentials
-pub struct MacCredentialBuilder;
+struct MacCredentialBuilder;
 
 /// Returns an instance of the Mac credential builder.
 ///
 /// On Mac, with default features enabled,
 /// this is called once when an entry is first created.
-pub fn default_credential_builder() -> Box<CredentialBuilder> {
+pub(super) fn default_credential_builder() -> Box<CredentialBuilder> {
     Box::new(MacCredentialBuilder {})
 }
 
@@ -258,7 +259,7 @@ impl CredentialBuilderApi for MacCredentialBuilder {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 /// The four pre-defined Mac keychains.
-pub enum MacKeychainDomain {
+enum MacKeychainDomain {
     User,
     System,
     Common,
@@ -320,7 +321,7 @@ fn get_keychain(domain: MacKeychainDomain) -> Result<SecKeychain> {
 ///
 /// The macOS error code values used here are from
 /// [this reference](https://opensource.apple.com/source/libsecurity_keychain/libsecurity_keychain-78/lib/SecBase.h.auto.html)
-pub fn decode_error(err: Error) -> ErrorCode {
+fn decode_error(err: Error) -> ErrorCode {
     match err.code() {
         -25291 => ErrorCode::NoStorageAccess(Box::new(err)), // errSecNotAvailable
         -25292 => ErrorCode::NoStorageAccess(Box::new(err)), // errSecReadOnly

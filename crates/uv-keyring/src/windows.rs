@@ -60,11 +60,11 @@ use zeroize::Zeroize;
 ///
 /// See the module header for the meanings of these fields.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WinCredential {
-    pub username: String,
-    pub target_name: String,
-    pub target_alias: String,
-    pub comment: String,
+struct WinCredential {
+    username: String,
+    target_name: String,
+    target_alias: String,
+    comment: String,
 }
 
 // Windows API type mappings:
@@ -287,7 +287,8 @@ impl WinCredential {
     /// Construct a credential from this credential's underlying Generic credential.
     ///
     /// This can be useful for seeing modifications made by a third party.
-    pub async fn get_credential(&self) -> Result<Self> {
+    #[cfg(all(feature = "native-auth", test))]
+    async fn get_credential(&self) -> Result<Self> {
         self.extract_from_platform(Self::extract_credential).await
     }
 
@@ -345,7 +346,7 @@ impl WinCredential {
     /// If there isn't already one there, it will be created only
     /// when [`set_password`](WinCredential::set_password) is
     /// called.
-    pub fn new_with_target(target: Option<&str>, service: &str, user: &str) -> Result<Self> {
+    fn new_with_target(target: Option<&str>, service: &str, user: &str) -> Result<Self> {
         const VERSION: &str = env!("CARGO_PKG_VERSION");
         let credential = if let Some(target) = target {
             Self {
@@ -379,13 +380,13 @@ impl WinCredential {
 }
 
 /// The builder for Windows Generic credentials.
-pub struct WinCredentialBuilder;
+struct WinCredentialBuilder;
 
 /// Returns an instance of the Windows credential builder.
 ///
 /// On Windows, with the default feature set,
 /// this is called once when an entry is first created.
-pub fn default_credential_builder() -> Box<CredentialBuilder> {
+pub(super) fn default_credential_builder() -> Box<CredentialBuilder> {
     Box::new(WinCredentialBuilder {})
 }
 
@@ -474,7 +475,7 @@ unsafe fn from_wstr(ws: *const u16) -> String {
 
 /// Windows error codes are `DWORDS` which are 32-bit unsigned ints.
 #[derive(Debug)]
-pub struct Error(windows::core::Error);
+struct Error(windows::core::Error);
 
 impl From<WIN32_ERROR> for Error {
     fn from(error: WIN32_ERROR) -> Self {

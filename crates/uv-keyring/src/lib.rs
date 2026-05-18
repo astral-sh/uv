@@ -169,21 +169,21 @@ mod mock;
     docsrs,
     doc(cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd")))
 )]
-pub mod secret_service;
+mod secret_service;
 
 //
 // pick the Apple keystore
 //
 #[cfg(all(target_os = "macos", feature = "apple-native"))]
 #[cfg_attr(docsrs, doc(cfg(target_os = "macos")))]
-pub mod macos;
+mod macos;
 
 //
 // pick the Windows keystore
 //
 #[cfg(all(target_os = "windows", feature = "windows-native"))]
 #[cfg_attr(docsrs, doc(cfg(target_os = "windows")))]
-pub mod windows;
+mod windows;
 
 mod credential;
 mod error;
