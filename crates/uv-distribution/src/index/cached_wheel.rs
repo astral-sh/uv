@@ -39,18 +39,23 @@ impl ResolvedWheel {
 #[derive(Debug, Clone)]
 pub struct CachedWheel {
     /// The filename of the wheel.
-    pub filename: WheelFilename,
+    pub(crate) filename: WheelFilename,
     /// The [`CacheEntry`] for the wheel.
-    pub entry: CacheEntry,
+    pub(crate) entry: CacheEntry,
     /// The [`HashDigest`]s for the wheel.
-    pub hashes: HashDigests,
+    pub(crate) hashes: HashDigests,
     /// The [`CacheInfo`] for the wheel.
-    pub cache_info: CacheInfo,
+    pub(crate) cache_info: CacheInfo,
     /// The [`BuildInfo`] for the wheel, if it was built.
-    pub build_info: Option<BuildInfo>,
+    pub(crate) build_info: Option<BuildInfo>,
 }
 
 impl CachedWheel {
+    /// Return the filename of the wheel.
+    pub fn filename(&self) -> &WheelFilename {
+        &self.filename
+    }
+
     /// Create a [`CachedWheel`] from a [`ResolvedWheel`].
     pub(crate) fn from_entry(
         wheel: ResolvedWheel,

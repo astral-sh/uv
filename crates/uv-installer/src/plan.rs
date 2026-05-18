@@ -394,7 +394,7 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     match built_index.url(sdist) {
                         Ok(Some(wheel)) => {
-                            if wheel.filename.name == sdist.name {
+                            if wheel.filename().name == sdist.name {
                                 let cached_dist = wheel.into_url_dist(sdist);
                                 debug!("URL source requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
@@ -403,7 +403,8 @@ impl<'a> Planner<'a> {
 
                             warn!(
                                 "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                                sdist, wheel.filename
+                                sdist,
+                                wheel.filename()
                             );
                         }
                         Ok(None) => {}
@@ -418,7 +419,7 @@ impl<'a> Planner<'a> {
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
                     if let Some(wheel) = built_index.git(sdist) {
-                        if wheel.filename.name == sdist.name {
+                        if wheel.filename().name == sdist.name {
                             let cached_dist = wheel.into_git_dist(sdist);
                             debug!("Git source requirement already cached: {cached_dist}");
                             cached.push(CachedDist::Url(cached_dist));
@@ -427,7 +428,8 @@ impl<'a> Planner<'a> {
 
                         warn!(
                             "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                            sdist, wheel.filename
+                            sdist,
+                            wheel.filename()
                         );
                     }
                 }
@@ -441,7 +443,7 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     match built_index.path(sdist) {
                         Ok(Some(wheel)) => {
-                            if wheel.filename.name == sdist.name {
+                            if wheel.filename().name == sdist.name {
                                 let cached_dist = wheel.into_path_dist(sdist);
                                 debug!("Path source requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
@@ -450,7 +452,8 @@ impl<'a> Planner<'a> {
 
                             warn!(
                                 "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                                sdist, wheel.filename
+                                sdist,
+                                wheel.filename()
                             );
                         }
                         Ok(None) => {}
@@ -471,7 +474,7 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     match built_index.directory(sdist) {
                         Ok(Some(wheel)) => {
-                            if wheel.filename.name == sdist.name {
+                            if wheel.filename().name == sdist.name {
                                 let cached_dist = wheel.into_directory_dist(sdist);
                                 debug!(
                                     "Directory source requirement already cached: {cached_dist}"
@@ -482,7 +485,8 @@ impl<'a> Planner<'a> {
 
                             warn!(
                                 "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                                sdist, wheel.filename
+                                sdist,
+                                wheel.filename()
                             );
                         }
                         Ok(None) => {}
