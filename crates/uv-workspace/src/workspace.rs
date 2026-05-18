@@ -115,12 +115,12 @@ pub enum ProjectDiscovery {
 
 impl ProjectDiscovery {
     /// Whether a `[project]` table is required.
-    pub fn allows_implicit_workspace(&self) -> bool {
+    fn allows_implicit_workspace(&self) -> bool {
         matches!(self, Self::Optional)
     }
 
     /// Whether a non-project workspace root is allowed.
-    pub fn allows_non_project_workspace(&self) -> bool {
+    fn allows_non_project_workspace(&self) -> bool {
         matches!(self, Self::Optional)
     }
 }
@@ -286,7 +286,7 @@ impl Workspace {
     /// Set the current project to the given workspace member.
     ///
     /// Returns `None` if the package is not part of the workspace.
-    pub fn with_current_project(self, package_name: PackageName) -> Option<ProjectWorkspace> {
+    fn with_current_project(self, package_name: PackageName) -> Option<ProjectWorkspace> {
         let member = self.packages.get(&package_name)?;
         Some(ProjectWorkspace {
             project_root: member.root().clone(),

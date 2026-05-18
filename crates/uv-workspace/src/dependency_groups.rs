@@ -295,7 +295,7 @@ pub enum DependencyGroupErrorInner {
 impl DependencyGroupErrorInner {
     /// Enrich a [`DependencyGroupError`] with the `tool.uv.dev-dependencies` metadata, if applicable.
     #[must_use]
-    pub fn with_dev_dependencies(
+    fn with_dev_dependencies(
         self,
         dev_dependencies: Option<&Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     ) -> Self {
