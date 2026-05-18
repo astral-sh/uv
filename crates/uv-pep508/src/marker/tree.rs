@@ -1303,6 +1303,21 @@ impl MarkerTree {
         self.simplify_extras_with_impl(&is_extra)
     }
 
+    /// Remove negated extras from a marker, returning `None` if the marker
+    /// tree evaluates to `true`.
+    ///
+    /// Any negated `extra` markers that are always `true` given the provided
+    /// extras will be removed. Any `extra` markers that are always `false`
+    /// given the provided extras will be left unchanged.
+    ///
+    /// For example, if `dev` is a provided extra, given `sys_platform
+    /// == 'linux' and extra != 'dev'`, the marker will be simplified to
+    /// `sys_platform == 'linux'`.
+    #[must_use]
+    pub fn simplify_not_extras(self, extras: &[ExtraName]) -> Self {
+        self.simplify_not_extras_with(|name| extras.contains(name))
+    }
+
     /// Remove negated extras from a marker, returning `None` if the marker tree evaluates to
     /// `true`.
     ///
@@ -2307,35 +2322,31 @@ mod test {
 
     #[test]
     fn test_simplify_not_extras() {
-        fn simplify_not_extras(markers: MarkerTree, extras: &[ExtraName]) -> MarkerTree {
-            markers.simplify_not_extras_with(|name| extras.contains(name))
-        }
-
         // Given `os_name == "nt" and extra != "dev"`, simplify to `os_name == "nt"`.
         let markers = MarkerTree::from_str(r#"os_name == "nt" and extra != "dev""#).unwrap();
-        let simplified = simplify_not_extras(markers, &[ExtraName::from_str("dev").unwrap()]);
+        let simplified = markers.simplify_not_extras(&[ExtraName::from_str("dev").unwrap()]);
         let expected = MarkerTree::from_str(r#"os_name == "nt""#).unwrap();
         assert_eq!(simplified, expected);
 
         // Given `os_name == "nt" or extra != "dev"`, remove the marker entirely.
         let markers = MarkerTree::from_str(r#"os_name == "nt" or extra != "dev""#).unwrap();
-        let simplified = simplify_not_extras(markers, &[ExtraName::from_str("dev").unwrap()]);
+        let simplified = markers.simplify_not_extras(&[ExtraName::from_str("dev").unwrap()]);
         assert_eq!(simplified, MarkerTree::TRUE);
 
         // Given `extra != "dev"`, remove the marker entirely.
         let markers = MarkerTree::from_str(r#"extra != "dev""#).unwrap();
-        let simplified = simplify_not_extras(markers, &[ExtraName::from_str("dev").unwrap()]);
+        let simplified = markers.simplify_not_extras(&[ExtraName::from_str("dev").unwrap()]);
         assert_eq!(simplified, MarkerTree::TRUE);
 
         // Given `extra != "dev" and extra != "test"`, simplify to `extra != "test"`.
         let markers = MarkerTree::from_str(r#"extra != "dev" and extra != "test""#).unwrap();
-        let simplified = simplify_not_extras(markers, &[ExtraName::from_str("dev").unwrap()]);
+        let simplified = markers.simplify_not_extras(&[ExtraName::from_str("dev").unwrap()]);
         let expected = MarkerTree::from_str(r#"extra != "test""#).unwrap();
         assert_eq!(simplified, expected);
 
         // Given `os_name == "nt" and extra != "test"`, don't simplify.
         let markers = MarkerTree::from_str(r#"os_name != "nt" and extra != "test""#).unwrap();
-        let simplified = simplify_not_extras(markers, &[ExtraName::from_str("dev").unwrap()]);
+        let simplified = markers.simplify_not_extras(&[ExtraName::from_str("dev").unwrap()]);
         assert_eq!(simplified, markers);
 
         // Given `os_name == "nt" and (python_version == "3.7" or extra != "dev")`, simplify to
@@ -2344,7 +2355,7 @@ mod test {
             r#"os_name == "nt" and (python_version == "3.7" or extra != "dev")"#,
         )
         .unwrap();
-        let simplified = simplify_not_extras(markers, &[ExtraName::from_str("dev").unwrap()]);
+        let simplified = markers.simplify_not_extras(&[ExtraName::from_str("dev").unwrap()]);
         let expected = MarkerTree::from_str(r#"os_name == "nt""#).unwrap();
         assert_eq!(simplified, expected);
 
@@ -2354,7 +2365,7 @@ mod test {
             r#"os_name == "nt" or (python_version == "3.7" and extra != "dev")"#,
         )
         .unwrap();
-        let simplified = simplify_not_extras(markers, &[ExtraName::from_str("dev").unwrap()]);
+        let simplified = markers.simplify_not_extras(&[ExtraName::from_str("dev").unwrap()]);
         let expected =
             MarkerTree::from_str(r#"os_name == "nt" or python_version == "3.7""#).unwrap();
         assert_eq!(simplified, expected);
