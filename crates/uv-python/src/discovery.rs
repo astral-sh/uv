@@ -2204,7 +2204,7 @@ impl PythonRequest {
     ///
     /// Returns `None` if the request doesn't carry version constraints (e.g., a path or
     /// executable name).
-    pub fn as_version_specifiers(&self) -> Option<VersionSpecifiers> {
+    fn as_version_specifiers(&self) -> Option<VersionSpecifiers> {
         match self {
             Self::Version(version) | Self::ImplementationVersion(_, version) => {
                 version.as_version_specifiers()
@@ -2386,7 +2386,7 @@ impl PythonPreference {
     ///
     /// Unlike [`PythonPreference::allows_source`], which checks the [`PythonSource`], this checks
     /// whether the interpreter's base prefix is in a managed location.
-    pub fn allows_interpreter(self, interpreter: &Interpreter) -> bool {
+    fn allows_interpreter(self, interpreter: &Interpreter) -> bool {
         match self {
             Self::OnlyManaged => interpreter.is_managed(),
             Self::OnlySystem => !interpreter.is_managed(),
@@ -3246,7 +3246,7 @@ impl VersionRequest {
     ///
     /// Returns `None` for requests without version constraints (e.g., [`VersionRequest::Default`]
     /// and [`VersionRequest::Any`]).
-    pub fn as_version_specifiers(&self) -> Option<VersionSpecifiers> {
+    fn as_version_specifiers(&self) -> Option<VersionSpecifiers> {
         match self {
             Self::Default | Self::Any => None,
             Self::Major(major, _) => Some(VersionSpecifiers::from(

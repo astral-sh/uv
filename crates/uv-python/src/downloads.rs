@@ -356,13 +356,13 @@ impl PythonDownloadRequest {
     }
 
     #[must_use]
-    pub fn with_os(mut self, os: Os) -> Self {
+    fn with_os(mut self, os: Os) -> Self {
         self.os = Some(os);
         self
     }
 
     #[must_use]
-    pub fn with_libc(mut self, libc: Libc) -> Self {
+    fn with_libc(mut self, libc: Libc) -> Self {
         self.libc = Some(libc);
         self
     }
@@ -593,7 +593,7 @@ impl PythonDownloadRequest {
     }
 
     /// Whether this request is satisfied by a Python download.
-    pub fn satisfied_by_download(&self, download: &ManagedPythonDownload) -> bool {
+    fn satisfied_by_download(&self, download: &ManagedPythonDownload) -> bool {
         // First check the key
         if !self.satisfied_by_key(download.key()) {
             return false;
