@@ -453,7 +453,7 @@ impl PythonInstallation {
 
     /// Emit a warning when the interpreter is a managed prerelease and a matching stable
     /// build can be installed via `uv python upgrade`.
-    pub(crate) fn warn_if_outdated_prerelease(
+    fn warn_if_outdated_prerelease(
         &self,
         request: &PythonRequest,
         download_list: &ManagedPythonDownloadList,
