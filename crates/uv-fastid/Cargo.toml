@@ -13,6 +13,7 @@ license.workspace = true
 doctest = false
 
 [dependencies]
+rand = { workspace = true }
 fastrand = { workspace = true }
 serde = { workspace = true, optional = true }
 

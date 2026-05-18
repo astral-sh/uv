@@ -10,6 +10,8 @@ use std::fmt;
 use std::ops::Deref;
 use std::str::FromStr;
 
+use rand::RngCore as _;
+
 const ALPHABET: [u8; 64] = [
     b'_', b'-', b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'a', b'b', b'c', b'd',
     b'e', b'f', b'g', b'h', b'i', b'j', b'k', b'l', b'm', b'n', b'o', b'p', b'q', b'r', b's', b't',
@@ -77,6 +79,17 @@ impl<'de> serde::Deserialize<'de> for Id {
 }
 
 impl Id {
+    /// Generate an [`Id`] from a cryptographically secure RNG.
+    ///
+    /// The resulting ID is suitable for use in contexts where uniqueness is needed and
+    /// the risk of an adversarial collision is non-negligible.
+    pub fn secure() -> Self {
+        let mut raw = [0u8; 16];
+        let mut rng = rand::rng();
+        rng.fill_bytes(raw.as_mut());
+        Self(Self::reduce(&raw))
+    }
+
     /// Generate an [`Id`] from a fast, non-cryptographically secure RNG.
     ///
     /// The resulting ID is suitable for use in contexts where uniqueness is needed
@@ -124,6 +137,13 @@ mod tests {
     }
 
     #[test]
+    fn test_secure() {
+        let id = Id::secure();
+        assert_eq!(id.len(), 16);
+        assert!(id.bytes().all(|byte| ALPHABET.contains(&byte)));
+    }
+
+    #[test]
     fn test_insecure() {
         let id = Id::insecure();
         assert_eq!(id.len(), 16);
@@ -148,6 +168,11 @@ mod tests {
 
         #[test]
         fn round_trip() {
+            let id = Id::secure();
+            let json = serde_json::to_string(&id).unwrap();
+            let parsed: Id = serde_json::from_str(&json).unwrap();
+            assert_eq!(id, parsed);
+
             let id = Id::insecure();
             let json = serde_json::to_string(&id).unwrap();
             let parsed: Id = serde_json::from_str(&json).unwrap();

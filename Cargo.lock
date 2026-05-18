@@ -6447,6 +6447,7 @@ name = "uv-fastid"
 version = "0.0.47"
 dependencies = [
  "fastrand",
+ "rand 0.9.4",
  "serde",
  "serde_json",
 ]
