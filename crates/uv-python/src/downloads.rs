@@ -476,7 +476,7 @@ impl PythonDownloadRequest {
     /// Remove default implementation and platform details so the request only contains
     /// explicitly user-specified segments.
     #[must_use]
-    pub fn unset_defaults(self) -> Self {
+    pub(crate) fn unset_defaults(self) -> Self {
         let request = self.unset_non_platform_defaults();
 
         if let Ok(host) = Platform::from_env() {
