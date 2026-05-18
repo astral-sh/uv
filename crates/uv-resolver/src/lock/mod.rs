@@ -668,25 +668,6 @@ impl Lock {
         self
     }
 
-    /// Record the supported environments that were used to generate this lock.
-    #[must_use]
-    pub fn with_supported_environments(mut self, supported_environments: Vec<MarkerTree>) -> Self {
-        // We "complexify" the markers given, since the supported
-        // environments given might be coming directly from what's written in
-        // `pyproject.toml`, and those are assumed to be simplified (i.e.,
-        // they assume `requires-python` is true). But a `Lock` always uses
-        // non-simplified markers internally, so we need to re-complexify them
-        // here.
-        //
-        // The nice thing about complexifying is that it's a no-op if the
-        // markers given have already been complexified.
-        self.supported_environments = supported_environments
-            .into_iter()
-            .map(|marker| self.requires_python.complexify_markers(marker))
-            .collect();
-        self
-    }
-
     /// Record the required platforms that were used to generate this lock.
     #[must_use]
     pub fn with_required_environments(mut self, required_environments: Vec<MarkerTree>) -> Self {
