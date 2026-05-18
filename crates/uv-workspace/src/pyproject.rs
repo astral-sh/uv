@@ -786,7 +786,7 @@ pub struct DependencyGroupSettings {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged, rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub enum ExtraBuildDependencyWire {
+enum ExtraBuildDependencyWire {
     Unannotated(uv_pep508::Requirement<VerbatimParsedUrl>),
     #[serde(rename_all = "kebab-case")]
     Annotated {
