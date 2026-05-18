@@ -1351,10 +1351,6 @@ impl Freshness {
     pub const fn is_fresh(self) -> bool {
         matches!(self, Self::Fresh)
     }
-
-    pub const fn is_stale(self) -> bool {
-        matches!(self, Self::Stale)
-    }
 }
 
 /// A refresh policy for cache entries.
