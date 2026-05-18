@@ -34,12 +34,12 @@ The abstract behavior of entries and credential stores are captured
 by two types (with associated traits):
 
 - a _credential builder_, represented by the [`CredentialBuilder`] type
-  (and [`CredentialBuilderApi`](credential::CredentialBuilderApi) trait).  Credential
+  (and [`CredentialBuilderApi`] trait).  Credential
   builders are given the identifying information (and target, if any)
   provided for an entry and map
   it to the identifying information for a platform-specific credential.
 - a _credential_, represented by the [`Credential`] type
-  (and [`CredentialApi`](credential::CredentialApi) trait).  The platform-specific credential
+  (and [`CredentialApi`] trait).  The platform-specific credential
   identified by the builder for an entry is what provides the secure storage
   for that entry's password/secret.
 
@@ -60,7 +60,7 @@ the one used by this crate to identify entries.
 These keystores expose their specific model in the
 concrete credential objects they use to implement the Credential trait.
 In order to allow clients to access this richer model, the Credential trait
-has an [`as_any`](credential::CredentialApi::as_any) method that returns a
+has an [`as_any`](CredentialApi::as_any) method that returns a
 reference to the underlying
 concrete object typed as [`Any`](std::any::Any), so that it can be downgraded to
 its concrete type.
@@ -105,17 +105,10 @@ two mechanisms provided for this:
   can be identified however clients want, rather than being restricted
   to the simple model used by this crate.
 
-## Mock Credential Store
+## Tests
 
-In addition to the platform-specific credential stores, this crate
-always provides a mock credential store that clients can use to
-test their code in a platform independent way.  The mock credential
-store allows for pre-setting errors as well as password values to
-be returned from [`Entry`] method calls. If you want to use the mock
-credential store as your default in tests, make this call:
-```
-uv_keyring::set_default_credential_builder(uv_keyring::mock::default_credential_builder())
-```
+In addition to the platform-specific credential stores, this crate uses
+an internal mock credential store for its own unit tests.
 
 ## Interoperability with Third Parties
 
@@ -155,12 +148,15 @@ are not recommended, as they may cause the RPC mechanism to fail.
 
 use std::collections::HashMap;
 
-pub use credential::{Credential, CredentialBuilder};
+pub use credential::{
+    Credential, CredentialApi, CredentialBuilder, CredentialBuilderApi, CredentialPersistence,
+};
 pub use error::{Error, Result};
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod blocking;
-pub mod mock;
+#[cfg(test)]
+mod mock;
 
 //
 // pick the *nix keystore
@@ -189,8 +185,8 @@ pub mod macos;
 #[cfg_attr(docsrs, doc(cfg(target_os = "windows")))]
 pub mod windows;
 
-pub mod credential;
-pub mod error;
+mod credential;
+mod error;
 
 #[derive(Default, Debug)]
 struct EntryBuilder {
@@ -403,9 +399,9 @@ impl Entry {
 /// Instead, it contains generics that each keystore invokes in their tests,
 /// passing their store-specific parameters for the generic ones.
 mod tests {
-    use super::{Entry, Error};
     #[cfg(feature = "native-auth")]
-    use super::{Result, credential::CredentialApi};
+    use super::{CredentialApi, Result};
+    use super::{Entry, Error};
     use std::collections::HashMap;
 
     /// Create a platform-specific credential given the constructor, service, and user

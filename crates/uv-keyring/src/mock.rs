@@ -2,12 +2,12 @@
 
 # Mock credential store
 
-To facilitate testing of clients, this crate provides a Mock credential store
-that is platform-independent, provides no persistence, and allows the client
+To facilitate unit testing, this crate provides a Mock credential store
+that is platform-independent, provides no persistence, and allows tests
 to specify the return values (including errors) for each call. The credentials
 in this store have no attributes at all.
 
-To use this credential store instead of the default, call
+To use this credential store instead of the default in unit tests, call
 [`set_default_credential_builder`](crate::set_default_credential_builder)
 with [`default_credential_builder`] during application startup
 _before_ creating any entries.
@@ -36,8 +36,8 @@ use crate::error::{Error, Result, decode_password};
 /// Mocks use an internal mutability pattern since entries are read-only.
 /// The mutex is used to make sure these are Sync.
 #[derive(Debug)]
-pub struct MockCredential {
-    pub inner: Mutex<RefCell<MockData>>,
+struct MockCredential {
+    inner: Mutex<RefCell<MockData>>,
 }
 
 impl Default for MockCredential {
@@ -53,12 +53,10 @@ impl Default for MockCredential {
 /// We keep a password, but unlike most keystores
 /// we also keep an intended error to return on the next call.
 ///
-/// (Everything about this structure is public for transparency.
-/// Most keystore implementation hide their internals.)
 #[derive(Debug, Default)]
-pub struct MockData {
-    pub secret: Option<Vec<u8>>,
-    pub error: Option<Error>,
+struct MockData {
+    secret: Option<Vec<u8>>,
+    error: Option<Error>,
 }
 
 #[async_trait::async_trait]
@@ -186,7 +184,7 @@ impl MockCredential {
     /// Error returns always take precedence over the normal
     /// behavior of the mock.  But once an error has been
     /// returned it is removed, so the mock works thereafter.
-    pub fn set_error(&self, err: Error) {
+    fn set_error(&self, err: Error) {
         let mut inner = self
             .inner
             .lock()
@@ -197,7 +195,7 @@ impl MockCredential {
 }
 
 /// The builder for mock credentials.
-pub struct MockCredentialBuilder;
+struct MockCredentialBuilder;
 
 impl CredentialBuilderApi for MockCredentialBuilder {
     /// Build a mock credential for the given target, service, and user.
@@ -220,8 +218,8 @@ impl CredentialBuilderApi for MockCredentialBuilder {
     }
 }
 
-/// Return a mock credential builder for use by clients.
-pub fn default_credential_builder() -> Box<CredentialBuilder> {
+/// Return a mock credential builder for use by unit tests.
+fn default_credential_builder() -> Box<CredentialBuilder> {
     Box::new(MockCredentialBuilder {})
 }
 
