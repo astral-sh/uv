@@ -433,7 +433,7 @@ pub struct ToolUv {
             my-group = {requires-python = ">=3.12"}
         "#
     )]
-    pub dependency_groups: Option<ToolUvDependencyGroups>,
+    pub(crate) dependency_groups: Option<ToolUvDependencyGroups>,
 
     /// The project's development dependencies.
     ///
@@ -745,18 +745,12 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct ToolUvDependencyGroups(BTreeMap<GroupName, DependencyGroupSettings>);
+pub(crate) struct ToolUvDependencyGroups(BTreeMap<GroupName, DependencyGroupSettings>);
 
 impl ToolUvDependencyGroups {
     /// Returns the underlying `BTreeMap` of group names to settings.
-    pub fn inner(&self) -> &BTreeMap<GroupName, DependencyGroupSettings> {
+    pub(crate) fn inner(&self) -> &BTreeMap<GroupName, DependencyGroupSettings> {
         &self.0
-    }
-
-    /// Convert the [`ToolUvDependencyGroups`] into its inner `BTreeMap`.
-    #[must_use]
-    pub fn into_inner(self) -> BTreeMap<GroupName, DependencyGroupSettings> {
-        self.0
     }
 }
 
@@ -777,10 +771,10 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvDependencyGroups {
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
-pub struct DependencyGroupSettings {
+pub(crate) struct DependencyGroupSettings {
     /// Version of python to require when installing this group
     #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
-    pub requires_python: Option<VersionSpecifiers>,
+    pub(crate) requires_python: Option<VersionSpecifiers>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
