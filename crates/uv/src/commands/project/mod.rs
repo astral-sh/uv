@@ -33,8 +33,10 @@ use uv_python::{
     PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonSource,
     PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
 };
-use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
-use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
+use uv_requirements::{
+    LockedRequirements, NamedRequirementsResolver, RequirementsSpecification,
+    read_lock_requirements,
+};
 use uv_resolver::{
     FlatIndex, Installable, Lock, OptionsBuilder, Preference, PythonRequirement,
     ResolverEnvironment, ResolverOutput,
