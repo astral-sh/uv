@@ -69,6 +69,7 @@ The following uv workspace members are also available:
 - [uv-state](https://crates.io/crates/uv-state)
 - [uv-static](https://crates.io/crates/uv-static)
 - [uv-test](https://crates.io/crates/uv-test)
+- [uv-toml](https://crates.io/crates/uv-toml)
 - [uv-tool](https://crates.io/crates/uv-tool)
 - [uv-torch](https://crates.io/crates/uv-torch)
 - [uv-trampoline-builder](https://crates.io/crates/uv-trampoline-builder)
