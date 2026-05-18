@@ -62,7 +62,7 @@ pub(crate) use crate::resolver::availability::{
     UnavailableVersion,
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
-pub use crate::resolver::derivation::DerivationChainBuilder;
+use crate::resolver::derivation::DerivationChainBuilder;
 pub use crate::resolver::environment::ResolverEnvironment;
 use crate::resolver::environment::{
     ForkingPossibility, fork_version_by_marker, fork_version_by_python_requirement,
