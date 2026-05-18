@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
-use uv_fs::{PortablePath, Simplified, persist_with_retry_sync, relative_to};
+use uv_fs::{PortablePath, Simplified, normalize_path_under, persist_with_retry_sync, relative_to};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
 use uv_shell::escape_posix_for_single_quotes;
@@ -160,21 +160,86 @@ fn get_script_executable(python_executable: &Path, is_gui: bool) -> PathBuf {
     }
 }
 
-/// Determine the absolute path to an entrypoint script.
-fn entrypoint_path(entrypoint: &Script, layout: &Layout) -> PathBuf {
-    if cfg!(windows) {
-        // On windows we actually build an .exe wrapper
-        let script_name = entrypoint
-            .name
-            // FIXME: What are the in-reality rules here for names?
-            .strip_suffix(".py")
-            .unwrap_or(&entrypoint.name)
-            .to_string()
-            + ".exe";
+const RESERVED_SCRIPT_NAMES_ERROR: &[&str; 3] = &["python", "pythonw", "python3"];
+const RESERVED_SCRIPT_NAMES_WARN: &[&str; 2] = &["activate", "activate_this.py"];
 
-        layout.scheme.scripts.join(script_name)
-    } else {
-        layout.scheme.scripts.join(&entrypoint.name)
+/// A form of [`Script`] guaranteed by [`ValidatedScript::try_from_script`] to be constrained to
+/// the scripts directory.
+struct ValidatedScript<'script> {
+    path: PathBuf,
+    script: &'script Script,
+}
+
+impl<'script> ValidatedScript<'script> {
+    fn try_from_script(script: &'script Script, layout: &Layout) -> Result<Self, Error> {
+        let Some(path) = normalize_path_under(
+            layout.scheme.scripts.join(&script.name),
+            &layout.scheme.scripts,
+        ) else {
+            return Err(Error::InvalidWheel(format!(
+                "Script path must resolve to a file within the scripts directory: `{}`",
+                script.name
+            )));
+        };
+
+        let name = relative_to(&path, &layout.scheme.scripts)?
+            .to_string_lossy()
+            .into_owned();
+
+        if RESERVED_SCRIPT_NAMES_WARN.contains(&name.as_str()) || name.starts_with("activate.") {
+            warn_user_once!(
+                "The script name `{}` is reserved for virtual environment activation scripts.",
+                name
+            );
+        }
+
+        if RESERVED_SCRIPT_NAMES_ERROR.contains(&name.as_str())
+            || name
+                .strip_prefix("python3.")
+                .is_some_and(|suffix| suffix.parse::<u8>().is_ok())
+        {
+            return Err(Error::ReservedScriptName {
+                reserved: name,
+                declared: script.name.clone(),
+            });
+        }
+
+        let path = if cfg!(windows) {
+            // On Windows we actually build an `.exe` wrapper.
+            let name = name
+                // FIXME: What are the in-reality rules here for names?
+                .strip_suffix(".py")
+                .unwrap_or(&name)
+                .to_string()
+                + std::env::consts::EXE_SUFFIX;
+
+            layout.scheme.scripts.join(name)
+        } else {
+            layout.scheme.scripts.join(name)
+        };
+
+        Ok(Self { path, script })
+    }
+
+    fn as_path(&self) -> &Path {
+        &self.path
+    }
+
+    fn inner(&self) -> &Script {
+        self.script
+    }
+
+    /// Return the script destination relative to `site_packages` for use in `RECORD`.
+    ///
+    /// Entry points are installed in the scripts directory, which may sit outside
+    /// `site_packages`, so we use a lexical diff rather than stripping a prefix.
+    fn relative_to_site_package(&self, site_packages: &Path) -> Result<PathBuf, Error> {
+        pathdiff::diff_paths(self.as_path(), site_packages).ok_or_else(|| {
+            Error::Io(io::Error::other(format!(
+                "Could not find relative path for: {}",
+                self.as_path().simplified_display()
+            )))
+        })
     }
 }
 
@@ -187,42 +252,16 @@ pub(crate) fn write_script_entrypoints(
     record: &mut Vec<RecordEntry>,
     is_gui: bool,
 ) -> Result<(), Error> {
-    for entrypoint in entrypoints {
-        let warn_names = ["activate", "activate_this.py"];
-        if warn_names.contains(&entrypoint.name.as_str())
-            || entrypoint.name.starts_with("activate.")
-        {
-            warn_user_once!(
-                "The script name `{}` is reserved for virtual environment activation scripts.",
-                entrypoint.name
-            );
-        }
-        let reserved_names = ["python", "pythonw", "python3"];
-        if reserved_names.contains(&entrypoint.name.as_str())
-            || entrypoint
-                .name
-                .strip_prefix("python3.")
-                .is_some_and(|suffix| suffix.parse::<u8>().is_ok())
-        {
-            return Err(Error::ReservedScriptName(entrypoint.name.clone()));
-        }
-
-        let entrypoint_absolute = entrypoint_path(entrypoint, layout);
-
-        let entrypoint_relative = pathdiff::diff_paths(&entrypoint_absolute, site_packages)
-            .ok_or_else(|| {
-                Error::Io(io::Error::other(format!(
-                    "Could not find relative path for: {}",
-                    entrypoint_absolute.simplified_display()
-                )))
-            })?;
+    for script in entrypoints {
+        let script = ValidatedScript::try_from_script(script, layout)?;
+        let entrypoint_relative = script.relative_to_site_package(site_packages)?;
 
         // Generate the launcher script.
         let launcher_executable = get_script_executable(&layout.sys_executable, is_gui);
         let launcher_executable =
             get_relocatable_executable(launcher_executable, layout, relocatable)?;
         let launcher_python_script = get_script_launcher(
-            entrypoint,
+            script.inner(),
             &format_shebang(&launcher_executable, &layout.os_name, relocatable),
         );
 
@@ -248,8 +287,8 @@ pub(crate) fn write_script_entrypoints(
                 use std::fs::Permissions;
                 use std::os::unix::fs::PermissionsExt;
 
-                let path = site_packages.join(entrypoint_relative);
-                let permissions = fs::metadata(&path)?.permissions();
+                let path = script.as_path();
+                let permissions = fs::metadata(path)?.permissions();
                 if permissions.mode() & 0o111 != 0o111 {
                     fs::set_permissions(path, Permissions::from_mode(permissions.mode() | 0o111))?;
                 }

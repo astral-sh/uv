@@ -263,6 +263,21 @@ pub fn normalize_path<'path>(path: impl Into<Cow<'path, Path>>) -> Cow<'path, Pa
     path
 }
 
+/// Normalize `path`, returning it when it remains strictly under a non-empty `root`.
+///
+/// This comparison is lexical and does not resolve symlinks. The returned path is normalized, and
+/// equality with `root` is rejected.
+pub fn normalize_path_under(path: impl AsRef<Path>, root: impl AsRef<Path>) -> Option<PathBuf> {
+    let path = normalize_path(path.as_ref()).into_owned();
+    let root = normalize_path(root.as_ref());
+
+    if root.as_os_str().is_empty() || path.as_path() == root.as_ref() {
+        None
+    } else {
+        path.starts_with(root.as_ref()).then_some(path)
+    }
+}
+
 /// Normalize a [`Path`].
 ///
 /// Unlike [`normalize_absolute_path`], this works with relative paths and does never error.
@@ -725,6 +740,32 @@ mod tests {
                 "expected borrowed for {already_normalized:?}"
             );
         }
+    }
+
+    #[test]
+    fn test_normalize_path_under() {
+        assert_eq!(
+            normalize_path_under("scripts/script", "scripts"),
+            Some(PathBuf::from("scripts/script"))
+        );
+        assert_eq!(
+            normalize_path_under("/scripts/script", "/scripts"),
+            Some(PathBuf::from("/scripts/script"))
+        );
+        assert_eq!(
+            normalize_path_under("scripts/nested/../script", "scripts"),
+            Some(PathBuf::from("scripts/script"))
+        );
+        assert_eq!(
+            normalize_path_under("/scripts/nested/../script", "/scripts"),
+            Some(PathBuf::from("/scripts/script"))
+        );
+        assert_eq!(normalize_path_under("scripts/.", "scripts"), None);
+        assert_eq!(normalize_path_under("/scripts/.", "/scripts"), None);
+        assert_eq!(normalize_path_under("scripts/../script", "scripts"), None);
+        assert_eq!(normalize_path_under("/scripts/../script", "/scripts"), None);
+        assert_eq!(normalize_path_under("scripts/script", "."), None);
+        assert_eq!(normalize_path_under("scripts/script", ""), None);
     }
 
     #[test]

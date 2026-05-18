@@ -86,8 +86,8 @@ pub enum Error {
     InvalidEggLink(PathBuf),
     #[error(transparent)]
     LauncherError(#[from] uv_trampoline_builder::Error),
-    #[error("Scripts must not use the reserved name {0}")]
-    ReservedScriptName(String),
+    #[error("Scripts must not use the reserved name `{reserved}`, got: `{declared}`")]
+    ReservedScriptName { reserved: String, declared: String },
     #[error(transparent)]
     Copy(#[from] uv_fs::link::LinkError),
 }
