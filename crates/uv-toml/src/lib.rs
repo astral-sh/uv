@@ -110,8 +110,15 @@ impl EventReceiver for DetectToml11<'_> {
         self.state.pop();
     }
 
-    fn simple_key(&mut self, _span: Span, _kind: Option<Encoding>, _error: &mut dyn ErrorSink) {
+    fn simple_key(&mut self, span: Span, kind: Option<Encoding>, _error: &mut dyn ErrorSink) {
         self.set_sep(false);
+
+        if matches!(kind, Some(Encoding::BasicString | Encoding::MlBasicString))
+            && has_toml11_escapes(self.raw_at(span))
+        {
+            // TOML 1.1 introduces new escape sequences
+            self.flag_11();
+        }
     }
 
     fn scalar(&mut self, span: Span, kind: Option<Encoding>, _error: &mut dyn ErrorSink) {
@@ -249,6 +256,16 @@ mod tests {
     #[test]
     fn features_hex_escape() {
         assert!(has_toml11_features("x = \"val \\x41\"\n"));
+    }
+
+    #[test]
+    fn features_hex_escape_in_quoted_key() {
+        assert!(has_toml11_features("\"\\x62ar\" = \"baz\"\n"));
+    }
+
+    #[test]
+    fn features_hex_escape_in_dotted_quoted_key() {
+        assert!(has_toml11_features("foo.\"\\x62ar\" = \"baz\"\n"));
     }
 
     #[test]
