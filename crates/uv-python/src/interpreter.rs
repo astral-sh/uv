@@ -1123,7 +1123,7 @@ impl InterpreterInfo {
     /// Running a Python script is (relatively) expensive, and the markers won't change
     /// unless the Python executable changes, so we use the executable's last modified
     /// time as a cache key.
-    pub(crate) fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
+    fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
         let absolute = std::path::absolute(executable)?;
 
         // Provide a better error message if the link is broken or the file does not exist. Since
