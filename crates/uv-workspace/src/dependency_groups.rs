@@ -267,7 +267,7 @@ pub struct DependencyGroupError {
 }
 
 #[derive(Debug, Error)]
-pub enum DependencyGroupErrorInner {
+enum DependencyGroupErrorInner {
     #[error("Failed to parse entry in group `{0}`: `{1}`")]
     GroupParseError(
         GroupName,
@@ -317,7 +317,7 @@ impl DependencyGroupErrorInner {
 
 /// A cycle in the `dependency-groups` table.
 #[derive(Debug)]
-pub struct Cycle(Vec<GroupName>);
+struct Cycle(Vec<GroupName>);
 
 /// Display a cycle, e.g., `a -> b -> c -> a`.
 impl std::fmt::Display for Cycle {
