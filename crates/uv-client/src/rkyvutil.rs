@@ -26,20 +26,20 @@ use crate::{Error, ErrorKind};
 ///
 /// This utilizes rkyv's `HighSerializer` but fixes its type parameters where
 /// possible since we don't need the full flexibility of a generic serializer.
-pub type Serializer<'a> = HighSerializer<AlignedVec, ArenaHandle<'a>, rancor::Error>;
+pub(crate) type Serializer<'a> = HighSerializer<AlignedVec, ArenaHandle<'a>, rancor::Error>;
 
 /// A convenient alias for the rkyv deserializer used by `uv-client`.
 ///
 /// This utilizes rkyv's `HighDeserializer` but fixes its type parameters
 /// where possible since we don't need the full flexibility of a generic
 /// deserializer.
-pub type Deserializer = HighDeserializer<rancor::Error>;
+pub(crate) type Deserializer = HighDeserializer<rancor::Error>;
 
 /// A convenient alias for the rkyv validator used by `uv-client`.
 ///
 /// This utilizes rkyv's `HighValidator` but fixes its type parameters where
 /// possible since we don't need the full flexibility of a generic validator.
-pub type Validator<'a> = HighValidator<'a, rancor::Error>;
+pub(crate) type Validator<'a> = HighValidator<'a, rancor::Error>;
 
 /// An owned archived type.
 ///
