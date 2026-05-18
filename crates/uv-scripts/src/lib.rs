@@ -211,7 +211,7 @@ impl Pep723Script {
     /// Generates a default PEP 723 metadata table from the provided script contents.
     ///
     /// See: <https://peps.python.org/pep-0723/>
-    pub fn init_metadata(
+    fn init_metadata(
         contents: &[u8],
         requires_python: &VersionSpecifiers,
     ) -> Result<(String, Pep723Metadata, String), Pep723Error> {
