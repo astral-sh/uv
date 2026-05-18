@@ -188,7 +188,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             build_context.capabilities(),
         );
 
-        Self::new_custom_io(
+        Ok(Self::new_custom_io(
             manifest,
             options,
             hasher,
@@ -203,7 +203,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             build_context.locations(),
             provider,
             installed_packages,
-        )
+        ))
     }
 }
 
@@ -211,7 +211,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
     Resolver<Provider, InstalledPackages>
 {
     /// Initialize a new resolver using a user provided backend.
-    pub fn new_custom_io(
+    fn new_custom_io(
         manifest: Manifest,
         options: Options,
         hasher: &HashStrategy,
@@ -226,7 +226,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         locations: &IndexLocations,
         provider: Provider,
         installed_packages: InstalledPackages,
-    ) -> Result<Self, ResolveError> {
+    ) -> Self {
         let state = ResolverState {
             index: index.clone(),
             git: git.clone(),
@@ -256,7 +256,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             options,
             reporter: None,
         };
-        Ok(Self { state, provider })
+        Self { state, provider }
     }
 
     /// Set the [`Reporter`] to use for this installer.
