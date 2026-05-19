@@ -2,6 +2,7 @@
 #![allow(dead_code, unreachable_pub)]
 
 pub mod find_links;
+mod http_server;
 pub mod packse;
 
 use std::borrow::BorrowMut;

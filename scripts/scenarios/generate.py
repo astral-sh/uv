@@ -74,8 +74,6 @@ class PackageMetadata:
     wheel: bool = True
     yanked: bool = False
     wheel_tags: list[str] = field(default_factory=list)
-    description: str = ""
-
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> PackageMetadata:
         values = data or {}
@@ -87,7 +85,6 @@ class PackageMetadata:
             wheel=values.get("wheel", True),
             yanked=values.get("yanked", False),
             wheel_tags=values.get("wheel_tags", []),
-            description=values.get("description", ""),
         )
 
 
@@ -129,7 +126,7 @@ class Expected:
     def from_dict(cls, data: dict[str, Any] | None) -> Expected:
         values = data or {}
         return cls(
-            satisfiable=values.get("satisfiable", True),
+            satisfiable=values["satisfiable"],
             packages=values.get("packages", {}),
             explanation=values.get("explanation"),
         )
@@ -197,8 +194,8 @@ class Scenario:
         return cls(
             name=data["name"],
             packages=packages,
-            root=RootPackage.from_dict(data.get("root")),
-            expected=Expected.from_dict(data.get("expected")),
+            root=RootPackage.from_dict(data["root"]),
+            expected=Expected.from_dict(data["expected"]),
             environment=Environment.from_dict(data.get("environment")),
             resolver_options=ResolverOptions.from_dict(data.get("resolver_options")),
             description=data.get("description"),
@@ -218,13 +215,10 @@ class Scenario:
 
     @classmethod
     def load_all(cls, scenarios_dir: Path = SCENARIOS_DIR) -> list[Scenario]:
-        scenarios = []
-        for path in sorted(scenarios_dir.rglob("*.toml")):
-            try:
-                scenarios.append(cls.from_path(path, scenarios_dir=scenarios_dir))
-            except Exception as exc:
-                logging.warning(f"Skipping {path}: {exc}")
-        return scenarios
+        return [
+            cls.from_path(path, scenarios_dir=scenarios_dir)
+            for path in sorted(scenarios_dir.rglob("*.toml"))
+        ]
 
     def to_pretty_tree(self) -> str:
         space = "    "

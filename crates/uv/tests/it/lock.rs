@@ -35220,8 +35220,7 @@ fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
 #[test]
 fn lock_required_environment_cycle_reports_resolution_error() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let server =
-        PackseServer::new("wheels/no-sdist-no-wheels-with-matching-platform.toml");
+    let server = PackseServer::new("wheels/no-sdist-no-wheels-with-matching-platform.toml");
 
     context
         .temp_dir

@@ -11,14 +11,15 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::thread;
 
 use serde_json::json;
-use wiremock::matchers::any;
-use wiremock::{Mock, MockServer, Request, ResponseTemplate};
+use uv_pep440::VersionSpecifiers;
+use wiremock::{Request, ResponseTemplate};
 
 use uv_distribution_filename::WheelFilename;
 use uv_normalize::PackageName;
+
+use crate::http_server::{HttpServer, content_type_for_filename};
 
 use super::scenario::Scenario;
 use super::wheel::{generate_sdist, generate_wheel, sha256_hex};
@@ -30,7 +31,7 @@ const PACKSE_UPLOAD_TIME: &str = "2024-03-24T00:00:00Z";
 struct DistInfo {
     filename: String,
     sha256: String,
-    requires_python: Option<String>,
+    requires_python: Option<VersionSpecifiers>,
     upload_time: &'static str,
     yanked: bool,
 }
@@ -53,11 +54,7 @@ struct ServerIndex {
 /// The server runs on a background thread with its own single-threaded tokio runtime.
 /// When [`PackseServer`] is dropped, the background thread and server are shut down.
 pub struct PackseServer {
-    url: String,
-    /// Signals the background thread to stop.
-    _shutdown: Option<tokio::sync::oneshot::Sender<()>>,
-    /// The background thread handle.
-    _thread: Option<thread::JoinHandle<()>>,
+    server: HttpServer,
 }
 
 impl PackseServer {
@@ -73,90 +70,23 @@ impl PackseServer {
     ///
     /// Useful as a dummy index that will 404 for any non-vendored package lookup.
     pub fn empty() -> Self {
-        let scenario = Scenario {
-            name: String::new(),
-            description: None,
-            packages: std::collections::BTreeMap::new(),
-            root: super::scenario::RootPackage {
-                requires_python: None,
-                requires: Vec::new(),
-            },
-            expected: super::scenario::Expected {
-                satisfiable: true,
-                packages: std::collections::BTreeMap::new(),
-                explanation: None,
-            },
-            environment: super::scenario::Environment::default(),
-            resolver_options: super::scenario::ResolverOptions::default(),
-        };
-        Self::from_scenario(&scenario)
+        Self::from_scenario(&Scenario::empty())
     }
 
     /// Start a mock server for the given scenario.
     pub fn from_scenario(scenario: &Scenario) -> Self {
         let vendor_path = vendor_dir();
-
-        // Build the full index eagerly (on the calling thread).
         let index = Arc::new(build_server_index(scenario, &vendor_path));
-
-        // Channel: background thread sends us the URL once the server is ready.
-        let (url_tx, url_rx) = std::sync::mpsc::channel::<String>();
-        // Channel: we send shutdown signal to the background thread.
-        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-
-        let handle = thread::spawn(move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("Failed to create tokio runtime for PackseServer");
-
-            rt.block_on(async move {
-                let server = MockServer::start().await;
-                let server_uri = server.uri();
-
-                Mock::given(any())
-                    .respond_with(move |req: &Request| handle_request(req, &server_uri, &index))
-                    .mount(&server)
-                    .await;
-
-                // Tell the main thread the URL.
-                url_tx.send(server.uri()).ok();
-
-                // Keep the server alive until shutdown is signaled.
-                let _ = shutdown_rx.await;
-            });
+        let server = HttpServer::start(move |request, server_uri| {
+            handle_request(request, server_uri, &index)
         });
 
-        let url = url_rx
-            .recv_timeout(std::time::Duration::from_secs(30))
-            .expect("PackseServer: timed out waiting for server to start");
-
-        Self {
-            url,
-            _shutdown: Some(shutdown_tx),
-            _thread: Some(handle),
-        }
+        Self { server }
     }
 
     /// The Simple API index URL (e.g., `http://127.0.0.1:PORT/simple/`).
     pub fn index_url(&self) -> String {
-        format!("{}/simple/", self.url)
-    }
-
-    /// The base URI of the mock server.
-    pub fn uri(&self) -> String {
-        self.url.clone()
-    }
-}
-
-impl Drop for PackseServer {
-    fn drop(&mut self) {
-        // Signal the background thread to stop.
-        drop(self._shutdown.take());
-        // Wait for it to finish.
-        if let Some(handle) = self._thread.take() {
-            handle.join().ok();
-        }
+        format!("{}/simple/", self.server.url())
     }
 }
 
@@ -165,14 +95,10 @@ fn build_server_index(scenario: &Scenario, vendor_path: &Path) -> ServerIndex {
     let mut packages = HashMap::new();
     let mut files: HashMap<String, Arc<[u8]>> = HashMap::new();
 
-    // Index scenario packages.
-    for (pkg_name, package) in &scenario.packages {
-        let package_name =
-            PackageName::from_str(pkg_name).expect("invalid package name in scenario");
+    for (package_name, package) in &scenario.packages {
         let mut dists = Vec::new();
 
         for (version, meta) in &package.versions {
-            // Generate wheel(s)
             if meta.wheel {
                 let tags = if meta.wheel_tags.is_empty() {
                     vec!["py3-none-any".to_string()]
@@ -182,11 +108,11 @@ fn build_server_index(scenario: &Scenario, vendor_path: &Path) -> ServerIndex {
 
                 for tag in &tags {
                     let (filename, bytes) = generate_wheel(
-                        pkg_name,
+                        package_name,
                         version,
                         &meta.requires,
                         &meta.extras,
-                        meta.requires_python.as_deref(),
+                        meta.requires_python.as_ref(),
                         tag,
                     );
                     let sha256 = sha256_hex(&bytes);
@@ -202,14 +128,13 @@ fn build_server_index(scenario: &Scenario, vendor_path: &Path) -> ServerIndex {
                 }
             }
 
-            // Generate sdist
             if meta.sdist {
                 let (filename, bytes) = generate_sdist(
-                    pkg_name,
+                    package_name,
                     version,
                     &meta.requires,
                     &meta.extras,
-                    meta.requires_python.as_deref(),
+                    meta.requires_python.as_ref(),
                 );
                 let sha256 = sha256_hex(&bytes);
                 let bytes: Arc<[u8]> = bytes.into();
@@ -224,10 +149,9 @@ fn build_server_index(scenario: &Scenario, vendor_path: &Path) -> ServerIndex {
             }
         }
 
-        packages.insert(package_name, PackageEntry { dists });
+        packages.insert(package_name.clone(), PackageEntry { dists });
     }
 
-    // Index vendored build dependencies (wheels only).
     let entries = fs_err::read_dir(vendor_path).expect("failed to read vendor directory");
     for entry in entries {
         let entry = entry.expect("failed to read vendor directory entry");
@@ -266,11 +190,9 @@ fn build_server_index(scenario: &Scenario, vendor_path: &Path) -> ServerIndex {
     ServerIndex { packages, files }
 }
 
-/// Handle an incoming request.
 fn handle_request(req: &Request, server_uri: &str, index: &ServerIndex) -> ResponseTemplate {
     let path = req.url.path();
 
-    // Simple API: /simple/{package}/
     if let Some(pkg) = extract_package_name(path) {
         let Ok(package_name) = PackageName::from_str(pkg) else {
             return ResponseTemplate::new(404);
@@ -282,7 +204,6 @@ fn handle_request(req: &Request, server_uri: &str, index: &ServerIndex) -> Respo
         return ResponseTemplate::new(404);
     }
 
-    // File download: /files/{filename}
     if let Some(filename) = path.strip_prefix("/files/") {
         if let Some(bytes) = index.files.get(filename) {
             return ResponseTemplate::new(200)
@@ -333,17 +254,6 @@ fn build_simple_api_response(
     ResponseTemplate::new(200)
         .insert_header("Content-Type", "application/vnd.pypi.simple.v1+json")
         .set_body_raw(body_str, "application/vnd.pypi.simple.v1+json")
-}
-
-fn content_type_for_filename(filename: &str) -> &'static str {
-    if Path::new(filename)
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
-    {
-        "application/zip"
-    } else {
-        "application/gzip"
-    }
 }
 
 /// Extract the package name from `/simple/{package}` or `/simple/{package}/`.

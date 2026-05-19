@@ -6,16 +6,13 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use std::thread;
+use wiremock::{Request, ResponseTemplate};
 
-use wiremock::matchers::any;
-use wiremock::{Mock, MockServer, Request, ResponseTemplate};
+use crate::http_server::{HttpServer, content_type_for_filename};
 
 /// A running HTTP server that serves files from a directory as a flat links page.
 pub struct FindLinksServer {
-    url: String,
-    _shutdown: Option<tokio::sync::oneshot::Sender<()>>,
-    _thread: Option<thread::JoinHandle<()>>,
+    server: HttpServer,
 }
 
 impl FindLinksServer {
@@ -41,86 +38,42 @@ impl FindLinksServer {
 
         let files = Arc::new(files);
         let filenames = Arc::new(filenames);
-
-        let (url_tx, url_rx) = std::sync::mpsc::channel::<String>();
-        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-
-        let handle = thread::spawn(move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("failed to create tokio runtime for FindLinksServer");
-
-            rt.block_on(async move {
-                let server = MockServer::start().await;
-                let server_uri = server.uri();
-
-                let files_clone = Arc::clone(&files);
-                let filenames_clone = Arc::clone(&filenames);
-
-                Mock::given(any())
-                    .respond_with(move |req: &Request| {
-                        let path = req.url.path();
-
-                        // Root: flat HTML links page.
-                        if path == "/" {
-                            let links: String = filenames_clone
-                                .iter()
-                                .map(|f| format!("<a href=\"{server_uri}/{f}\">{f}</a>"))
-                                .collect::<Vec<_>>()
-                                .join("\n");
-                            let html =
-                                format!("<!DOCTYPE html>\n<html><body>\n{links}\n</body></html>");
-                            return ResponseTemplate::new(200).set_body_raw(html, "text/html");
-                        }
-
-                        // File download.
-                        let filename = path.trim_start_matches('/');
-                        if let Some(bytes) = files_clone.get(filename) {
-                            let content_type = if Path::new(filename)
-                                .extension()
-                                .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
-                            {
-                                "application/zip"
-                            } else {
-                                "application/gzip"
-                            };
-                            return ResponseTemplate::new(200)
-                                .set_body_raw(bytes.to_vec(), content_type);
-                        }
-
-                        ResponseTemplate::new(404)
-                    })
-                    .mount(&server)
-                    .await;
-
-                url_tx.send(server.uri()).ok();
-                let _ = shutdown_rx.await;
-            });
+        let server = HttpServer::start(move |request, server_uri| {
+            handle_request(request, server_uri, &files, &filenames)
         });
 
-        let url = url_rx
-            .recv_timeout(std::time::Duration::from_secs(30))
-            .expect("FindLinksServer: timed out waiting for server to start");
-
-        Self {
-            url,
-            _shutdown: Some(shutdown_tx),
-            _thread: Some(handle),
-        }
+        Self { server }
     }
 
     /// The base URL of the server (for use with `--find-links`).
     pub fn url(&self) -> &str {
-        &self.url
+        self.server.url()
     }
 }
 
-impl Drop for FindLinksServer {
-    fn drop(&mut self) {
-        drop(self._shutdown.take());
-        if let Some(handle) = self._thread.take() {
-            handle.join().ok();
-        }
+fn handle_request(
+    request: &Request,
+    server_uri: &str,
+    files: &HashMap<String, Arc<[u8]>>,
+    filenames: &[String],
+) -> ResponseTemplate {
+    let path = request.url.path();
+
+    if path == "/" {
+        let links = filenames
+            .iter()
+            .map(|filename| format!("<a href=\"{server_uri}/{filename}\">{filename}</a>"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let html = format!("<!DOCTYPE html>\n<html><body>\n{links}\n</body></html>");
+        return ResponseTemplate::new(200).set_body_raw(html, "text/html");
     }
+
+    let filename = path.trim_start_matches('/');
+    if let Some(bytes) = files.get(filename) {
+        return ResponseTemplate::new(200)
+            .set_body_raw(bytes.to_vec(), content_type_for_filename(filename));
+    }
+
+    ResponseTemplate::new(404)
 }
