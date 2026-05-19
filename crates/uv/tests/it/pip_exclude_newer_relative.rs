@@ -10,7 +10,7 @@ use uv_test::uv_snapshot;
 /// - 3.6: 2023-11-25
 /// - 3.7: 2024-04-11
 #[test]
-fn pip_install_exclude_newer_relative() -> Result<()> {
+fn pip_install_exclude_newer_relative() {
     let context = uv_test::test_context!("3.12");
     let current_timestamp = "2024-05-01T00:00:00Z";
 
@@ -56,8 +56,6 @@ fn pip_install_exclude_newer_relative() -> Result<()> {
      - idna==3.6
      + idna==3.7
     ");
-
-    Ok(())
 }
 
 /// Install with relative `exclude-newer` values from `[tool.uv.pip]`.
