@@ -63,6 +63,7 @@ uv-pep440 = { version = "0.0.49", path = "crates/uv-pep440", features = [
 uv-pep508 = { version = "0.0.49", path = "crates/uv-pep508", features = [
   "non-pep508-extensions",
 ] }
+uv-pep740 = { version = "0.0.49", path = "crates/uv-pep740" }
 uv-platform = { version = "0.0.49", path = "crates/uv-platform" }
 uv-platform-tags = { version = "0.0.49", path = "crates/uv-platform-tags" }
 uv-preview = { version = "0.0.49", path = "crates/uv-preview" }
@@ -255,6 +256,9 @@ serde = { version = "1.0.210", features = ["derive", "rc"] }
 serde-untagged = { version = "0.1.6" }
 serde_json = { version = "1.0.128" }
 sha2 = { version = "0.10.8" }
+sigstore-oidc = { version = "0.8.0" }
+sigstore-sign = { version = "0.8.0" }
+sigstore-types = { version = "0.8.0" }
 smallvec = { version = "1.13.2" }
 spdx = { version = "0.13.0" }
 syn = { version = "2.0.77" }

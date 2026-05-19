@@ -95,6 +95,7 @@ fn mixed_credentials() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Failed to obtain ambient identity token for signing, skipping attestation generation
     Publishing 1 file to https://test.pypi.org/legacy/
     error: a username and a password are not allowed when using trusted publishing
     "
@@ -119,6 +120,7 @@ fn missing_trusted_publishing_permission() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Failed to obtain ambient identity token for signing, skipping attestation generation
     Publishing 1 file to https://test.pypi.org/legacy/
     error: Failed to obtain token for trusted publishing
       Caused by: Failed to obtain OIDC token: is the `id-token: write` permission missing?
@@ -145,6 +147,7 @@ fn no_credentials() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Failed to obtain ambient identity token for signing, skipping attestation generation
     Publishing 1 file to https://test.pypi.org/legacy/
     Note: Neither credentials nor keyring are configured, and there was an error fetching the trusted publishing token. If you don't want to use trusted publishing, you can ignore this error, but you need to provide credentials.
     error: Trusted publishing failed
@@ -486,6 +489,7 @@ async fn read_index_credential_env_vars_for_check_url() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Trusted publishing is disabled, meaning that attestations cannot be uploaded even if they are present. Remove `--trusted-publishing never` to enable attestations, or pass `--attest never` to explicitly disable attestations.
     Publishing 1 file to http://[LOCALHOST]/upload
     Hashing astral_test_private-0.1.0-py3-none-any.whl ([SIZE])
     Uploading astral_test_private-0.1.0-py3-none-any.whl ([SIZE])
@@ -549,6 +553,7 @@ async fn gitlab_trusted_publishing_pypi_id_token() {
         .await;
 
     uv_snapshot!(context.filters(), context.publish()
+        .arg("--no-attestations")
         .arg("--trusted-publishing")
         .arg("always")
         .arg("--publish-url")
@@ -603,6 +608,7 @@ async fn gitlab_trusted_publishing_testpypi_id_token() {
         .await;
 
     uv_snapshot!(context.filters(), context.publish()
+        .arg("--no-attestations")
         .arg("--trusted-publishing")
         .arg("always")
         .arg("--publish-url")
@@ -668,9 +674,10 @@ async fn direct_publish_redacts_presigned_upload_url() {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Hashing [WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl
+    DEBUG No ambient identity token found for signing, skipping attestation generation
     Publishing 1 file to http://[LOCALHOST]/upload
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
-    DEBUG Hashing [WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     DEBUG Reserving upload slot at http://[LOCALHOST]/upload/reserve
     DEBUG Using HTTP Basic authentication
