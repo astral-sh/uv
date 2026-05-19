@@ -11,7 +11,7 @@ use uv_cache::Cache;
 use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
 };
-use uv_configuration::{KeyringProviderType, TrustedPublishing};
+use uv_configuration::{Attest, KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_errors::{ErrorOptions, write_error_chain_with_options};
@@ -41,7 +41,7 @@ pub(crate) async fn publish(
     index: Option<String>,
     index_locations: IndexLocations,
     dry_run: bool,
-    no_attestations: bool,
+    attest: Attest,
     direct: bool,
     preview: Preview,
     cache: &Cache,
@@ -58,6 +58,18 @@ pub(crate) async fn publish(
             PreviewFeature::DirectPublish
         );
     }
+
+    let attest = match (trusted_publishing, attest) {
+        (TrustedPublishing::Never, Attest::Always | Attest::Automatic) => {
+            warn_user_once!(
+                "Trusted publishing is disabled, meaning that attestations cannot be uploaded \
+                even if they are present. Remove `--trusted-publishing never` to enable attestations, \
+                or pass `--attest never` to explicitly disable attestations.",
+            );
+            Attest::Never
+        }
+        _ => attest,
+    };
 
     let token_store = PyxTokenStore::from_settings()?;
 
@@ -103,7 +115,9 @@ pub(crate) async fn publish(
         (publish_url, check_url)
     };
 
-    let mut groups = group_files_for_publishing(paths, no_attestations)?;
+    let reporter = Arc::new(PublishReporter::single(printer));
+
+    let mut groups = group_files_for_publishing(paths, attest, reporter.clone()).await?;
     // Sort by filename first so the stable type sort preserves filename order within each type.
     groups.sort_by(|left, right| left.raw_filename.cmp(&right.raw_filename));
     // Sort by distribution type, with wheels before source distributions.
@@ -223,8 +237,6 @@ pub(crate) async fn publish(
             );
         }
 
-        let reporter = Arc::new(PublishReporter::single(printer));
-
         if let Some(check_url_client) = &check_url_client {
             match uv_publish::check_url(
                 check_url_client,
@@ -269,6 +281,7 @@ pub(crate) async fn publish(
                 format!("({bytes:.1}{unit})").dimmed()
             )?;
         } else {
+            // TODO: We now perform the hashing above, so this is in the wrong place.
             writeln!(
                 printer.stderr(),
                 "{} {} {}",
@@ -279,24 +292,23 @@ pub(crate) async fn publish(
         }
 
         // Collect the metadata for the file.
-        let form_metadata =
-            match FormMetadata::read_from_file(&group.file, &group.filename, reporter.clone())
-                .await
-                .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))
-            {
-                Ok(metadata) => metadata,
-                Err(err) => {
-                    if dry_run {
-                        write_error_chain_with_options(
-                            &err,
-                            ErrorOptions::default().with_stream(printer.stderr()),
-                        )?;
-                        error_count += 1;
-                        continue;
-                    }
-                    return Err(err.into());
+        let form_metadata = match FormMetadata::read_from_file(&group)
+            .await
+            .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))
+        {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                if dry_run {
+                    write_error_chain_with_options(
+                        &err,
+                        ErrorOptions::default().with_stream(printer.stderr()),
+                    )?;
+                    error_count += 1;
+                    continue;
                 }
-            };
+                return Err(err.into());
+            }
+        };
 
         writeln!(
             printer.stderr(),
