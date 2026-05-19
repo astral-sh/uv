@@ -332,16 +332,10 @@ impl WheelFile {
         // Check that installer is compatible with Wheel-Version. Warn if minor version is greater, abort if major version is greater.
         // Wheel-Version: 1.0
         let major = wheel_version.0.parse::<u32>().map_err(|_| {
-            Error::InvalidWheel(format!(
-                "Invalid wheel major version: {}",
-                wheel_version.0
-            ))
+            Error::InvalidWheel(format!("Invalid wheel major version: {}", wheel_version.0))
         })?;
         let minor = wheel_version.1.parse::<u32>().map_err(|_| {
-            Error::InvalidWheel(format!(
-                "Invalid wheel minor version: {}",
-                wheel_version.1
-            ))
+            Error::InvalidWheel(format!("Invalid wheel minor version: {}", wheel_version.1))
         })?;
         if major != 1 {
             return Err(Error::InvalidWheel(format!(
@@ -360,7 +354,7 @@ impl WheelFile {
 
     /// Whether the wheel should be installed into the `purelib` or `platlib` directory.
     pub(crate) fn lib_kind(&self) -> LibKind {
-        // Determine whether Root-Is-Purelib == ‘true’.
+        // Determine whether Root-Is-Purelib == 'true'.
         // If it is, the wheel is pure, and should be installed into purelib.
         let root_is_purelib = self
             .0
