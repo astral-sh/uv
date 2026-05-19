@@ -203,7 +203,7 @@ impl PythonInstallation {
                         return Err(err);
                     }
                     return Err(err.with_missing_python_hint(
-                        "uv embeds available Python downloads and may require an update to install new versions. Consider retrying on a newer version of uv."
+                        "uv fetches available Python downloads at runtime and falls back to embedded metadata on failure. If this is a newly released Python version, retry later."
                             .to_string(),
                     ));
                 }

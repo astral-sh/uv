@@ -956,6 +956,9 @@ impl FromStr for PythonDownloadRequest {
 const BUILTIN_PYTHON_DOWNLOADS_JSON: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/download-metadata-minified.json"));
 
+/// Default URL for runtime Python download metadata.
+const REMOTE_PYTHON_DOWNLOAD_METADATA_URL: &str = "https://raw.githubusercontent.com/astral-sh/versions/refs/heads/main/v1/python-build-standalone.ndjson";
+
 // 2025-03-11, the first CPython release date whose musl builds are dynamically linked.
 const CPYTHON_MUSL_STATIC_RELEASE_END: u64 = 2025 * 10_000 + 3 * 100 + 11;
 const NDJSON_FLAVOR_PREFERENCES: &[&str] = &[
@@ -1019,6 +1022,19 @@ enum DownloadListFormat {
     Ndjson,
 }
 
+#[derive(Debug, Clone)]
+struct DownloadListSource<'a> {
+    location: DownloadListLocation<'a>,
+    format: DownloadListFormat,
+    implicit: bool,
+}
+
+#[derive(Debug, Clone)]
+enum DownloadListLocation<'a> {
+    Path(Cow<'a, Path>),
+    Http(DisplaySafeUrl),
+}
+
 fn detect_download_list_format(url_or_path: &str) -> DownloadListFormat {
     let path = Url::parse(url_or_path)
         .ok()
@@ -1031,6 +1047,48 @@ fn detect_download_list_format(url_or_path: &str) -> DownloadListFormat {
     } else {
         DownloadListFormat::Json
     }
+}
+
+fn resolve_download_list_source(
+    python_downloads_json_url: Option<&str>,
+) -> Result<DownloadListSource<'_>, Error> {
+    let implicit = python_downloads_json_url.is_none();
+    let source = if let Some(source) = python_downloads_json_url {
+        Cow::Borrowed(source)
+    } else if let Some(source) = env::var_os(EnvVars::UV_INTERNAL__TEST_PYTHON_DOWNLOADS_JSON_URL)
+        .filter(|value| !value.is_empty())
+        .map(|value| Cow::Owned(value.to_string_lossy().into_owned()))
+    {
+        source
+    } else {
+        return Ok(DownloadListSource {
+            location: DownloadListLocation::Http(
+                DisplaySafeUrl::parse(REMOTE_PYTHON_DOWNLOAD_METADATA_URL)
+                    .expect("default remote Python download metadata URL should be valid"),
+            ),
+            format: DownloadListFormat::Ndjson,
+            implicit,
+        });
+    };
+
+    let format = detect_download_list_format(&source);
+    let location = if let Ok(url) = DisplaySafeUrl::parse(&source) {
+        match url.scheme() {
+            "http" | "https" => DownloadListLocation::Http(url),
+            "file" => DownloadListLocation::Path(Cow::Owned(
+                url.to_file_path().or(Err(Error::InvalidUrlFormat(url)))?,
+            )),
+            _ => DownloadListLocation::Path(Cow::Owned(PathBuf::from(source.as_ref()))),
+        }
+    } else {
+        DownloadListLocation::Path(Cow::Owned(PathBuf::from(source.as_ref())))
+    };
+
+    Ok(DownloadListSource {
+        location,
+        format,
+        implicit,
+    })
 }
 
 /// A wrapper type to display a `ManagedPythonDownload` with its build information.
@@ -1082,100 +1140,91 @@ impl ManagedPythonDownloadList {
         Err(Error::NoDownloadFound(request.clone()))
     }
 
-    /// Load available Python distributions from a provided source or the compiled-in list.
+    /// Load available Python distributions from a provided source.
     ///
-    /// `python_downloads_json_url` can be either `None`, to use the default list (taken from
-    /// `crates/uv-python/download-metadata.json`), or `Some` local path
-    /// or file://, http://, or https:// URL.
-    ///
-    /// Returns an error if the provided list could not be opened, if the JSON is invalid, or if it
-    /// does not parse into the expected data structure.
+    /// If no explicit source is provided, uv fetches metadata from the default remote NDJSON
+    /// endpoint and falls back to the embedded metadata if the fetch or parse fails.
     pub async fn new(
         client: &BaseClient,
         python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
-        let format = python_downloads_json_url
-            .map(detect_download_list_format)
-            .unwrap_or(DownloadListFormat::Json);
+        let source = resolve_download_list_source(python_downloads_json_url)?;
 
-        // Although read_url() handles file:// URLs and converts them to local file reads, here we
-        // want to also support parsing bare filenames like "/tmp/py.json", not just
-        // "file:///tmp/py.json". Note that "C:\Temp\py.json" should be considered a filename, even
-        // though Url::parse would successfully misparse it as a URL with scheme "C".
-        enum Source<'a> {
-            BuiltIn,
-            Path(Cow<'a, Path>),
-            Http(DisplaySafeUrl),
-        }
-
-        let json_source = if let Some(url_or_path) = python_downloads_json_url {
-            if let Ok(url) = DisplaySafeUrl::parse(url_or_path) {
-                match url.scheme() {
-                    "http" | "https" => Source::Http(url),
-                    "file" => Source::Path(Cow::Owned(
-                        url.to_file_path().or(Err(Error::InvalidUrlFormat(url)))?,
-                    )),
-                    _ => Source::Path(Cow::Borrowed(Path::new(url_or_path))),
-                }
-            } else {
-                Source::Path(Cow::Borrowed(Path::new(url_or_path)))
+        let downloads = match (&source.location, source.format) {
+            (DownloadListLocation::Path(path), DownloadListFormat::Json) => {
+                parse_json_download_bytes(&path.to_string_lossy(), &fs_err::read(path.as_ref())?)?
             }
-        } else {
-            Source::BuiltIn
-        };
-
-        let buf: Cow<'_, [u8]> = match json_source {
-            Source::BuiltIn => BUILTIN_PYTHON_DOWNLOADS_JSON.into(),
-            Source::Path(ref path) => fs_err::read(path.as_ref())?.into(),
-            Source::Http(ref url) => {
-                let buf = fetch_bytes_from_url(client, url)
-                    .await
-                    .map_err(|err| match format {
-                        DownloadListFormat::Json => {
-                            Error::FetchingPythonDownloadsJSONError(url.to_string(), Box::new(err))
+            (DownloadListLocation::Path(path), DownloadListFormat::Ndjson) => {
+                match parse_ndjson_bytes(&path.to_string_lossy(), &fs_err::read(path.as_ref())?) {
+                    Ok(downloads) => {
+                        if source.implicit {
+                            merge_with_embedded_non_cpython(downloads)?
+                        } else {
+                            downloads
                         }
-                        DownloadListFormat::Ndjson => Error::FetchingPythonDownloadsNdjsonError(
+                    }
+                    Err(err) => {
+                        if source.implicit {
+                            debug!(
+                                "Falling back to embedded Python downloads metadata after NDJSON parse failure: {err}"
+                            );
+                            embedded_downloads()?
+                        } else {
+                            return Err(err);
+                        }
+                    }
+                }
+            }
+            (DownloadListLocation::Http(url), DownloadListFormat::Json) => {
+                match fetch_bytes_from_url(client, url).await {
+                    Ok(buf) => parse_json_download_bytes(&url.to_string(), &buf)?,
+                    Err(err) => {
+                        return Err(Error::FetchingPythonDownloadsJSONError(
                             url.to_string(),
                             Box::new(err),
-                        ),
-                    })?;
-                buf.into()
+                        ));
+                    }
+                }
+            }
+            (DownloadListLocation::Http(url), DownloadListFormat::Ndjson) => {
+                match fetch_bytes_from_url(client, url).await {
+                    Ok(buf) => match parse_ndjson_bytes(&url.to_string(), &buf) {
+                        Ok(downloads) => {
+                            if source.implicit {
+                                merge_with_embedded_non_cpython(downloads)?
+                            } else {
+                                downloads
+                            }
+                        }
+                        Err(err) => {
+                            if source.implicit {
+                                debug!(
+                                    "Falling back to embedded Python downloads metadata after NDJSON parse failure: {err}"
+                                );
+                                embedded_downloads()?
+                            } else {
+                                return Err(err);
+                            }
+                        }
+                    },
+                    Err(err) => {
+                        if source.implicit {
+                            debug!(
+                                "Falling back to embedded Python downloads metadata after NDJSON fetch failure: {err}"
+                            );
+                            embedded_downloads()?
+                        } else {
+                            return Err(Error::FetchingPythonDownloadsNdjsonError(
+                                url.to_string(),
+                                Box::new(err),
+                            ));
+                        }
+                    }
+                }
             }
         };
 
-        let source = match json_source {
-            Source::BuiltIn => "EMBEDDED IN THE BINARY".to_owned(),
-            Source::Path(path) => path.to_string_lossy().to_string(),
-            Source::Http(url) => url.to_string(),
-        };
-        let result = match format {
-            DownloadListFormat::Json => {
-                let json_downloads: HashMap<String, JsonPythonDownload> =
-                    serde_json::from_slice(&buf).map_err(
-                        // As an explicit compatibility mechanism, if there's a top-level "version" key, it
-                        // means it's a newer format than we know how to deal with.  Before reporting a
-                        // parse error about the format of JsonPythonDownload, check for that key. We can do
-                        // this by parsing into a Map<String, IgnoredAny> which allows any valid JSON on the
-                        // value side. (Because it's zero-sized, Clippy suggests Set<String>, but that won't
-                        // have the same parsing effect.)
-                        #[expect(clippy::zero_sized_map_values)]
-                        |err| {
-                            if let Ok(keys) = serde_json::from_slice::<
-                                HashMap<String, serde::de::IgnoredAny>,
-                            >(&buf)
-                                && keys.contains_key("version")
-                            {
-                                Error::UnsupportedPythonDownloadsJSON(source.clone())
-                            } else {
-                                Error::InvalidPythonDownloadsJSON(source.clone(), err)
-                            }
-                        },
-                    )?;
-                parse_json_downloads(json_downloads)
-            }
-            DownloadListFormat::Ndjson => parse_ndjson_bytes(&source, &buf)?,
-        };
-        Ok(Self { downloads: result })
+        Ok(Self { downloads })
     }
 
     /// Load available Python distributions from the compiled-in list only.
@@ -1196,6 +1245,36 @@ async fn fetch_bytes_from_url(client: &BaseClient, url: &DisplaySafeUrl) -> Resu
     let mut buf = Vec::with_capacity(capacity);
     reader.read_to_end(&mut buf).await?;
     Ok(buf)
+}
+
+fn embedded_non_cpython_downloads() -> Result<Vec<ManagedPythonDownload>, Error> {
+    Ok(embedded_downloads()?
+        .into_iter()
+        .filter(|download| {
+            !matches!(
+                download.key().implementation().as_ref(),
+                LenientImplementationName::Known(ImplementationName::CPython)
+            )
+        })
+        .collect())
+}
+
+fn merge_with_embedded_non_cpython(
+    downloads: Vec<ManagedPythonDownload>,
+) -> Result<Vec<ManagedPythonDownload>, Error> {
+    let mut merged = BTreeMap::new();
+
+    for download in downloads {
+        merged.entry(download.key().clone()).or_insert(download);
+    }
+
+    for download in embedded_non_cpython_downloads()? {
+        merged.entry(download.key().clone()).or_insert(download);
+    }
+
+    let mut downloads = merged.into_values().collect::<Vec<_>>();
+    downloads.sort_by(|a, b| Ord::cmp(&b.key, &a.key));
+    Ok(downloads)
 }
 
 impl ManagedPythonDownload {
@@ -1664,6 +1743,33 @@ impl ManagedPythonDownload {
 
         Ok(vec![DisplaySafeUrl::parse(&self.url)?])
     }
+}
+
+fn embedded_downloads() -> Result<Vec<ManagedPythonDownload>, Error> {
+    let json_downloads: HashMap<String, JsonPythonDownload> =
+        serde_json::from_slice(BUILTIN_PYTHON_DOWNLOADS_JSON).map_err(|err| {
+            Error::InvalidPythonDownloadsJSON("EMBEDDED IN THE BINARY".to_owned(), err)
+        })?;
+    Ok(parse_json_downloads(json_downloads))
+}
+
+fn parse_json_download_bytes(
+    source: &str,
+    buf: &[u8],
+) -> Result<Vec<ManagedPythonDownload>, Error> {
+    let json_downloads: HashMap<String, JsonPythonDownload> = serde_json::from_slice(buf).map_err(
+        #[expect(clippy::zero_sized_map_values)]
+        |err| {
+            if let Ok(keys) = serde_json::from_slice::<HashMap<String, serde::de::IgnoredAny>>(buf)
+                && keys.contains_key("version")
+            {
+                Error::UnsupportedPythonDownloadsJSON(source.to_owned())
+            } else {
+                Error::InvalidPythonDownloadsJSON(source.to_owned(), err)
+            }
+        },
+    )?;
+    Ok(parse_json_downloads(json_downloads))
 }
 
 fn parse_json_downloads(

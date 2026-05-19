@@ -6221,9 +6221,9 @@ pub enum PythonCommand {
     /// Download and install Python versions.
     ///
     /// Supports CPython and PyPy. CPython distributions are downloaded from the Astral
-    /// `python-build-standalone` project. PyPy distributions are downloaded from `python.org`. The
-    /// available Python versions are bundled with each uv release. To install new Python versions,
-    /// you may need upgrade uv.
+    /// `python-build-standalone` project. PyPy distributions are downloaded from `python.org`.
+    /// Available CPython versions are fetched at runtime and fall back to metadata bundled with
+    /// each uv release if that fetch fails.
     ///
     /// Python versions are installed into the uv Python directory, which can be retrieved with `uv
     /// python dir`.
@@ -6353,7 +6353,7 @@ pub struct PythonListArgs {
     #[arg(long, value_enum, default_value_t = PythonListFormat::default())]
     pub output_format: PythonListFormat,
 
-    /// URL pointing to JSON of custom Python installations.
+    /// URL pointing to JSON or NDJSON describing custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     pub python_downloads_json_url: Option<String>,
 }
@@ -6479,7 +6479,7 @@ pub struct PythonInstallArgs {
     #[arg(long, value_hint = ValueHint::Url)]
     pub pypy_mirror: Option<String>,
 
-    /// URL pointing to JSON of custom Python installations.
+    /// URL pointing to JSON or NDJSON describing custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     pub python_downloads_json_url: Option<String>,
 
@@ -6584,7 +6584,7 @@ pub struct PythonUpgradeArgs {
     #[arg(long, short)]
     pub reinstall: bool,
 
-    /// URL pointing to JSON of custom Python installations.
+    /// URL pointing to JSON or NDJSON describing custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     pub python_downloads_json_url: Option<String>,
 
@@ -6679,7 +6679,7 @@ pub struct PythonFindArgs {
     #[arg(long)]
     pub resolve_links: bool,
 
-    /// URL pointing to JSON of custom Python installations.
+    /// URL pointing to JSON or NDJSON describing custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     pub python_downloads_json_url: Option<String>,
 }
@@ -6736,7 +6736,7 @@ pub struct PythonPinArgs {
     #[arg(long, conflicts_with = "request", conflicts_with = "resolved")]
     pub rm: bool,
 
-    /// URL pointing to JSON of custom Python installations.
+    /// URL pointing to JSON or NDJSON describing custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     pub python_downloads_json_url: Option<String>,
 }

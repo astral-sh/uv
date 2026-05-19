@@ -118,8 +118,8 @@ present, uv will install all the Python versions listed in the file.
 
 !!! important
 
-    The available Python versions are frozen for each uv release. To install new Python versions,
-    you may need upgrade uv.
+    Available CPython versions are fetched at runtime and fall back to metadata bundled with each
+    uv release if that fetch fails.
 
 See the [storage documentation](../reference/storage.md#python-versions) for details about where
 installed Python versions are stored.
