@@ -1882,12 +1882,12 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         .arg("lock-build-dependencies")
         .arg("--locked"), @"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: Distribution not found at: file://[TEMP_DIR]/missing
     ");
 
     // Re-lock without `--locked` to pick up the new `build-system.requires`.
@@ -2733,6 +2733,113 @@ fn sync_filters_locked_build_resolutions_to_selected_packages() -> Result<()> {
     Ok(())
 }
 
+/// Verify that lock-time metadata builds use the build dependency branch for
+/// the active marker environment instead of flattening every universal branch
+/// into one concrete build environment.
+#[test]
+fn lock_build_dependencies_marker_selected_build_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let other_builder_dir = context.temp_dir.child("builder-other");
+    other_builder_dir.create_dir_all()?;
+    other_builder_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "builder"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    other_builder_dir.child("builder").create_dir_all()?;
+    other_builder_dir
+        .child("builder/__init__.py")
+        .write_str("DEP_VERSION = '0.2.0'")?;
+    let other_builder_url = Url::from_directory_path(other_builder_dir.path()).unwrap();
+
+    let linux_builder_dir = context.temp_dir.child("builder-linux");
+    linux_builder_dir.create_dir_all()?;
+    linux_builder_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "builder"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    linux_builder_dir.child("builder").create_dir_all()?;
+    linux_builder_dir
+        .child("builder/__init__.py")
+        .write_str("DEP_VERSION = '0.1.0'")?;
+    let linux_builder_url = Url::from_directory_path(linux_builder_dir.path()).unwrap();
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = [
+            "setuptools>=42",
+            "builder @ {other_builder_url} ; sys_platform != 'linux'",
+            "builder @ {linux_builder_url} ; sys_platform == 'linux'",
+        ]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {{attr = "dep.__version__"}}
+        "#
+    ))?;
+    dep_dir.child("dep").create_dir_all()?;
+    dep_dir
+        .child("dep/__init__.py")
+        .write_str("from builder import DEP_VERSION\n__version__ = DEP_VERSION")?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    let expected_version = if cfg!(target_os = "linux") {
+        "version = \"0.1.0\""
+    } else {
+        "version = \"0.2.0\""
+    };
+    assert!(dep.contains(expected_version), "{dep}");
+
+    Ok(())
+}
+
 /// Verify that source packages reached only through build dependencies are
 /// reconstructed for frozen syncs and validated by locked relocks.
 #[test]
@@ -2814,6 +2921,19 @@ fn lock_build_dependencies_build_only_source_package() -> Result<()> {
     let builder = package_section(&lock, "builder");
     assert!(builder.contains("build-dependencies = ["), "{builder}");
 
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
     let missing_url = Url::from_directory_path(context.temp_dir.child("missing").path()).unwrap();
     builder_pyproject.write_str(&format!(
         r#"
@@ -2870,13 +2990,12 @@ fn lock_build_dependencies_build_only_source_package() -> Result<()> {
         .arg("--preview-features")
         .arg("lock-build-dependencies")
         .arg("--locked"), @"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    Resolved 6 packages in [TIME]
     ");
 
     Ok(())

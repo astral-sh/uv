@@ -305,11 +305,35 @@ fn package_id_from_resolved_dist(
     resolved_dist: &ResolvedDist,
     root: &Path,
 ) -> Result<PackageId, LockError> {
+    let source = Source::from_resolved_dist(resolved_dist, root)?;
     Ok(PackageId {
         name: resolved_dist.name().clone(),
-        version: resolved_dist.version().cloned(),
-        source: Source::from_resolved_dist(resolved_dist, root)?,
+        version: resolved_dist_lock_version(resolved_dist, &source, root),
+        source,
     })
+}
+
+/// Resolved build dependency dists carry their concrete metadata version, but
+/// dynamic source trees must remain versionless in the lockfile.
+fn resolved_dist_lock_version(
+    resolved_dist: &ResolvedDist,
+    source: &Source,
+    root: &Path,
+) -> Option<Version> {
+    if let Some(source_tree) = source.as_source_tree() {
+        let path = root.join(source_tree).join("pyproject.toml");
+        if let Ok(contents) = fs_err::read_to_string(&path)
+            && let Ok(pyproject_toml) = PyProjectToml::from_toml(&contents, path.user_display())
+            && pyproject_toml
+                .project
+                .as_ref()
+                .is_some_and(|project| project.version.is_none())
+        {
+            return None;
+        }
+    }
+
+    resolved_dist.version().cloned()
 }
 
 fn lookup_build_key_value<'a, T>(
@@ -837,6 +861,10 @@ impl Lock {
             build_dep_refs.insert(parent_key.clone(), deps);
         }
 
+        // Add new packages to the lock before extracting build requirement metadata so
+        // source packages that are only reachable through build graphs are validated too.
+        self.packages.extend(new_packages);
+
         // Extract the build requirements to store in metadata for satisfies() checks.
         // Use already-loaded workspace members when available; read from disk for
         // non-workspace source trees (e.g. path dependencies outside the workspace).
@@ -890,9 +918,6 @@ impl Lock {
                 build_requires_map.insert(key, build_requires);
             }
         }
-
-        // Add new packages to the lock so we can look up PackageIds.
-        self.packages.extend(new_packages);
 
         // Build a source-aware PackageId set for resolving dependency edges.
         let package_ids: FxHashSet<PackageId> =
@@ -2617,6 +2642,74 @@ impl Lock {
                 continue;
             }
 
+            // Validate that the build requirements haven't changed for source trees
+            // that can store build dependencies in the lock. Do this before metadata
+            // validation, since a changed build environment can otherwise fail while
+            // trying to extract package metadata instead of reporting the stale lock.
+            if self.supports_build_dependencies() || !package.metadata.build_requires.is_empty() {
+                let build_requires = if let Some(member) = packages.get(&package.id.name) {
+                    Some(
+                        member
+                            .pyproject_toml()
+                            .build_system
+                            .as_ref()
+                            .map(|build_system| build_system.requires.clone())
+                            .unwrap_or_default(),
+                    )
+                } else if let Some(source_tree) = package.id.source.as_source_tree() {
+                    let path = root.join(source_tree).join("pyproject.toml");
+                    match fs_err::tokio::read_to_string(&path).await {
+                        Ok(contents) => {
+                            uv_workspace::pyproject::PyProjectToml::from_string(contents, &path)
+                                .ok()
+                                .map(|pyproject| {
+                                    pyproject
+                                        .build_system
+                                        .map(|build_system| build_system.requires)
+                                        .unwrap_or_default()
+                                })
+                        }
+                        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+                        Err(err) => {
+                            return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
+                        }
+                    }
+                } else {
+                    None
+                };
+
+                let extra_build_requires = extra_build_requires.get(&package.id.name);
+
+                if build_requires.is_some() || extra_build_requires.is_some() {
+                    let mut build_requires = build_requires
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(Requirement::from)
+                        .collect::<BTreeSet<_>>();
+                    build_requires.extend(
+                        extra_build_requires
+                            .into_iter()
+                            .flatten()
+                            .cloned()
+                            .map(Requirement::from),
+                    );
+                    match self.satisfies_build_requires(build_requires, package, root) {
+                        Ok(SatisfiesResult::Satisfied) => {}
+                        Ok(result) => return Ok(result),
+                        Err(err) => {
+                            debug!(
+                                "Failed to check `build-system.requires` for `{}`: {err}",
+                                package.id
+                            );
+                            return Ok(SatisfiesResult::MismatchedBuildRequires(
+                                &package.id.name,
+                                package.id.version.as_ref(),
+                            ));
+                        }
+                    }
+                }
+            }
+
             // Validating a direct URL package requires retrieving metadata from the remote
             // artifact. In offline mode, preserve the metadata captured in the lockfile rather
             // than requiring that artifact to already be present in the cache.
@@ -2881,68 +2974,6 @@ impl Lock {
                 }
             } else {
                 return Ok(SatisfiesResult::MissingVersion(&package.id.name));
-            }
-
-            // Validate that the build requirements haven't changed for source trees
-            // that can store build dependencies in the lock. Use workspace member
-            // data when available; fall back to disk for non-workspace source trees.
-            if self.supports_build_dependencies() || !package.metadata.build_requires.is_empty() {
-                let build_requires = if let Some(member) = packages.get(&package.id.name) {
-                    Some(
-                        member
-                            .pyproject_toml()
-                            .build_system
-                            .as_ref()
-                            .map(|bs| bs.requires.clone())
-                            .unwrap_or_default(),
-                    )
-                } else if let Some(source_tree) = package.id.source.as_source_tree() {
-                    let path = root.join(source_tree).join("pyproject.toml");
-                    match fs_err::tokio::read_to_string(&path).await {
-                        Ok(contents) => {
-                            uv_workspace::pyproject::PyProjectToml::from_string(contents, &path)
-                                .ok()
-                                .map(|p| p.build_system.map(|bs| bs.requires).unwrap_or_default())
-                        }
-                        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
-                        Err(err) => {
-                            return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
-                        }
-                    }
-                } else {
-                    None
-                };
-
-                let extra_build_requires = extra_build_requires.get(&package.id.name);
-
-                if build_requires.is_some() || extra_build_requires.is_some() {
-                    let mut build_requires = build_requires
-                        .unwrap_or_default()
-                        .into_iter()
-                        .map(Requirement::from)
-                        .collect::<BTreeSet<_>>();
-                    build_requires.extend(
-                        extra_build_requires
-                            .into_iter()
-                            .flatten()
-                            .cloned()
-                            .map(Requirement::from),
-                    );
-                    match self.satisfies_build_requires(build_requires, package, root) {
-                        Ok(SatisfiesResult::Satisfied) => {}
-                        Ok(result) => return Ok(result),
-                        Err(err) => {
-                            debug!(
-                                "Failed to check `build-system.requires` for `{}`: {err}",
-                                package.id
-                            );
-                            return Ok(SatisfiesResult::MismatchedBuildRequires(
-                                &package.id.name,
-                                package.id.version.as_ref(),
-                            ));
-                        }
-                    }
-                }
             }
 
             // Add any explicit indexes to the list of known locals or remotes. These indexes may
@@ -3577,7 +3608,7 @@ impl Package {
         root: &Path,
     ) -> Result<Self, LockError> {
         let source = Source::from_resolved_dist(resolved_dist, root)?;
-        let version = resolved_dist.version().cloned();
+        let version = resolved_dist_lock_version(resolved_dist, &source, root);
         let name = resolved_dist.name().clone();
         let id = PackageId {
             name,

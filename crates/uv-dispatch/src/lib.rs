@@ -468,7 +468,17 @@ impl BuildContext for BuildDispatch<'_> {
         }
 
         let resolution = if self.universal_build_resolution {
-            resolver_output.into_build_resolution()
+            let markers = if self.universal_build_environments.is_empty()
+                || self
+                    .universal_build_environments
+                    .iter()
+                    .any(|environment| environment.evaluate(self.interpreter.markers(), &[]))
+            {
+                Some(self.interpreter.markers())
+            } else {
+                None
+            };
+            resolver_output.into_build_resolution(markers)
         } else {
             Resolution::from(resolver_output)
         };

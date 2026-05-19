@@ -703,13 +703,21 @@ impl ResolverOutput {
     /// environment.
     ///
     /// Build dependency locking can resolve across multiple supported marker
-    /// environments, but the current build only needs an installable superset
-    /// of those dependencies to extract metadata.
-    pub fn into_build_resolution(self) -> uv_distribution_types::Resolution {
-        self.into_resolution(true)
+    /// environments, but metadata extraction still runs in one concrete
+    /// interpreter environment. Project the universal graph onto that concrete
+    /// marker environment before producing the installable build resolution.
+    pub fn into_build_resolution(
+        self,
+        markers: Option<&MarkerEnvironment>,
+    ) -> uv_distribution_types::Resolution {
+        self.into_resolution(true, markers)
     }
 
-    fn into_resolution(self, allow_universal: bool) -> uv_distribution_types::Resolution {
+    fn into_resolution(
+        self,
+        allow_universal: bool,
+        markers: Option<&MarkerEnvironment>,
+    ) -> uv_distribution_types::Resolution {
         let Self {
             graph,
             diagnostics,
@@ -738,6 +746,10 @@ impl ResolverOutput {
                 continue;
             }
 
+            if markers.is_some_and(|markers| !dist.marker.evaluate_no_extras(markers)) {
+                continue;
+            }
+
             if inverse.contains_key(&dist.name) {
                 // This is guaranteed by `find_conflicting_distributions` when
                 // conflicts are empty. However, when conflicts are non-empty,
@@ -763,18 +775,27 @@ impl ResolverOutput {
         // Re-add the edges to the reduced graph.
         for edge in graph.edge_indices() {
             let (source, target) = graph.edge_endpoints(edge).unwrap();
+            if markers.is_some_and(|markers| !graph[edge].evaluate_no_extras(markers)) {
+                continue;
+            }
 
             match (&graph[source], &graph[target]) {
                 (ResolutionGraphNode::Root, ResolutionGraphNode::Dist(target_dist)) => {
-                    let target = inverse[&target_dist.name()];
+                    let Some(&target) = inverse.get(target_dist.name()) else {
+                        continue;
+                    };
                     transformed.update_edge(root, target, Edge::Prod);
                 }
                 (
                     ResolutionGraphNode::Dist(source_dist),
                     ResolutionGraphNode::Dist(target_dist),
                 ) => {
-                    let source = inverse[&source_dist.name()];
-                    let target = inverse[&target_dist.name()];
+                    let Some(&source) = inverse.get(source_dist.name()) else {
+                        continue;
+                    };
+                    let Some(&target) = inverse.get(target_dist.name()) else {
+                        continue;
+                    };
 
                     let edge = if let Some(extra) = source_dist.extra.as_ref() {
                         Edge::Optional(extra.clone())
@@ -1050,7 +1071,7 @@ impl Display for ConflictingDistributionError {
 /// single version of each package to be present in the graph.
 impl From<ResolverOutput> for uv_distribution_types::Resolution {
     fn from(output: ResolverOutput) -> Self {
-        output.into_resolution(false)
+        output.into_resolution(false, None)
     }
 }
 
