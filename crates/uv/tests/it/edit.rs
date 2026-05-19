@@ -5103,13 +5103,16 @@ fn add_lower_bound_local() -> Result<()> {
         revision = 3
         requires-python = ">=3.12"
 
+        [options]
+        exclude-newer = "2026-05-12T02:01:30Z"
+
         [[package]]
         name = "a"
         version = "1.2.3+foo"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        sdist = { url = "http://[LOCALHOST]/files/a-1.2.3+foo.tar.gz", hash = "sha256:67395cb5cf75b15d713843c4e47eebb86cf42ae19fd3f516dd959daa14719248" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.2.3+foo.tar.gz", hash = "sha256:acfa2c41e4b236bde285a9175d0cc4edb163400b625dc39492dd98be9fb63c69", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
-            { url = "http://[LOCALHOST]/files/a-1.2.3+foo-py3-none-any.whl", hash = "sha256:788fb0f2dc4838efe5753396fcb2978166f60179ec2fa2fd5b53952bb6d83adc" },
+            { url = "http://[LOCALHOST]/files/a-1.2.3+foo-py3-none-any.whl", hash = "sha256:788fb0f2dc4838efe5753396fcb2978166f60179ec2fa2fd5b53952bb6d83adc", upload-time = "2024-03-24T00:00:00Z" },
         ]
 
         [[package]]
