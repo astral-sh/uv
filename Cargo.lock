@@ -5864,10 +5864,13 @@ name = "uv-bench"
 version = "0.0.48"
 dependencies = [
  "anyhow",
+ "clap",
  "codspeed-criterion-compat",
  "jiff",
  "tokio",
+ "uv",
  "uv-cache",
+ "uv-cli",
  "uv-client",
  "uv-configuration",
  "uv-dispatch",
