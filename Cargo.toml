@@ -219,7 +219,6 @@ reqwest = { version = "0.13.1", default-features = false, features = [
   "socks",
   "multipart",
   "http2",
-  "blocking",
   "query",
   "form",
 ] }
