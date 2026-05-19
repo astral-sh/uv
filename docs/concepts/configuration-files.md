@@ -69,6 +69,9 @@ settings provided via the command line take precedence over both.
 uv accepts a `--no-config` command-line argument which, when provided, disables the discovery of any
 persistent configuration.
 
+To ignore system-level configuration while continuing to discover project- and user-level
+configuration, set the `UV_NO_SYSTEM_CONFIG` environment variable to `1`.
+
 uv also accepts a `--config-file` command-line argument, which accepts a path to a `uv.toml` to use
 as the configuration file. When provided, this file will be used in place of _any_ discovered
 configuration files (e.g., user-level configuration will be ignored).
