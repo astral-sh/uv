@@ -6834,6 +6834,7 @@ fn already_installed_remote_dependencies() {
 #[test]
 fn already_installed_dependent_editable() {
     let context = uv_test::test_context!("3.12");
+    let vendor = uv_test::find_links::FindLinksServer::vendor();
     let root_path = context
         .workspace_root
         .join("test/packages/dependent_locals");
@@ -6862,7 +6863,7 @@ fn already_installed_dependent_editable() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(context.workspace_root.join("test/vendor")), @"
+        .arg(vendor.url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6903,7 +6904,7 @@ fn already_installed_dependent_editable() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(context.workspace_root.join("test/vendor")), @"
+        .arg(vendor.url()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6940,6 +6941,7 @@ fn already_installed_dependent_editable() {
 #[test]
 fn already_installed_local_path_dependent() {
     let context = uv_test::test_context!("3.12");
+    let vendor = uv_test::find_links::FindLinksServer::vendor();
     let root_path = context
         .workspace_root
         .join("test/packages/dependent_locals");
@@ -6966,7 +6968,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(context.workspace_root.join("test/vendor")), @"
+        .arg(vendor.url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7022,7 +7024,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(context.workspace_root.join("test/vendor")), @"
+        .arg(vendor.url()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7064,7 +7066,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(context.workspace_root.join("test/vendor")), @"
+        .arg(vendor.url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7089,7 +7091,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(context.workspace_root.join("test/vendor")), @"
+        .arg(vendor.url()), @"
     success: true
     exit_code: 0
     ----- stdout -----

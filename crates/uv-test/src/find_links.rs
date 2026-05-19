@@ -9,6 +9,7 @@ use std::sync::Arc;
 use wiremock::{Request, ResponseTemplate};
 
 use crate::http_server::{HttpServer, content_type_for_filename};
+use crate::vendor::vendor_files;
 
 /// A running HTTP server that serves files from a directory as a flat links page.
 pub struct FindLinksServer {
@@ -33,6 +34,26 @@ impl FindLinksServer {
             let bytes = fs_err::read(&path).expect("failed to read file");
             files.insert(filename.clone(), bytes.into());
             filenames.push(filename);
+        }
+        filenames.sort();
+
+        let files = Arc::new(files);
+        let filenames = Arc::new(filenames);
+        let server = HttpServer::start(move |request, server_uri| {
+            handle_request(request, server_uri, &files, &filenames)
+        });
+
+        Self { server }
+    }
+
+    /// Start a server that serves the pinned registry artifacts used by tests.
+    pub fn vendor() -> Self {
+        let mut files: HashMap<String, Arc<[u8]>> = HashMap::new();
+        let mut filenames: Vec<String> = Vec::new();
+
+        for artifact in vendor_files() {
+            files.insert(artifact.filename.to_string(), Arc::clone(&artifact.bytes));
+            filenames.push(artifact.filename.to_string());
         }
         filenames.sort();
 

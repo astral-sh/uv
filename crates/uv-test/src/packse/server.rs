@@ -4,11 +4,10 @@
 //! - PEP 691 Simple API at `/simple/{package}/`
 //! - Distribution downloads at `/files/{filename}`
 //!
-//! Vendored build dependencies are exposed through the same `/simple/*` and
+//! Cached build dependencies are exposed through the same `/simple/*` and
 //! `/files/*` routes as scenario packages.
 
 use std::collections::HashMap;
-use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -20,10 +19,11 @@ use uv_distribution_filename::WheelFilename;
 use uv_normalize::PackageName;
 
 use crate::http_server::{HttpServer, content_type_for_filename};
+use crate::vendor::vendor_files;
 
 use super::scenario::Scenario;
+use super::scenarios_dir;
 use super::wheel::{generate_sdist, generate_wheel, sha256_hex};
-use super::{scenarios_dir, vendor_dir};
 
 const PACKSE_UPLOAD_TIME: &str = "2024-03-24T00:00:00Z";
 
@@ -66,17 +66,16 @@ impl PackseServer {
         Self::from_scenario(&scenario)
     }
 
-    /// Start a mock server with no packages (only vendored build dependencies).
+    /// Start a mock server with no packages (only cached build dependencies).
     ///
-    /// Useful as a dummy index that will 404 for any non-vendored package lookup.
+    /// Useful as a dummy index that will 404 for any non-cached package lookup.
     pub fn empty() -> Self {
         Self::from_scenario(&Scenario::empty())
     }
 
     /// Start a mock server for the given scenario.
     pub fn from_scenario(scenario: &Scenario) -> Self {
-        let vendor_path = vendor_dir();
-        let index = Arc::new(build_server_index(scenario, &vendor_path));
+        let index = Arc::new(build_server_index(scenario));
         let server = HttpServer::start(move |request, server_uri| {
             handle_request(request, server_uri, &index)
         });
@@ -90,8 +89,8 @@ impl PackseServer {
     }
 }
 
-/// Build the complete [`ServerIndex`] from a scenario and vendored wheels.
-fn build_server_index(scenario: &Scenario, vendor_path: &Path) -> ServerIndex {
+/// Build the complete [`ServerIndex`] from a scenario and cached build dependencies.
+fn build_server_index(scenario: &Scenario) -> ServerIndex {
     let mut packages = HashMap::new();
     let mut files: HashMap<String, Arc<[u8]>> = HashMap::new();
 
@@ -152,35 +151,23 @@ fn build_server_index(scenario: &Scenario, vendor_path: &Path) -> ServerIndex {
         packages.insert(package_name.clone(), PackageEntry { dists });
     }
 
-    let entries = fs_err::read_dir(vendor_path).expect("failed to read vendor directory");
-    for entry in entries {
-        let entry = entry.expect("failed to read vendor directory entry");
-        let path = entry.path();
-        let Some(filename) = path.file_name().map(|n| n.to_string_lossy().to_string()) else {
-            continue;
-        };
-
-        if !path
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
-        {
+    for artifact in vendor_files() {
+        if !artifact.filename.ends_with(".whl") {
             continue;
         }
 
         let wheel_filename =
-            WheelFilename::from_str(&filename).expect("invalid vendor wheel filename");
-        let bytes = fs_err::read(&path).expect("failed to read vendor wheel");
-        let sha256 = sha256_hex(&bytes);
-        let bytes: Arc<[u8]> = bytes.into();
+            WheelFilename::from_str(artifact.filename).expect("invalid vendor wheel filename");
+        let bytes = Arc::clone(&artifact.bytes);
 
-        files.insert(filename.clone(), Arc::clone(&bytes));
+        files.insert(artifact.filename.to_string(), Arc::clone(&bytes));
         packages
             .entry(wheel_filename.name)
             .or_insert_with(|| PackageEntry { dists: Vec::new() })
             .dists
             .push(DistInfo {
-                filename,
-                sha256,
+                filename: artifact.filename.to_string(),
+                sha256: artifact.sha256.to_string(),
                 requires_python: None,
                 upload_time: PACKSE_UPLOAD_TIME,
                 yanked: false,

@@ -24,8 +24,3 @@ fn workspace_root() -> PathBuf {
 fn scenarios_dir() -> PathBuf {
     workspace_root().join("test").join("scenarios")
 }
-
-/// Base directory containing vendored build-dependency wheels (hatchling, etc.).
-fn vendor_dir() -> PathBuf {
-    workspace_root().join("test").join("vendor")
-}

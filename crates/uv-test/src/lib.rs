@@ -4,6 +4,7 @@
 pub mod find_links;
 mod http_server;
 pub mod packse;
+mod vendor;
 
 use std::borrow::BorrowMut;
 use std::ffi::OsString;
