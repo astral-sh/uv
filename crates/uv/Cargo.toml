@@ -106,7 +106,7 @@ toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"], optional = true }
-tracing-subscriber = { workspace = true, features = ["env-filter", "json", "registry"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "registry"] }
 tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
