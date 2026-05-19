@@ -331,16 +331,28 @@ impl WheelFile {
         }
         // Check that installer is compatible with Wheel-Version. Warn if minor version is greater, abort if major version is greater.
         // Wheel-Version: 1.0
-        if wheel_version.0 != "1" {
+        let major = wheel_version.0.parse::<u32>().map_err(|_| {
+            Error::InvalidWheel(format!(
+                "Invalid wheel major version: {}",
+                wheel_version.0
+            ))
+        })?;
+        let minor = wheel_version.1.parse::<u32>().map_err(|_| {
+            Error::InvalidWheel(format!(
+                "Invalid wheel minor version: {}",
+                wheel_version.1
+            ))
+        })?;
+        if major != 1 {
             return Err(Error::InvalidWheel(format!(
                 "Unsupported wheel major version (expected {}, got {})",
-                1, wheel_version.0
+                1, major
             )));
         }
-        if wheel_version.1 > "0" {
+        if minor > 0 {
             warn!(
                 "Warning: Unsupported wheel minor version (expected {}, got {})",
-                0, wheel_version.1
+                0, minor
             );
         }
         Ok(Self(data))
