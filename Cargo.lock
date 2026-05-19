@@ -6295,7 +6295,9 @@ dependencies = [
  "uv-extract",
  "uv-installer",
  "uv-macros",
+ "uv-normalize",
  "uv-options-metadata",
+ "uv-pep440",
  "uv-pep508",
  "uv-performance-memory-allocator",
  "uv-preview",
@@ -6303,6 +6305,7 @@ dependencies = [
  "uv-python",
  "uv-settings",
  "uv-static",
+ "uv-test",
  "uv-workspace",
  "walkdir",
 ]

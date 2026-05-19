@@ -1,6 +1,6 @@
 //! DO NOT EDIT
 //!
-//! Generated with `uv run scripts/scenarios/generate.py`
+//! Generated with `cargo dev generate-scenarios`
 //! Scenarios from <test/scenarios>
 //!
 #![cfg(all(feature = "test-python", unix))]
@@ -30,17 +30,17 @@ fn command(context: &TestContext, server: &PackseServer) -> Command {
 /// │   └── python3.12
 /// ├── root
 /// │   ├── requires a
-/// │   │   ├── satisfied by a-2.0.0
-/// │   │   └── satisfied by a-1.0.0
+/// │   │   ├── satisfied by a-1.0.0
+/// │   │   └── satisfied by a-2.0.0
 /// │   └── requires b
 /// │       ├── satisfied by b-1.0.0
 /// │       ├── satisfied by b-2.0.0
 /// │       └── satisfied by b-3.0.0
 /// ├── a
-/// │   ├── a-2.0.0
-/// │   └── a-1.0.0
-/// │       └── requires c
-/// │           └── unsatisfied: no versions for package
+/// │   ├── a-1.0.0
+/// │   │   └── requires c
+/// │   │       └── unsatisfied: no versions for package
+/// │   └── a-2.0.0
 /// └── b
 ///     ├── b-1.0.0
 ///     │   └── requires a==1.0.0
@@ -59,7 +59,7 @@ fn backtrack_to_missing_package() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b")
+        .arg("b")
         , @"
     success: false
     exit_code: 1
@@ -109,7 +109,7 @@ fn backtrack_with_missing_package() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b")
+        .arg("b")
         , @"
     success: true
     exit_code: 0
@@ -307,7 +307,7 @@ fn transitive_requires_package_does_not_exist() {
 /// │   │   ├── satisfied by a-2.3.0
 /// │   │   ├── satisfied by a-2.4.0
 /// │   │   └── satisfied by a-3.0.0
-/// │   ├── requires b<3.0.0,>=2.0.0
+/// │   ├── requires b>=2.0.0,<3.0.0
 /// │   │   └── satisfied by b-2.0.0
 /// │   └── requires c
 /// │       ├── satisfied by c-1.0.0
@@ -359,8 +359,8 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b>=2.0.0,<3.0.0")
-                .arg("c")
+        .arg("b>=2.0.0,<3.0.0")
+        .arg("c")
         , @"
     success: false
     exit_code: 1
@@ -410,7 +410,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
 /// │   │   ├── satisfied by a-2.2.0
 /// │   │   ├── satisfied by a-2.3.0
 /// │   │   └── satisfied by a-3.0.0
-/// │   ├── requires b<3.0.0,>=2.0.0
+/// │   ├── requires b>=2.0.0,<3.0.0
 /// │   │   └── satisfied by b-2.0.0
 /// │   └── requires c
 /// │       ├── satisfied by c-1.0.0
@@ -454,8 +454,8 @@ fn dependency_excludes_range_of_compatible_versions() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b>=2.0.0,<3.0.0")
-                .arg("c")
+        .arg("b>=2.0.0,<3.0.0")
+        .arg("c")
         , @"
     success: false
     exit_code: 1
@@ -501,7 +501,7 @@ fn dependency_excludes_range_of_compatible_versions() {
 /// │   ├── requires a!=2.0.0
 /// │   │   ├── satisfied by a-1.0.0
 /// │   │   └── satisfied by a-3.0.0
-/// │   └── requires b<3.0.0,>=2.0.0
+/// │   └── requires b>=2.0.0,<3.0.0
 /// │       └── satisfied by b-2.0.0
 /// ├── a
 /// │   ├── a-1.0.0
@@ -525,7 +525,7 @@ fn excluded_only_compatible_version() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a!=2.0.0")
-                .arg("b>=2.0.0,<3.0.0")
+        .arg("b>=2.0.0,<3.0.0")
         , @"
     success: false
     exit_code: 1
@@ -602,25 +602,25 @@ fn excluded_only_version() {
 /// │   └── requires a[all]
 /// │       ├── satisfied by a-1.0.0
 /// │       ├── satisfied by a-1.0.0[all]
-/// │       ├── satisfied by a-1.0.0[extra_b]
-/// │       └── satisfied by a-1.0.0[extra_c]
+/// │       ├── satisfied by a-1.0.0[extra-b]
+/// │       └── satisfied by a-1.0.0[extra-c]
 /// ├── a
 /// │   ├── a-1.0.0
 /// │   ├── a-1.0.0[all]
-/// │   │   ├── requires a[extra_b]
+/// │   │   ├── requires a[extra-b]
 /// │   │   │   ├── satisfied by a-1.0.0
 /// │   │   │   ├── satisfied by a-1.0.0[all]
-/// │   │   │   ├── satisfied by a-1.0.0[extra_b]
-/// │   │   │   └── satisfied by a-1.0.0[extra_c]
-/// │   │   └── requires a[extra_c]
+/// │   │   │   ├── satisfied by a-1.0.0[extra-b]
+/// │   │   │   └── satisfied by a-1.0.0[extra-c]
+/// │   │   └── requires a[extra-c]
 /// │   │       ├── satisfied by a-1.0.0
 /// │   │       ├── satisfied by a-1.0.0[all]
-/// │   │       ├── satisfied by a-1.0.0[extra_b]
-/// │   │       └── satisfied by a-1.0.0[extra_c]
-/// │   ├── a-1.0.0[extra_b]
+/// │   │       ├── satisfied by a-1.0.0[extra-b]
+/// │   │       └── satisfied by a-1.0.0[extra-c]
+/// │   ├── a-1.0.0[extra-b]
 /// │   │   └── requires b
 /// │   │       └── satisfied by b-1.0.0
-/// │   └── a-1.0.0[extra_c]
+/// │   └── a-1.0.0[extra-c]
 /// │       └── requires c
 /// │           └── satisfied by c-1.0.0
 /// ├── b
@@ -662,17 +662,17 @@ fn all_extras_required() {
 /// │   └── python3.12
 /// ├── root
 /// │   └── requires a[extra]
-/// │       ├── satisfied by a-2.0.0
-/// │       ├── satisfied by a-3.0.0
 /// │       ├── satisfied by a-1.0.0
-/// │       └── satisfied by a-1.0.0[extra]
+/// │       ├── satisfied by a-1.0.0[extra]
+/// │       ├── satisfied by a-2.0.0
+/// │       └── satisfied by a-3.0.0
 /// ├── a
-/// │   ├── a-2.0.0
-/// │   ├── a-3.0.0
 /// │   ├── a-1.0.0
-/// │   └── a-1.0.0[extra]
-/// │       └── requires b==1.0.0
-/// │           └── satisfied by b-1.0.0
+/// │   ├── a-1.0.0[extra]
+/// │   │   └── requires b==1.0.0
+/// │   │       └── satisfied by b-1.0.0
+/// │   ├── a-2.0.0
+/// │   └── a-3.0.0
 /// └── b
 ///     └── b-1.0.0
 /// ```
@@ -707,16 +707,16 @@ fn extra_does_not_exist_backtrack() {
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   └── requires a[extra_c]
+/// │   └── requires a[extra-c]
 /// │       ├── satisfied by a-1.0.0
-/// │       ├── satisfied by a-1.0.0[extra_b]
-/// │       └── satisfied by a-1.0.0[extra_c]
+/// │       ├── satisfied by a-1.0.0[extra-b]
+/// │       └── satisfied by a-1.0.0[extra-c]
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   ├── a-1.0.0[extra_b]
+/// │   ├── a-1.0.0[extra-b]
 /// │   │   └── requires b==1.0.0
 /// │   │       └── satisfied by b-1.0.0
-/// │   └── a-1.0.0[extra_c]
+/// │   └── a-1.0.0[extra-c]
 /// │       └── requires b==2.0.0
 /// │           └── satisfied by b-2.0.0
 /// └── b
@@ -729,7 +729,7 @@ fn extra_incompatible_with_extra_not_requested() {
     let server = PackseServer::new("extras/extra-incompatible-with-extra-not-requested.toml");
 
     uv_snapshot!(context.filters(), command(&context, &server)
-        .arg("a[extra_c]")
+        .arg("a[extra-c]")
         , @"
     success: true
     exit_code: 0
@@ -755,16 +755,16 @@ fn extra_incompatible_with_extra_not_requested() {
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   └── requires a[extra_b,extra_c]
+/// │   └── requires a[extra-b,extra-c]
 /// │       ├── satisfied by a-1.0.0
-/// │       ├── satisfied by a-1.0.0[extra_b]
-/// │       └── satisfied by a-1.0.0[extra_c]
+/// │       ├── satisfied by a-1.0.0[extra-b]
+/// │       └── satisfied by a-1.0.0[extra-c]
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   ├── a-1.0.0[extra_b]
+/// │   ├── a-1.0.0[extra-b]
 /// │   │   └── requires b==1.0.0
 /// │   │       └── satisfied by b-1.0.0
-/// │   └── a-1.0.0[extra_c]
+/// │   └── a-1.0.0[extra-c]
 /// │       └── requires b==2.0.0
 /// │           └── satisfied by b-2.0.0
 /// └── b
@@ -777,7 +777,7 @@ fn extra_incompatible_with_extra() {
     let server = PackseServer::new("extras/extra-incompatible-with-extra.toml");
 
     uv_snapshot!(context.filters(), command(&context, &server)
-        .arg("a[extra_b,extra_c]")
+        .arg("a[extra-b,extra-c]")
         , @"
     success: false
     exit_code: 1
@@ -822,7 +822,7 @@ fn extra_incompatible_with_root() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a[extra]")
-                .arg("b==2.0.0")
+        .arg("b==2.0.0")
         , @"
     success: false
     exit_code: 1
@@ -924,16 +924,16 @@ fn missing_extra() {
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   └── requires a[extra_b,extra_c]
+/// │   └── requires a[extra-b,extra-c]
 /// │       ├── satisfied by a-1.0.0
-/// │       ├── satisfied by a-1.0.0[extra_b]
-/// │       └── satisfied by a-1.0.0[extra_c]
+/// │       ├── satisfied by a-1.0.0[extra-b]
+/// │       └── satisfied by a-1.0.0[extra-c]
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   ├── a-1.0.0[extra_b]
+/// │   ├── a-1.0.0[extra-b]
 /// │   │   └── requires b
 /// │   │       └── satisfied by b-1.0.0
-/// │   └── a-1.0.0[extra_c]
+/// │   └── a-1.0.0[extra-c]
 /// │       └── requires c
 /// │           └── satisfied by c-1.0.0
 /// ├── b
@@ -947,7 +947,7 @@ fn multiple_extras_required() {
     let server = PackseServer::new("extras/multiple-extras-required.toml");
 
     uv_snapshot!(context.filters(), command(&context, &server)
-        .arg("a[extra_b,extra_c]")
+        .arg("a[extra-b,extra-c]")
         , @"
     success: true
     exit_code: 0
@@ -989,7 +989,7 @@ fn direct_incompatible_versions() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.0.0")
-                .arg("a==2.0.0")
+        .arg("a==2.0.0")
         , @"
     success: false
     exit_code: 1
@@ -1068,7 +1068,7 @@ fn transitive_incompatible_with_root_version() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b==1.0.0")
+        .arg("b==1.0.0")
         , @"
     success: false
     exit_code: 1
@@ -1115,7 +1115,7 @@ fn transitive_incompatible_with_transitive() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b")
+        .arg("b")
         , @"
     success: false
     exit_code: 1
@@ -1278,13 +1278,13 @@ fn local_less_than() {
 /// │   └── python3.12
 /// ├── root
 /// │   └── requires a>=1
-/// │       ├── satisfied by a-1.2.3
+/// │       ├── satisfied by a-1.2.1+foo
 /// │       ├── satisfied by a-1.2.2+foo
-/// │       └── satisfied by a-1.2.1+foo
+/// │       └── satisfied by a-1.2.3
 /// └── a
-///     ├── a-1.2.3
+///     ├── a-1.2.1+foo
 ///     ├── a-1.2.2+foo
-///     └── a-1.2.1+foo
+///     └── a-1.2.3
 /// ```
 #[test]
 fn local_not_latest() {
@@ -1413,7 +1413,7 @@ fn local_transitive_backtrack() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b==2.0.0+foo")
+        .arg("b==2.0.0+foo")
         , @"
     success: true
     exit_code: 0
@@ -1458,7 +1458,7 @@ fn local_transitive_conflicting() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b==2.0.0+foo")
+        .arg("b==2.0.0+foo")
         , @"
     success: false
     exit_code: 1
@@ -1546,7 +1546,7 @@ fn local_transitive_greater_than_or_equal() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b==2.0.0+foo")
+        .arg("b==2.0.0+foo")
         , @"
     success: true
     exit_code: 0
@@ -1591,7 +1591,7 @@ fn local_transitive_greater_than() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b==2.0.0+foo")
+        .arg("b==2.0.0+foo")
         , @"
     success: false
     exit_code: 1
@@ -1634,7 +1634,7 @@ fn local_transitive_less_than_or_equal() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b==2.0.0+foo")
+        .arg("b==2.0.0+foo")
         , @"
     success: true
     exit_code: 0
@@ -1679,7 +1679,7 @@ fn local_transitive_less_than() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b==2.0.0+foo")
+        .arg("b==2.0.0+foo")
         , @"
     success: false
     exit_code: 1
@@ -1709,11 +1709,11 @@ fn local_transitive_less_than() {
 /// ├── a
 /// │   └── a-1.0.0
 /// │       └── requires b==2.0.0
-/// │           ├── satisfied by b-2.0.0+foo
-/// │           └── satisfied by b-2.0.0+bar
+/// │           ├── satisfied by b-2.0.0+bar
+/// │           └── satisfied by b-2.0.0+foo
 /// └── b
-///     ├── b-2.0.0+foo
-///     └── b-2.0.0+bar
+///     ├── b-2.0.0+bar
+///     └── b-2.0.0+foo
 /// ```
 #[test]
 fn local_transitive() {
@@ -1722,7 +1722,7 @@ fn local_transitive() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b==2.0.0+foo")
+        .arg("b==2.0.0+foo")
         , @"
     success: true
     exit_code: 0
@@ -2579,10 +2579,10 @@ fn package_prereleases_global_boundary() {
 /// │       └── satisfied by a-0.2.0a1
 /// └── a
 ///     ├── a-0.1.0
-///     ├── a-0.2.0
 ///     ├── a-0.2.0a1
 ///     ├── a-0.2.0a2
 ///     ├── a-0.2.0a3
+///     ├── a-0.2.0
 ///     └── a-0.3.0
 /// ```
 #[test]
@@ -2711,7 +2711,7 @@ fn transitive_package_only_prereleases_in_range_opt_in() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b>0.0.0a1")
+        .arg("b>0.0.0a1")
         , @"
     success: true
     exit_code: 0
@@ -2825,7 +2825,7 @@ fn transitive_package_only_prereleases() {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       └── requires c!=2.0.0a5,!=2.0.0a6,!=2.0.0a7,!=2.0.0b1,<2.0.0b5,>1.0.0
+/// │       └── requires c>1.0.0,!=2.0.0a5,!=2.0.0a6,!=2.0.0a7,!=2.0.0b1,<2.0.0b5
 /// │           ├── satisfied by c-2.0.0a1
 /// │           ├── satisfied by c-2.0.0a2
 /// │           ├── satisfied by c-2.0.0a3
@@ -2837,7 +2837,7 @@ fn transitive_package_only_prereleases() {
 /// │           └── satisfied by c-2.0.0b4
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c<=3.0.0,>=1.0.0
+/// │       └── requires c>=1.0.0,<=3.0.0
 /// │           ├── satisfied by c-1.0.0
 /// │           ├── satisfied by c-2.0.0a1
 /// │           ├── satisfied by c-2.0.0a2
@@ -2887,7 +2887,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b")
+        .arg("b")
         , @"
     success: false
     exit_code: 1
@@ -2944,7 +2944,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
 /// │           └── satisfied by c-2.0.0b9
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c<=3.0.0,>=1.0.0
+/// │       └── requires c>=1.0.0,<=3.0.0
 /// │           ├── satisfied by c-1.0.0
 /// │           ├── satisfied by c-2.0.0a1
 /// │           ├── satisfied by c-2.0.0a2
@@ -2994,7 +2994,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b")
+        .arg("b")
         , @"
     success: false
     exit_code: 1
@@ -3035,7 +3035,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
 /// │           └── satisfied by c-2.0.0b1
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c<=3.0.0,>=1.0.0
+/// │       └── requires c>=1.0.0,<=3.0.0
 /// │           ├── satisfied by c-1.0.0
 /// │           └── satisfied by c-2.0.0b1
 /// └── c
@@ -3050,8 +3050,8 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b")
-                .arg("c>=0.0.0a1")
+        .arg("b")
+        .arg("c>=0.0.0a1")
         , @"
     success: true
     exit_code: 0
@@ -3089,7 +3089,7 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
 /// │           └── satisfied by c-2.0.0b1
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c<=3.0.0,>=1.0.0
+/// │       └── requires c>=1.0.0,<=3.0.0
 /// │           ├── satisfied by c-1.0.0
 /// │           └── satisfied by c-2.0.0b1
 /// └── c
@@ -3103,7 +3103,7 @@ fn transitive_prerelease_and_stable_dependency() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b")
+        .arg("b")
         , @"
     success: false
     exit_code: 1
@@ -3965,7 +3965,7 @@ fn transitive_package_only_yanked_in_range_opt_in() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b==1.0.0")
+        .arg("b==1.0.0")
         , @"
     success: true
     exit_code: 0
@@ -4086,7 +4086,7 @@ fn transitive_package_only_yanked() {
 /// │           └── unsatisfied: no matching version
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c<=3.0.0,>=1.0.0
+/// │       └── requires c>=1.0.0,<=3.0.0
 /// │           └── satisfied by c-1.0.0
 /// └── c
 ///     ├── c-1.0.0
@@ -4099,8 +4099,8 @@ fn transitive_yanked_and_unyanked_dependency_opt_in() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b")
-                .arg("c==2.0.0")
+        .arg("b")
+        .arg("c==2.0.0")
         , @"
     success: true
     exit_code: 0
@@ -4139,7 +4139,7 @@ fn transitive_yanked_and_unyanked_dependency_opt_in() {
 /// │           └── unsatisfied: no matching version
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c<=3.0.0,>=1.0.0
+/// │       └── requires c>=1.0.0,<=3.0.0
 /// │           └── satisfied by c-1.0.0
 /// └── c
 ///     ├── c-1.0.0
@@ -4152,7 +4152,7 @@ fn transitive_yanked_and_unyanked_dependency() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-                .arg("b")
+        .arg("b")
         , @"
     success: false
     exit_code: 1

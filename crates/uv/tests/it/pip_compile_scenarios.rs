@@ -1,6 +1,6 @@
 //! DO NOT EDIT
 //!
-//! Generated with `uv run scripts/scenarios/generate.py`
+//! Generated with `cargo dev generate-scenarios`
 //! Scenarios from <test/scenarios>
 //!
 #![cfg(all(feature = "test-python", unix))]
@@ -331,7 +331,7 @@ fn incompatible_python_compatible_override() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.9.4
+///         └── requires python>=3.9.4 (incompatible with environment)
 /// ```
 #[cfg(feature = "test-python-patch")]
 #[test]
@@ -376,7 +376,6 @@ fn python_patch_override_no_patch() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.9.0
 /// ```
 #[cfg(feature = "test-python-patch")]
 #[test]

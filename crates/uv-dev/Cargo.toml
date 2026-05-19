@@ -18,19 +18,22 @@ workspace = true
 uv-cache = { workspace = true, features = ["clap"] }
 uv-cli = { workspace = true }
 uv-client = { workspace = true }
-uv-configuration = { workspace = true }
+uv-configuration = { workspace = true, features = ["clap"] }
 uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
 uv-installer = { workspace = true }
 uv-macros = { workspace = true }
+uv-normalize = { workspace = true }
 uv-options-metadata = { workspace = true }
+uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-preview = { workspace = true }
 uv-python = { workspace = true }
 uv-settings = { workspace = true, features = ["schemars"] }
 uv-static = { workspace = true }
+uv-test = { workspace = true }
 uv-workspace = { workspace = true, features = ["schemars"] }
 
 # Any dependencies that are exclusively used in `uv-dev` should be listed as non-workspace

@@ -1,6 +1,6 @@
 //! DO NOT EDIT
 //!
-//! Generated with `uv run scripts/scenarios/generate.py`
+//! Generated with `cargo dev generate-scenarios`
 //! Scenarios from <test/scenarios>
 //!
 #![cfg(feature = "test-python")]
@@ -385,15 +385,16 @@ fn wrong_backtracking_indirect() -> Result<()> {
 /// leaves the `a>=1` fork free to choose `a==2.0.0` since it behaves as if
 /// the `a<2` constraint doesn't exist.
 ///
+///
 /// ```text
 /// fork-allows-non-conflicting-non-overlapping-dependencies
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a>=1; sys_platform == "linux"
+/// │   ├── requires a>=1 ; sys_platform == 'linux'
 /// │   │   ├── satisfied by a-1.0.0
 /// │   │   └── satisfied by a-2.0.0
-/// │   └── requires a<2; sys_platform == "darwin"
+/// │   └── requires a<2 ; sys_platform == 'darwin'
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     ├── a-1.0.0
@@ -504,6 +505,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
 /// only occur when there are duplicate dependency specifications with
 /// disjoint marker expressions.
 ///
+///
 /// ```text
 /// fork-allows-non-conflicting-repeated-dependencies
 /// ├── environment
@@ -609,14 +611,15 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
 /// An extremely basic test of universal resolution. In this case, the resolution
 /// should contain two distinct versions of `a` depending on `sys_platform`.
 ///
+///
 /// ```text
 /// fork-basic
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a>=2; sys_platform == "linux"
+/// │   ├── requires a>=2 ; sys_platform == 'linux'
 /// │   │   └── satisfied by a-2.0.0
-/// │   └── requires a<2; sys_platform == "darwin"
+/// │   └── requires a<2 ; sys_platform == 'darwin'
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     ├── a-1.0.0
@@ -733,14 +736,15 @@ fn fork_basic() -> Result<()> {
 
 /// We have a conflict after forking. This scenario exists to test the error message.
 ///
+///
 /// ```text
 /// conflict-in-fork
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a>=2; sys_platform == "os1"
+/// │   ├── requires a>=2 ; sys_platform == 'os1'
 /// │   │   └── satisfied by a-2.0.0
-/// │   └── requires a<2; sys_platform == "os2"
+/// │   └── requires a<2 ; sys_platform == 'os2'
 /// │       └── satisfied by a-1.0.0
 /// ├── a
 /// │   ├── a-1.0.0
@@ -815,6 +819,7 @@ fn conflict_in_fork() -> Result<()> {
 /// overlapping. (Well, there aren't any marker expressions here, which
 /// means they are both unconditional.)
 ///
+///
 /// ```text
 /// fork-conflict-unsatisfiable
 /// ├── environment
@@ -884,18 +889,19 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
 /// The correct thing to do here is to ensure that `b` is only part of the
 /// `a==4.4.0` fork and `c` is only par of the `a==4.3.0` fork.
 ///
+///
 /// ```text
 /// fork-filter-sibling-dependencies
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a==4.4.0; sys_platform == "linux"
+/// │   ├── requires a==4.4.0 ; sys_platform == 'linux'
 /// │   │   └── satisfied by a-4.4.0
-/// │   ├── requires a==4.3.0; sys_platform == "darwin"
+/// │   ├── requires a==4.3.0 ; sys_platform == 'darwin'
 /// │   │   └── satisfied by a-4.3.0
-/// │   ├── requires b==1.0.0; sys_platform == "linux"
+/// │   ├── requires b==1.0.0 ; sys_platform == 'linux'
 /// │   │   └── satisfied by b-1.0.0
-/// │   └── requires c==1.0.0; sys_platform == "darwin"
+/// │   └── requires c==1.0.0 ; sys_platform == 'darwin'
 /// │       └── satisfied by c-1.0.0
 /// ├── a
 /// │   ├── a-4.3.0
@@ -1077,6 +1083,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
 
 /// This test checks that we discard fork markers when using `--upgrade`.
 ///
+///
 /// ```text
 /// fork-upgrade
 /// ├── environment
@@ -1090,9 +1097,9 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
 /// │   └── bar-2.0.0
 /// └── foo
 ///     ├── foo-1.0.0
-///     │   ├── requires bar==1; sys_platform == "linux"
+///     │   ├── requires bar==1 ; sys_platform == 'linux'
 ///     │   │   └── satisfied by bar-1.0.0
-///     │   └── requires bar==2; sys_platform != "linux"
+///     │   └── requires bar==2 ; sys_platform != 'linux'
 ///     │       └── satisfied by bar-2.0.0
 ///     └── foo-2.0.0
 ///         └── requires bar==2
@@ -1200,14 +1207,15 @@ fn fork_upgrade() -> Result<()> {
 /// instead of having two forks around but without Python 3.13 and omitting
 /// `c` from the solution.
 ///
+///
 /// ```text
 /// fork-incomplete-markers
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a==1; python_version < "3.13"
+/// │   ├── requires a==1 ; python_full_version < '3.13'
 /// │   │   └── satisfied by a-1.0.0
-/// │   ├── requires a==2; python_version >= "3.14"
+/// │   ├── requires a==2 ; python_full_version >= '3.14'
 /// │   │   └── satisfied by a-2.0.0
 /// │   └── requires b
 /// │       └── satisfied by b-1.0.0
@@ -1216,7 +1224,7 @@ fn fork_upgrade() -> Result<()> {
 /// │   └── a-2.0.0
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c; python_version == "3.13"
+/// │       └── requires c ; python_full_version == '3.13.*'
 /// │           └── satisfied by c-1.0.0
 /// └── c
 ///     └── c-1.0.0
@@ -1233,8 +1241,8 @@ fn fork_incomplete_markers() -> Result<()> {
         name = "project"
         version = "0.1.0"
         dependencies = [
-          '''a==1; python_version < '3.13'''',
-          '''a==2; python_version >= '3.14'''',
+          '''a==1 ; python_full_version < '3.13'''',
+          '''a==2 ; python_full_version >= '3.14'''',
           '''b''',
         ]
         requires-python = ">=3.12"
@@ -1360,22 +1368,23 @@ fn fork_incomplete_markers() -> Result<()> {
 /// darwin`, even though `linux OR darwin` doesn't actually appear verbatim as a
 /// marker expression for any dependency on `c`.
 ///
+///
 /// ```text
 /// fork-marker-accrue
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a==1.0.0; implementation_name == "cpython"
+/// │   ├── requires a==1.0.0 ; implementation_name == 'cpython'
 /// │   │   └── satisfied by a-1.0.0
-/// │   └── requires b==1.0.0; implementation_name == "pypy"
+/// │   └── requires b==1.0.0 ; implementation_name == 'pypy'
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       └── requires c==1.0.0; sys_platform == "linux"
+/// │       └── requires c==1.0.0 ; sys_platform == 'linux'
 /// │           └── satisfied by c-1.0.0
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c==1.0.0; sys_platform == "darwin"
+/// │       └── requires c==1.0.0 ; sys_platform == 'darwin'
 /// │           └── satisfied by c-1.0.0
 /// └── c
 ///     └── c-1.0.0
@@ -1505,14 +1514,15 @@ fn fork_marker_accrue() -> Result<()> {
 /// both `1.0.0` and `2.0.0` of `a`. But of course, the correct behavior is to fail
 /// resolving.
 ///
+///
 /// ```text
 /// fork-marker-disjoint
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a>=2; sys_platform == "linux"
+/// │   ├── requires a>=2 ; sys_platform == 'linux'
 /// │   │   └── satisfied by a-2.0.0
-/// │   └── requires a<2; sys_platform == "linux"
+/// │   └── requires a<2 ; sys_platform == 'linux'
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     ├── a-1.0.0
@@ -1565,25 +1575,26 @@ fn fork_marker_disjoint() -> Result<()> {
 /// `implementation_name == 'pypy'`. So in this case, `c` should be
 /// included.
 ///
+///
 /// ```text
 /// fork-marker-inherit-combined-allowed
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a>=2; sys_platform == "linux"
+/// │   ├── requires a>=2 ; sys_platform == 'linux'
 /// │   │   └── satisfied by a-2.0.0
-/// │   └── requires a<2; sys_platform == "darwin"
+/// │   └── requires a<2 ; sys_platform == 'darwin'
 /// │       └── satisfied by a-1.0.0
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   ├── requires b>=2; implementation_name == "cpython"
+/// │   │   ├── requires b>=2 ; implementation_name == 'cpython'
 /// │   │   │   └── satisfied by b-2.0.0
-/// │   │   └── requires b<2; implementation_name == "pypy"
+/// │   │   └── requires b<2 ; implementation_name == 'pypy'
 /// │   │       └── satisfied by b-1.0.0
 /// │   └── a-2.0.0
 /// ├── b
 /// │   ├── b-1.0.0
-/// │   │   └── requires c; sys_platform == "linux" or implementation_name == "pypy"
+/// │   │   └── requires c ; implementation_name == 'pypy' or sys_platform == 'linux'
 /// │   │       └── satisfied by c-1.0.0
 /// │   └── b-2.0.0
 /// └── c
@@ -1750,25 +1761,26 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
 /// `implementation_name == 'cpython'`. Therefore, `c` should not be
 /// included here.
 ///
+///
 /// ```text
 /// fork-marker-inherit-combined-disallowed
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a>=2; sys_platform == "linux"
+/// │   ├── requires a>=2 ; sys_platform == 'linux'
 /// │   │   └── satisfied by a-2.0.0
-/// │   └── requires a<2; sys_platform == "darwin"
+/// │   └── requires a<2 ; sys_platform == 'darwin'
 /// │       └── satisfied by a-1.0.0
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   ├── requires b>=2; implementation_name == "cpython"
+/// │   │   ├── requires b>=2 ; implementation_name == 'cpython'
 /// │   │   │   └── satisfied by b-2.0.0
-/// │   │   └── requires b<2; implementation_name == "pypy"
+/// │   │   └── requires b<2 ; implementation_name == 'pypy'
 /// │   │       └── satisfied by b-1.0.0
 /// │   └── a-2.0.0
 /// ├── b
 /// │   ├── b-1.0.0
-/// │   │   └── requires c; sys_platform == "linux" or implementation_name == "cpython"
+/// │   │   └── requires c ; implementation_name == 'cpython' or sys_platform == 'linux'
 /// │   │       └── satisfied by c-1.0.0
 /// │   └── b-2.0.0
 /// └── c
@@ -1924,25 +1936,26 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
 /// expression that provoked the *first* fork. Therefore, `c` should be
 /// entirely excluded from the resolution.
 ///
+///
 /// ```text
 /// fork-marker-inherit-combined
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a>=2; sys_platform == "linux"
+/// │   ├── requires a>=2 ; sys_platform == 'linux'
 /// │   │   └── satisfied by a-2.0.0
-/// │   └── requires a<2; sys_platform == "darwin"
+/// │   └── requires a<2 ; sys_platform == 'darwin'
 /// │       └── satisfied by a-1.0.0
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   ├── requires b>=2; implementation_name == "cpython"
+/// │   │   ├── requires b>=2 ; implementation_name == 'cpython'
 /// │   │   │   └── satisfied by b-2.0.0
-/// │   │   └── requires b<2; implementation_name == "pypy"
+/// │   │   └── requires b<2 ; implementation_name == 'pypy'
 /// │   │       └── satisfied by b-1.0.0
 /// │   └── a-2.0.0
 /// ├── b
 /// │   ├── b-1.0.0
-/// │   │   └── requires c; sys_platform == "linux"
+/// │   │   └── requires c ; sys_platform == 'linux'
 /// │   │       └── satisfied by c-1.0.0
 /// │   └── b-2.0.0
 /// └── c
@@ -2096,21 +2109,22 @@ fn fork_marker_inherit_combined() -> Result<()> {
 /// As with `fork-marker-inherit`, the `a<2` path should exclude `b==1.0.0`
 /// since their marker expressions are disjoint.
 ///
+///
 /// ```text
 /// fork-marker-inherit-isolated
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a>=2; sys_platform == "linux"
+/// │   ├── requires a>=2 ; sys_platform == 'linux'
 /// │   │   └── satisfied by a-2.0.0
-/// │   └── requires a<2; sys_platform == "darwin"
+/// │   └── requires a<2 ; sys_platform == 'darwin'
 /// │       └── satisfied by a-1.0.0
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   └── requires b; sys_platform == "linux"
+/// │   │   └── requires b ; sys_platform == 'linux'
 /// │   │       └── satisfied by b-1.0.0
 /// │   └── a-2.0.0
-/// │       └── requires b; sys_platform == "linux"
+/// │       └── requires b ; sys_platform == 'linux'
 /// │           └── satisfied by b-1.0.0
 /// └── b
 ///     └── b-1.0.0
@@ -2243,14 +2257,15 @@ fn fork_marker_inherit_isolated() -> Result<()> {
 /// with the initial `a<2` dependency. Therefore, it ought to be completely
 /// excluded from the resolution.
 ///
+///
 /// ```text
 /// fork-marker-inherit-transitive
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a>=2; sys_platform == "linux"
+/// │   ├── requires a>=2 ; sys_platform == 'linux'
 /// │   │   └── satisfied by a-2.0.0
-/// │   └── requires a<2; sys_platform == "darwin"
+/// │   └── requires a<2 ; sys_platform == 'darwin'
 /// │       └── satisfied by a-1.0.0
 /// ├── a
 /// │   ├── a-1.0.0
@@ -2263,7 +2278,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
 /// │           └── satisfied by c-1.0.0
 /// ├── c
 /// │   └── c-1.0.0
-/// │       └── requires d; sys_platform == "linux"
+/// │       └── requires d ; sys_platform == 'linux'
 /// │           └── satisfied by d-1.0.0
 /// └── d
 ///     └── d-1.0.0
@@ -2412,18 +2427,19 @@ fn fork_marker_inherit_transitive() -> Result<()> {
 /// ignore it because it isn't possible for `sys_platform == 'linux'` and
 /// `sys_platform == 'darwin'` to be simultaneously true.
 ///
+///
 /// ```text
 /// fork-marker-inherit
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a>=2; sys_platform == "linux"
+/// │   ├── requires a>=2 ; sys_platform == 'linux'
 /// │   │   └── satisfied by a-2.0.0
-/// │   └── requires a<2; sys_platform == "darwin"
+/// │   └── requires a<2 ; sys_platform == 'darwin'
 /// │       └── satisfied by a-1.0.0
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   └── requires b; sys_platform == "linux"
+/// │   │   └── requires b ; sys_platform == 'linux'
 /// │   │       └── satisfied by b-1.0.0
 /// │   └── a-2.0.0
 /// └── b
@@ -2548,25 +2564,26 @@ fn fork_marker_inherit() -> Result<()> {
 /// `c` for Linux only, should still incorporate `c` as the dependency is
 /// not part of any fork.
 ///
+///
 /// ```text
 /// fork-marker-limited-inherit
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a>=2; sys_platform == "linux"
+/// │   ├── requires a>=2 ; sys_platform == 'linux'
 /// │   │   └── satisfied by a-2.0.0
-/// │   ├── requires a<2; sys_platform == "darwin"
+/// │   ├── requires a<2 ; sys_platform == 'darwin'
 /// │   │   └── satisfied by a-1.0.0
 /// │   └── requires b
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   └── requires c; sys_platform == "linux"
+/// │   │   └── requires c ; sys_platform == 'linux'
 /// │   │       └── satisfied by c-1.0.0
 /// │   └── a-2.0.0
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c; sys_platform == "linux"
+/// │       └── requires c ; sys_platform == 'linux'
 /// │           └── satisfied by c-1.0.0
 /// └── c
 ///     └── c-1.0.0
@@ -2710,6 +2727,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
 /// file. So this acts as a regression test to ensure that only one version of `a`
 /// is selected.
 ///
+///
 /// ```text
 /// fork-marker-selection
 /// ├── environment
@@ -2718,9 +2736,9 @@ fn fork_marker_limited_inherit() -> Result<()> {
 /// │   ├── requires a
 /// │   │   ├── satisfied by a-0.1.0
 /// │   │   └── satisfied by a-0.2.0
-/// │   ├── requires b>=2; sys_platform == "linux"
+/// │   ├── requires b>=2 ; sys_platform == 'linux'
 /// │   │   └── satisfied by b-2.0.0
-/// │   └── requires b<2; sys_platform == "darwin"
+/// │   └── requires b<2 ; sys_platform == 'darwin'
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   ├── a-0.1.0
@@ -2852,7 +2870,7 @@ fn fork_marker_selection() -> Result<()> {
     Ok(())
 }
 
-/// fork-marker-track
+///
 ///
 /// ```text
 /// fork-marker-track
@@ -2864,23 +2882,23 @@ fn fork_marker_selection() -> Result<()> {
 /// │   │   ├── satisfied by a-2.0.0
 /// │   │   ├── satisfied by a-3.1.0
 /// │   │   └── satisfied by a-4.3.0
-/// │   ├── requires b>=2.8; sys_platform == "linux"
+/// │   ├── requires b>=2.8 ; sys_platform == 'linux'
 /// │   │   └── satisfied by b-2.8
-/// │   └── requires b<2.8; sys_platform == "darwin"
+/// │   └── requires b<2.8 ; sys_platform == 'darwin'
 /// │       └── satisfied by b-2.7
 /// ├── a
 /// │   ├── a-1.3.1
-/// │   │   └── requires c; implementation_name == "iron"
+/// │   │   └── requires c ; implementation_name == 'iron'
 /// │   │       └── satisfied by c-1.10
 /// │   ├── a-2.0.0
 /// │   │   ├── requires b>=2.8
 /// │   │   │   └── satisfied by b-2.8
-/// │   │   └── requires c; implementation_name == "cpython"
+/// │   │   └── requires c ; implementation_name == 'cpython'
 /// │   │       └── satisfied by c-1.10
 /// │   ├── a-3.1.0
 /// │   │   ├── requires b>=2.8
 /// │   │   │   └── satisfied by b-2.8
-/// │   │   └── requires c; implementation_name == "pypy"
+/// │   │   └── requires c ; implementation_name == 'pypy'
 /// │   │       └── satisfied by c-1.10
 /// │   └── a-4.3.0
 /// │       └── requires b>=2.8
@@ -3028,6 +3046,7 @@ fn fork_marker_track() -> Result<()> {
 /// dependency specifications on `c` use the same constraints and thus depend on
 /// the same version of `c`. In this case, there is no conflict.
 ///
+///
 /// ```text
 /// fork-non-fork-marker-transitive
 /// ├── environment
@@ -3039,11 +3058,11 @@ fn fork_marker_track() -> Result<()> {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       └── requires c>=2.0.0; sys_platform == "linux"
+/// │       └── requires c>=2.0.0 ; sys_platform == 'linux'
 /// │           └── satisfied by c-2.0.0
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c>=2.0.0; sys_platform == "darwin"
+/// │       └── requires c>=2.0.0 ; sys_platform == 'darwin'
 /// │           └── satisfied by c-2.0.0
 /// └── c
 ///     ├── c-1.0.0
@@ -3167,14 +3186,15 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
 /// `c` is indirect, and thus, there's no fork detected by the universal resolver.
 /// This in turn results in an unresolvable conflict on `c`.
 ///
+///
 /// ```text
 /// fork-non-local-fork-marker-direct
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a==1.0.0; sys_platform == "linux"
+/// │   ├── requires a==1.0.0 ; sys_platform == 'linux'
 /// │   │   └── satisfied by a-1.0.0
-/// │   └── requires b==1.0.0; sys_platform == "darwin"
+/// │   └── requires b==1.0.0 ; sys_platform == 'darwin'
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
@@ -3240,6 +3260,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
 /// specifications) in the dependency graph, the forking resolver does not "detect"
 /// it, and thus never forks and thus this results in "no resolution."
 ///
+///
 /// ```text
 /// fork-non-local-fork-marker-transitive
 /// ├── environment
@@ -3251,11 +3272,11 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       └── requires c<2.0.0; sys_platform == "linux"
+/// │       └── requires c<2.0.0 ; sys_platform == 'linux'
 /// │           └── satisfied by c-1.0.0
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c>=2.0.0; sys_platform == "darwin"
+/// │       └── requires c>=2.0.0 ; sys_platform == 'darwin'
 /// │           └── satisfied by c-2.0.0
 /// └── c
 ///     ├── c-1.0.0
@@ -3331,19 +3352,20 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
 /// `1.2.0` unconditionally. (The marker expressions get normalized out
 /// entirely.)
 ///
+///
 /// ```text
 /// fork-overlapping-markers-basic
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a>=1.0.0; python_version < "3.13"
+/// │   ├── requires a>=1.0.0 ; python_full_version < '3.13'
 /// │   │   ├── satisfied by a-1.0.0
 /// │   │   ├── satisfied by a-1.1.0
 /// │   │   └── satisfied by a-1.2.0
-/// │   ├── requires a>=1.1.0; python_version >= "3.13"
+/// │   ├── requires a>=1.1.0 ; python_full_version >= '3.13'
 /// │   │   ├── satisfied by a-1.1.0
 /// │   │   └── satisfied by a-1.2.0
-/// │   └── requires a>=1.2.0; python_version >= "3.14"
+/// │   └── requires a>=1.2.0 ; python_full_version >= '3.14'
 /// │       └── satisfied by a-1.2.0
 /// └── a
 ///     ├── a-1.0.0
@@ -3362,9 +3384,9 @@ fn fork_overlapping_markers_basic() -> Result<()> {
         name = "project"
         version = "0.1.0"
         dependencies = [
-          '''a>=1.0.0 ; python_version < '3.13'''',
-          '''a>=1.1.0 ; python_version >= '3.13'''',
-          '''a>=1.2.0 ; python_version >= '3.14'''',
+          '''a>=1.0.0 ; python_full_version < '3.13'''',
+          '''a>=1.1.0 ; python_full_version >= '3.13'''',
+          '''a>=1.2.0 ; python_full_version >= '3.14'''',
         ]
         requires-python = ">=3.12"
         "###,
@@ -3460,39 +3482,40 @@ fn fork_overlapping_markers_basic() -> Result<()> {
 /// `fork-if-not-forked`, we reject cleaver 1, we select cleaver 2, we fork on
 /// `sys_platform`, we accept cleaver 2 since we forked on `os_name`, done.
 ///
+///
 /// ```text
 /// preferences-dependent-forking-bistable
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
 /// │   └── requires cleaver
-/// │       ├── satisfied by cleaver-2.0.0
-/// │       └── satisfied by cleaver-1.0.0
+/// │       ├── satisfied by cleaver-1.0.0
+/// │       └── satisfied by cleaver-2.0.0
 /// ├── cleaver
-/// │   ├── cleaver-2.0.0
-/// │   │   ├── requires fork-sys-platform==1; sys_platform == "linux"
-/// │   │   │   └── satisfied by fork-sys-platform-1.0.0
-/// │   │   ├── requires fork-sys-platform==2; sys_platform != "linux"
-/// │   │   │   └── satisfied by fork-sys-platform-2.0.0
-/// │   │   ├── requires reject-cleaver2==1; os_name == "posix"
-/// │   │   │   └── satisfied by reject-cleaver2-1.0.0
-/// │   │   └── requires reject-cleaver2-proxy
-/// │   │       └── satisfied by reject-cleaver2-proxy-1.0.0
-/// │   └── cleaver-1.0.0
-/// │       ├── requires fork-if-not-forked!=2; sys_platform == "linux"
-/// │       │   ├── satisfied by fork-if-not-forked-1.0.0
-/// │       │   └── satisfied by fork-if-not-forked-3.0.0
-/// │       ├── requires fork-if-not-forked-proxy; sys_platform != "linux"
-/// │       │   └── satisfied by fork-if-not-forked-proxy-1.0.0
-/// │       ├── requires reject-cleaver1==1; sys_platform == "linux"
-/// │       │   └── satisfied by reject-cleaver1-1.0.0
-/// │       └── requires reject-cleaver1-proxy
-/// │           └── satisfied by reject-cleaver1-proxy-1.0.0
+/// │   ├── cleaver-1.0.0
+/// │   │   ├── requires fork-if-not-forked!=2 ; sys_platform == 'linux'
+/// │   │   │   ├── satisfied by fork-if-not-forked-1.0.0
+/// │   │   │   └── satisfied by fork-if-not-forked-3.0.0
+/// │   │   ├── requires fork-if-not-forked-proxy ; sys_platform != 'linux'
+/// │   │   │   └── satisfied by fork-if-not-forked-proxy-1.0.0
+/// │   │   ├── requires reject-cleaver1==1 ; sys_platform == 'linux'
+/// │   │   │   └── satisfied by reject-cleaver1-1.0.0
+/// │   │   └── requires reject-cleaver1-proxy
+/// │   │       └── satisfied by reject-cleaver1-proxy-1.0.0
+/// │   └── cleaver-2.0.0
+/// │       ├── requires fork-sys-platform==1 ; sys_platform == 'linux'
+/// │       │   └── satisfied by fork-sys-platform-1.0.0
+/// │       ├── requires fork-sys-platform==2 ; sys_platform != 'linux'
+/// │       │   └── satisfied by fork-sys-platform-2.0.0
+/// │       ├── requires reject-cleaver2==1 ; os_name == 'posix'
+/// │       │   └── satisfied by reject-cleaver2-1.0.0
+/// │       └── requires reject-cleaver2-proxy
+/// │           └── satisfied by reject-cleaver2-proxy-1.0.0
 /// ├── fork-if-not-forked
 /// │   ├── fork-if-not-forked-1.0.0
-/// │   │   ├── requires fork-os-name==1; os_name == "posix"
+/// │   │   ├── requires fork-os-name==1 ; os_name == 'posix'
 /// │   │   │   └── satisfied by fork-os-name-1.0.0
-/// │   │   ├── requires fork-os-name==2; os_name != "posix"
+/// │   │   ├── requires fork-os-name==2 ; os_name != 'posix'
 /// │   │   │   └── satisfied by fork-os-name-2.0.0
 /// │   │   └── requires reject-cleaver1-proxy
 /// │   │       └── satisfied by reject-cleaver1-proxy-1.0.0
@@ -3514,14 +3537,14 @@ fn fork_overlapping_markers_basic() -> Result<()> {
 /// │   └── reject-cleaver1-2.0.0
 /// ├── reject-cleaver1-proxy
 /// │   └── reject-cleaver1-proxy-1.0.0
-/// │       └── requires reject-cleaver1==2; sys_platform != "linux"
+/// │       └── requires reject-cleaver1==2 ; sys_platform != 'linux'
 /// │           └── satisfied by reject-cleaver1-2.0.0
 /// ├── reject-cleaver2
 /// │   ├── reject-cleaver2-1.0.0
 /// │   └── reject-cleaver2-2.0.0
 /// └── reject-cleaver2-proxy
 ///     └── reject-cleaver2-proxy-1.0.0
-///         └── requires reject-cleaver2==2; os_name != "posix"
+///         └── requires reject-cleaver2==2 ; os_name != 'posix'
 ///             └── satisfied by reject-cleaver2-2.0.0
 /// ```
 #[test]
@@ -3719,6 +3742,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
 /// foo 1 -> bar==2
 /// ```
 ///
+///
 /// ```text
 /// preferences-dependent-forking-conflicting
 /// ├── environment
@@ -3728,8 +3752,8 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
 /// │   │   ├── satisfied by bar-1.0.0
 /// │   │   └── satisfied by bar-2.0.0
 /// │   ├── requires cleaver
-/// │   │   ├── satisfied by cleaver-2.0.0
-/// │   │   └── satisfied by cleaver-1.0.0
+/// │   │   ├── satisfied by cleaver-1.0.0
+/// │   │   └── satisfied by cleaver-2.0.0
 /// │   └── requires foo
 /// │       ├── satisfied by foo-1.0.0
 /// │       └── satisfied by foo-2.0.0
@@ -3737,18 +3761,18 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
 /// │   ├── bar-1.0.0
 /// │   └── bar-2.0.0
 /// ├── cleaver
-/// │   ├── cleaver-2.0.0
-/// │   │   ├── requires reject-cleaver-2
-/// │   │   │   └── satisfied by reject-cleaver-2-1.0.0
-/// │   │   ├── requires unrelated-dep==1; sys_platform == "linux"
-/// │   │   │   └── satisfied by unrelated-dep-1.0.0
-/// │   │   └── requires unrelated-dep==2; sys_platform != "linux"
-/// │   │       └── satisfied by unrelated-dep-2.0.0
-/// │   └── cleaver-1.0.0
-/// │       ├── requires bar==1; sys_platform != "linux"
-/// │       │   └── satisfied by bar-1.0.0
-/// │       └── requires foo==1; sys_platform == "linux"
-/// │           └── satisfied by foo-1.0.0
+/// │   ├── cleaver-1.0.0
+/// │   │   ├── requires bar==1 ; sys_platform != 'linux'
+/// │   │   │   └── satisfied by bar-1.0.0
+/// │   │   └── requires foo==1 ; sys_platform == 'linux'
+/// │   │       └── satisfied by foo-1.0.0
+/// │   └── cleaver-2.0.0
+/// │       ├── requires reject-cleaver-2
+/// │       │   └── satisfied by reject-cleaver-2-1.0.0
+/// │       ├── requires unrelated-dep==1 ; sys_platform == 'linux'
+/// │       │   └── satisfied by unrelated-dep-1.0.0
+/// │       └── requires unrelated-dep==2 ; sys_platform != 'linux'
+/// │           └── satisfied by unrelated-dep-2.0.0
 /// ├── foo
 /// │   ├── foo-1.0.0
 /// │   │   └── requires bar==2
@@ -3810,6 +3834,7 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
 /// It's not polished, but it's useful to have something with a higher period
 /// than 2 in our test suite.
 ///
+///
 /// ```text
 /// preferences-dependent-forking-tristable
 /// ├── environment
@@ -3819,25 +3844,25 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
 /// │   │   ├── satisfied by bar-1.0.0
 /// │   │   └── satisfied by bar-2.0.0
 /// │   ├── requires cleaver
-/// │   │   ├── satisfied by cleaver-2.0.0
-/// │   │   └── satisfied by cleaver-1.0.0
+/// │   │   ├── satisfied by cleaver-1.0.0
+/// │   │   └── satisfied by cleaver-2.0.0
 /// │   └── requires foo
 /// │       ├── satisfied by foo-1.0.0
 /// │       └── satisfied by foo-2.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       └── requires unrelated-dep3==1; os_name == "posix"
+/// │       └── requires unrelated-dep3==1 ; os_name == 'posix'
 /// │           └── satisfied by unrelated-dep3-1.0.0
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires unrelated-dep3==2; os_name != "posix"
+/// │       └── requires unrelated-dep3==2 ; os_name != 'posix'
 /// │           └── satisfied by unrelated-dep3-2.0.0
 /// ├── bar
 /// │   ├── bar-1.0.0
-/// │   │   ├── requires c!=3; sys_platform == "linux"
+/// │   │   ├── requires c!=3 ; sys_platform == 'linux'
 /// │   │   │   ├── satisfied by c-1.0.0
 /// │   │   │   └── satisfied by c-2.0.0
-/// │   │   ├── requires d; sys_platform != "linux"
+/// │   │   ├── requires d ; sys_platform != 'linux'
 /// │   │   │   └── satisfied by d-1.0.0
 /// │   │   └── requires reject-cleaver-1
 /// │   │       └── satisfied by reject-cleaver-1-1.0.0
@@ -3846,27 +3871,27 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
 /// │   ├── c-1.0.0
 /// │   │   ├── requires reject-cleaver-1
 /// │   │   │   └── satisfied by reject-cleaver-1-1.0.0
-/// │   │   ├── requires unrelated-dep2==1; os_name == "posix"
+/// │   │   ├── requires unrelated-dep2==1 ; os_name == 'posix'
 /// │   │   │   └── satisfied by unrelated-dep2-1.0.0
-/// │   │   └── requires unrelated-dep2==2; os_name != "posix"
+/// │   │   └── requires unrelated-dep2==2 ; os_name != 'posix'
 /// │   │       └── satisfied by unrelated-dep2-2.0.0
 /// │   ├── c-2.0.0
 /// │   └── c-3.0.0
 /// ├── cleaver
-/// │   ├── cleaver-2.0.0
-/// │   │   ├── requires a
-/// │   │   │   └── satisfied by a-1.0.0
-/// │   │   ├── requires b
-/// │   │   │   └── satisfied by b-1.0.0
-/// │   │   ├── requires unrelated-dep==1; sys_platform == "linux"
-/// │   │   │   └── satisfied by unrelated-dep-1.0.0
-/// │   │   └── requires unrelated-dep==2; sys_platform != "linux"
-/// │   │       └── satisfied by unrelated-dep-2.0.0
-/// │   └── cleaver-1.0.0
-/// │       ├── requires bar==1; sys_platform != "linux"
-/// │       │   └── satisfied by bar-1.0.0
-/// │       └── requires foo==1; sys_platform == "linux"
-/// │           └── satisfied by foo-1.0.0
+/// │   ├── cleaver-1.0.0
+/// │   │   ├── requires bar==1 ; sys_platform != 'linux'
+/// │   │   │   └── satisfied by bar-1.0.0
+/// │   │   └── requires foo==1 ; sys_platform == 'linux'
+/// │   │       └── satisfied by foo-1.0.0
+/// │   └── cleaver-2.0.0
+/// │       ├── requires a
+/// │       │   └── satisfied by a-1.0.0
+/// │       ├── requires b
+/// │       │   └── satisfied by b-1.0.0
+/// │       ├── requires unrelated-dep==1 ; sys_platform == 'linux'
+/// │       │   └── satisfied by unrelated-dep-1.0.0
+/// │       └── requires unrelated-dep==2 ; sys_platform != 'linux'
+/// │           └── satisfied by unrelated-dep-2.0.0
 /// ├── d
 /// │   └── d-1.0.0
 /// │       └── requires c!=2
@@ -3874,10 +3899,10 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
 /// │           └── satisfied by c-3.0.0
 /// ├── foo
 /// │   ├── foo-1.0.0
-/// │   │   ├── requires c!=3; sys_platform == "linux"
+/// │   │   ├── requires c!=3 ; sys_platform == 'linux'
 /// │   │   │   ├── satisfied by c-1.0.0
 /// │   │   │   └── satisfied by c-2.0.0
-/// │   │   ├── requires c!=2; sys_platform != "linux"
+/// │   │   ├── requires c!=2 ; sys_platform != 'linux'
 /// │   │   │   ├── satisfied by c-1.0.0
 /// │   │   │   └── satisfied by c-3.0.0
 /// │   │   └── requires reject-cleaver-1
@@ -3885,9 +3910,9 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
 /// │   └── foo-2.0.0
 /// ├── reject-cleaver-1
 /// │   └── reject-cleaver-1-1.0.0
-/// │       ├── requires unrelated-dep2==1; sys_platform == "linux"
+/// │       ├── requires unrelated-dep2==1 ; sys_platform == 'linux'
 /// │       │   └── satisfied by unrelated-dep2-1.0.0
-/// │       └── requires unrelated-dep2==2; sys_platform != "linux"
+/// │       └── requires unrelated-dep2==2 ; sys_platform != 'linux'
 /// │           └── satisfied by unrelated-dep2-2.0.0
 /// ├── reject-cleaver-2
 /// │   └── reject-cleaver-2-1.0.0
@@ -4152,6 +4177,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
 /// cleaver 1 -> bar==1; fork==2
 /// ```
 ///
+///
 /// ```text
 /// preferences-dependent-forking
 /// ├── environment
@@ -4161,8 +4187,8 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
 /// │   │   ├── satisfied by bar-1.0.0
 /// │   │   └── satisfied by bar-2.0.0
 /// │   ├── requires cleaver
-/// │   │   ├── satisfied by cleaver-2.0.0
-/// │   │   └── satisfied by cleaver-1.0.0
+/// │   │   ├── satisfied by cleaver-1.0.0
+/// │   │   └── satisfied by cleaver-2.0.0
 /// │   └── requires foo
 /// │       ├── satisfied by foo-1.0.0
 /// │       └── satisfied by foo-2.0.0
@@ -4170,18 +4196,18 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
 /// │   ├── bar-1.0.0
 /// │   └── bar-2.0.0
 /// ├── cleaver
-/// │   ├── cleaver-2.0.0
-/// │   │   ├── requires reject-cleaver-2
-/// │   │   │   └── satisfied by reject-cleaver-2-1.0.0
-/// │   │   ├── requires unrelated-dep==1; sys_platform == "linux"
-/// │   │   │   └── satisfied by unrelated-dep-1.0.0
-/// │   │   └── requires unrelated-dep==2; sys_platform != "linux"
-/// │   │       └── satisfied by unrelated-dep-2.0.0
-/// │   └── cleaver-1.0.0
-/// │       ├── requires bar==1; sys_platform != "linux"
-/// │       │   └── satisfied by bar-1.0.0
-/// │       └── requires foo==1; sys_platform == "linux"
-/// │           └── satisfied by foo-1.0.0
+/// │   ├── cleaver-1.0.0
+/// │   │   ├── requires bar==1 ; sys_platform != 'linux'
+/// │   │   │   └── satisfied by bar-1.0.0
+/// │   │   └── requires foo==1 ; sys_platform == 'linux'
+/// │   │       └── satisfied by foo-1.0.0
+/// │   └── cleaver-2.0.0
+/// │       ├── requires reject-cleaver-2
+/// │       │   └── satisfied by reject-cleaver-2-1.0.0
+/// │       ├── requires unrelated-dep==1 ; sys_platform == 'linux'
+/// │       │   └── satisfied by unrelated-dep-1.0.0
+/// │       └── requires unrelated-dep==2 ; sys_platform != 'linux'
+/// │           └── satisfied by unrelated-dep-2.0.0
 /// ├── foo
 /// │   ├── foo-1.0.0
 /// │   └── foo-2.0.0
@@ -4350,22 +4376,23 @@ fn preferences_dependent_forking() -> Result<()> {
 /// selected in the context of `a < 2 ; sys_platform == 'illumos'`, so `z`
 /// should never appear in the resolution.
 ///
+///
 /// ```text
 /// fork-remaining-universe-partitioning
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a>=2; sys_platform == "windows"
+/// │   ├── requires a>=2 ; sys_platform == 'windows'
 /// │   │   └── satisfied by a-2.0.0
-/// │   └── requires a<2; sys_platform == "illumos"
+/// │   └── requires a<2 ; sys_platform == 'illumos'
 /// │       └── satisfied by a-1.0.0
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   ├── requires b>=2; os_name == "linux"
+/// │   │   ├── requires b>=2 ; os_name == 'linux'
 /// │   │   │   └── satisfied by b-2.0.0
-/// │   │   ├── requires b<2; os_name == "darwin"
+/// │   │   ├── requires b<2 ; os_name == 'darwin'
 /// │   │   │   └── satisfied by b-1.0.0
-/// │   │   └── requires z; sys_platform == "windows"
+/// │   │   └── requires z ; sys_platform == 'windows'
 /// │   │       └── satisfied by z-1.0.0
 /// │   └── a-2.0.0
 /// ├── b
@@ -4521,12 +4548,13 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
 /// In particular, this is tested via the `python_full_version` marker with
 /// a pre-release version.
 ///
+///
 /// ```text
 /// fork-requires-python-full-prerelease
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   └── requires a==1.0.0; python_full_version == "3.9b1"
+/// │   └── requires a==1.0.0 ; python_full_version == '3.9'
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
@@ -4543,7 +4571,7 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
         name = "project"
         version = "0.1.0"
         dependencies = [
-          '''a==1.0.0 ; python_full_version == '3.9b1'''',
+          '''a==1.0.0 ; python_full_version == '3.9'''',
         ]
         requires-python = ">=3.10"
         "###,
@@ -4609,12 +4637,13 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
 /// In particular, this is tested via the `python_full_version` marker
 /// instead of the more common `python_version` marker.
 ///
+///
 /// ```text
 /// fork-requires-python-full
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   └── requires a==1.0.0; python_full_version == "3.9"
+/// │   └── requires a==1.0.0 ; python_full_version == '3.9'
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
@@ -4701,12 +4730,13 @@ fn fork_requires_python_full() -> Result<()> {
 /// considered disjoint with `python_version == '3.10'`. Thus, the
 /// dependency `a` below was erroneously excluded. It should be included.
 ///
+///
 /// ```text
 /// fork-requires-python-patch-overlap
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   └── requires a==1.0.0; python_version == "3.10"
+/// │   └── requires a==1.0.0 ; python_full_version == '3.10.*'
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
@@ -4724,7 +4754,7 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
         name = "project"
         version = "0.1.0"
         dependencies = [
-          '''a==1.0.0 ; python_version == '3.10'''',
+          '''a==1.0.0 ; python_full_version == '3.10.*'''',
         ]
         requires-python = ">=3.10.1"
         "###,
@@ -4799,12 +4829,13 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
 /// This tests that a `Requires-Python` specifier will result in the
 /// exclusion of dependency specifications that cannot possibly satisfy it.
 ///
+///
 /// ```text
 /// fork-requires-python
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   └── requires a==1.0.0; python_version == "3.9"
+/// │   └── requires a==1.0.0 ; python_full_version == '3.9.*'
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
@@ -4821,7 +4852,7 @@ fn fork_requires_python() -> Result<()> {
         name = "project"
         version = "0.1.0"
         dependencies = [
-          '''a==1.0.0 ; python_version == '3.9'''',
+          '''a==1.0.0 ; python_full_version == '3.9.*'''',
         ]
         requires-python = ">=3.10"
         "###,
@@ -4986,11 +5017,11 @@ fn requires_python_wheels() -> Result<()> {
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   └── requires a==1.0.0; sys_platform == "win32"
+/// │   └── requires a==1.0.0 ; sys_platform == 'win32'
 /// │       └── satisfied by a-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       └── requires b==1.0.0; sys_platform == "linux"
+/// │       └── requires b==1.0.0 ; sys_platform == 'linux'
 /// │           └── satisfied by b-1.0.0
 /// └── b
 ///     └── b-1.0.0
@@ -5007,7 +5038,7 @@ fn unreachable_package() -> Result<()> {
         name = "project"
         version = "0.1.0"
         dependencies = [
-          '''a==1.0.0; sys_platform == 'win32'''',
+          '''a==1.0.0 ; sys_platform == 'win32'''',
         ]
         requires-python = ">=3.12"
         "###,
@@ -5086,11 +5117,11 @@ fn unreachable_package() -> Result<()> {
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a==1.0.0; sys_platform == "win32"
+/// │   ├── requires a==1.0.0 ; sys_platform == 'win32'
 /// │   │   └── satisfied by a-1.0.0
-/// │   ├── requires b==1.0.0; sys_platform == "linux"
+/// │   ├── requires b==1.0.0 ; sys_platform == 'linux'
 /// │   │   └── satisfied by b-1.0.0
-/// │   └── requires c==1.0.0; sys_platform == "darwin"
+/// │   └── requires c==1.0.0 ; sys_platform == 'darwin'
 /// │       └── satisfied by c-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
@@ -5111,9 +5142,9 @@ fn unreachable_wheels() -> Result<()> {
         name = "project"
         version = "0.1.0"
         dependencies = [
-          '''a==1.0.0; sys_platform == 'win32'''',
-          '''b==1.0.0; sys_platform == 'linux'''',
-          '''c==1.0.0; sys_platform == 'darwin'''',
+          '''a==1.0.0 ; sys_platform == 'win32'''',
+          '''b==1.0.0 ; sys_platform == 'linux'''',
+          '''c==1.0.0 ; sys_platform == 'darwin'''',
         ]
         requires-python = ">=3.12"
         "###,
@@ -5217,18 +5248,18 @@ fn unreachable_wheels() -> Result<()> {
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires psycopg[binary]; platform_python_implementation != "PyPy"
+/// │   ├── requires psycopg[binary] ; platform_python_implementation != 'PyPy'
 /// │   │   ├── satisfied by psycopg-1.0.0
 /// │   │   └── satisfied by psycopg-1.0.0[binary]
-/// │   └── requires psycopg; platform_python_implementation == "PyPy"
+/// │   └── requires psycopg ; platform_python_implementation == 'PyPy'
 /// │       ├── satisfied by psycopg-1.0.0
 /// │       └── satisfied by psycopg-1.0.0[binary]
 /// ├── psycopg
 /// │   ├── psycopg-1.0.0
-/// │   │   └── requires tzdata; sys_platform == "win32"
+/// │   │   └── requires tzdata ; sys_platform == 'win32'
 /// │   │       └── satisfied by tzdata-1.0.0
 /// │   └── psycopg-1.0.0[binary]
-/// │       └── requires psycopg-binary; implementation_name != "pypy"
+/// │       └── requires psycopg-binary ; implementation_name != 'pypy'
 /// │           └── satisfied by psycopg-binary-1.0.0
 /// ├── psycopg-binary
 /// │   └── psycopg-binary-1.0.0
@@ -5361,17 +5392,17 @@ fn marker_variants_have_different_extras() -> Result<()> {
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   ├── requires a==1; python_version >= "3.8"
+/// │   ├── requires a==1 ; python_full_version >= '3.8'
 /// │   │   └── satisfied by a-1.0.0
-/// │   └── requires b; python_version >= "3.9"
+/// │   └── requires b ; python_full_version >= '3.9'
 /// │       ├── satisfied by b-1.0.0
 /// │       └── satisfied by b-2.0.0
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   └── requires b==1; python_version >= "3.10"
+/// │   │   └── requires b==1 ; python_full_version >= '3.10'
 /// │   │       └── satisfied by b-1.0.0
 /// │   └── a-2.0.0
-/// │       └── requires b==1; python_version >= "3.10"
+/// │       └── requires b==1 ; python_full_version >= '3.10'
 /// │           └── satisfied by b-1.0.0
 /// └── b
 ///     ├── b-1.0.0
@@ -5389,8 +5420,8 @@ fn virtual_package_extra_priorities() -> Result<()> {
         name = "project"
         version = "0.1.0"
         dependencies = [
-          '''a==1; python_version >= '3.8'''',
-          '''b; python_version >= '3.9'''',
+          '''a==1 ; python_full_version >= '3.8'''',
+          '''b ; python_full_version >= '3.9'''',
         ]
         requires-python = ">=3.12"
         "###,
@@ -5485,7 +5516,7 @@ fn virtual_package_extra_priorities() -> Result<()> {
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
-/// │   └── requires win-only; sys_platform == "win32"
+/// │   └── requires win-only ; sys_platform == 'win32'
 /// │       └── satisfied by win-only-1.0.0
 /// └── win-only
 ///     └── win-only-1.0.0
@@ -5502,13 +5533,13 @@ fn requires_python_subset() -> Result<()> {
         name = "project"
         version = "0.1.0"
         dependencies = [
-          '''win-only; sys_platform == 'win32'''',
+          '''win-only ; sys_platform == 'win32'''',
         ]
         requires-python = ">=3.12"
         [tool.uv]
         required-environments = [
-          '''sys_platform == "linux"''',
-          '''sys_platform == "win32"''',
+          '''sys_platform == 'linux'''',
+          '''sys_platform == 'win32'''',
         ]
         "###,
     )?;
@@ -5593,11 +5624,11 @@ fn requires_python_subset() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires b; platform_machine == "x86_64"
+/// │       ├── requires b ; platform_machine == 'x86_64'
 /// │       │   └── satisfied by b-1.0.0
-/// │       ├── requires c; platform_machine == "aarch64"
+/// │       ├── requires c ; platform_machine == 'aarch64'
 /// │       │   └── satisfied by c-1.0.0
-/// │       └── requires d; platform_machine == "i686"
+/// │       └── requires d ; platform_machine == 'i686'
 /// │           └── satisfied by d-1.0.0
 /// ├── b
 /// │   └── b-1.0.0

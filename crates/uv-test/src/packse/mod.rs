@@ -4,7 +4,7 @@
 //! and serves a PEP 691 Simple API + wheel/sdist downloads via a local wiremock server.
 //! Each test gets its own server instance, so package names need no prefix mangling.
 
-mod scenario;
+pub mod scenario;
 mod server;
 mod wheel;
 
