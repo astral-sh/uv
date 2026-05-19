@@ -1389,7 +1389,14 @@ async fn fetch_ndjson_cached(
                 .await;
                 Ok(content)
             }
-            Err(err) => Err(err),
+            Err(err) => {
+                if let Some((content, _)) = cached {
+                    debug!("Using stale cached Python downloads metadata after HEAD failure");
+                    Ok(content)
+                } else {
+                    Err(err)
+                }
+            }
         };
     };
 
@@ -1496,7 +1503,14 @@ async fn fetch_ndjson_cached(
                 .await;
             Ok(content)
         }
-        Err(err) => Err(err),
+        Err(err) => {
+            if let Some((content, _)) = cached {
+                debug!("Using stale cached Python downloads metadata after fetch failure");
+                Ok(content)
+            } else {
+                Err(err)
+            }
+        }
     }
 }
 
@@ -1919,11 +1933,19 @@ async fn find_matching_download(
                     }
                 }
             } else {
-                match fetch_ndjson_find(client, url, |download| {
-                    request.satisfied_by_download(download)
-                })
-                .await
-                {
+                let result = if let Some(cache) = cache {
+                    fetch_ndjson_find_cached(client, url, cache, |download| {
+                        request.satisfied_by_download(download)
+                    })
+                    .await
+                } else {
+                    fetch_ndjson_find(client, url, |download| {
+                        request.satisfied_by_download(download)
+                    })
+                    .await
+                };
+
+                match result {
                     Ok(download) => find_matching_or_implicit_embedded(source, download, request),
                     Err(err @ Error::InvalidPythonDownloadsNdjsonLine(..)) => source
                         .on_implicit_ndjson_parse_error(err, || {
@@ -2896,6 +2918,53 @@ async fn fetch_ndjson_find(
     .await
 }
 
+async fn fetch_ndjson_find_cached(
+    client: &BaseClient,
+    url: &DisplaySafeUrl,
+    cache: &Cache,
+    predicate: impl Fn(&ManagedPythonDownload) -> bool,
+) -> Result<Option<ManagedPythonDownload>, Error> {
+    let source = url.to_string();
+    let cached = read_versions_cache_content(cache, url).await;
+    if let Some((content, meta)) = &cached
+        && versions_cache_is_fresh(meta)
+    {
+        return parse_ndjson_bytes_find(&source, content, predicate);
+    }
+
+    if let Some((content, meta)) = &cached {
+        let etag = fetch_versions_cache_etag(client, url).await;
+        if etag.is_some() && etag == meta.etag {
+            let shard = versions_cache_shard(cache, url);
+            if let Ok(_lock) = shard.lock().await {
+                let (_, meta_entry) = versions_cache_entries(&shard);
+                let meta = VersionsCacheMeta {
+                    checked_at: Timestamp::now(),
+                    ..meta.clone()
+                };
+                if let Err(err) = write_versions_cache_meta(&meta_entry, &meta).await {
+                    debug!("Failed to refresh Python downloads cache metadata: {err}");
+                }
+            } else {
+                debug!("Failed to lock Python downloads cache");
+            }
+            return parse_ndjson_bytes_find(&source, content, predicate);
+        }
+    }
+
+    match fetch_ndjson_find(client, url, &predicate).await {
+        Ok(download) => Ok(download),
+        Err(err @ Error::InvalidPythonDownloadsNdjsonLine(..)) => Err(err),
+        Err(err) => {
+            if let Some((content, _)) = cached {
+                debug!("Using stale cached Python downloads metadata after fetch failure");
+                return parse_ndjson_bytes_find(&source, &content, predicate);
+            }
+            Err(err)
+        }
+    }
+}
+
 async fn fetch_ndjson_collect(
     client: &BaseClient,
     url: &DisplaySafeUrl,
@@ -2953,7 +3022,16 @@ async fn fetch_ndjson_collect_streaming_cached(
         return parse_ndjson_bytes_filtered(&source, content, predicate, limit);
     }
 
-    let (reader, _) = read_url(url, client).await?;
+    let (reader, _) = match read_url(url, client).await {
+        Ok(reader) => reader,
+        Err(err) => {
+            if let Some((content, _)) = cached {
+                debug!("Using stale cached Python downloads metadata after fetch failure");
+                return parse_ndjson_bytes_filtered(&source, &content, predicate, limit);
+            }
+            return Err(err);
+        }
+    };
     let mut reader = BufReader::new(reader);
     let mut line = Vec::new();
     let mut content = Vec::new();
@@ -2971,8 +3049,16 @@ async fn fetch_ndjson_collect_streaming_cached(
 
     loop {
         line.clear();
-        if reader.read_until(b'\n', &mut line).await? == 0 {
-            break;
+        match reader.read_until(b'\n', &mut line).await {
+            Ok(0) => break,
+            Ok(_) => {}
+            Err(err) => {
+                if let Some((content, _)) = cached {
+                    debug!("Using stale cached Python downloads metadata after fetch failure");
+                    return parse_ndjson_bytes_filtered(&source, &content, predicate, limit);
+                }
+                return Err(err.into());
+            }
         }
 
         content.extend_from_slice(&line);
@@ -3712,6 +3798,195 @@ mod tests {
             "https://example.com/token-a.tar.gz"
         );
         assert_eq!(get_requests.load(Ordering::SeqCst), 0);
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn find_streaming_cache_reuses_matching_etag_without_get() {
+        let cached = br#"{"version":"3.14.1","artifacts":[{"url":"https://example.com/token-a.tar.gz","platform":"x86_64-unknown-linux-gnu","sha256":"abc123","variant":"install_only"}]}
+"#;
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
+        let get_requests = Arc::new(AtomicUsize::new(0));
+        let get_requests_server = Arc::clone(&get_requests);
+        let server = std::thread::spawn(move || {
+            let deadline = std::time::Instant::now() + StdDuration::from_secs(5);
+            while std::time::Instant::now() < deadline {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        let mut buf = [0u8; 4096];
+                        let read = stream.read(&mut buf).unwrap_or_default();
+                        let request = String::from_utf8_lossy(&buf[..read]);
+                        if request.starts_with("HEAD ") {
+                            write!(
+                                stream,
+                                "HTTP/1.1 200 OK\r\nETag: \"v1\"\r\nContent-Length: {}\r\n\r\n",
+                                cached.len()
+                            )
+                            .unwrap();
+                            return;
+                        }
+                        if request.starts_with("GET ") {
+                            get_requests_server.fetch_add(1, Ordering::SeqCst);
+                            write!(
+                                stream,
+                                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/x-ndjson\r\n\r\n",
+                                cached.len()
+                            )
+                            .unwrap();
+                            stream.write_all(cached).unwrap();
+                            return;
+                        }
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(StdDuration::from_millis(10));
+                    }
+                    Err(err) => panic!("failed to accept connection: {err}"),
+                }
+            }
+        });
+
+        let cache = Cache::temp().unwrap().init().await.unwrap();
+        let url = DisplaySafeUrl::parse(&format!("http://{address}/versions.ndjson")).unwrap();
+        let shard = versions_cache_shard(&cache, &url);
+        let (content_entry, meta_entry) = versions_cache_entries(&shard);
+        write_versions_cache(
+            &content_entry,
+            &meta_entry,
+            cached,
+            &VersionsCacheMeta {
+                content_length: cached.len() as u64,
+                etag: Some("\"v1\"".to_string()),
+                checked_at: Timestamp::from(SystemTime::UNIX_EPOCH),
+            },
+        )
+        .await
+        .unwrap();
+
+        let client = BaseClientBuilder::default().retries(0).build().unwrap();
+        let request = PythonDownloadRequest::from_str("cpython-3.14-linux-x86_64-gnu").unwrap();
+        let download = ManagedPythonDownloadList::find_streaming(
+            &client,
+            Some(url.as_str()),
+            Some(&cache),
+            &request,
+        )
+        .await
+        .unwrap()
+        .expect("matching download should be found");
+
+        assert_eq!(
+            download.url().as_ref(),
+            "https://example.com/token-a.tar.gz"
+        );
+        assert_eq!(get_requests.load(Ordering::SeqCst), 0);
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn streaming_cache_uses_stale_content_after_refresh_failure() {
+        let cached = br#"{"version":"3.14.1","artifacts":[{"url":"https://example.com/token-a.tar.gz","platform":"x86_64-unknown-linux-gnu","sha256":"abc123","variant":"install_only"}]}
+"#;
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                write!(
+                    stream,
+                    "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n"
+                )
+                .unwrap();
+            }
+        });
+
+        let cache = Cache::temp().unwrap().init().await.unwrap();
+        let url = DisplaySafeUrl::parse(&format!("http://{address}/versions.ndjson")).unwrap();
+        let shard = versions_cache_shard(&cache, &url);
+        let (content_entry, meta_entry) = versions_cache_entries(&shard);
+        write_versions_cache(
+            &content_entry,
+            &meta_entry,
+            cached,
+            &VersionsCacheMeta {
+                content_length: cached.len() as u64,
+                etag: None,
+                checked_at: Timestamp::from(SystemTime::UNIX_EPOCH),
+            },
+        )
+        .await
+        .unwrap();
+
+        let client = BaseClientBuilder::default().retries(0).build().unwrap();
+        let downloads =
+            fetch_ndjson_collect_streaming_cached(&client, &url, &cache, |_| true, None)
+                .await
+                .unwrap();
+
+        assert_eq!(downloads.len(), 1);
+        assert_eq!(
+            downloads[0].url().as_ref(),
+            "https://example.com/token-a.tar.gz"
+        );
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn find_streaming_uses_stale_content_after_refresh_failure() {
+        let cached = br#"{"version":"3.14.1","artifacts":[{"url":"https://example.com/token-a.tar.gz","platform":"x86_64-unknown-linux-gnu","sha256":"abc123","variant":"install_only"}]}
+"#;
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = stream.read(&mut buf);
+            write!(
+                stream,
+                "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n"
+            )
+            .unwrap();
+        });
+
+        let cache = Cache::temp().unwrap().init().await.unwrap();
+        let url = DisplaySafeUrl::parse(&format!("http://{address}/versions.ndjson")).unwrap();
+        let shard = versions_cache_shard(&cache, &url);
+        let (content_entry, meta_entry) = versions_cache_entries(&shard);
+        write_versions_cache(
+            &content_entry,
+            &meta_entry,
+            cached,
+            &VersionsCacheMeta {
+                content_length: cached.len() as u64,
+                etag: None,
+                checked_at: Timestamp::from(SystemTime::UNIX_EPOCH),
+            },
+        )
+        .await
+        .unwrap();
+
+        let client = BaseClientBuilder::default().retries(0).build().unwrap();
+        let request = PythonDownloadRequest::from_str("cpython-3.14-linux-x86_64-gnu").unwrap();
+        let download = ManagedPythonDownloadList::find_streaming(
+            &client,
+            Some(url.as_str()),
+            Some(&cache),
+            &request,
+        )
+        .await
+        .unwrap()
+        .expect("matching download should be found");
+
+        assert_eq!(
+            download.url().as_ref(),
+            "https://example.com/token-a.tar.gz"
+        );
         server.join().unwrap();
     }
     #[test]
