@@ -8,6 +8,7 @@
 //! `/files/*` routes as scenario packages.
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -152,7 +153,10 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
     }
 
     for artifact in vendor_files() {
-        if !artifact.filename.ends_with(".whl") {
+        if !Path::new(artifact.filename)
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("whl"))
+        {
             continue;
         }
 
