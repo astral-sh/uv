@@ -136,7 +136,7 @@ jobs:
       "id-token": "write"
       "packages": "write"
 
-  synthesize-local-dist-manifest:
+  generate-checksum-manifest:
     needs:
       - plan
       - custom-build-release-binaries
@@ -180,7 +180,7 @@ jobs:
       - plan
       - custom-build-release-binaries
       - custom-build-docker
-      - synthesize-local-dist-manifest
+      - generate-checksum-manifest
     runs-on: "depot-ubuntu-latest-4"
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
