@@ -3685,7 +3685,7 @@ fn resolve_system_configuration_can_be_disabled() -> anyhow::Result<()> {
         },
         python_preference: Managed,
         python_downloads: Automatic,
-        no_progress: true,
+        no_progress: false,
         installer_metadata: true,
     }
     CacheSettings {
@@ -3862,7 +3862,7 @@ fn resolve_system_configuration_can_be_disabled() -> anyhow::Result<()> {
         },
         python_preference: Managed,
         python_downloads: Automatic,
-        no_progress: true,
+        no_progress: false,
         installer_metadata: true,
     }
     CacheSettings {
