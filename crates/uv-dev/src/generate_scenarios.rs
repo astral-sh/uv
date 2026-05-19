@@ -361,7 +361,7 @@ fn render_lock(output: &mut String, cases: &[&ScenarioCase]) -> Result<()> {
     output.push_str("#![cfg(feature = \"test-python\")]\n");
     output.push_str("#![expect(clippy::needless_raw_string_hashes)]\n");
     output.push_str("#![expect(clippy::doc_markdown)]\n");
-    output.push_str("#![expect(clippy::doc_lazy_continuation)]\n\n");
+    output.push('\n');
     output.push_str("use anyhow::Result;\n");
     output.push_str("use assert_cmd::assert::OutputAssertExt;\n");
     output.push_str("use assert_fs::prelude::*;\n");

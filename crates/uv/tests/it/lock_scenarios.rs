@@ -6,7 +6,6 @@
 #![cfg(feature = "test-python")]
 #![expect(clippy::needless_raw_string_hashes)]
 #![expect(clippy::doc_markdown)]
-#![expect(clippy::doc_lazy_continuation)]
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;

@@ -116,6 +116,11 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"([^\s])[ \t]+(\r?\n)", "$1$2"),
     // Filter SSL certificate loading debug messages (environment-dependent)
     (r"DEBUG Loaded \d+ certificate\(s\) from [^\n]+\n", ""),
+    // Ignore the intentionally empty Unix system config fixture used to isolate host state.
+    (
+        r"DEBUG Found system configuration in: `[^\n]*config/uv/uv\.toml`\r?\n",
+        "",
+    ),
 ];
 
 /// Create a context for tests which simplifies shared behavior across tests.
