@@ -18,7 +18,7 @@ permissions:
   "contents": "write"
 
 # This task runs when workflow_dispatch is invoked after release metadata has been updated.
-# The release tag is read from pyproject.toml unless dry-run is selected.
+# The release tag is read from project metadata with `uv version --short` unless dry-run is selected.
 # The shared release version must remain a Cargo-style SemVer version with at least
 # major.minor.patch. cargo-dist uses the derived tag to decide whether the release
 # should be marked as a prerelease.
@@ -85,7 +85,7 @@ jobs:
       - name: Resolve release tag
         if: ${{ !inputs.dry-run }}
         id: release-tag
-        run: echo "tag=$(uv run scripts/resolve-release-tag.py)" >> "$GITHUB_OUTPUT"
+        run: echo "tag=$(uv version --short --color never)" >> "$GITHUB_OUTPUT"
       # sure would be cool if github gave us proper conditionals...
       # so here's a doubly-nested ternary-via-truthiness to try to provide the best possible
       # functionality based on whether this is a pull_request, and whether it's from a fork.
