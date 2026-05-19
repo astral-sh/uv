@@ -1179,6 +1179,8 @@ mod test {
         }
         WheelFile::parse(&wheel_with_version("1.0")).unwrap();
         WheelFile::parse(&wheel_with_version("2.0")).unwrap_err();
+        WheelFile::parse(&wheel_with_version("1.invalid")).unwrap_err();
+        WheelFile::parse(&wheel_with_version("invalid.0")).unwrap_err();
     }
 
     #[test]
