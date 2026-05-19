@@ -46,6 +46,16 @@ const VENDOR_ARTIFACTS: &[VendorArtifact] = &[
         sha256: "7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301",
     },
     VendorArtifact {
+        filename: "futzed_bz2-0.1.0-py3-none-any.whl",
+        url: "https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_bz2-0.1.0-py3-none-any.whl",
+        sha256: "3c106ea0433a90f767271c322a8cb8bf5145f210adf8a357152796475b00b316",
+    },
+    VendorArtifact {
+        filename: "futzed_lzma-0.1.0-py3-none-any.whl",
+        url: "https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_lzma-0.1.0-py3-none-any.whl",
+        sha256: "9f39b4686926ffbed723450d700cca524001af259949eb5e4b973e7846df23d2",
+    },
+    VendorArtifact {
         filename: "hatchling-1.20.0-py3-none-any.whl",
         url: "https://files.pythonhosted.org/packages/87/4a/7d22a92b55809c579d8deafb0dabeb102b411a0ef9439949cccef3071527/hatchling-1.20.0-py3-none-any.whl",
         sha256: "872c63aa7e8aca85e8dba07b05c6a9b28d5a149fe00638f1a47e36930197248f",
