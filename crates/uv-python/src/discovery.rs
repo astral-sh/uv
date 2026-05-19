@@ -1456,6 +1456,7 @@ pub(crate) async fn find_best_python_installation(
                     let download_list = ManagedPythonDownloadList::new(
                         &download_list_client,
                         python_downloads_json_url,
+                        Some(cache),
                     )
                     .await?;
                     let retry_policy = client_builder.retry_policy();

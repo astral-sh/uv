@@ -4713,24 +4713,19 @@ fn python_install_with_ndjson_manifest() {
         .with_empty_python_install_mirror()
         .with_python_download_cache();
 
-    let download_list =
-        ManagedPythonDownloadList::new_only_embedded().expect("embedded downloads should parse");
+    let download_list = ManagedPythonDownloadList::new_only_embedded().unwrap();
     let download_request = PythonDownloadRequest::from_request(&PythonRequest::parse("3.14"))
-        .expect("Python request should map to a download request")
+        .unwrap()
         .fill()
-        .expect("download request should be fillable");
-    let download = download_list
-        .find(&download_request)
-        .expect("embedded downloads should contain CPython 3.14");
+        .unwrap();
+    let download = download_list.find(&download_request).unwrap();
 
     let version = if let Some(build) = download.build() {
         format!("{}+{build}", download.key().version())
     } else {
         download.key().version().to_string()
     };
-    let sha256 = download
-        .sha256()
-        .expect("download should include a checksum");
+    let sha256 = download.sha256().unwrap();
     let manifest = context.temp_dir.child("python-downloads.ndjson");
     manifest
         .write_str(&format!(
@@ -4739,7 +4734,7 @@ fn python_install_with_ndjson_manifest() {
             download.key().platform().as_cargo_dist_triple(),
             sha256,
         ))
-        .expect("manifest should be writable");
+        .unwrap();
 
     uv_snapshot!(context.filters(), context
         .python_install()
@@ -4767,24 +4762,19 @@ fn python_install_with_debug_ndjson_manifest() {
         .with_empty_python_install_mirror()
         .with_python_download_cache();
 
-    let download_list =
-        ManagedPythonDownloadList::new_only_embedded().expect("embedded downloads should parse");
+    let download_list = ManagedPythonDownloadList::new_only_embedded().unwrap();
     let download_request = PythonDownloadRequest::from_request(&PythonRequest::parse("3.12d"))
-        .expect("Python request should map to a download request")
+        .unwrap()
         .fill()
-        .expect("download request should be fillable");
-    let download = download_list
-        .find(&download_request)
-        .expect("embedded downloads should contain debug CPython 3.12");
+        .unwrap();
+    let download = download_list.find(&download_request).unwrap();
 
     let version = if let Some(build) = download.build() {
         format!("{}+{build}", download.key().version())
     } else {
         download.key().version().to_string()
     };
-    let sha256 = download
-        .sha256()
-        .expect("download should include a checksum");
+    let sha256 = download.sha256().unwrap();
     let manifest = context.temp_dir.child("python-downloads.ndjson");
     manifest
         .write_str(&format!(
@@ -4793,7 +4783,7 @@ fn python_install_with_debug_ndjson_manifest() {
             download.key().platform().as_cargo_dist_triple(),
             sha256,
         ))
-        .expect("manifest should be writable");
+        .unwrap();
 
     uv_snapshot!(context.filters(), context
         .python_install()

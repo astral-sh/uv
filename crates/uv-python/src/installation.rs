@@ -125,6 +125,7 @@ impl PythonInstallation {
                 request,
                 client_builder,
                 python_downloads_json_url,
+                cache,
             )
             .await?;
         Ok(installation)
@@ -155,6 +156,7 @@ impl PythonInstallation {
                         request,
                         client_builder,
                         python_downloads_json_url,
+                        cache,
                     )
                     .await?;
                 return Ok(installation);
@@ -182,8 +184,12 @@ impl PythonInstallation {
         let download_list = if python_downloads_json_url.is_some() {
             let download_list_client = client_builder.build()?;
             Some(
-                ManagedPythonDownloadList::new(&download_list_client, python_downloads_json_url)
-                    .await?,
+                ManagedPythonDownloadList::new(
+                    &download_list_client,
+                    python_downloads_json_url,
+                    Some(cache),
+                )
+                .await?,
             )
         } else {
             None
@@ -211,6 +217,7 @@ impl PythonInstallation {
                     match ManagedPythonDownloadList::find_streaming(
                         &client,
                         python_downloads_json_url,
+                        Some(cache),
                         &download_request,
                     )
                     .await
@@ -318,6 +325,7 @@ impl PythonInstallation {
                     request,
                     client_builder,
                     python_downloads_json_url,
+                    cache,
                 )
                 .await?;
         }
@@ -551,15 +559,19 @@ impl PythonInstallation {
         request: &PythonRequest,
         client_builder: &BaseClientBuilder<'_>,
         python_downloads_json_url: Option<&str>,
+        cache: &Cache,
     ) -> Result<(), Error> {
         if !self.should_check_outdated_prerelease_warning(request) {
             return Ok(());
         }
 
         let download_list_client = client_builder.build()?;
-        let download_list =
-            ManagedPythonDownloadList::new(&download_list_client, python_downloads_json_url)
-                .await?;
+        let download_list = ManagedPythonDownloadList::new(
+            &download_list_client,
+            python_downloads_json_url,
+            Some(cache),
+        )
+        .await?;
         self.warn_if_outdated_prerelease(request, &download_list);
 
         Ok(())

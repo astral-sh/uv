@@ -90,6 +90,7 @@ pub(crate) async fn find(
             &python_request,
             client_builder,
             python_downloads_json_url,
+            cache,
         )
         .await?;
 

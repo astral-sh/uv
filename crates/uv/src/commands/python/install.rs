@@ -91,6 +91,7 @@ impl<'a> InstallRequest<'a> {
         request: PythonRequest,
         client: &uv_client::BaseClient,
         python_downloads_json_url: Option<&str>,
+        cache: &Cache,
     ) -> Result<InstallRequest<'static>> {
         let download_request = PythonDownloadRequest::from_request(&request)
             .ok_or_else(|| {
@@ -104,6 +105,7 @@ impl<'a> InstallRequest<'a> {
         let download = match ManagedPythonDownloadList::find_streaming(
             client,
             python_downloads_json_url,
+            Some(cache),
             &download_request,
         )
         .await
@@ -286,6 +288,7 @@ pub(crate) async fn install(
         no_config,
         compile_bytecode.then_some(sender),
         concurrency,
+        cache,
         preview,
         printer,
     );
@@ -345,6 +348,7 @@ async fn perform_install(
     no_config: bool,
     bytecode_compilation_sender: Option<mpsc::UnboundedSender<ManagedPythonInstallation>>,
     concurrency: &Concurrency,
+    cache: &Cache,
     preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -393,13 +397,15 @@ async fn perform_install(
         ) {
             if download_list.is_none() {
                 download_list = Some(
-                    ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref())
-                        .await?,
+                    ManagedPythonDownloadList::new(
+                        &client,
+                        python_downloads_json_url.as_deref(),
+                        Some(cache),
+                    )
+                    .await?,
                 );
             }
-            let download_list = download_list
-                .as_ref()
-                .expect("download list should be loaded before upgrade resolution");
+            let download_list = download_list.as_ref().unwrap();
 
             is_unspecified_upgrade = true;
             // On upgrade, derive requests for all of the existing installations
@@ -446,13 +452,15 @@ async fn perform_install(
 
             if download_list.is_none() {
                 download_list = Some(
-                    ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref())
-                        .await?,
+                    ManagedPythonDownloadList::new(
+                        &client,
+                        python_downloads_json_url.as_deref(),
+                        Some(cache),
+                    )
+                    .await?,
                 );
             }
-            let download_list = download_list
-                .as_ref()
-                .expect("download list should be loaded before version-file resolution");
+            let download_list = download_list.as_ref().unwrap();
             version_requests
                 .into_iter()
                 .map(|request| InstallRequest::new(request, download_list))
@@ -464,19 +472,22 @@ async fn perform_install(
                 PythonRequest::parse(&targets[0]),
                 &client,
                 python_downloads_json_url.as_deref(),
+                cache,
             )
             .await?,
         ]
     } else {
         if download_list.is_none() {
             download_list = Some(
-                ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref())
-                    .await?,
+                ManagedPythonDownloadList::new(
+                    &client,
+                    python_downloads_json_url.as_deref(),
+                    Some(cache),
+                )
+                .await?,
             );
         }
-        let download_list = download_list
-            .as_ref()
-            .expect("download list should be loaded before multi-target resolution");
+        let download_list = download_list.as_ref().unwrap();
         targets
             .iter()
             .map(|target| PythonRequest::parse(target.as_str()))
@@ -543,7 +554,14 @@ async fn perform_install(
             .any(|request| matches!(&request.request, &PythonRequest::Any))
         && download_list.is_none()
     {
-        Some(ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?)
+        Some(
+            ManagedPythonDownloadList::new(
+                &client,
+                python_downloads_json_url.as_deref(),
+                Some(cache),
+            )
+            .await?,
+        )
     } else {
         None
     };
@@ -577,7 +595,7 @@ async fn perform_install(
                         download_list
                             .as_ref()
                             .or(reinstall_download_list.as_ref())
-                            .expect("reinstall Any requests should have a download list"),
+                            .unwrap(),
                     ) {
                         Ok(request) => {
                             debug!("Will reinstall `{}`", installation.key());

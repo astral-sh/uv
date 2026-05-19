@@ -106,7 +106,6 @@ pub(crate) async fn list(
                 }
             }
         }
-        // Include pre-release versions
         .map(|request| request.with_prereleases(true))
     } else {
         None
@@ -118,6 +117,7 @@ pub(crate) async fn list(
         let download_list = ManagedPythonDownloadList::new_filtered(
             &client,
             python_downloads_json_url.as_deref(),
+            Some(cache),
             Some(download_request),
             None,
         )
