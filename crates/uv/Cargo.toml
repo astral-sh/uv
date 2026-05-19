@@ -163,6 +163,9 @@ native-auth = []
 performance = ["performance-memory-allocator"]
 performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
 
+# Exposes a narrow in-process execution seam for CodSpeed benchmarks.
+benchmark = []
+
 # Adds self-update functionality. This feature is only enabled for uv's cargo-dist installer
 # and should be left unselected when building uv for package managers.
 self-update = ["axoupdater", "uv-cli/self-update"]
