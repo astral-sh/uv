@@ -5103,9 +5103,6 @@ fn add_lower_bound_local() -> Result<()> {
         revision = 3
         requires-python = ">=3.12"
 
-        [options]
-        exclude-newer = "2026-05-12T02:01:30Z"
-
         [[package]]
         name = "a"
         version = "1.2.3+foo"

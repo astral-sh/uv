@@ -848,6 +848,18 @@ impl TestContext {
         let home_dir = ChildPath::new(root.path()).child("home");
         fs_err::create_dir_all(&home_dir).expect("Failed to create test home directory");
 
+        // Keep Unix system configuration discovery inside the test root instead of
+        // falling back to a host-level `/etc/uv/uv.toml`.
+        if cfg!(not(windows)) {
+            let system_config_dir = home_dir.child("config").child("uv");
+            fs_err::create_dir_all(&system_config_dir)
+                .expect("Failed to create test system configuration directory");
+            system_config_dir
+                .child("uv.toml")
+                .write_str("")
+                .expect("Failed to create test system configuration file");
+        }
+
         let user_config_dir = if cfg!(windows) {
             ChildPath::new(home_dir.path())
         } else {
