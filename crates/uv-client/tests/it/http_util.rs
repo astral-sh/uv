@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use futures::future;
-use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Full};
 use hyper::body::{Bytes, Incoming};
 use hyper::header::USER_AGENT;
@@ -155,16 +154,8 @@ pub(crate) fn generate_self_signed_certs_with_ca_custom_extensions(
     Ok((ca_self_signed, server_self_signed, client_self_signed))
 }
 
-// Plain is fine for now; Arc/Box could be used later if we need to support move.
-type ServerSvcFn =
-    fn(
-        Request<Incoming>,
-    ) -> future::Ready<Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error>>;
-
 #[derive(Default)]
 pub(crate) struct TestServerBuilder<'a> {
-    // Custom server response function
-    svc_fn: Option<ServerSvcFn>,
     // CA certificate
     ca_cert: Option<&'a SelfSigned>,
     // Server certificate
@@ -176,36 +167,28 @@ pub(crate) struct TestServerBuilder<'a> {
 impl<'a> TestServerBuilder<'a> {
     pub(crate) fn new() -> Self {
         Self {
-            svc_fn: None,
             server_cert: None,
             ca_cert: None,
             mutual_tls: false,
         }
     }
 
-    #[expect(unused)]
-    /// Provide a custom server response function.
-    pub(crate) fn with_svc_fn(mut self, svc_fn: ServerSvcFn) -> Self {
-        self.svc_fn = Some(svc_fn);
-        self
-    }
-
     /// Provide the server certificate. This will enable TLS (HTTPS).
-    pub(crate) fn with_server_cert(mut self, server_cert: &'a SelfSigned) -> Self {
+    fn with_server_cert(mut self, server_cert: &'a SelfSigned) -> Self {
         self.server_cert = Some(server_cert);
         self
     }
 
     /// CA certificate used to build the `RootCertStore` for client verification.
     /// Requires `with_server_cert`.
-    pub(crate) fn with_ca_cert(mut self, ca_cert: &'a SelfSigned) -> Self {
+    fn with_ca_cert(mut self, ca_cert: &'a SelfSigned) -> Self {
         self.ca_cert = Some(ca_cert);
         self
     }
 
     /// Enforce mutual TLS (client cert auth).
     /// Requires `with_server_cert` and `with_ca_cert`.
-    pub(crate) fn with_mutual_tls(mut self, mutual: bool) -> Self {
+    fn with_mutual_tls(mut self, mutual: bool) -> Self {
         self.mutual_tls = mutual;
         self
     }
@@ -263,25 +246,21 @@ impl<'a> TestServerBuilder<'a> {
         };
 
         // Setup Response Handler
-        let svc_fn = if let Some(custom_svc_fn) = self.svc_fn {
-            custom_svc_fn
-        } else {
-            |req: Request<Incoming>| {
-                // Get User Agent Header and send it back in the response
-                let user_agent = req
-                    .headers()
-                    .get(USER_AGENT)
-                    .and_then(|v| v.to_str().ok())
-                    .map(ToString::to_string)
-                    .unwrap_or_default(); // Empty Default
-                let response_content = Full::new(Bytes::from(user_agent))
-                    .map_err(|_| unreachable!())
-                    .boxed();
-                // If we ever want a true echo server, we can use instead
-                // let response_content = req.into_body().boxed();
-                // although uv-client doesn't expose post currently.
-                future::ok::<_, hyper::Error>(Response::new(response_content))
-            }
+        let svc_fn = |req: Request<Incoming>| {
+            // Get User Agent Header and send it back in the response
+            let user_agent = req
+                .headers()
+                .get(USER_AGENT)
+                .and_then(|v| v.to_str().ok())
+                .map(ToString::to_string)
+                .unwrap_or_default(); // Empty Default
+            let response_content = Full::new(Bytes::from(user_agent))
+                .map_err(|_| unreachable!())
+                .boxed();
+            // If we ever want a true echo server, we can use instead
+            // let response_content = req.into_body().boxed();
+            // although uv-client doesn't expose post currently.
+            future::ok::<_, hyper::Error>(Response::new(response_content))
         };
 
         // Spawn the server loop in a background task

@@ -26,7 +26,7 @@ use uv_distribution_types::{
     RequirementSource, UnresolvedRequirement,
 };
 use uv_fs::{LockedFile, LockedFileError, Simplified};
-use uv_git::GIT_STORE;
+use uv_git::store_credentials;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::Preview;
@@ -874,7 +874,7 @@ fn edits(
                 let credentials = uv_auth::Credentials::from_url(&git);
                 if let Some(credentials) = credentials {
                     debug!("Caching credentials for: {git}");
-                    GIT_STORE.insert(RepositoryUrl::new(&git), credentials);
+                    store_credentials(RepositoryUrl::new(&git), credentials);
 
                     // Redact the credentials.
                     git.remove_credentials();

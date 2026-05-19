@@ -95,7 +95,7 @@ impl Arch {
         matches!(self.family, target_lexicon::Architecture::Arm(_))
     }
 
-    pub fn is_wasm(&self) -> bool {
+    pub(crate) fn is_wasm(self) -> bool {
         matches!(self.family, target_lexicon::Architecture::Wasm32)
     }
 }
@@ -240,7 +240,7 @@ pub(crate) mod test_support {
         static MOCK_ARCH: RefCell<Option<Arch>> = const { RefCell::new(None) };
     }
 
-    pub(crate) fn get_mock_arch() -> Option<Arch> {
+    pub(super) fn get_mock_arch() -> Option<Arch> {
         MOCK_ARCH.with(|arch| *arch.borrow())
     }
 
@@ -248,12 +248,12 @@ pub(crate) mod test_support {
         MOCK_ARCH.with(|mock| *mock.borrow_mut() = arch);
     }
 
-    pub(crate) struct MockArchGuard {
+    struct MockArchGuard {
         previous: Option<Arch>,
     }
 
     impl MockArchGuard {
-        pub(crate) fn new(arch: Arch) -> Self {
+        fn new(arch: Arch) -> Self {
             let previous = get_mock_arch();
             set_mock_arch(Some(arch));
             Self { previous }

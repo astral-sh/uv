@@ -49,7 +49,7 @@ use uv_pep440::Version;
 use uv_platform_tags::Os;
 use uv_static::EnvVars;
 
-use crate::{Accelerator, AcceleratorError, AmdGpuArchitecture};
+use crate::accelerator::{Accelerator, AcceleratorError, AmdGpuArchitecture};
 
 /// The strategy to use when determining the appropriate PyTorch index.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]

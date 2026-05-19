@@ -88,11 +88,6 @@ pub fn finalize() -> Result<(), PreviewError> {
     }
 }
 
-/// Error returned when [`finalize`] is called on an uninitialized state.
-#[derive(Debug, Error)]
-#[error("The preview configuration has already been finalized")]
-pub struct SetError;
-
 /// Get the current global preview configuration.
 ///
 /// # Panics

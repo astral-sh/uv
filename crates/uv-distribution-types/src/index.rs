@@ -29,12 +29,12 @@ pub struct IndexCacheControl {
 
 impl IndexCacheControl {
     /// Return the default Simple API cache control headers for the given index URL, if applicable.
-    pub fn simple_api_cache_control(_url: &Url) -> Option<HeaderValue> {
+    fn simple_api_cache_control(_url: &Url) -> Option<HeaderValue> {
         None
     }
 
     /// Return the default files cache control headers for the given index URL, if applicable.
-    pub fn artifact_cache_control(url: &Url) -> Option<HeaderValue> {
+    fn artifact_cache_control(url: &Url) -> Option<HeaderValue> {
         let dominated_by_pytorch_or_nvidia = url.host_str().is_some_and(|host| {
             host.eq_ignore_ascii_case("download.pytorch.org")
                 || host.eq_ignore_ascii_case("pypi.nvidia.com")
@@ -497,7 +497,7 @@ impl Index {
     }
 
     /// Return the cache control header for file requests to this index, if any.
-    pub fn artifact_cache_control(&self) -> Option<HeaderValue> {
+    pub(crate) fn artifact_cache_control(&self) -> Option<HeaderValue> {
         self.cache_control
             .as_ref()
             .and_then(|cache_control| cache_control.files.clone())
@@ -505,7 +505,7 @@ impl Index {
     }
 
     /// Return the cache control header for API requests to this index, if any.
-    pub fn simple_api_cache_control(&self) -> Option<HeaderValue> {
+    pub(crate) fn simple_api_cache_control(&self) -> Option<HeaderValue> {
         self.cache_control
             .as_ref()
             .and_then(|cache_control| cache_control.api.clone())

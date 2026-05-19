@@ -74,7 +74,7 @@ impl Display for CPythonAbiVariants {
 }
 
 impl CPythonAbiVariants {
-    pub fn from_char(suffix: char) -> Option<Self> {
+    fn from_char(suffix: char) -> Option<Self> {
         match suffix {
             't' => Some(Self::Freethreading),
             'u' => Some(Self::WideUnicode),

@@ -249,7 +249,7 @@ impl InstallState {
 
 /// Extract a wheel by linking all of its files into site packages.
 #[instrument(skip_all)]
-pub fn link_wheel_files(
+pub(crate) fn link_wheel_files(
     link_mode: LinkMode,
     site_packages: impl AsRef<Path>,
     wheel: impl AsRef<Path>,

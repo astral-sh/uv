@@ -21,10 +21,9 @@ use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 use anyhow::Result;
 use rustc_hash::FxHashSet;
 use tracing::trace;
-use uv_audit::service::project_status::ProjectStatusAudit;
-use uv_audit::service::{VulnerabilityServiceFormat, osv};
-use uv_audit::types::{
-    AdverseStatus, Dependency, Finding, ProjectStatus, Vulnerability, VulnerabilityID,
+use uv_audit::{
+    AdverseStatus, Dependency, Finding, ProjectStatus, ProjectStatusAudit, Vulnerability,
+    VulnerabilityID, VulnerabilityServiceFormat, osv,
 };
 use uv_cache::Cache;
 use uv_cli::AuditOutputFormat;

@@ -4,6 +4,10 @@ pub use crate::source_tree::*;
 pub use crate::sources::*;
 pub use crate::specification::*;
 pub use crate::unnamed::*;
+pub use crate::upgrade::{
+    LockedRequirements, read_lock_requirements, read_pylock_toml_requirements,
+    read_requirements_txt,
+};
 
 use uv_distribution_types::{
     Dist, DistErrorKind, GitSourceDist, Requirement, RequirementSource, SourceDist,
@@ -15,7 +19,7 @@ mod source_tree;
 mod sources;
 mod specification;
 mod unnamed;
-pub mod upgrade;
+mod upgrade;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

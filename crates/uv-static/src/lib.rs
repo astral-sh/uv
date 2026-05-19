@@ -7,7 +7,7 @@ use std::borrow::Cow;
 use thiserror::Error;
 
 /// The base URL for the default Astral mirror.
-pub const ASTRAL_MIRROR_BASE_URL: &str = "https://releases.astral.sh";
+const ASTRAL_MIRROR_BASE_URL: &str = "https://releases.astral.sh";
 
 /// Read the user-configured Astral mirror URL from the environment, if set.
 pub fn astral_mirror_url_from_env() -> Option<String> {

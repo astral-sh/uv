@@ -2360,7 +2360,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
 /// better error messages when deserializing.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct OptionsWire {
+struct OptionsWire {
     // #[serde(flatten)]
     // globals: GlobalOptions
     required_version: Option<RequiredVersion>,

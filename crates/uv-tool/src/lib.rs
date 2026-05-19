@@ -390,36 +390,6 @@ impl InstalledTools {
     }
 }
 
-/// A uv-managed tool installed on the current system..
-#[derive(Debug, Clone)]
-pub struct InstalledTool {
-    /// The path to the top-level directory of the tools.
-    path: PathBuf,
-}
-
-impl InstalledTool {
-    pub fn new(path: PathBuf) -> Result<Self, Error> {
-        Ok(Self { path })
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl std::fmt::Display for InstalledTool {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.path
-                .file_name()
-                .unwrap_or(self.path.as_os_str())
-                .to_string_lossy()
-        )
-    }
-}
-
 /// Find the tool executable directory.
 pub fn tool_executable_dir() -> Result<PathBuf, Error> {
     user_executable_directory(Some(EnvVars::UV_TOOL_BIN_DIR)).ok_or(Error::NoExecutableDirectory)

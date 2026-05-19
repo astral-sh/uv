@@ -913,7 +913,7 @@ impl BinaryFormat {
     /// Determine the appropriate binary formats for a macOS version.
     ///
     /// See: <https://github.com/pypa/packaging/blob/fd4f11139d1c884a637be8aa26bb60a31fbc9411/packaging/tags.py#L314>
-    pub fn from_arch(arch: Arch) -> &'static [Self] {
+    fn from_arch(arch: Arch) -> &'static [Self] {
         match arch {
             Arch::Aarch64 => &[Self::Arm64, Self::Universal2],
             Arch::Powerpc64 => &[Self::Ppc64, Self::Fat64, Self::Universal],
@@ -1025,7 +1025,7 @@ impl FromStr for AndroidAbi {
 
 impl AndroidAbi {
     /// Determine the appropriate Android arch.
-    pub fn from_arch(arch: Arch) -> Result<Self, PlatformError> {
+    fn from_arch(arch: Arch) -> Result<Self, PlatformError> {
         match arch {
             Arch::Aarch64 => Ok(Self::Arm64V8a),
             Arch::Armv7L => Ok(Self::ArmeabiV7a),
@@ -1091,7 +1091,7 @@ impl FromStr for IosMultiarch {
 
 impl IosMultiarch {
     /// Determine the appropriate multiarch for a iOS version.
-    pub fn from_arch(arch: Arch, simulator: bool) -> Result<Self, PlatformError> {
+    fn from_arch(arch: Arch, simulator: bool) -> Result<Self, PlatformError> {
         if simulator {
             match arch {
                 Arch::Aarch64 => Ok(Self::Arm64Simulator),

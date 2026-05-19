@@ -286,11 +286,6 @@ pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::
     fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref())
 }
 
-#[cfg(unix)]
-pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
-    fs_err::remove_file(path.as_ref())
-}
-
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
@@ -328,19 +323,6 @@ pub fn symlink_or_copy_file(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std
     }
 
     Ok(())
-}
-
-#[cfg(windows)]
-pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
-    match junction::delete(dunce::simplified(path.as_ref())) {
-        Ok(()) => match fs_err::remove_dir_all(path.as_ref()) {
-            Ok(()) => Ok(()),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(err) => Err(err),
-        },
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(err) => Err(err),
-    }
 }
 
 /// Return a [`NamedTempFile`] in the specified directory.
@@ -507,7 +489,7 @@ enum PersistRetryError {
 /// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system
 /// errors.
 #[cfg(feature = "tokio")]
-pub async fn persist_with_retry(
+async fn persist_with_retry(
     from: NamedTempFile,
     to: impl AsRef<Path>,
 ) -> Result<(), std::io::Error> {

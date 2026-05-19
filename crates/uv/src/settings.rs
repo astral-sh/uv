@@ -6,8 +6,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use rustc_hash::FxHashSet;
-use uv_audit::service::VulnerabilityServiceFormat;
-use uv_audit::types::VulnerabilityID;
+use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
 
 use crate::commands::{PythonUpgrade, PythonUpgradeSource};
 use uv_auth::Service;

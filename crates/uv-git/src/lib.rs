@@ -1,4 +1,4 @@
-pub use crate::credentials::{GIT_STORE, store_credentials_from_url};
+pub use crate::credentials::{store_credentials, store_credentials_from_url};
 pub use crate::git::{GIT, GIT_LFS, GitError};
 pub use crate::resolver::{
     GitResolver, GitResolverError, RepositoryReference, ResolvedRepositoryReference,

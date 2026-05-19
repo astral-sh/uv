@@ -286,7 +286,7 @@ impl PyxTokenStore {
     ///
     /// If no access token is found, but an API key is present, the API key will be used to
     /// bootstrap an access token.
-    pub async fn init(
+    async fn init(
         &self,
         client: &ClientWithMiddleware,
         tolerance_secs: u64,
@@ -340,7 +340,7 @@ impl PyxTokenStore {
     }
 
     /// Returns `true` if the user appears to have OAuth tokens stored on disk.
-    pub fn has_oauth_tokens(&self) -> bool {
+    fn has_oauth_tokens(&self) -> bool {
         self.subdirectory.join("tokens.json").is_file()
     }
 

@@ -23,9 +23,9 @@ pub use resolution::{
 };
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{
-    BuildId, DefaultResolverProvider, DerivationChainBuilder, InMemoryIndex, MetadataResponse,
-    PackageVersionsResult, Reporter as ResolverReporter, Resolver, ResolverEnvironment,
-    ResolverProvider, VersionsResponse, WheelMetadataResult,
+    DefaultResolverProvider, InMemoryIndex, MetadataResponse, PackageVersionsResult,
+    Reporter as ResolverReporter, Resolver, ResolverEnvironment, ResolverProvider,
+    VersionsResponse, WheelMetadataResult,
 };
 pub use universal_marker::{ConflictMarker, UniversalMarker};
 pub use upgrade::UpgradePackages;

@@ -283,7 +283,7 @@ impl Display for ArchRequest {
 }
 
 impl ArchRequest {
-    pub(crate) fn satisfied_by(self, platform: &Platform) -> bool {
+    fn satisfied_by(self, platform: &Platform) -> bool {
         match self {
             Self::Explicit(request) => request == platform.arch,
             Self::Environment(env) => {
@@ -322,7 +322,7 @@ impl PythonDownloadRequest {
     }
 
     #[must_use]
-    pub fn with_implementation(mut self, implementation: ImplementationName) -> Self {
+    pub(crate) fn with_implementation(mut self, implementation: ImplementationName) -> Self {
         match implementation {
             // Pyodide is actually CPython with an Emscripten OS, we paper over that for usability
             ImplementationName::Pyodide => {
@@ -356,13 +356,13 @@ impl PythonDownloadRequest {
     }
 
     #[must_use]
-    pub fn with_os(mut self, os: Os) -> Self {
+    fn with_os(mut self, os: Os) -> Self {
         self.os = Some(os);
         self
     }
 
     #[must_use]
-    pub fn with_libc(mut self, libc: Libc) -> Self {
+    fn with_libc(mut self, libc: Libc) -> Self {
         self.libc = Some(libc);
         self
     }
@@ -370,12 +370,6 @@ impl PythonDownloadRequest {
     #[must_use]
     pub fn with_prereleases(mut self, prereleases: bool) -> Self {
         self.prereleases = Some(prereleases);
-        self
-    }
-
-    #[must_use]
-    pub fn with_build(mut self, build: String) -> Self {
-        self.build = Some(build);
         self
     }
 
@@ -428,7 +422,7 @@ impl PythonDownloadRequest {
     }
 
     /// Fill the build field from the environment variable relevant for the [`ImplementationName`].
-    pub fn fill_build_from_env(mut self) -> Result<Self, Error> {
+    fn fill_build_from_env(mut self) -> Result<Self, Error> {
         if self.build.is_some() {
             return Ok(self);
         }
@@ -476,7 +470,7 @@ impl PythonDownloadRequest {
     /// Remove default implementation and platform details so the request only contains
     /// explicitly user-specified segments.
     #[must_use]
-    pub fn unset_defaults(self) -> Self {
+    pub(crate) fn unset_defaults(self) -> Self {
         let request = self.unset_non_platform_defaults();
 
         if let Ok(host) = Platform::from_env() {
@@ -504,12 +498,12 @@ impl PythonDownloadRequest {
     }
 
     #[cfg(test)]
-    pub(crate) fn unset_defaults_for_host(self, host: &Platform) -> Self {
+    fn unset_defaults_for_host(self, host: &Platform) -> Self {
         self.unset_non_platform_defaults()
             .unset_platform_defaults(host)
     }
 
-    pub(crate) fn unset_platform_defaults(mut self, host: &Platform) -> Self {
+    fn unset_platform_defaults(mut self, host: &Platform) -> Self {
         self.os = self.os.filter(|os| *os != host.os);
 
         self.libc = self.libc.filter(|libc| *libc != host.libc);
@@ -523,7 +517,7 @@ impl PythonDownloadRequest {
 
     /// Drop patch and prerelease information so the request can be re-used for upgrades.
     #[must_use]
-    pub fn without_patch(mut self) -> Self {
+    pub(crate) fn without_patch(mut self) -> Self {
         self.version = self.version.take().map(VersionRequest::only_minor);
         self.prereleases = None;
         self.build = None;
@@ -593,7 +587,7 @@ impl PythonDownloadRequest {
     }
 
     /// Whether this request is satisfied by a Python download.
-    pub fn satisfied_by_download(&self, download: &ManagedPythonDownload) -> bool {
+    fn satisfied_by_download(&self, download: &ManagedPythonDownload) -> bool {
         // First check the key
         if !self.satisfied_by_key(download.key()) {
             return false;
@@ -631,18 +625,18 @@ impl PythonDownloadRequest {
     }
 
     /// Whether this download request opts-in to a debug Python version.
-    pub fn allows_debug(&self) -> bool {
+    pub(crate) fn allows_debug(&self) -> bool {
         self.version.as_ref().is_some_and(VersionRequest::is_debug)
     }
 
     /// Whether this download request opts-in to alternative Python implementations.
-    pub fn allows_alternative_implementations(&self) -> bool {
+    pub(crate) fn allows_alternative_implementations(&self) -> bool {
         self.implementation
             .is_some_and(|implementation| !matches!(implementation, ImplementationName::CPython))
             || self.os.is_some_and(|os| os.is_emscripten())
     }
 
-    pub fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
+    pub(crate) fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
         let executable = interpreter.sys_executable().display();
         if let Some(version) = self.version() {
             if !version.matches_interpreter(interpreter) {
@@ -983,19 +977,6 @@ pub enum DownloadResult {
     Fetched(PathBuf),
 }
 
-/// A wrapper type to display a `ManagedPythonDownload` with its build information.
-pub struct ManagedPythonDownloadWithBuild<'a>(&'a ManagedPythonDownload);
-
-impl Display for ManagedPythonDownloadWithBuild<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(build) = self.0.build {
-            write!(f, "{}+{}", self.0.key, build)
-        } else {
-            write!(f, "{}", self.0.key)
-        }
-    }
-}
-
 impl ManagedPythonDownloadList {
     /// Iterate over all [`ManagedPythonDownload`]s.
     fn iter_all(&self) -> impl Iterator<Item = &ManagedPythonDownload> {
@@ -1129,11 +1110,6 @@ async fn fetch_bytes_from_url(client: &BaseClient, url: &DisplaySafeUrl) -> Resu
 }
 
 impl ManagedPythonDownload {
-    /// Return a display type that includes the build information.
-    pub fn to_display_with_build(&self) -> ManagedPythonDownloadWithBuild<'_> {
-        ManagedPythonDownloadWithBuild(self)
-    }
-
     pub fn url(&self) -> &Cow<'static, str> {
         &self.url
     }
@@ -2084,10 +2060,10 @@ mod tests {
     /// Test that build filtering works correctly
     #[tokio::test]
     async fn test_python_download_request_build_filtering() {
-        let request = PythonDownloadRequest::default()
+        let mut request = PythonDownloadRequest::default()
             .with_version(VersionRequest::from_str("3.12").unwrap())
-            .with_implementation(ImplementationName::CPython)
-            .with_build("20240814".to_string());
+            .with_implementation(ImplementationName::CPython);
+        request.build = Some("20240814".to_string());
 
         let client = uv_client::BaseClientBuilder::default()
             .build()
@@ -2112,10 +2088,10 @@ mod tests {
     #[tokio::test]
     async fn test_python_download_request_invalid_build() {
         // Create a request with a non-existent build
-        let request = PythonDownloadRequest::default()
+        let mut request = PythonDownloadRequest::default()
             .with_version(VersionRequest::from_str("3.12").unwrap())
-            .with_implementation(ImplementationName::CPython)
-            .with_build("99999999".to_string());
+            .with_implementation(ImplementationName::CPython);
+        request.build = Some("99999999".to_string());
 
         let client = uv_client::BaseClientBuilder::default()
             .build()
@@ -2386,52 +2362,6 @@ mod tests {
             .expect("download URLs should be valid");
 
         assert_eq!(default_urls, empty_urls);
-    }
-
-    /// Test build display
-    #[test]
-    fn test_managed_python_download_build_display() {
-        // Create a test download with a build
-        let key = PythonInstallationKey::new(
-            LenientImplementationName::Known(crate::implementation::ImplementationName::CPython),
-            3,
-            12,
-            0,
-            None,
-            Platform::new(
-                Os::from_str("linux").unwrap(),
-                Arch::from_str("x86_64").unwrap(),
-                Libc::from_str("gnu").unwrap(),
-            ),
-            crate::PythonVariant::default(),
-        );
-
-        let download_with_build = ManagedPythonDownload {
-            key,
-            url: Cow::Borrowed("https://example.com/python.tar.gz"),
-            sha256: Some(Cow::Borrowed("abc123")),
-            build: Some("20240101"),
-        };
-
-        // Test display with build
-        assert_eq!(
-            download_with_build.to_display_with_build().to_string(),
-            "cpython-3.12.0-linux-x86_64-gnu+20240101"
-        );
-
-        // Test download without build
-        let download_without_build = ManagedPythonDownload {
-            key: download_with_build.key.clone(),
-            url: Cow::Borrowed("https://example.com/python.tar.gz"),
-            sha256: Some(Cow::Borrowed("abc123")),
-            build: None,
-        };
-
-        // Test display without build
-        assert_eq!(
-            download_without_build.to_display_with_build().to_string(),
-            "cpython-3.12.0-linux-x86_64-gnu"
-        );
     }
 
     /// A hash mismatch is a post-download integrity failure — retrying a different URL cannot fix

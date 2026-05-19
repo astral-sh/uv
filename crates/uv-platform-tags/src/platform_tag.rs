@@ -160,7 +160,7 @@ impl PlatformTag {
     }
 
     /// Returns `true` if the platform is manylinux-only.
-    pub fn is_manylinux(&self) -> bool {
+    pub(crate) fn is_manylinux(&self) -> bool {
         matches!(
             self,
             Self::Manylinux { .. }

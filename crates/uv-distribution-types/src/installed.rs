@@ -391,7 +391,7 @@ impl InstalledDist {
     }
 
     /// Read the `direct_url.json` file from a `.dist-info` directory.
-    pub fn read_direct_url(path: &Path) -> Result<Option<DirectUrl>, InstalledDistError> {
+    fn read_direct_url(path: &Path) -> Result<Option<DirectUrl>, InstalledDistError> {
         let path = path.join("direct_url.json");
         let file = match fs_err::File::open(&path) {
             Ok(file) => file,
@@ -404,7 +404,7 @@ impl InstalledDist {
     }
 
     /// Read the `uv_cache.json` file from a `.dist-info` directory.
-    pub fn read_cache_info(path: &Path) -> Result<Option<CacheInfo>, InstalledDistError> {
+    fn read_cache_info(path: &Path) -> Result<Option<CacheInfo>, InstalledDistError> {
         let path = path.join("uv_cache.json");
         let file = match fs_err::File::open(&path) {
             Ok(file) => file,
@@ -417,7 +417,7 @@ impl InstalledDist {
     }
 
     /// Read the `uv_build.json` file from a `.dist-info` directory.
-    pub fn read_build_info(path: &Path) -> Result<Option<BuildInfo>, InstalledDistError> {
+    fn read_build_info(path: &Path) -> Result<Option<BuildInfo>, InstalledDistError> {
         let path = path.join("uv_build.json");
         let file = match fs_err::File::open(&path) {
             Ok(file) => file,

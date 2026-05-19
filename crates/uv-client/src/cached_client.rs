@@ -21,14 +21,14 @@ use crate::{BaseClient, Error, ErrorKind, OwnedArchive, ProblemDetails, RetrySta
 /// either serde or other mechanisms of serialization such as `rkyv`.
 ///
 /// If you're using Serde, then unless you want to control the format, callers
-/// should just use `CachedClient::get_serde`. This will use a default
+/// should just use [`CachedClient::get_serde_with_retry`]. This will use a default
 /// implementation of `Cacheable` internally.
 ///
 /// Alternatively, callers using `rkyv` should use
-/// `CachedClient::get_cacheable`. If your types fit into the
+/// [`CachedClient::get_cacheable_with_retry`]. If your types fit into the
 /// `rkyvutil::OwnedArchive` mold, then an implementation of `Cacheable` is
 /// already provided for that type.
-pub trait Cacheable: Sized {
+pub(crate) trait Cacheable: Sized {
     /// This associated type permits customizing what the "output" type of
     /// deserialization is. It can be identical to `Self`.
     ///
@@ -230,7 +230,7 @@ impl CachedClient {
     /// only the result is cached and returned. The `response_callback` is
     /// allowed to make subsequent requests, e.g. through the uncached client.
     #[instrument(skip_all)]
-    pub async fn get_cacheable<
+    async fn get_cacheable<
         Payload: Cacheable,
         CallBackError: std::error::Error + 'static,
         Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
@@ -338,7 +338,7 @@ impl CachedClient {
     }
 
     /// Make a request without checking whether the cache is fresh.
-    pub async fn skip_cache<
+    async fn skip_cache<
         Payload: Serialize + DeserializeOwned + Send + 'static,
         CallBackError: std::error::Error + 'static,
         Callback: AsyncFnOnce(Response) -> Result<Payload, CallBackError>,
@@ -645,7 +645,7 @@ impl CachedClient {
     ///
     /// See: <https://github.com/TrueLayer/reqwest-middleware/blob/8a494c165734e24c62823714843e1c9347027e8a/reqwest-retry/src/middleware.rs#L137>
     #[instrument(skip_all)]
-    pub async fn get_cacheable_with_retry<
+    pub(crate) async fn get_cacheable_with_retry<
         Payload: Cacheable,
         CallBackError: std::error::Error + 'static,
         Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,

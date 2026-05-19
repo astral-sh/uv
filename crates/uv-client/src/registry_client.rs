@@ -44,8 +44,7 @@ use crate::html::SimpleDetailHTML;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{
-    BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, FlatIndexEntries,
-    RedirectClientWithMiddleware,
+    BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, RedirectClientWithMiddleware,
 };
 
 /// A builder for an [`RegistryClient`].
@@ -136,13 +135,13 @@ impl<'a> RegistryClientBuilder<'a> {
     /// leakage to untrusted domains.
     #[cfg(test)]
     #[must_use]
-    pub fn allow_cross_origin_credentials(mut self) -> Self {
+    pub(crate) fn allow_cross_origin_credentials(mut self) -> Self {
         self.base_client_builder = self.base_client_builder.allow_cross_origin_credentials();
         self
     }
 
     /// Add all authenticated sources to the cache.
-    pub fn cache_index_credentials(&mut self) {
+    fn cache_index_credentials(&mut self) {
         for index in self.index_locations.known_indexes() {
             if let Some(credentials) = index.credentials() {
                 trace!(
@@ -466,15 +465,18 @@ impl RegistryClient {
         let client = FlatIndexClient::new(self.cached_client(), self.connectivity, &self.cache);
 
         // Fetch the entries for the index.
-        let FlatIndexEntries { entries, .. } =
-            client.fetch_index(index).await.map_err(ErrorKind::Flat)?;
+        let (entries, _) = client
+            .fetch_index(index)
+            .await
+            .map_err(ErrorKind::Flat)?
+            .into_parts();
 
         // Index by package name.
         let mut entries_by_package: FxHashMap<PackageName, Vec<FlatIndexEntry>> =
             FxHashMap::default();
         for entry in entries {
             entries_by_package
-                .entry(entry.filename.name().clone())
+                .entry(entry.filename().name().clone())
                 .or_default()
                 .push(entry);
         }
@@ -1357,14 +1359,14 @@ impl SimpleIndexMetadata {
     /// Create a [`SimpleIndexMetadata`] from a [`PypiSimpleIndex`].
     fn from_pypi_index(index: PypiSimpleIndex) -> Self {
         Self {
-            projects: index.projects.into_iter().map(|entry| entry.name).collect(),
+            projects: index.into_project_names(),
         }
     }
 
     /// Create a [`SimpleIndexMetadata`] from a [`PyxSimpleIndex`].
     fn from_pyx_index(index: PyxSimpleIndex) -> Self {
         Self {
-            projects: index.projects.into_iter().map(|entry| entry.name).collect(),
+            projects: index.into_project_names(),
         }
     }
 

@@ -74,7 +74,7 @@ impl GitReference {
     }
 
     /// Percent-encode a revision string for use in a URL.
-    pub fn encode_rev(rev: &str) -> String {
+    pub(crate) fn encode_rev(rev: &str) -> String {
         utf8_percent_encode(rev, GIT_REFERENCE_ENCODE_SET).to_string()
     }
 
