@@ -108,8 +108,14 @@ fn wrong_backtracking_basic() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -117,8 +123,50 @@ fn wrong_backtracking_basic() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:10eb37b5137fa0770faf91f55610eb2555ff2b6d6b0fe56c53ea9374173ea099", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:3bb550e2717befbb11afa0d1f3dc9b4f6775a6a805f5bea7b0da6dc980b47520", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "2.0.9"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "a" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-2.0.9.tar.gz", hash = "sha256:1737d32e4dc91e32baeb8a734e655ea9f0ec2c2dde348d7d4e5a76bc16fa0308", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-2.0.9-py3-none-any.whl", hash = "sha256:12ad87cac056e0e3211f6c09fc8925181dcf8d7c332d670bf14c7ea6989a746f", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+            { name = "b" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a" },
+            { name = "b" },
+        ]
+        "#
         );
     });
 
@@ -231,8 +279,14 @@ fn wrong_backtracking_indirect() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -240,8 +294,71 @@ fn wrong_backtracking_indirect() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:b5d23816137e4a895c5fdc25c482cc192a6e976397dad1826ce6969997ef2cd6", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:6a62b0a0a71b6d01beeeb72e7fa7aa30a3a457f5ee0357b40bd66a64463dc3b4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "b-inner" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:49c2c6d2a0393e18bc474b2e8bbf5df4cf65789b441ec7d231da4b12ad3a7c44", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:b5e09c13671d3f4d41d7d04b110edaf6f6fdd6caed4caa9319248d9cbb6ced91", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b-inner"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "too-old" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b_inner-1.0.0.tar.gz", hash = "sha256:48c73086effae8effa708c6b9644a2bb2997f21f13147df7a896a860e0dd4ac4", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b_inner-1.0.0-py3-none-any.whl", hash = "sha256:b32b4885eefef71892c1f49df45a9b95f67f15d3d1d628968c8b1f2db3eee5a7", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+            { name = "b" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a" },
+            { name = "b" },
+        ]
+
+        [[package]]
+        name = "too-old"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/too_old-1.0.0.tar.gz", hash = "sha256:3b98fc1f4649e5a8e1f3d0562760138a7fc913315c4e187ac6d975b3ad9b8790", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/too_old-1.0.0-py3-none-any.whl", hash = "sha256:57ffafea045b55b3fe73501c0a5b45db373f058df4168aa580878260ab2a4b52", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+        "#
         );
     });
 
@@ -308,8 +425,14 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -317,8 +440,42 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:10eb37b5137fa0770faf91f55610eb2555ff2b6d6b0fe56c53ea9374173ea099", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:3bb550e2717befbb11afa0d1f3dc9b4f6775a6a805f5bea7b0da6dc980b47520", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "a", marker = "sys_platform == 'linux'", specifier = ">=1" },
+        ]
+        "#
         );
     });
 
@@ -387,8 +544,14 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -396,8 +559,37 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:10eb37b5137fa0770faf91f55610eb2555ff2b6d6b0fe56c53ea9374173ea099", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:3bb550e2717befbb11afa0d1f3dc9b4f6775a6a805f5bea7b0da6dc980b47520", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", specifier = "<2" },
+            { name = "a", specifier = ">=1" },
+        ]
+        "#
         );
     });
 
@@ -456,8 +648,14 @@ fn fork_basic() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -465,8 +663,58 @@ fn fork_basic() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:10eb37b5137fa0770faf91f55610eb2555ff2b6d6b0fe56c53ea9374173ea099", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:3bb550e2717befbb11afa0d1f3dc9b4f6775a6a805f5bea7b0da6dc980b47520", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:b5d23816137e4a895c5fdc25c482cc192a6e976397dad1826ce6969997ef2cd6", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:6a62b0a0a71b6d01beeeb72e7fa7aa30a3a457f5ee0357b40bd66a64463dc3b4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'darwin'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+        ]
+        "#
         );
     });
 
@@ -539,8 +787,21 @@ fn conflict_in_fork() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (markers: sys_platform == 'os2'):
+      ╰─▶ Because only b==1.0.0 is available and b==1.0.0 depends on d==1, we can conclude that all versions of b depend on d==1.
+          And because c==1.0.0 depends on d==2 and only c==1.0.0 is available, we can conclude that all versions of b and all versions of c are incompatible.
+          And because a==1.0.0 depends on b and c, we can conclude that a==1.0.0 cannot be used.
+          And because only the following versions of a{sys_platform == 'os2'} are available:
+              a{sys_platform == 'os2'}==1.0.0
+              a{sys_platform == 'os2'}>=2
+          and your project depends on a{sys_platform == 'os2'}<2, we can conclude that your project's requirements are unsatisfiable.
+    "
     );
 
     Ok(())
@@ -595,8 +856,15 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because your project depends on a>=2 and a<2, we can conclude that your project's requirements are unsatisfiable.
+    "
     );
 
     Ok(())
@@ -672,8 +940,14 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -681,8 +955,110 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform == 'darwin'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "4.3.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-4.3.0.tar.gz", hash = "sha256:fee0fc6bcee55d9ae0b70fb7b8df0d2ef97bc78caac7f9f4eade28d1e85886f7", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-4.3.0-py3-none-any.whl", hash = "sha256:4eae5bcfed5c2ed82a4826af49f35270973046f88c62198f578a578838723900", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "4.4.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-4.4.0.tar.gz", hash = "sha256:1806430d31c2f245ab059f21aeb037a3edd949bb2398e13a651cf3b66a72e418", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-4.4.0-py3-none-any.whl", hash = "sha256:bddc32211e7564f035b45d1381c63e72be059920a12d693fd47719b06afbae8b", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "d", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:528085bda01c1e3ff730ff075fbcbe0df4fd774557b5bf6a92df6dbe01e8bb73", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:93ba2c158db91acf4004b98a4da25642f5f5eaa46bebcb5418ad836fb1ef2226", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "c"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "d", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'darwin'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:9079186140cefca7694f67cfc935e46e0d4367b53783033fd317bba93bccc930", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-1.0.0-py3-none-any.whl", hash = "sha256:5fa869c2f8c0bb3ceb85f00d42a2f65fcebb67322b6c792b8d3c9c1fdd7dbaff", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "d"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/d-1.0.0.tar.gz", hash = "sha256:92a96d88da0f35142034d41ad49d3c5270f29ded946134a1cbfd9aecb57e3cc6", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/d-1.0.0-py3-none-any.whl", hash = "sha256:b41fe5d94d1cc63db5dad7569ff9d1cbe0381bb85a3c6aa87fcc440dd4b01d0f", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "d"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/d-2.0.0.tar.gz", hash = "sha256:122c5c68004e59ea46a6bf02db4f271c36dec9782e877e979f8567819187d1bf", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/d-2.0.0-py3-none-any.whl", hash = "sha256:fdc6021e4bdf8b73707394cf349e0ae4b914664f1c362b44d46a22cfcb495487", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "4.3.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'darwin'" },
+            { name = "a", version = "4.4.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "b", marker = "sys_platform == 'linux'" },
+            { name = "c", marker = "sys_platform == 'darwin'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "sys_platform == 'darwin'", specifier = "==4.3.0" },
+            { name = "a", marker = "sys_platform == 'linux'", specifier = "==4.4.0" },
+            { name = "b", marker = "sys_platform == 'linux'", specifier = "==1.0.0" },
+            { name = "c", marker = "sys_platform == 'darwin'", specifier = "==1.0.0" },
+        ]
+        "#
         );
     });
 
@@ -747,8 +1123,14 @@ fn fork_upgrade() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -756,8 +1138,46 @@ fn fork_upgrade() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "bar"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/bar-2.0.0.tar.gz", hash = "sha256:eedc005a3c6d9bd8c2677125d0724958350264ad7f010f5b141ba2c48a4e536b", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/bar-2.0.0-py3-none-any.whl", hash = "sha256:30058fca0b5a4d570025278d8f2a7c2a05360e355e8b1b1f186fce304ae63696", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "foo"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "bar" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/foo-2.0.0.tar.gz", hash = "sha256:b50d90692b72bf7aa5bea07717ce0e64fbe28a8295a66ba3083a761ed4ac86dc", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/foo-2.0.0-py3-none-any.whl", hash = "sha256:02ac0da19d145413246a117538284b5c5bf99d3100e7bfa844618239fb0347c6", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "foo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "foo" }]
+        "#
         );
     });
 
@@ -828,8 +1248,14 @@ fn fork_incomplete_markers() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -837,8 +1263,81 @@ fn fork_incomplete_markers() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "python_full_version >= '3.14'",
+            "python_full_version == '3.13.*'",
+            "python_full_version < '3.13'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version < '3.13'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:10eb37b5137fa0770faf91f55610eb2555ff2b6d6b0fe56c53ea9374173ea099", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:3bb550e2717befbb11afa0d1f3dc9b4f6775a6a805f5bea7b0da6dc980b47520", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version >= '3.14'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:b5d23816137e4a895c5fdc25c482cc192a6e976397dad1826ce6969997ef2cd6", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:6a62b0a0a71b6d01beeeb72e7fa7aa30a3a457f5ee0357b40bd66a64463dc3b4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "c", marker = "python_full_version == '3.13.*'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:595323b35f0cf2f8512c8877e6d3527e94301c1ac74e7f985230447c6c0fd0b1", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:1193492ad454d1aef3f62eb9051e06138e0e3970958f78d74334f39464dd358d", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "c"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:1a0dc3013c4de679411df70712ff3a4cd23b873fff1ee8ac1f7f57630bb74f86", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-1.0.0-py3-none-any.whl", hash = "sha256:6538c793eb1a787d65d1da4730c21cb517ae7b6d6d770bda939c1932b1e8a01c", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.13'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.14'" },
+            { name = "b" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "python_full_version < '3.13'", specifier = "==1" },
+            { name = "a", marker = "python_full_version >= '3.14'", specifier = "==2" },
+            { name = "b" },
+        ]
+        "#
         );
     });
 
@@ -907,8 +1406,14 @@ fn fork_marker_accrue() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -916,8 +1421,62 @@ fn fork_marker_accrue() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "c", marker = "sys_platform == 'linux'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:257566ecb1ea2fce480ffcd4e151dd68692b616d97afebd8de9c1172384eced0", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:d8cabfd6f2f2a4940fefc6b872519c06d1699f660722d5ee5856ebadd9dc3786", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "c", marker = "sys_platform == 'darwin'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:5c01a85ab6656934c5418257f79778d8f7daf3d1a6974e01f2a7d1ad74fa4d24", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:bdfa46036256430c2cc7a84f57d63abb17a3523e297bad8a2e14d3ef0574c26f", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "c"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:1a0dc3013c4de679411df70712ff3a4cd23b873fff1ee8ac1f7f57630bb74f86", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-1.0.0-py3-none-any.whl", hash = "sha256:6538c793eb1a787d65d1da4730c21cb517ae7b6d6d770bda939c1932b1e8a01c", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", marker = "implementation_name == 'cpython'" },
+            { name = "b", marker = "implementation_name == 'pypy'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "implementation_name == 'cpython'", specifier = "==1.0.0" },
+            { name = "b", marker = "implementation_name == 'pypy'", specifier = "==1.0.0" },
+        ]
+        "#
         );
     });
 
@@ -985,8 +1544,15 @@ fn fork_marker_disjoint() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because your project depends on a{sys_platform == 'linux'}>=2 and a{sys_platform == 'linux'}<2, we can conclude that your project's requirements are unsatisfiable.
+    "
     );
 
     Ok(())
@@ -1049,8 +1615,14 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -1058,8 +1630,102 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+        ]
+        dependencies = [
+            { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" },
+            { name = "b", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:be5a95ac459f06fe627ba397c0ae10dd68259bc5f6689a3425751636de17e59d", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:49ed99dc5f047f6000118bac0ed1b56436b1af35e291d15f99e8df3c4b232d63", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:b5d23816137e4a895c5fdc25c482cc192a6e976397dad1826ce6969997ef2cd6", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:6a62b0a0a71b6d01beeeb72e7fa7aa30a3a457f5ee0357b40bd66a64463dc3b4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+        ]
+        dependencies = [
+            { name = "c", marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:27d78f7c153a75ea316c2805172f2905f9d5b6ee3c8c9fa353bd4e8531e3e32b", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:6b5da398018e65ac87811de1f9433310e09b4653573c158e9429375830bb2e57", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-2.0.0.tar.gz", hash = "sha256:55f2897a25930102575ec735a42948a3f8e62169de5960fbf79ecfc7cf72c002", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-2.0.0-py3-none-any.whl", hash = "sha256:d0d9a8026b777021642e5d3ca9fec669eb63d9742a59a3d1872edab105b7cd81", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "c"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:1a0dc3013c4de679411df70712ff3a4cd23b873fff1ee8ac1f7f57630bb74f86", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-1.0.0-py3-none-any.whl", hash = "sha256:6538c793eb1a787d65d1da4730c21cb517ae7b6d6d770bda939c1932b1e8a01c", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'darwin'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+        ]
+        "#
         );
     });
 
@@ -1134,8 +1800,14 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -1143,8 +1815,90 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+        ]
+        dependencies = [
+            { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" },
+            { name = "b", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:be5a95ac459f06fe627ba397c0ae10dd68259bc5f6689a3425751636de17e59d", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:49ed99dc5f047f6000118bac0ed1b56436b1af35e291d15f99e8df3c4b232d63", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:b5d23816137e4a895c5fdc25c482cc192a6e976397dad1826ce6969997ef2cd6", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:6a62b0a0a71b6d01beeeb72e7fa7aa30a3a457f5ee0357b40bd66a64463dc3b4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:e32f38e3cd28d8b27483d81928ca61916dc549695570821915433331a7be474d", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:59cd064061ea7b911ef4f74f91150cf9ababa8c7e467f80757149aceca5b6a44", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-2.0.0.tar.gz", hash = "sha256:55f2897a25930102575ec735a42948a3f8e62169de5960fbf79ecfc7cf72c002", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-2.0.0-py3-none-any.whl", hash = "sha256:d0d9a8026b777021642e5d3ca9fec669eb63d9742a59a3d1872edab105b7cd81", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'darwin'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+        ]
+        "#
         );
     });
 
@@ -1220,8 +1974,14 @@ fn fork_marker_inherit_combined() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -1229,8 +1989,90 @@ fn fork_marker_inherit_combined() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+        ]
+        dependencies = [
+            { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" },
+            { name = "b", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:be5a95ac459f06fe627ba397c0ae10dd68259bc5f6689a3425751636de17e59d", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:49ed99dc5f047f6000118bac0ed1b56436b1af35e291d15f99e8df3c4b232d63", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:b5d23816137e4a895c5fdc25c482cc192a6e976397dad1826ce6969997ef2cd6", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:6a62b0a0a71b6d01beeeb72e7fa7aa30a3a457f5ee0357b40bd66a64463dc3b4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:9f4b3fae6101a9b51044c8f05f21233e64870776788503b2497228991942c85f", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:2669bd01ef1fc7729d9c25c6689df45482af12edd515aaa6f1e71b465b2fa5cf", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-2.0.0.tar.gz", hash = "sha256:55f2897a25930102575ec735a42948a3f8e62169de5960fbf79ecfc7cf72c002", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-2.0.0-py3-none-any.whl", hash = "sha256:d0d9a8026b777021642e5d3ca9fec669eb63d9742a59a3d1872edab105b7cd81", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'darwin'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+        ]
+        "#
         );
     });
 
@@ -1299,8 +2141,14 @@ fn fork_marker_inherit_isolated() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -1308,8 +2156,70 @@ fn fork_marker_inherit_isolated() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:ba33eb172f41aca59e7455cc3704e663f12602d721c9e08a93885d5c3311eb14", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:527c38843f560be7c57cbd9ea29ba590a7170001b1b2255a9b1f3a6adaf02802", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        dependencies = [
+            { name = "b", marker = "sys_platform == 'linux'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:3b65be55a14e0685a6f67d8f815bf1ebd74f03fe4e06455cf0096569255638ff", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:b6ebfbb12c5fa225cd89697c703bc8a5a89e90e7cc169d2b13d5396657c125e5", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:444108175a344c7a5c435b365246b1460e85f8243b9da7143de631c88fe649b0", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:7bfefe7c9de97c4900f6a712427046f21236b96ac6081cae7701009038ea2b72", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'darwin'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+        ]
+        "#
         );
     });
 
@@ -1384,8 +2294,14 @@ fn fork_marker_inherit_transitive() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -1393,8 +2309,82 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        dependencies = [
+            { name = "b", marker = "sys_platform == 'darwin'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:39c894213e9ad6f2f1b453dd868aed3edf2bd90e0d2bdf2909362468e12a3e33", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:075db311ef6c99e6b108056db2b1ced6c9d635b34a458bae137c562fade89585", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:b5d23816137e4a895c5fdc25c482cc192a6e976397dad1826ce6969997ef2cd6", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:6a62b0a0a71b6d01beeeb72e7fa7aa30a3a457f5ee0357b40bd66a64463dc3b4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "c", marker = "sys_platform == 'darwin'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:4e800f41d05a0d3920597cac9ae323177dc55db29999ce85010ec1349e47f12f", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:c82e8b72e46b0423687649a5fff24a23ff1ef4a0b8de8548f55f0a929b4eda5e", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "c"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:c1dd6a57d2e681e59377f47c03c828334dd0116f3fba2e40cb2d307386eb7fd1", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-1.0.0-py3-none-any.whl", hash = "sha256:061278709034937dc5f19394b3c2018caa82ff52adc882526a1e8985fa30ece6", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'darwin'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+        ]
+        "#
         );
     });
 
@@ -1465,8 +2455,14 @@ fn fork_marker_inherit() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -1474,8 +2470,58 @@ fn fork_marker_inherit() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:ba33eb172f41aca59e7455cc3704e663f12602d721c9e08a93885d5c3311eb14", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:527c38843f560be7c57cbd9ea29ba590a7170001b1b2255a9b1f3a6adaf02802", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:b5d23816137e4a895c5fdc25c482cc192a6e976397dad1826ce6969997ef2cd6", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:6a62b0a0a71b6d01beeeb72e7fa7aa30a3a457f5ee0357b40bd66a64463dc3b4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'darwin'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+        ]
+        "#
         );
     });
 
@@ -1552,8 +2598,14 @@ fn fork_marker_limited_inherit() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -1561,8 +2613,81 @@ fn fork_marker_limited_inherit() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:46378c66a71bd8b5f100f8467c879629758b9188d0b1f8c33c738cdde097ae85", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:fd773b571195e61b7ea5c0054a4e63bd6aad50ba4d56f91593d85a90a6b579f0", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:b5d23816137e4a895c5fdc25c482cc192a6e976397dad1826ce6969997ef2cd6", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:6a62b0a0a71b6d01beeeb72e7fa7aa30a3a457f5ee0357b40bd66a64463dc3b4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "c", marker = "sys_platform == 'linux'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:9f4b3fae6101a9b51044c8f05f21233e64870776788503b2497228991942c85f", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:2669bd01ef1fc7729d9c25c6689df45482af12edd515aaa6f1e71b465b2fa5cf", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "c"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:1a0dc3013c4de679411df70712ff3a4cd23b873fff1ee8ac1f7f57630bb74f86", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-1.0.0-py3-none-any.whl", hash = "sha256:6538c793eb1a787d65d1da4730c21cb517ae7b6d6d770bda939c1932b1e8a01c", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'darwin'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "b" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "b" },
+        ]
+        "#
         );
     });
 
@@ -1633,8 +2758,14 @@ fn fork_marker_selection() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -1642,8 +2773,69 @@ fn fork_marker_selection() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "0.1.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-0.1.0.tar.gz", hash = "sha256:95ea3bf6ab98343c3af41c7cb01804aca90e66aceeb269e7e35988fd4626a92c", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-0.1.0-py3-none-any.whl", hash = "sha256:fe3c334817464011aa9fcc76d74785d0e27e391138e61769600d2fd839f8fe3e", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:444108175a344c7a5c435b365246b1460e85f8243b9da7143de631c88fe649b0", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:7bfefe7c9de97c4900f6a712427046f21236b96ac6081cae7701009038ea2b72", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-2.0.0.tar.gz", hash = "sha256:55f2897a25930102575ec735a42948a3f8e62169de5960fbf79ecfc7cf72c002", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-2.0.0-py3-none-any.whl", hash = "sha256:d0d9a8026b777021642e5d3ca9fec669eb63d9742a59a3d1872edab105b7cd81", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+            { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'darwin'" },
+            { name = "b", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a" },
+            { name = "b", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "b", marker = "sys_platform == 'linux'", specifier = ">=2" },
+        ]
+        "#
         );
     });
 
@@ -1726,8 +2918,14 @@ fn fork_marker_track() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -1735,8 +2933,81 @@ fn fork_marker_track() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.3.1"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "c", marker = "implementation_name == 'iron'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.3.1.tar.gz", hash = "sha256:a2b51719052c1c5ccc2df2eced1227c0377857ea0af174b54b863a614ded83c1", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.3.1-py3-none-any.whl", hash = "sha256:63dc8b2d02d39ab3e243870b9852eac9660e8d91377a0bb37f61ec6e0f2e2e9b", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "2.7"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-2.7.tar.gz", hash = "sha256:d768eca6b4468008376430d1704db3c7519959e5f0985455fcf17b761481cd42", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-2.7-py3-none-any.whl", hash = "sha256:18dd3f4b87a2291e6cfd14b7d096a5834b1a7986b60eb8e74ab60945c19b81cd", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "2.8"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-2.8.tar.gz", hash = "sha256:2e6b546ca893410451b318ce2d7c0f69c41b602d916892f4f3d83147199c4045", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-2.8-py3-none-any.whl", hash = "sha256:2bf4db5fd525f4581366a48de53474a63b9b95b0272c67a2f531d0caa20216dd", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "c"
+        version = "1.10"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/c-1.10.tar.gz", hash = "sha256:8ef0155e958db107593f5af7524172b32c7bc02133ec32e78ca0c4b8d94007f8", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-1.10-py3-none-any.whl", hash = "sha256:ba2d23a8f3a3114db4559d2d592af787dc944508110dbf1abd43a0edbf645a4b", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+            { name = "b", version = "2.7", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'darwin'" },
+            { name = "b", version = "2.8", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a" },
+            { name = "b", marker = "sys_platform == 'darwin'", specifier = "<2.8" },
+            { name = "b", marker = "sys_platform == 'linux'", specifier = ">=2.8" },
+        ]
+        "#
         );
     });
 
@@ -1804,8 +3075,14 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -1813,8 +3090,62 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "c", marker = "sys_platform == 'linux'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:e2805dfa682d1fbc0e063562473856edfbff42707883f737be4e7c81403781cb", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:afa1008030c031fc70e50b13f8cc1117023274f05b0531a25f7d1e834ca376d2", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "c", marker = "sys_platform == 'darwin'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:ab421db53b848cf34ab7126ef3def74250a36d32ca405e9853a620c1ff89c477", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:481f0b473749804b60655300acc9b17258ce3c7665dc7c6af8aea383a2ed72ee", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "c"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/c-2.0.0.tar.gz", hash = "sha256:37a07411ed3ed6b9cb796ae510bea299cb271a38fc9c64763a2efc920625a5e5", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-2.0.0-py3-none-any.whl", hash = "sha256:e4250088158b745edd41612deab90a2070681364aa5a79ea426e59766974902d", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+            { name = "b" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", specifier = "==1.0.0" },
+            { name = "b", specifier = "==1.0.0" },
+        ]
+        "#
         );
     });
 
@@ -1883,8 +3214,16 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because a==1.0.0 depends on c<2.0.0 and b==1.0.0 depends on c>=2.0.0, we can conclude that b==1.0.0 and a{sys_platform == 'linux'}==1.0.0 are incompatible.
+          And because your project depends on a{sys_platform == 'linux'}==1.0.0 and b{sys_platform == 'darwin'}==1.0.0, we can conclude that your project's requirements are unsatisfiable.
+    "
     );
 
     Ok(())
@@ -1948,8 +3287,16 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because a==1.0.0 depends on c{sys_platform == 'linux'}<2.0.0 and b==1.0.0 depends on c{sys_platform == 'darwin'}>=2.0.0, we can conclude that a==1.0.0 and b==1.0.0 are incompatible.
+          And because your project depends on a==1.0.0 and b==1.0.0, we can conclude that your project's requirements are unsatisfiable.
+    "
     );
 
     Ok(())
@@ -2030,8 +3377,14 @@ fn fork_overlapping_markers_basic() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -2039,8 +3392,43 @@ fn fork_overlapping_markers_basic() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "python_full_version >= '3.14'",
+            "python_full_version == '3.13.*'",
+            "python_full_version < '3.13'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.2.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.2.0.tar.gz", hash = "sha256:72100f17c6cb3fb139367d2b6e9e95d6259083018244c3a7bbbac8ad786f49a5", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.2.0-py3-none-any.whl", hash = "sha256:7eb11ab3ef5d5ad9ea0a29983e094f23084e40f33bcc6d9c2cc897d17d6972d9", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "python_full_version < '3.13'", specifier = ">=1.0.0" },
+            { name = "a", marker = "python_full_version >= '3.13'", specifier = ">=1.1.0" },
+            { name = "a", marker = "python_full_version >= '3.14'", specifier = ">=1.2.0" },
+        ]
+        "#
         );
     });
 
@@ -2161,8 +3549,14 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -2170,8 +3564,116 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "cleaver"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "fork-if-not-forked", version = "3.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "fork-if-not-forked-proxy", marker = "sys_platform != 'linux'" },
+            { name = "reject-cleaver1", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "reject-cleaver1-proxy" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/cleaver-1.0.0.tar.gz", hash = "sha256:1c0f06143d2df2821a679a132eb25e829de4fb8b52f9ff6c78cbfbed7896ea26", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/cleaver-1.0.0-py3-none-any.whl", hash = "sha256:f253597b280229ca2c88c03b67f9240832cc94b10f6a9db87b439dde4ea60892", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "fork-if-not-forked"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/fork_if_not_forked-2.0.0.tar.gz", hash = "sha256:f972a3d25abdb71db3585126be721e8d98f87945584869be8df10def4815c374", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/fork_if_not_forked-2.0.0-py3-none-any.whl", hash = "sha256:2e7c62567ae2897f93bdcd9b83eddd95f0119cd7faead9f8135edda14c6ad372", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "fork-if-not-forked"
+        version = "3.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/fork_if_not_forked-3.0.0.tar.gz", hash = "sha256:b3ca82e1fd2d2e2df3b9d33ec2f87a4fcf109c4cd69324888d82047d8622cac3", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/fork_if_not_forked-3.0.0-py3-none-any.whl", hash = "sha256:0122e6ab47685617c815378db984a67edc9ed09bf432ea49b1dbf70132c2a990", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "fork-if-not-forked-proxy"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "fork-if-not-forked", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/fork_if_not_forked_proxy-1.0.0.tar.gz", hash = "sha256:7d7c0e3bad1f2bd80e769e3614c15181ebd2afb3fb7eaa272b52a0e1bc401902", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/fork_if_not_forked_proxy-1.0.0-py3-none-any.whl", hash = "sha256:f80880fedf339affe6c2257b166892d9665c7fc7e704618555fd850e10a85845", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "cleaver" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "cleaver" }]
+
+        [[package]]
+        name = "reject-cleaver1"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/reject_cleaver1-1.0.0.tar.gz", hash = "sha256:1407a50a2d354fb77d273965db766d4df07b7b24e0fd2419477b894e18cf7a67", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/reject_cleaver1-1.0.0-py3-none-any.whl", hash = "sha256:a47acf9faa8b9f68b2abbc1bdbeda4ea6c41e8873f71237a593e5c5613d13cc6", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "reject-cleaver1"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/reject_cleaver1-2.0.0.tar.gz", hash = "sha256:eba7ff63f7158bf323b9389aff54f53e5e8652d232b064a308adbefe2b2496bd", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/reject_cleaver1-2.0.0-py3-none-any.whl", hash = "sha256:a73278908dbf0cb8cc969152f92aa93e109206280f26ff5eca498c7d27294e79", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "reject-cleaver1-proxy"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "reject-cleaver1", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/reject_cleaver1_proxy-1.0.0.tar.gz", hash = "sha256:7d430cdfa7f52f6ae2d59c2b9d20817f58b8123edb427a57b44f79d77062525a", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/reject_cleaver1_proxy-1.0.0-py3-none-any.whl", hash = "sha256:64a0028a7bd633d9cef39c62c6ca42b3dba80df3ce029375a053955dc4fcc4fb", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+        "#
         );
     });
 
@@ -2288,8 +3790,14 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "
     );
 
     Ok(())
@@ -2425,8 +3933,14 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -2434,8 +3948,164 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "bar"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'linux'",
+        ]
+        dependencies = [
+            { name = "d", marker = "sys_platform != 'linux'" },
+            { name = "reject-cleaver-1", marker = "sys_platform != 'linux'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/bar-1.0.0.tar.gz", hash = "sha256:0e95a6a48a2546cb69c0d07e55c6d30522ef5ebb05fd9fc775a99433198f0a03", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/bar-1.0.0-py3-none-any.whl", hash = "sha256:5ee75c60ba5a9424ba90f725689b9e4b6b6fcc2fb0d7feec968c750f3a609dec", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "bar"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/bar-2.0.0.tar.gz", hash = "sha256:eedc005a3c6d9bd8c2677125d0724958350264ad7f010f5b141ba2c48a4e536b", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/bar-2.0.0-py3-none-any.whl", hash = "sha256:30058fca0b5a4d570025278d8f2a7c2a05360e355e8b1b1f186fce304ae63696", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "c"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/c-2.0.0.tar.gz", hash = "sha256:37a07411ed3ed6b9cb796ae510bea299cb271a38fc9c64763a2efc920625a5e5", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-2.0.0-py3-none-any.whl", hash = "sha256:e4250088158b745edd41612deab90a2070681364aa5a79ea426e59766974902d", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "c"
+        version = "3.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/c-3.0.0.tar.gz", hash = "sha256:db45dd7065945d754e2a1d93241f4f644eee060b14b8415b425bd1ef3fd65287", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-3.0.0-py3-none-any.whl", hash = "sha256:8deeaf14ff994d5f36cfc4e71db5a7a0eb8abb7e84e3d0ade0fb541cdd22e9c7", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "cleaver"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "bar", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+            { name = "foo", marker = "sys_platform == 'linux'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/cleaver-1.0.0.tar.gz", hash = "sha256:1ea6c0adfc782816720b58b0605a1c677c148a95305d26af8b10148221d73526", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/cleaver-1.0.0-py3-none-any.whl", hash = "sha256:aef90ca192c3aa6d0deccdc9b4d0ee5cf6dc3f0e9a629a3c326f6308924b6013", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "d"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "c", version = "3.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/d-1.0.0.tar.gz", hash = "sha256:d5b4cd76acac0ddb7efa56d5367f3a15f4673e50d79c047b8f77259c0e1d76d7", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/d-1.0.0-py3-none-any.whl", hash = "sha256:8cba05b5f73e2c65aa7bd8be9fb3d33f4e015ea5c9ec887085ed7298c49522a2", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "foo"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "c", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "c", version = "3.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+            { name = "reject-cleaver-1" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/foo-1.0.0.tar.gz", hash = "sha256:e9d341fd338a9fa964b6eea958e28c75128c2f13e97d7b125882985cd1b2f461", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/foo-1.0.0-py3-none-any.whl", hash = "sha256:3295279e16a7c50edca025e31f2a3244bb1ff8a73244e6cf4056af56acbedcab", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "bar", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+            { name = "bar", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "cleaver" },
+            { name = "foo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "bar" },
+            { name = "cleaver" },
+            { name = "foo" },
+        ]
+
+        [[package]]
+        name = "reject-cleaver-1"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "unrelated-dep2", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "unrelated-dep2", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/reject_cleaver_1-1.0.0.tar.gz", hash = "sha256:ba996f92d4490820583c59916b5975efa52e22a44523436beebc617de0328426", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/reject_cleaver_1-1.0.0-py3-none-any.whl", hash = "sha256:51d286d1195cf62f24f1355bd71cfd73d1f581ea13eb1a147971d95816362747", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "unrelated-dep2"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/unrelated_dep2-1.0.0.tar.gz", hash = "sha256:781e96f7046b120770fa678a14ba5aad4fb3eaf2265d0a96a6445e100e11b921", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/unrelated_dep2-1.0.0-py3-none-any.whl", hash = "sha256:01845c6a8bca5e9dafa9e5bce923cf907635bfa684524bc54106a60870beb62d", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "unrelated-dep2"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/unrelated_dep2-2.0.0.tar.gz", hash = "sha256:3172315b97d250b7b5bba5f601810c2d8517c005caf97f2f23602408cc988ee8", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/unrelated_dep2-2.0.0-py3-none-any.whl", hash = "sha256:be978e3c036d1c85a9957def2f5a2b48e0d041e664180a8ab8c5a7a439a645d7", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+        "#
         );
     });
 
@@ -2551,8 +4221,14 @@ fn preferences_dependent_forking() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -2560,8 +4236,82 @@ fn preferences_dependent_forking() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "bar"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/bar-1.0.0.tar.gz", hash = "sha256:b1eb94dbefaf3aadbea9d91c638802767c7f82daa1950db752b10eb9916fcd10", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/bar-1.0.0-py3-none-any.whl", hash = "sha256:abdad4f56ddd665e00054959ba415c5cb3ebca65792c6c14bb6b3480d812677e", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "bar"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/bar-2.0.0.tar.gz", hash = "sha256:eedc005a3c6d9bd8c2677125d0724958350264ad7f010f5b141ba2c48a4e536b", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/bar-2.0.0-py3-none-any.whl", hash = "sha256:30058fca0b5a4d570025278d8f2a7c2a05360e355e8b1b1f186fce304ae63696", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "cleaver"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "bar", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+            { name = "foo", marker = "sys_platform == 'linux'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/cleaver-1.0.0.tar.gz", hash = "sha256:1ea6c0adfc782816720b58b0605a1c677c148a95305d26af8b10148221d73526", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/cleaver-1.0.0-py3-none-any.whl", hash = "sha256:aef90ca192c3aa6d0deccdc9b4d0ee5cf6dc3f0e9a629a3c326f6308924b6013", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "foo"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/foo-1.0.0.tar.gz", hash = "sha256:14f7c4a961a74f6877aaa920d30e19d5545fc540152a3595bd4eef2b3edd9450", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/foo-1.0.0-py3-none-any.whl", hash = "sha256:05175a766bcf570f01876193b164fe18806e8e72bebd1e78145c7f3a72a91757", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "bar", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+            { name = "bar", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "cleaver" },
+            { name = "foo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "bar" },
+            { name = "cleaver" },
+            { name = "foo" },
+        ]
+        "#
         );
     });
 
@@ -2650,8 +4400,14 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -2659,8 +4415,90 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "os_name == 'darwin' and sys_platform == 'illumos'",
+            "os_name == 'linux' and sys_platform == 'illumos'",
+            "os_name != 'darwin' and os_name != 'linux' and sys_platform == 'illumos'",
+            "sys_platform == 'windows'",
+            "sys_platform != 'illumos' and sys_platform != 'windows'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "os_name == 'darwin' and sys_platform == 'illumos'",
+            "os_name == 'linux' and sys_platform == 'illumos'",
+            "os_name != 'darwin' and os_name != 'linux' and sys_platform == 'illumos'",
+        ]
+        dependencies = [
+            { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "os_name == 'darwin' and sys_platform == 'illumos'" },
+            { name = "b", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "os_name == 'linux' and sys_platform == 'illumos'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:8187593c923266cfdf37a02d0b96568841627e672484ff1b955781d800abaf4f", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:65a435b18f9744a6f898e3a70e067524cc67e5be63f87ba5da4b7d35151e5c72", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'windows'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:b5d23816137e4a895c5fdc25c482cc192a6e976397dad1826ce6969997ef2cd6", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:6a62b0a0a71b6d01beeeb72e7fa7aa30a3a457f5ee0357b40bd66a64463dc3b4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "os_name == 'darwin' and sys_platform == 'illumos'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:444108175a344c7a5c435b365246b1460e85f8243b9da7143de631c88fe649b0", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:7bfefe7c9de97c4900f6a712427046f21236b96ac6081cae7701009038ea2b72", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "os_name == 'linux' and sys_platform == 'illumos'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-2.0.0.tar.gz", hash = "sha256:55f2897a25930102575ec735a42948a3f8e62169de5960fbf79ecfc7cf72c002", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-2.0.0-py3-none-any.whl", hash = "sha256:d0d9a8026b777021642e5d3ca9fec669eb63d9742a59a3d1872edab105b7cd81", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'illumos'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'windows'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "sys_platform == 'illumos'", specifier = "<2" },
+            { name = "a", marker = "sys_platform == 'windows'", specifier = ">=2" },
+        ]
+        "#
         );
     });
 
@@ -2718,8 +4556,14 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -2727,8 +4571,22 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.10"
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.metadata]
+        requires-dist = [{ name = "a", marker = "python_full_version == '3.9'", specifier = "==1.0.0" }]
+        "#
         );
     });
 
@@ -2786,8 +4644,14 @@ fn fork_requires_python_full() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -2795,8 +4659,22 @@ fn fork_requires_python_full() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.10"
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.metadata]
+        requires-dist = [{ name = "a", marker = "python_full_version == '3.9'", specifier = "==1.0.0" }]
+        "#
         );
     });
 
@@ -2859,8 +4737,14 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -2868,8 +4752,34 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.10.1"
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:6be143220747f2153423e58696f7f279b095232c3eefef94872a5c2ebc4ef3a0", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:c7433f6de78829d826bb6d78fcf1a756ea7a70117f2ed50f071a5022e8537eb3", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", marker = "python_full_version < '3.11'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a", marker = "python_full_version == '3.10.*'", specifier = "==1.0.0" }]
+        "#
         );
     });
 
@@ -2924,8 +4834,14 @@ fn fork_requires_python() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -2933,8 +4849,22 @@ fn fork_requires_python() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.10"
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.metadata]
+        requires-dist = [{ name = "a", marker = "python_full_version == '3.9.*'", specifier = "==1.0.0" }]
+        "#
         );
     });
 
@@ -2989,8 +4919,14 @@ fn requires_python_wheels() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -2998,8 +4934,35 @@ fn requires_python_wheels() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.10"
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:6be143220747f2153423e58696f7f279b095232c3eefef94872a5c2ebc4ef3a0", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-cp310-cp310-any.whl", hash = "sha256:25db0ad8ae40e499fc55390becdb4766c8874dd76a40b94829752e97aeece895", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-1.0.0-cp311-cp311-any.whl", hash = "sha256:8aa7d0ff72e12054f2b3077be5bd8606f1e2d92ed897d0ef1d846d1092a8675f", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a", specifier = "==1.0.0" }]
+        "#
         );
     });
 
@@ -3057,8 +5020,14 @@ fn unreachable_package() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -3066,8 +5035,34 @@ fn unreachable_package() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:da50619ab411e5f58be6267424ee2d8258dadf313bf00cd5cd5ff8ada7f91588", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:8ad08308942af0580f078f36d7df92e62e924d51819f6268bf69cf0ca422c0aa", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", marker = "sys_platform == 'win32'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a", marker = "sys_platform == 'win32'", specifier = "==1.0.0" }]
+        "#
         );
     });
 
@@ -3131,8 +5126,14 @@ fn unreachable_wheels() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -3140,8 +5141,59 @@ fn unreachable_wheels() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:10eb37b5137fa0770faf91f55610eb2555ff2b6d6b0fe56c53ea9374173ea099", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-cp312-cp312-win_amd64.whl", hash = "sha256:9bcce818092ca0b3f246067a55a79b8719b0481f0bf426f7ced7f9e82c6845cb", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:444108175a344c7a5c435b365246b1460e85f8243b9da7143de631c88fe649b0", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:72edd68e9b19269d97ce4a25f7d1222f33787dc41b021cab357bf5654ca9e114", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/b-1.0.0-cp312-cp312-musllinux_1_1_armv7l.whl", hash = "sha256:ec7e01ee30a81c11b2c25ec8a9efd334ec0715ddf508bf177a66c36687294853", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "c"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:1a0dc3013c4de679411df70712ff3a4cd23b873fff1ee8ac1f7f57630bb74f86", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-1.0.0-cp312-cp312-macosx_14_0_x86_64.whl", hash = "sha256:976fb70abc38668e73095c6c32ca2c149276299d61659fe881a4e2b9a9af61b8", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", marker = "sys_platform == 'win32'" },
+            { name = "b", marker = "sys_platform == 'linux'" },
+            { name = "c", marker = "sys_platform == 'darwin'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "sys_platform == 'win32'", specifier = "==1.0.0" },
+            { name = "b", marker = "sys_platform == 'linux'", specifier = "==1.0.0" },
+            { name = "c", marker = "sys_platform == 'darwin'", specifier = "==1.0.0" },
+        ]
+        "#
         );
     });
 
@@ -3209,8 +5261,14 @@ fn marker_variants_have_different_extras() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -3218,8 +5276,68 @@ fn marker_variants_have_different_extras() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "platform_python_implementation != 'PyPy'",
+            "platform_python_implementation == 'PyPy'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "psycopg" },
+            { name = "psycopg", extra = ["binary"], marker = "platform_python_implementation != 'PyPy'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "psycopg", marker = "platform_python_implementation == 'PyPy'" },
+            { name = "psycopg", extras = ["binary"], marker = "platform_python_implementation != 'PyPy'" },
+        ]
+
+        [[package]]
+        name = "psycopg"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "tzdata", marker = "sys_platform == 'win32'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/psycopg-1.0.0.tar.gz", hash = "sha256:5c76c59091db32ee89f99f6a93c61fbf77e2b342c329ffd927776e308c0ab334", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/psycopg-1.0.0-py3-none-any.whl", hash = "sha256:88133992b8060b8f6cf34b87c388c249600f5679545405c83f82b26f7aaba1f9", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [package.optional-dependencies]
+        binary = [
+            { name = "psycopg-binary", marker = "implementation_name != 'pypy' and platform_python_implementation != 'PyPy'" },
+        ]
+
+        [[package]]
+        name = "psycopg-binary"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/psycopg_binary-1.0.0.tar.gz", hash = "sha256:ab34aa0d2cb6cdf38c46832556ece754d940a7699981914aecc31ed96edb2ebe", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/psycopg_binary-1.0.0-py3-none-any.whl", hash = "sha256:1154fe8109fbfca9717971080dbdd38d492b51b1bfb0d8916ad04ee89891b73c", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "tzdata"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/tzdata-1.0.0.tar.gz", hash = "sha256:6d0474e2abdf2c801bad4b96eecc4d0ed484832199a3eb813b70890de0737774", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/tzdata-1.0.0-py3-none-any.whl", hash = "sha256:6b2cdf2b72682be633655b994d1bf54f5ca5e6bc84225cb1cd84c4c295f3e715", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+        "#
         );
     });
 
@@ -3285,8 +5403,14 @@ fn virtual_package_extra_priorities() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -3294,8 +5418,50 @@ fn virtual_package_extra_priorities() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "b" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:a6c111dfe08c73b32b2ab664d536220dd87735ddc7f776bddfa50a80ec75983b", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:da859e3031f4dd04df738cb97ea7b09b2805af7f9005f6f89f4e2641576d93ae", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:444108175a344c7a5c435b365246b1460e85f8243b9da7143de631c88fe649b0", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:7bfefe7c9de97c4900f6a712427046f21236b96ac6081cae7701009038ea2b72", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+            { name = "b" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "python_full_version >= '3.8'", specifier = "==1" },
+            { name = "b", marker = "python_full_version >= '3.9'" },
+        ]
+        "#
         );
     });
 
@@ -3311,6 +5477,7 @@ fn virtual_package_extra_priorities() -> Result<()> {
 
     Ok(())
 }
+
 /// While both Linux and Windows are required and `win-only` has only a Windows wheel, `win-only` is also used only on Windows.
 ///
 /// ```text
@@ -3353,8 +5520,14 @@ fn requires_python_subset() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -3362,8 +5535,37 @@ fn requires_python_subset() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        required-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform == 'win32'",
+        ]
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "win-only", marker = "sys_platform == 'win32'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "win-only", marker = "sys_platform == 'win32'" }]
+
+        [[package]]
+        name = "win-only"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/win_only-1.0.0-cp312-abi3-win_amd64.whl", hash = "sha256:2e9abfa701593c82513445e9db7be9a74c36fb1686fdf438e95f45c0bc5e40ab", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+        "#
         );
     });
 
@@ -3429,8 +5631,14 @@ fn specific_architecture() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    uv_snapshot!(filters, cmd, @r###"<snapshot>
-    "###
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -3438,8 +5646,71 @@ fn specific_architecture() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"<snapshot>
-            "###
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2026-05-11T21:26:21Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "b", marker = "platform_machine == 'x86_64'" },
+            { name = "c", marker = "platform_machine == 'aarch64'" },
+            { name = "d", marker = "platform_machine == 'i686'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:721ec790d3b6e1e90e6c22cdb544ebbf3f2c85ee5f8e033844d6898c5bba5020", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:1aaf8f097e407e33211de4d23a13b391e538563a23d0e6e076bb4a40e8b79a9c", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-cp313-cp313-freebsd_13_aarch64.whl", hash = "sha256:1f8d700bacf3f9c536a3339498ae8b38b049a8e1c3d488297ebbde14da69aee5", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/b-1.0.0-cp313-cp313-freebsd_13_x86_64.whl", hash = "sha256:1a23f527ed5cf188a28a8ed81c06422c295b9c9c1874c95af81f696e4af8f129", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/b-1.0.0-cp313-cp313-macosx_10_9_x86_64.whl", hash = "sha256:d9ba5c5956164fc35647c0f0fe250f3695fcef3d812203b37167fac3f50c4f00", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/b-1.0.0-cp313-cp313-manylinux2010_x86_64.whl", hash = "sha256:ffd5b0655ac095db862072a10e99e73b174a7053c1a190c292efb62d68db9fec", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "c"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-1.0.0-cp313-cp313-freebsd_13_aarch64.whl", hash = "sha256:3e17c66b556c8a4731a66dd2af5a36ed435fd9d19a23f926daf24966f8d7c997", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/c-1.0.0-cp313-cp313-freebsd_13_x86_64.whl", hash = "sha256:8060ca87f19f1e77f1f9c37117f0a791587f98c044b00349103fea115112400e", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/c-1.0.0-cp313-cp313-macosx_10_9_arm64.whl", hash = "sha256:0bc5e89d4bd3e63d04e0ec3b6e8f3b71bf00b2006cb9dc445e4472e620553e34", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/c-1.0.0-cp313-cp313-manylinux2010_aarch64.whl", hash = "sha256:b9cf5cb287ea13e94927dc39c7c14740a120e11042ec925c0ca7caa76c7e3f17", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "d"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/d-1.0.0-cp313-cp313-freebsd_13_aarch64.whl", hash = "sha256:34aac6a3d45cd4be2467b7ab53846c4d908695ec6d4d197d0ed4a97315713b94", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/d-1.0.0-cp313-cp313-freebsd_13_x86_64.whl", hash = "sha256:0a3d9d85f9e662a3aa9bc20cc63369eadd1f1cf7ed967c2925272be0b9a122c0", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/d-1.0.0-cp313-cp313-manylinux2010_i686.whl", hash = "sha256:0bbb3aff5fabc3babad3225ab67c34eb685cdfe8fcc0dd42100df091c2a1dbb6", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#
         );
     });
 

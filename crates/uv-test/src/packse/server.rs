@@ -24,11 +24,14 @@ use super::scenario::Scenario;
 use super::wheel::{generate_sdist, generate_wheel, sha256_hex};
 use super::{scenarios_dir, vendor_dir};
 
+const PACKSE_UPLOAD_TIME: &str = "2024-03-24T00:00:00Z";
+
 /// Information about a single distribution file (metadata for the Simple API).
 struct DistInfo {
     filename: String,
     sha256: String,
     requires_python: Option<String>,
+    upload_time: &'static str,
     yanked: bool,
 }
 
@@ -193,6 +196,7 @@ fn build_server_index(scenario: &Scenario, vendor_path: &Path) -> ServerIndex {
                         filename,
                         sha256,
                         requires_python: meta.requires_python.clone(),
+                        upload_time: PACKSE_UPLOAD_TIME,
                         yanked: meta.yanked,
                     });
                 }
@@ -214,6 +218,7 @@ fn build_server_index(scenario: &Scenario, vendor_path: &Path) -> ServerIndex {
                     filename,
                     sha256,
                     requires_python: meta.requires_python.clone(),
+                    upload_time: PACKSE_UPLOAD_TIME,
                     yanked: meta.yanked,
                 });
             }
@@ -253,6 +258,7 @@ fn build_server_index(scenario: &Scenario, vendor_path: &Path) -> ServerIndex {
                 filename,
                 sha256,
                 requires_python: None,
+                upload_time: PACKSE_UPLOAD_TIME,
                 yanked: false,
             });
     }
@@ -305,6 +311,7 @@ fn build_simple_api_response(
                 "hashes": {
                     "sha256": dist.sha256,
                 },
+                "upload-time": dist.upload_time,
             });
             if let Some(rp) = &dist.requires_python {
                 file_obj["requires-python"] = json!(rp);

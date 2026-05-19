@@ -60,8 +60,16 @@ fn backtrack_to_missing_package() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
                 .arg("b")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because c was not found in the package registry and a==1.0.0 depends on c, we can conclude that a==1.0.0 cannot be used.
+          And because all versions of b depend on a==1.0.0 and you require b, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
     context.assert_not_installed("b");
@@ -102,8 +110,18 @@ fn backtrack_with_missing_package() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
                 .arg("b")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==1.0.0
+     + b==2.0.0
+    ");
 
     context.assert_installed("a", "1.0.0");
     context.assert_installed("b", "2.0.0");
@@ -128,8 +146,15 @@ fn requires_exact_version_does_not_exist() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==2.0.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of a==2.0.0 and you require a==2.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -154,8 +179,15 @@ fn requires_greater_version_does_not_exist() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>1.0.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a<=1.0.0 is available and you require a>1.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -181,8 +213,15 @@ fn requires_less_version_does_not_exist() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a<2.0.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a>=2.0.0 is available and you require a<2.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -204,8 +243,15 @@ fn requires_package_does_not_exist() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because a was not found in the package registry and you require a, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -232,8 +278,16 @@ fn transitive_requires_package_does_not_exist() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because b was not found in the package registry and a==1.0.0 depends on b, we can conclude that a==1.0.0 cannot be used.
+          And because only a==1.0.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -307,8 +361,34 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
         .arg("a")
                 .arg("b>=2.0.0,<3.0.0")
                 .arg("c")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because a==1.0.0 depends on b==1.0.0 and only the following versions of a are available:
+              a==1.0.0
+              a>=2.0.0
+          we can conclude that a<2.0.0 depends on b==1.0.0.
+          And because only a<=3.0.0 is available, we can conclude that a<2.0.0 depends on b==1.0.0. (1)
+
+          Because only the following versions of c are available:
+              c==1.0.0
+              c==2.0.0
+          and c==1.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on a<2.0.0.
+          And because c==2.0.0 depends on a>=3.0.0, we can conclude that all versions of c depend on one of:
+              a<2.0.0
+              a>=3.0.0
+
+          And because we know from (1) that a<2.0.0 depends on b==1.0.0, we can conclude that a!=3.0.0, b!=1.0.0, all versions of c are incompatible.
+          And because a==3.0.0 depends on b==3.0.0, we can conclude that all versions of c depend on one of:
+              b<=1.0.0
+              b>=3.0.0
+
+          And because you require b>=2.0.0,<3.0.0 and c, we can conclude that your requirements are unsatisfiable.
+    ");
 
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0` require incompatible versions of `b`, but all available versions of `c` exclude that range of `a` so resolution fails.
     context.assert_not_installed("a");
@@ -376,8 +456,34 @@ fn dependency_excludes_range_of_compatible_versions() {
         .arg("a")
                 .arg("b>=2.0.0,<3.0.0")
                 .arg("c")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because a==1.0.0 depends on b==1.0.0 and only the following versions of a are available:
+              a==1.0.0
+              a>=2.0.0
+          we can conclude that a<2.0.0 depends on b==1.0.0.
+          And because only a<=3.0.0 is available, we can conclude that a<2.0.0 depends on b==1.0.0. (1)
+
+          Because only the following versions of c are available:
+              c==1.0.0
+              c==2.0.0
+          and c==1.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on a<2.0.0.
+          And because c==2.0.0 depends on a>=3.0.0, we can conclude that all versions of c depend on one of:
+              a<2.0.0
+              a>=3.0.0
+
+          And because we know from (1) that a<2.0.0 depends on b==1.0.0, we can conclude that a!=3.0.0, b!=1.0.0, all versions of c are incompatible.
+          And because a==3.0.0 depends on b==3.0.0, we can conclude that all versions of c depend on one of:
+              b<=1.0.0
+              b>=3.0.0
+
+          And because you require b>=2.0.0,<3.0.0 and c, we can conclude that your requirements are unsatisfiable.
+    ");
 
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0` require incompatible versions of `b`, but all available versions of `c` exclude that range of `a` so resolution fails.
     context.assert_not_installed("a");
@@ -420,8 +526,30 @@ fn excluded_only_compatible_version() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a!=2.0.0")
                 .arg("b>=2.0.0,<3.0.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only the following versions of a are available:
+              a==1.0.0
+              a==2.0.0
+              a==3.0.0
+          and a==1.0.0 depends on b==1.0.0, we can conclude that a<2.0.0 depends on b==1.0.0.
+          And because a==3.0.0 depends on b==3.0.0, we can conclude that all of:
+              a<2.0.0
+              a>2.0.0
+          depend on one of:
+              b==1.0.0
+              b==3.0.0
+
+          And because you require one of:
+              a<2.0.0
+              a>2.0.0
+          and b>=2.0.0,<3.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
 
     // Only `a==1.2.0` is available since `a==1.0.0` and `a==3.0.0` require incompatible versions of `b`. The user has excluded that version of `a` so resolution fails.
     context.assert_not_installed("a");
@@ -447,8 +575,18 @@ fn excluded_only_version() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a!=1.0.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.0.0 is available and you require one of:
+              a<1.0.0
+              a>1.0.0
+          we can conclude that your requirements are unsatisfiable.
+    ");
 
     // Only `a==1.0.0` is available but the user excluded it.
     context.assert_not_installed("a");
@@ -497,8 +635,19 @@ fn all_extras_required() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a[all]")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + a==1.0.0
+     + b==1.0.0
+     + c==1.0.0
+    ");
 
     context.assert_installed("a", "1.0.0");
     context.assert_installed("b", "1.0.0");
@@ -534,8 +683,18 @@ fn extra_does_not_exist_backtrack() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a[extra]")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==3.0.0
+    warning: The package `a==3.0.0` does not have an extra named `extra`
+    ");
 
     // The resolver should not backtrack to `a==1.0.0` because missing extras are allowed during resolution. `b` should not be installed.
     context.assert_installed("a", "3.0.0");
@@ -571,8 +730,18 @@ fn extra_incompatible_with_extra_not_requested() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a[extra_c]")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==1.0.0
+     + b==2.0.0
+    ");
 
     // Because the user does not request both extras, it is okay that one is incompatible with the other.
     context.assert_installed("a", "1.0.0");
@@ -609,8 +778,17 @@ fn extra_incompatible_with_extra() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a[extra_b,extra_c]")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a[extra-b]==1.0.0 is available and a[extra-b]==1.0.0 depends on b==1.0.0, we can conclude that all versions of a[extra-b] depend on b==1.0.0.
+          And because a[extra-c]==1.0.0 depends on b==2.0.0 and only a[extra-c]==1.0.0 is available, we can conclude that all versions of a[extra-b] and all versions of a[extra-c] are incompatible.
+          And because you require a[extra-b] and a[extra-c], we can conclude that your requirements are unsatisfiable.
+    ");
 
     // Because both `extra_b` and `extra_c` are requested and they require incompatible versions of `b`, `a` cannot be installed.
     context.assert_not_installed("a");
@@ -645,8 +823,16 @@ fn extra_incompatible_with_root() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a[extra]")
                 .arg("b==2.0.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a[extra]==1.0.0 is available and a[extra]==1.0.0 depends on b==1.0.0, we can conclude that all versions of a[extra] depend on b==1.0.0.
+          And because you require a[extra] and b==2.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
 
     // Because the user requested `b==2.0.0` but the requested extra requires `b==1.0.0`, the dependencies cannot be satisfied.
     context.assert_not_installed("a");
@@ -678,8 +864,18 @@ fn extra_required() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a[extra]")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==1.0.0
+     + b==1.0.0
+    ");
 
     context.assert_installed("a", "1.0.0");
     context.assert_installed("b", "1.0.0");
@@ -704,8 +900,18 @@ fn missing_extra() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a[extra]")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    warning: The package `a==1.0.0` does not have an extra named `extra`
+    ");
 
     // Missing extras are ignored during resolution.
     context.assert_installed("a", "1.0.0");
@@ -742,8 +948,19 @@ fn multiple_extras_required() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a[extra_b,extra_c]")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + a==1.0.0
+     + b==1.0.0
+     + c==1.0.0
+    ");
 
     context.assert_installed("a", "1.0.0");
     context.assert_installed("b", "1.0.0");
@@ -773,8 +990,15 @@ fn direct_incompatible_versions() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.0.0")
                 .arg("a==2.0.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because you require a==1.0.0 and a==2.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
     context.assert_not_installed("a");
@@ -803,8 +1027,16 @@ fn transitive_incompatible_versions() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.0.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because a==1.0.0 depends on b==2.0.0 and b==1.0.0, we can conclude that a==1.0.0 cannot be used.
+          And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -837,8 +1069,16 @@ fn transitive_incompatible_with_root_version() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
                 .arg("b==1.0.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 depends on b==2.0.0, we can conclude that all versions of a depend on b==2.0.0.
+          And because you require a and b==1.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
     context.assert_not_installed("b");
@@ -876,8 +1116,17 @@ fn transitive_incompatible_with_transitive() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
                 .arg("b")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 depends on c==1.0.0, we can conclude that all versions of a depend on c==1.0.0.
+          And because b==1.0.0 depends on c==2.0.0 and only b==1.0.0 is available, we can conclude that all versions of a and all versions of b are incompatible.
+          And because you require a and b, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
     context.assert_not_installed("b");
@@ -904,8 +1153,17 @@ fn local_greater_than_or_equal() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=1.2.3")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.2.3+foo
+    ");
 
     // The version '1.2.3+foo' satisfies the constraint '>=1.2.3'.
     context.assert_installed("a", "1.2.3+foo");
@@ -930,8 +1188,15 @@ fn local_greater_than() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>1.2.3")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.2.3+foo is available and you require a>1.2.3, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -957,8 +1222,17 @@ fn local_less_than_or_equal() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a<=1.2.3")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.2.3+foo
+    ");
 
     // The version '1.2.3+foo' satisfies the constraint '<=1.2.3'.
     context.assert_installed("a", "1.2.3+foo");
@@ -983,8 +1257,15 @@ fn local_less_than() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a<1.2.3")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.2.3+foo is available and you require a<1.2.3, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -1012,8 +1293,17 @@ fn local_not_latest() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=1")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.2.1+foo
+    ");
 
     context.assert_installed("a", "1.2.1+foo");
 }
@@ -1039,8 +1329,17 @@ fn local_not_used_with_sdist() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.2.3")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.2.3+foo
+    ");
 
     // The version '1.2.3' with an sdist satisfies the constraint '==1.2.3'.
     context.assert_installed("a", "1.2.3+foo");
@@ -1067,8 +1366,17 @@ fn local_simple() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.2.3")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.2.3+foo
+    ");
 
     // The version '1.2.3+foo' satisfies the constraint '==1.2.3'.
     context.assert_installed("a", "1.2.3+foo");
@@ -1106,8 +1414,18 @@ fn local_transitive_backtrack() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
                 .arg("b==2.0.0+foo")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==1.0.0
+     + b==2.0.0+foo
+    ");
 
     // Backtracking to '1.0.0' gives us compatible local versions of b.
     context.assert_installed("a", "1.0.0");
@@ -1141,8 +1459,16 @@ fn local_transitive_conflicting() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
                 .arg("b==2.0.0+foo")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 depends on b==2.0.0+bar, we can conclude that all versions of a depend on b==2.0.0+bar.
+          And because you require a and b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
     context.assert_not_installed("b");
@@ -1175,8 +1501,18 @@ fn local_transitive_confounding() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==1.0.0
+     + b==2.0.0+foo
+    ");
 
     // The version '2.0.0+foo' satisfies the constraint '==2.0.0'.
     context.assert_installed("a", "1.0.0");
@@ -1211,8 +1547,18 @@ fn local_transitive_greater_than_or_equal() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
                 .arg("b==2.0.0+foo")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==1.0.0
+     + b==2.0.0+foo
+    ");
 
     // The version '2.0.0+foo' satisfies both >=2.0.0 and ==2.0.0+foo.
     context.assert_installed("a", "1.0.0");
@@ -1246,8 +1592,16 @@ fn local_transitive_greater_than() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
                 .arg("b==2.0.0+foo")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 depends on b>2.0.0, we can conclude that all versions of a depend on b>2.0.0.
+          And because you require a and b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
     context.assert_not_installed("b");
@@ -1281,8 +1635,18 @@ fn local_transitive_less_than_or_equal() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
                 .arg("b==2.0.0+foo")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==1.0.0
+     + b==2.0.0+foo
+    ");
 
     // The version '2.0.0+foo' satisfies both <=2.0.0 and ==2.0.0+foo.
     context.assert_installed("a", "1.0.0");
@@ -1316,8 +1680,16 @@ fn local_transitive_less_than() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
                 .arg("b==2.0.0+foo")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 depends on b<2.0.0, we can conclude that all versions of a depend on b<2.0.0.
+          And because you require a and b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
     context.assert_not_installed("b");
@@ -1351,8 +1723,18 @@ fn local_transitive() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
                 .arg("b==2.0.0+foo")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==1.0.0
+     + b==2.0.0+foo
+    ");
 
     // The version '2.0.0+foo' satisfies both ==2.0.0 and ==2.0.0+foo.
     context.assert_installed("a", "1.0.0");
@@ -1380,8 +1762,17 @@ fn local_used_without_sdist() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.2.3")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.2.3+foo
+    ");
 
     // The version '1.2.3+foo' satisfies the constraint '==1.2.3'.
     context.assert_installed("a", "1.2.3+foo");
@@ -1407,8 +1798,17 @@ fn post_equal_available() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.2.3.post0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.2.3.post0
+    ");
 
     // The version '1.2.3.post0' satisfies the constraint '==1.2.3.post0'.
     context.assert_installed("a", "1.2.3.post0");
@@ -1434,8 +1834,15 @@ fn post_equal_not_available() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.2.3.post0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of a==1.2.3.post0 and you require a==1.2.3.post0, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -1461,8 +1868,17 @@ fn post_greater_than_or_equal_post() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=1.2.3.post0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.2.3.post1
+    ");
 
     // The version '1.2.3.post1' satisfies the constraint '>=1.2.3.post0'.
     context.assert_installed("a", "1.2.3.post1");
@@ -1487,8 +1903,17 @@ fn post_greater_than_or_equal() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=1.2.3")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.2.3.post1
+    ");
 
     // The version '1.2.3.post1' satisfies the constraint '>=1.2.3'.
     context.assert_installed("a", "1.2.3.post1");
@@ -1515,8 +1940,15 @@ fn post_greater_than_post_not_available() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>1.2.3.post2")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a<=1.2.3.post1 is available and you require a>=1.2.3.post3, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -1541,8 +1973,17 @@ fn post_greater_than_post() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>1.2.3.post0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.2.3.post1
+    ");
 
     // The version '1.2.3.post1' satisfies the constraint '>1.2.3.post0'.
     context.assert_installed("a", "1.2.3.post1");
@@ -1567,8 +2008,15 @@ fn post_greater_than() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>1.2.3")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.2.3.post1 is available and you require a>1.2.3, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -1592,8 +2040,15 @@ fn post_less_than_or_equal() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a<=1.2.3")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.2.3.post1 is available and you require a<=1.2.3, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -1617,8 +2072,15 @@ fn post_less_than() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a<1.2.3")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.2.3.post1 is available and you require a<1.2.3, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -1643,8 +2105,15 @@ fn post_local_greater_than_post() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>1.2.3.post1")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a<=1.2.3.post1+local is available and you require a>=1.2.3.post2, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -1669,8 +2138,15 @@ fn post_local_greater_than() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>1.2.3")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a<=1.2.3.post1+local is available and you require a>1.2.3, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -1694,8 +2170,15 @@ fn post_simple() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.2.3")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of a==1.2.3 and you require a==1.2.3, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -1723,8 +2206,17 @@ fn package_multiple_prereleases_kinds() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=1.0.0a1")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0rc1
+    ");
 
     // Release candidates should be the highest precedence prerelease kind.
     context.assert_installed("a", "1.0.0rc1");
@@ -1753,8 +2245,17 @@ fn package_multiple_prereleases_numbers() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=1.0.0a1")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0a3
+    ");
 
     // The latest alpha version should be selected.
     context.assert_installed("a", "1.0.0a3");
@@ -1781,8 +2282,17 @@ fn package_only_prereleases_boundary() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a<0.2.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==0.1.0a1
+    ");
 
     // Since there are only prerelease versions of `a` available, a prerelease is allowed. Since the user did not explicitly request a pre-release, pre-releases at the boundary should not be selected.
     context.assert_installed("a", "0.1.0a1");
@@ -1808,8 +2318,17 @@ fn package_only_prereleases_in_range() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>0.1.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a<=0.1.0 is available and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
+
+          hint: Pre-releases are available for `a` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    ");
 
     // Since there are stable versions of `a` available, prerelease versions should not be selected without explicit opt-in.
     context.assert_not_installed("a");
@@ -1834,8 +2353,17 @@ fn package_only_prereleases() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0a1
+    ");
 
     // Since there are only prerelease versions of `a` available, it should be installed even though the user did not include a prerelease specifier.
     context.assert_installed("a", "1.0.0a1");
@@ -1866,8 +2394,17 @@ fn package_prerelease_specified_mixed_available() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=0.1.0a1")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0a1
+    ");
 
     // Since the user provided a prerelease specifier, the latest prerelease version should be selected.
     context.assert_installed("a", "1.0.0a1");
@@ -1897,8 +2434,17 @@ fn package_prerelease_specified_only_final_available() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=0.1.0a1")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==0.3.0
+    ");
 
     // The latest stable version should be selected.
     context.assert_installed("a", "0.3.0");
@@ -1929,8 +2475,17 @@ fn package_prerelease_specified_only_prerelease_available() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=0.1.0a1")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==0.3.0a1
+    ");
 
     // The latest prerelease version should be selected.
     context.assert_installed("a", "0.3.0a1");
@@ -1958,8 +2513,17 @@ fn package_prereleases_boundary() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--prerelease=allow")
         .arg("a<0.2.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==0.1.0
+    ");
 
     // Since the user did not use a pre-release specifier, pre-releases at the boundary should not be selected even though pre-releases are allowed.
     context.assert_installed("a", "0.1.0");
@@ -1987,8 +2551,17 @@ fn package_prereleases_global_boundary() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--prerelease=allow")
         .arg("a<0.2.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==0.1.0
+    ");
 
     // Since the user did not use a pre-release specifier, pre-releases at the boundary should not be selected even though pre-releases are allowed.
     context.assert_installed("a", "0.1.0");
@@ -2019,8 +2592,17 @@ fn package_prereleases_specifier_boundary() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a<0.2.0a2")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==0.2.0a1
+    ");
 
     // Since the user used a pre-release specifier, pre-releases at the boundary should be selected.
     context.assert_installed("a", "0.2.0a1");
@@ -2049,8 +2631,17 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--prerelease=allow")
         .arg("a>0.1.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0a1
+    ");
 
     context.assert_installed("a", "1.0.0a1");
 }
@@ -2076,8 +2667,17 @@ fn requires_package_prerelease_and_final_any() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==0.1.0
+    ");
 
     // Since the user did not provide a prerelease specifier, the older stable version should be selected.
     context.assert_installed("a", "0.1.0");
@@ -2112,8 +2712,18 @@ fn transitive_package_only_prereleases_in_range_opt_in() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
                 .arg("b>0.0.0a1")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==0.1.0
+     + b==1.0.0a1
+    ");
 
     // Since the user included a dependency on `b` with a prerelease specifier, a prerelease version can be selected.
     context.assert_installed("a", "0.1.0");
@@ -2144,8 +2754,18 @@ fn transitive_package_only_prereleases_in_range() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only b<=0.1 is available and a==0.1.0 depends on b>0.1, we can conclude that a==0.1.0 cannot be used.
+          And because only a==0.1.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
+
+          hint: Pre-releases are available for `b` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    ");
 
     // Since there are stable versions of `b` available, the prerelease version should not be selected without explicit opt-in. The available version is excluded by the range requested by the user.
     context.assert_not_installed("a");
@@ -2174,8 +2794,18 @@ fn transitive_package_only_prereleases() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==0.1.0
+     + b==1.0.0a1
+    ");
 
     // Since there are only prerelease versions of `b` available, it should be selected even though the user did not opt-in to prereleases.
     context.assert_installed("a", "0.1.0");
@@ -2258,8 +2888,31 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
                 .arg("b")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only the following versions of c are available:
+              c<=1.0.0
+              c>=2.0.0a5,<=2.0.0a7
+              c==2.0.0b1
+              c>=2.0.0b5
+          and a==1.0.0 depends on one of:
+              c>1.0.0,<2.0.0a5
+              c>2.0.0a7,<2.0.0b1
+              c>2.0.0b1,<2.0.0b5
+          we can conclude that a==1.0.0 cannot be used.
+          And because only a==1.0.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
+
+          hint: `c` was requested with a pre-release marker (e.g., all of:
+              c>1.0.0,<2.0.0a5
+              c>2.0.0a7,<2.0.0b1
+              c>2.0.0b1,<2.0.0b5
+          ), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    ");
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
     context.assert_not_installed("a");
@@ -2342,8 +2995,20 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
                 .arg("b")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 depends on c>=2.0.0b1, we can conclude that all versions of a depend on c>=2.0.0b1.
+          And because only c<2.0.0b1 is available, we can conclude that all versions of a depend on c>3.0.0.
+          And because b==1.0.0 depends on c and only b==1.0.0 is available, we can conclude that all versions of a and all versions of b are incompatible.
+          And because you require a and b, we can conclude that your requirements are unsatisfiable.
+
+          hint: `c` was requested with a pre-release marker (e.g., c>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    ");
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
     context.assert_not_installed("a");
@@ -2387,8 +3052,19 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
         .arg("a")
                 .arg("b")
                 .arg("c>=0.0.0a1")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + a==1.0.0
+     + b==1.0.0
+     + c==2.0.0b1
+    ");
 
     // Since the user explicitly opted-in to a prerelease for `c`, it can be installed.
     context.assert_installed("a", "1.0.0");
@@ -2428,8 +3104,18 @@ fn transitive_prerelease_and_stable_dependency() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
                 .arg("b")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of c==2.0.0b1 and a==1.0.0 depends on c==2.0.0b1, we can conclude that a==1.0.0 cannot be used.
+          And because only a==1.0.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
+
+          hint: `c` was requested with a pre-release marker (e.g., c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    ");
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
     context.assert_not_installed("a");
@@ -2464,8 +3150,17 @@ fn python_greater_than_current_backtrack() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
 
     context.assert_installed("a", "1.0.0");
 }
@@ -2497,8 +3192,27 @@ fn python_greater_than_current_excluded() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=2.0.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and a==2.0.0 depends on Python>=3.10, we can conclude that a==2.0.0 cannot be used.
+          And because only the following versions of a are available:
+              a<=2.0.0
+              a==3.0.0
+              a==4.0.0
+          we can conclude that a>=2.0.0,<3.0.0 cannot be used. (1)
+
+          Because the current Python version (3.9.[X]) does not satisfy Python>=3.11 and a==3.0.0 depends on Python>=3.11, we can conclude that a==3.0.0 cannot be used.
+          And because we know from (1) that a>=2.0.0,<3.0.0 cannot be used, we can conclude that a>=2.0.0,<4.0.0 cannot be used. (2)
+
+          Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and a==4.0.0 depends on Python>=3.12, we can conclude that a==4.0.0 cannot be used.
+          And because we know from (2) that a>=2.0.0,<4.0.0 cannot be used, we can conclude that a>=2.0.0 cannot be used.
+          And because you require a>=2.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -2545,8 +3259,15 @@ fn python_greater_than_current_many() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.0.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of a==1.0.0 and you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -2572,8 +3293,16 @@ fn python_greater_than_current_patch() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.0.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the current Python version (3.13) does not satisfy Python>=3.13.2 and a==1.0.0 depends on Python>=3.13.2, we can conclude that a==1.0.0 cannot be used.
+          And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -2598,8 +3327,16 @@ fn python_greater_than_current() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.0.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and a==1.0.0 depends on Python>=3.10, we can conclude that a==1.0.0 cannot be used.
+          And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -2624,8 +3361,17 @@ fn python_less_than_current() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.0.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
 
     // We ignore the upper bound on Python requirements
 }
@@ -2650,8 +3396,16 @@ fn python_version_does_not_exist() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.0.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.30 and a==1.0.0 depends on Python>=3.30, we can conclude that a==1.0.0 cannot be used.
+          And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
 
     context.assert_not_installed("a");
 }
@@ -2677,8 +3431,17 @@ fn no_binary() {
         .arg("--no-binary")
         .arg("a")
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
 
     // The source distribution should be used for install
 }
@@ -2704,8 +3467,17 @@ fn no_build() {
         .arg("--only-binary")
         .arg("a")
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
 
     // The wheel should be used for install
 }
@@ -2730,8 +3502,18 @@ fn no_sdist_no_wheels_with_matching_abi() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--python-platform=x86_64-manylinux2014")
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 has no wheels with a matching Python ABI tag (e.g., `cp312`), we can conclude that all versions of a cannot be used.
+          And because you require a, we can conclude that your requirements are unsatisfiable.
+
+          hint: You require CPython 3.12 (`cp312`), but we only found wheels for `a` (v1.0.0) with the following Python ABI tag: `graalpy240_310_native`
+    ");
 
     context.assert_not_installed("a");
 }
@@ -2756,8 +3538,18 @@ fn no_sdist_no_wheels_with_matching_platform() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--python-platform=x86_64-manylinux2014")
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`), we can conclude that all versions of a cannot be used.
+          And because you require a, we can conclude that your requirements are unsatisfiable.
+
+          hint: Wheels are available for `a` (v1.0.0) on the following platform: `macosx_10_0_ppc64`
+    ");
 
     context.assert_not_installed("a");
 }
@@ -2782,8 +3574,18 @@ fn no_sdist_no_wheels_with_matching_python() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--python-platform=x86_64-manylinux2014")
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 has no wheels with a matching Python implementation tag (e.g., `cp312`), we can conclude that all versions of a cannot be used.
+          And because you require a, we can conclude that your requirements are unsatisfiable.
+
+          hint: You require CPython 3.12 (`cp312`), but we only found wheels for `a` (v1.0.0) with the following Python implementation tag: `graalpy310`
+    ");
 
     context.assert_not_installed("a");
 }
@@ -2809,8 +3611,18 @@ fn no_wheels_no_build() {
         .arg("--only-binary")
         .arg("a")
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 has no usable wheels, we can conclude that all versions of a cannot be used.
+          And because you require a, we can conclude that your requirements are unsatisfiable.
+
+          hint: Wheels are required for `a` because building from source is disabled for `a` (i.e., with `--no-build-package a`)
+    ");
 
     context.assert_not_installed("a");
 }
@@ -2834,8 +3646,17 @@ fn no_wheels_with_matching_platform() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
 }
 
 /// No wheels are available, only source distributions.
@@ -2857,8 +3678,17 @@ fn no_wheels() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
 }
 
 /// No source distributions are available, only wheels but the user has disabled using pre-built binaries.
@@ -2882,8 +3712,18 @@ fn only_wheels_no_binary() {
         .arg("--no-binary")
         .arg("a")
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 has no source distribution, we can conclude that all versions of a cannot be used.
+          And because you require a, we can conclude that your requirements are unsatisfiable.
+
+          hint: A source distribution is required for `a` because using pre-built wheels is disabled for `a` (i.e., with `--no-binary-package a`)
+    ");
 
     context.assert_not_installed("a");
 }
@@ -2907,8 +3747,17 @@ fn only_wheels() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
 }
 
 /// A wheel for a specific platform is available alongside the default.
@@ -2930,8 +3779,17 @@ fn specific_tag_and_default() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
 }
 
 /// The user requires a version of package `a` which only matches yanked versions.
@@ -2954,8 +3812,19 @@ fn package_only_yanked_in_range() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>0.1.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only the following versions of a are available:
+              a<=0.1.0
+              a==1.0.0
+          and a==1.0.0 was yanked, we can conclude that a>0.1.0 cannot be used.
+          And because you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
+    ");
 
     // Since there are other versions of `a` available, yanked versions should not be selected without explicit opt-in.
     context.assert_not_installed("a");
@@ -2980,8 +3849,16 @@ fn package_only_yanked() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 was yanked, we can conclude that all versions of a cannot be used.
+          And because you require a, we can conclude that your requirements are unsatisfiable.
+    ");
 
     // Yanked versions should not be installed, even if they are the only one available.
     context.assert_not_installed("a");
@@ -3010,8 +3887,17 @@ fn package_yanked_specified_mixed_available() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=0.1.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==0.3.0
+    ");
 
     // The latest unyanked version should be selected.
     context.assert_installed("a", "0.3.0");
@@ -3037,8 +3923,17 @@ fn requires_package_yanked_and_unyanked_any() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==0.1.0
+    ");
 
     // The unyanked version should be selected.
     context.assert_installed("a", "0.1.0");
@@ -3071,8 +3966,19 @@ fn transitive_package_only_yanked_in_range_opt_in() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
                 .arg("b==1.0.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==0.1.0
+     + b==1.0.0
+    warning: `b==1.0.0` is yanked
+    ");
 
     // Since the user included a dependency on `b` with an exact specifier, the yanked version can be selected.
     context.assert_installed("a", "0.1.0");
@@ -3103,8 +4009,20 @@ fn transitive_package_only_yanked_in_range() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only the following versions of b are available:
+              b<=0.1
+              b==1.0.0
+          and b==1.0.0 was yanked, we can conclude that b>0.1 cannot be used.
+          And because a==0.1.0 depends on b>0.1, we can conclude that a==0.1.0 cannot be used.
+          And because only a==0.1.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
+    ");
 
     // Yanked versions should not be installed, even if they are the only valid version in a range.
     context.assert_not_installed("a");
@@ -3133,8 +4051,17 @@ fn transitive_package_only_yanked() {
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only b==1.0.0 is available and b==1.0.0 was yanked, we can conclude that all versions of b cannot be used.
+          And because a==0.1.0 depends on b, we can conclude that a==0.1.0 cannot be used.
+          And because only a==0.1.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
+    ");
 
     // Yanked versions should not be installed, even if they are the only one available.
     context.assert_not_installed("a");
@@ -3174,8 +4101,20 @@ fn transitive_yanked_and_unyanked_dependency_opt_in() {
         .arg("a")
                 .arg("b")
                 .arg("c==2.0.0")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + a==1.0.0
+     + b==1.0.0
+     + c==2.0.0
+    warning: `c==2.0.0` is yanked
+    ");
 
     // Since the user explicitly selected the yanked version of `c`, it can be installed.
     context.assert_installed("a", "1.0.0");
@@ -3214,8 +4153,16 @@ fn transitive_yanked_and_unyanked_dependency() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
                 .arg("b")
-        , @r#"<snapshot>
-    "#);
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because c==2.0.0 was yanked and a==1.0.0 depends on c==2.0.0, we can conclude that a==1.0.0 cannot be used.
+          And because only a==1.0.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
+    ");
 
     // Since the user did not explicitly select the yanked version, it cannot be used.
     context.assert_not_installed("a");
