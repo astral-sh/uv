@@ -190,6 +190,34 @@ fn python_list_implicit_ndjson_source_preserves_non_cpython_downloads() {
 }
 
 #[tokio::test]
+async fn python_list_only_installed_skips_implicit_download_metadata() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_collapsed_whitespace();
+    let server = MockServer::start().await;
+
+    uv_snapshot!(context.filters(), context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .env(
+            EnvVars::UV_INTERNAL__TEST_PYTHON_DOWNLOADS_JSON_URL,
+            format!("{}/versions.ndjson", server.uri()),
+        )
+        .arg("--only-installed"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    let Some(requests) = server.received_requests().await else {
+        anyhow::bail!("failed to read received requests");
+    };
+    assert_eq!(requests.len(), 0);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn python_list_remote_python_downloads_ndjson_falls_back_to_embedded() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
         .with_collapsed_whitespace()

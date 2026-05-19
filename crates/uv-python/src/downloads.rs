@@ -16,7 +16,9 @@ use reqwest_retry::RetryError;
 use reqwest_retry::policies::ExponentialBackoff;
 use serde::Deserialize;
 use thiserror::Error;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufWriter, ReadBuf};
+use tokio::io::{
+    AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader, BufWriter, ReadBuf,
+};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::either::Either;
 use tracing::{debug, instrument};
@@ -1091,6 +1093,47 @@ fn resolve_download_list_source(
     })
 }
 
+impl DownloadListSource<'_> {
+    fn merge_downloads(
+        &self,
+        downloads: Vec<ManagedPythonDownload>,
+        filter: Option<&PythonDownloadRequest>,
+        limit: Option<usize>,
+    ) -> Result<Vec<ManagedPythonDownload>, Error> {
+        if self.implicit {
+            merge_with_embedded_non_cpython(downloads, filter, limit)
+        } else {
+            Ok(filter_downloads(downloads, filter, limit))
+        }
+    }
+
+    fn find_in_implicit_embedded_non_cpython(
+        &self,
+        request: &PythonDownloadRequest,
+    ) -> Result<Option<ManagedPythonDownload>, Error> {
+        if self.implicit {
+            find_in_embedded_non_cpython(request)
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn on_implicit_ndjson_parse_error<T>(
+        &self,
+        err: Error,
+        fallback: impl FnOnce() -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        if self.implicit {
+            debug!(
+                "Falling back to embedded Python downloads metadata after NDJSON parse failure: {err}"
+            );
+            fallback()
+        } else {
+            Err(err)
+        }
+    }
+}
+
 /// A wrapper type to display a `ManagedPythonDownload` with its build information.
 pub struct ManagedPythonDownloadWithBuild<'a>(&'a ManagedPythonDownload);
 
@@ -1158,7 +1201,7 @@ impl ManagedPythonDownloadList {
                 match parse_ndjson_bytes(&path.to_string_lossy(), &fs_err::read(path.as_ref())?) {
                     Ok(downloads) => {
                         if source.implicit {
-                            merge_with_embedded_non_cpython(downloads)?
+                            merge_with_embedded_non_cpython(downloads, None, None)?
                         } else {
                             downloads
                         }
@@ -1191,7 +1234,7 @@ impl ManagedPythonDownloadList {
                     Ok(buf) => match parse_ndjson_bytes(&url.to_string(), &buf) {
                         Ok(downloads) => {
                             if source.implicit {
-                                merge_with_embedded_non_cpython(downloads)?
+                                merge_with_embedded_non_cpython(downloads, None, None)?
                             } else {
                                 downloads
                             }
@@ -1225,6 +1268,100 @@ impl ManagedPythonDownloadList {
         };
 
         Ok(Self { downloads })
+    }
+
+    /// Load available Python distributions with optional filtering and limiting.
+    ///
+    /// For NDJSON sources, this parses matching downloads eagerly and stops once `limit` matches
+    /// have been collected.
+    pub async fn new_filtered(
+        client: &BaseClient,
+        python_downloads_json_url: Option<&str>,
+        filter: Option<&PythonDownloadRequest>,
+        limit: Option<usize>,
+    ) -> Result<Self, Error> {
+        let source = resolve_download_list_source(python_downloads_json_url)?;
+
+        let downloads = match (&source.location, source.format) {
+            (DownloadListLocation::Path(path), DownloadListFormat::Ndjson) => {
+                let downloads = parse_ndjson_bytes_filtered(
+                    &path.to_string_lossy(),
+                    &fs_err::read(path.as_ref())?,
+                    |download| {
+                        filter
+                            .map(|request| request.satisfied_by_download(download))
+                            .unwrap_or(true)
+                    },
+                    limit,
+                )?;
+                source.merge_downloads(downloads, filter, limit)?
+            }
+            (DownloadListLocation::Http(url), DownloadListFormat::Ndjson) => {
+                let source_url = url.to_string();
+                match fetch_ndjson_collect(
+                    client,
+                    url,
+                    |download| {
+                        filter
+                            .map(|request| request.satisfied_by_download(download))
+                            .unwrap_or(true)
+                    },
+                    limit,
+                )
+                .await
+                {
+                    Ok(downloads) => source.merge_downloads(downloads, filter, limit)?,
+                    Err(err @ Error::InvalidPythonDownloadsNdjsonLine(..)) => source
+                        .on_implicit_ndjson_parse_error(err, || {
+                            Ok(filter_downloads(embedded_downloads()?, filter, limit))
+                        })?,
+                    Err(err) => {
+                        if source.implicit {
+                            debug!(
+                                "Falling back to embedded Python downloads metadata after NDJSON fetch failure: {err}"
+                            );
+                            filter_downloads(embedded_downloads()?, filter, limit)
+                        } else {
+                            return Err(Error::FetchingPythonDownloadsNdjsonError(
+                                source_url,
+                                Box::new(err),
+                            ));
+                        }
+                    }
+                }
+            }
+            _ => filter_downloads(
+                Self::new(client, python_downloads_json_url)
+                    .await?
+                    .downloads,
+                filter,
+                limit,
+            ),
+        };
+
+        Ok(Self { downloads })
+    }
+
+    /// Find a single download matching the request, using early-exit parsing for NDJSON sources.
+    ///
+    /// NDJSON metadata is ordered newest-first, so the first matching download is the preferred
+    /// download for the request.
+    pub async fn find_streaming(
+        client: &BaseClient,
+        python_downloads_json_url: Option<&str>,
+        request: &PythonDownloadRequest,
+    ) -> Result<Option<ManagedPythonDownload>, Error> {
+        let source = resolve_download_list_source(python_downloads_json_url)?;
+
+        if let Some(download) = find_matching_download(client, &source, request).await? {
+            return Ok(Some(download));
+        }
+
+        if request.allows_prereleases() {
+            return Ok(None);
+        }
+
+        find_matching_download(client, &source, &request.clone().with_prereleases(true)).await
     }
 
     /// Load available Python distributions from the compiled-in list only.
@@ -1261,6 +1398,8 @@ fn embedded_non_cpython_downloads() -> Result<Vec<ManagedPythonDownload>, Error>
 
 fn merge_with_embedded_non_cpython(
     downloads: Vec<ManagedPythonDownload>,
+    filter: Option<&PythonDownloadRequest>,
+    limit: Option<usize>,
 ) -> Result<Vec<ManagedPythonDownload>, Error> {
     let mut merged = BTreeMap::new();
 
@@ -1268,13 +1407,134 @@ fn merge_with_embedded_non_cpython(
         merged.entry(download.key().clone()).or_insert(download);
     }
 
-    for download in embedded_non_cpython_downloads()? {
+    for download in filter_downloads(embedded_non_cpython_downloads()?, filter, None) {
         merged.entry(download.key().clone()).or_insert(download);
     }
 
     let mut downloads = merged.into_values().collect::<Vec<_>>();
     downloads.sort_by(|a, b| Ord::cmp(&b.key, &a.key));
+
+    if let Some(limit) = limit {
+        downloads.truncate(limit);
+    }
+
     Ok(downloads)
+}
+
+fn find_in_embedded_non_cpython(
+    request: &PythonDownloadRequest,
+) -> Result<Option<ManagedPythonDownload>, Error> {
+    Ok(embedded_non_cpython_downloads()?
+        .into_iter()
+        .find(|download| request.satisfied_by_download(download)))
+}
+
+fn find_in_embedded_downloads(
+    request: &PythonDownloadRequest,
+) -> Result<Option<ManagedPythonDownload>, Error> {
+    Ok(embedded_downloads()?
+        .into_iter()
+        .find(|download| request.satisfied_by_download(download)))
+}
+
+fn filter_downloads(
+    mut downloads: Vec<ManagedPythonDownload>,
+    filter: Option<&PythonDownloadRequest>,
+    limit: Option<usize>,
+) -> Vec<ManagedPythonDownload> {
+    if let Some(filter) = filter {
+        downloads.retain(|download| filter.satisfied_by_download(download));
+    }
+
+    if let Some(limit) = limit {
+        downloads.truncate(limit);
+    }
+
+    downloads
+}
+
+fn find_matching_or_implicit_embedded(
+    source: &DownloadListSource<'_>,
+    download: Option<ManagedPythonDownload>,
+    request: &PythonDownloadRequest,
+) -> Result<Option<ManagedPythonDownload>, Error> {
+    match download {
+        Some(download) => Ok(Some(download)),
+        None => source.find_in_implicit_embedded_non_cpython(request),
+    }
+}
+
+async fn find_matching_download(
+    client: &BaseClient,
+    source: &DownloadListSource<'_>,
+    request: &PythonDownloadRequest,
+) -> Result<Option<ManagedPythonDownload>, Error> {
+    match (&source.location, source.format) {
+        (DownloadListLocation::Path(path), DownloadListFormat::Ndjson) => {
+            let download = parse_ndjson_bytes_find(
+                &path.to_string_lossy(),
+                &fs_err::read(path.as_ref())?,
+                |download| request.satisfied_by_download(download),
+            )?;
+            find_matching_or_implicit_embedded(source, download, request)
+        }
+        (DownloadListLocation::Http(url), DownloadListFormat::Ndjson) => {
+            let source_url = url.to_string();
+            match fetch_ndjson_find(client, url, |download| {
+                request.satisfied_by_download(download)
+            })
+            .await
+            {
+                Ok(download) => find_matching_or_implicit_embedded(source, download, request),
+                Err(err @ Error::InvalidPythonDownloadsNdjsonLine(..)) => source
+                    .on_implicit_ndjson_parse_error(err, || find_in_embedded_downloads(request)),
+                Err(err) => {
+                    if source.implicit {
+                        debug!(
+                            "Falling back to embedded Python downloads metadata after NDJSON fetch failure: {err}"
+                        );
+                        find_in_embedded_downloads(request)
+                    } else {
+                        Err(Error::FetchingPythonDownloadsNdjsonError(
+                            source_url,
+                            Box::new(err),
+                        ))
+                    }
+                }
+            }
+        }
+        (DownloadListLocation::Path(path), DownloadListFormat::Json) => {
+            let download =
+                parse_json_download_bytes(&path.to_string_lossy(), &fs_err::read(path.as_ref())?)?
+                    .into_iter()
+                    .find(|download| request.satisfied_by_download(download));
+            find_matching_or_implicit_embedded(source, download, request)
+        }
+        (DownloadListLocation::Http(url), DownloadListFormat::Json) => {
+            let source_url = url.to_string();
+            match fetch_bytes_from_url(client, url).await {
+                Ok(buf) => {
+                    let download = parse_json_download_bytes(&source_url, &buf)?
+                        .into_iter()
+                        .find(|download| request.satisfied_by_download(download));
+                    find_matching_or_implicit_embedded(source, download, request)
+                }
+                Err(err) => {
+                    if source.implicit {
+                        debug!(
+                            "Falling back to embedded Python downloads metadata after JSON fetch failure: {err}"
+                        );
+                        find_in_embedded_downloads(request)
+                    } else {
+                        Err(Error::FetchingPythonDownloadsJSONError(
+                            source_url,
+                            Box::new(err),
+                        ))
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl ManagedPythonDownload {
@@ -2114,6 +2374,107 @@ fn parse_ndjson_bytes(source: &str, buf: &[u8]) -> Result<Vec<ManagedPythonDownl
     Ok(downloads)
 }
 
+fn parse_ndjson_bytes_filtered(
+    source: &str,
+    buf: &[u8],
+    predicate: impl Fn(&ManagedPythonDownload) -> bool,
+    limit: Option<usize>,
+) -> Result<Vec<ManagedPythonDownload>, Error> {
+    let mut downloads = Vec::new();
+    parse_ndjson_bytes_with(source, buf, |download| {
+        if predicate(&download) {
+            downloads.push(download);
+            if limit.is_some_and(|limit| downloads.len() >= limit) {
+                return ControlFlow::Break(());
+            }
+        }
+        ControlFlow::Continue(())
+    })?;
+    downloads.sort_by(|a, b| Ord::cmp(&b.key, &a.key));
+    Ok(downloads)
+}
+
+fn parse_ndjson_bytes_find(
+    source: &str,
+    buf: &[u8],
+    predicate: impl Fn(&ManagedPythonDownload) -> bool,
+) -> Result<Option<ManagedPythonDownload>, Error> {
+    parse_ndjson_bytes_with(source, buf, |download| {
+        if predicate(&download) {
+            ControlFlow::Break(download)
+        } else {
+            ControlFlow::Continue(())
+        }
+    })
+}
+
+async fn fetch_ndjson_streaming<T>(
+    client: &BaseClient,
+    url: &DisplaySafeUrl,
+    mut visitor: impl FnMut(ManagedPythonDownload) -> ControlFlow<T, ()>,
+) -> Result<Option<T>, Error> {
+    let source = url.to_string();
+    let (reader, _) = read_url(url, client).await?;
+    let mut reader = BufReader::new(reader);
+    let mut line = Vec::new();
+
+    loop {
+        line.clear();
+        if reader.read_until(b'\n', &mut line).await? == 0 {
+            break;
+        }
+
+        if line.last() == Some(&b'\n') {
+            line.pop();
+        }
+        if line.last() == Some(&b'\r') {
+            line.pop();
+        }
+
+        if let Some(value) = visit_ndjson_line(&source, &line, &mut visitor)? {
+            return Ok(Some(value));
+        }
+    }
+
+    Ok(None)
+}
+
+async fn fetch_ndjson_find(
+    client: &BaseClient,
+    url: &DisplaySafeUrl,
+    predicate: impl Fn(&ManagedPythonDownload) -> bool,
+) -> Result<Option<ManagedPythonDownload>, Error> {
+    fetch_ndjson_streaming(client, url, |download| {
+        if predicate(&download) {
+            ControlFlow::Break(download)
+        } else {
+            ControlFlow::Continue(())
+        }
+    })
+    .await
+}
+
+async fn fetch_ndjson_collect(
+    client: &BaseClient,
+    url: &DisplaySafeUrl,
+    predicate: impl Fn(&ManagedPythonDownload) -> bool,
+    limit: Option<usize>,
+) -> Result<Vec<ManagedPythonDownload>, Error> {
+    let mut downloads = Vec::new();
+    fetch_ndjson_streaming(client, url, |download| {
+        if predicate(&download) {
+            downloads.push(download);
+            if limit.is_some_and(|limit| downloads.len() >= limit) {
+                return ControlFlow::Break(());
+            }
+        }
+        ControlFlow::Continue(())
+    })
+    .await?;
+    downloads.sort_by(|a, b| Ord::cmp(&b.key, &a.key));
+    Ok(downloads)
+}
+
 impl Error {
     pub(crate) fn from_reqwest(
         url: DisplaySafeUrl,
@@ -2563,6 +2924,39 @@ mod tests {
                     "https://example.com/cpython-3.10.0-x86_64-unknown-linux-gnu-pgo-lto-full.tar.zst",
                 ),
             ]
+        );
+    }
+
+    #[test]
+    fn parse_ndjson_bytes_filtered_applies_limit() {
+        let ndjson = br#"{"version":"3.14.1+20260420","artifacts":[{"url":"https://example.com/cpython-3.14.1-aarch64-apple-darwin.tar.gz","platform":"aarch64-apple-darwin","sha256":"abc123","variant":"install_only"}]}
+{"version":"3.13.2","artifacts":[{"url":"https://example.com/cpython-3.13.2-aarch64-apple-darwin.tar.gz","platform":"aarch64-apple-darwin","sha256":"def456","variant":"install_only"}]}
+"#;
+
+        let downloads = parse_ndjson_bytes_filtered("test.ndjson", ndjson, |_| true, Some(1))
+            .expect("NDJSON should parse");
+
+        assert_eq!(downloads.len(), 1);
+        assert_eq!(downloads[0].key().version().to_string(), "3.14.1");
+        assert_eq!(downloads[0].build(), Some("20260420"));
+    }
+
+    #[test]
+    fn parse_ndjson_bytes_find_returns_first_match() {
+        let ndjson = br#"{"version":"3.14.1","artifacts":[{"url":"https://example.com/cpython-3.14.1-aarch64-apple-darwin.tar.gz","platform":"aarch64-apple-darwin","sha256":"abc123","variant":"install_only"}]}
+{"version":"3.13.2","artifacts":[{"url":"https://example.com/cpython-3.13.2-aarch64-apple-darwin.tar.gz","platform":"aarch64-apple-darwin","sha256":"def456","variant":"install_only"}]}
+"#;
+
+        let download = parse_ndjson_bytes_find("test.ndjson", ndjson, |download| {
+            download.key().version().to_string() == "3.13.2"
+        })
+        .expect("NDJSON should parse")
+        .expect("matching download should be found");
+
+        assert_eq!(download.key().version().to_string(), "3.13.2");
+        assert_eq!(
+            download.url().as_ref(),
+            "https://example.com/cpython-3.13.2-aarch64-apple-darwin.tar.gz"
         );
     }
 

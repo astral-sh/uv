@@ -49,7 +49,7 @@ struct InstallRequest<'a> {
     /// A download request corresponding to the `request` with platform information filled
     download_request: PythonDownloadRequest,
     /// A download that satisfies the request
-    download: &'a ManagedPythonDownload,
+    download: Cow<'a, ManagedPythonDownload>,
 }
 
 impl<'a> InstallRequest<'a> {
@@ -66,7 +66,7 @@ impl<'a> InstallRequest<'a> {
 
         // Find a matching download
         let download = match download_list.find(&download_request) {
-            Ok(download) => download,
+            Ok(download) => Cow::Borrowed(download),
             Err(downloads::Error::NoDownloadFound(request))
                 if request.libc().is_some_and(Libc::is_musl)
                     && request.arch().is_some_and(|arch| {
@@ -81,6 +81,49 @@ impl<'a> InstallRequest<'a> {
         };
 
         Ok(Self {
+            request,
+            download_request,
+            download,
+        })
+    }
+
+    async fn new_streaming(
+        request: PythonRequest,
+        client: &uv_client::BaseClient,
+        python_downloads_json_url: Option<&str>,
+    ) -> Result<InstallRequest<'static>> {
+        let download_request = PythonDownloadRequest::from_request(&request)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "`{}` is not a valid Python download request; see `uv help python` for supported formats and `uv python list --only-downloads` for available versions",
+                    request.to_canonical_string()
+                )
+            })?
+            .fill()?;
+
+        let download = match ManagedPythonDownloadList::find_streaming(
+            client,
+            python_downloads_json_url,
+            &download_request,
+        )
+        .await
+        {
+            Ok(Some(download)) => Cow::Owned(download),
+            Ok(None)
+                if download_request.libc().is_some_and(Libc::is_musl)
+                    && download_request.arch().is_some_and(|arch| {
+                        arch.inner() == Arch::from(&uv_platform_tags::Arch::Armv7L)
+                    }) =>
+            {
+                return Err(anyhow::anyhow!(
+                    "uv does not yet provide musl Python distributions on armv7."
+                ));
+            }
+            Ok(None) => return Err(downloads::Error::NoDownloadFound(download_request).into()),
+            Err(err) => return Err(err.into()),
+        };
+
+        Ok(InstallRequest {
             request,
             download_request,
             download,
@@ -339,8 +382,7 @@ async fn perform_install(
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
     let client = client_builder.retries(0).build()?;
-    let download_list =
-        ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
+    let mut download_list = None;
     // TODO(zanieb): We use this variable to special-case .python-version files, but it'd be nice to
     // have generalized request source tracking instead
     let mut is_from_python_version_file = false;
@@ -349,6 +391,16 @@ async fn perform_install(
             upgrade,
             PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
         ) {
+            if download_list.is_none() {
+                download_list = Some(
+                    ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref())
+                        .await?,
+                );
+            }
+            let download_list = download_list
+                .as_ref()
+                .expect("download list should be loaded before upgrade resolution");
+
             is_unspecified_upgrade = true;
             // On upgrade, derive requests for all of the existing installations
             let mut minor_version_requests = IndexSet::<InstallRequest>::default();
@@ -359,12 +411,12 @@ async fn perform_install(
                 // Drop the patch and prerelease parts from the request
                 request = request.with_version(version.only_minor());
                 let install_request =
-                    InstallRequest::new(PythonRequest::Key(request), &download_list)?;
+                    InstallRequest::new(PythonRequest::Key(request), download_list)?;
                 minor_version_requests.insert(install_request);
             }
             minor_version_requests.into_iter().collect::<Vec<_>>()
         } else {
-            PythonVersionFile::discover(
+            let version_requests = PythonVersionFile::discover(
                 project_dir,
                 &VersionFileDiscoveryOptions::default()
                     .with_no_config(no_config)
@@ -390,16 +442,45 @@ async fn perform_install(
                 } else {
                     PythonRequest::Default
                 }]
-            })
-            .into_iter()
-            .map(|request| InstallRequest::new(request, &download_list))
-            .collect::<Result<Vec<_>>>()?
+            });
+
+            if download_list.is_none() {
+                download_list = Some(
+                    ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref())
+                        .await?,
+                );
+            }
+            let download_list = download_list
+                .as_ref()
+                .expect("download list should be loaded before version-file resolution");
+            version_requests
+                .into_iter()
+                .map(|request| InstallRequest::new(request, download_list))
+                .collect::<Result<Vec<_>>>()?
         }
+    } else if targets.len() == 1 {
+        vec![
+            InstallRequest::new_streaming(
+                PythonRequest::parse(&targets[0]),
+                &client,
+                python_downloads_json_url.as_deref(),
+            )
+            .await?,
+        ]
     } else {
+        if download_list.is_none() {
+            download_list = Some(
+                ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref())
+                    .await?,
+            );
+        }
+        let download_list = download_list
+            .as_ref()
+            .expect("download list should be loaded before multi-target resolution");
         targets
             .iter()
             .map(|target| PythonRequest::parse(target.as_str()))
-            .map(|request| InstallRequest::new(request, &download_list))
+            .map(|request| InstallRequest::new(request, download_list))
             .collect::<Result<Vec<_>>>()?
     };
 
@@ -456,6 +537,17 @@ async fn perform_install(
         }
     }
 
+    let reinstall_download_list = if reinstall
+        && requests
+            .iter()
+            .any(|request| matches!(&request.request, &PythonRequest::Any))
+        && download_list.is_none()
+    {
+        Some(ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?)
+    } else {
+        None
+    };
+
     // Find requests that are already satisfied
     let mut changelog = Changelog::default();
     let (satisfied, unsatisfied): (Vec<_>, Vec<_>) = if reinstall {
@@ -482,7 +574,10 @@ async fn perform_install(
                     // Construct an install request matching the existing installation
                     match InstallRequest::new(
                         PythonRequest::Key(installation.into()),
-                        &download_list,
+                        download_list
+                            .as_ref()
+                            .or(reinstall_download_list.as_ref())
+                            .expect("reinstall Any requests should have a download list"),
                     ) {
                         Ok(request) => {
                             debug!("Will reinstall `{}`", installation.key());
@@ -590,9 +685,9 @@ async fn perform_install(
                 request.download, request,
             );
         })
-        .map(|request| request.download)
+        .map(|request| request.download.as_ref())
         // Ensure we only download each version once
-        .unique_by(|download| download.key())
+        .unique_by(|download| download.key().clone())
         .collect::<Vec<_>>();
 
     // Download and unpack the Python versions concurrently
@@ -601,7 +696,7 @@ async fn perform_install(
     let mut tasks = futures::stream::iter(&downloads)
         .map(async |download| {
             (
-                *download,
+                download,
                 download
                     .fetch_with_retry(
                         &client,
