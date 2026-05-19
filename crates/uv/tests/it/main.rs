@@ -72,6 +72,9 @@ mod pip_compile_scenarios;
 mod pip_freeze;
 
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
+mod pip_exclude_newer_relative;
+
+#[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod pip_install;
 
 mod pip_install_scenarios;
