@@ -742,12 +742,12 @@ Likewise, an individual index can override the global cutoff:
 
 ```pyproject.toml
 [tool.uv]
-exclude-newer = "2006-12-02T02:07:43Z"
+exclude-newer = "2012-12-02T02:07:43Z"
 
 [[tool.uv.index]]
 name = "internal"
 url = "https://internal.example.com/simple"
-exclude-newer = "7 days"
+exclude-newer = "2006-12-02T02:07:43Z"
 ```
 
 Or disable it entirely for that index:
