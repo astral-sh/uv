@@ -245,6 +245,11 @@ jobs:
       - name: "Create NTFS test directory (low hardlink limit)"
         run: New-Item -Path "C:\uv" -ItemType Directory -Force
 
+      - name: "Create SMB test share (alternative filesystem)"
+        run: |
+          New-Item -Path "C:\uv-smb" -ItemType Directory -Force
+          New-SmbShare -Name "uv-alt-fs" -Path "C:\uv-smb" -FullAccess "Everyone"
+
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
         with:
@@ -259,6 +264,7 @@ jobs:
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy
           RUST_BACKTRACE: 1
+          UV_INTERNAL__TEST_ALT_FS: "\\\\localhost\\uv-alt-fs"
           UV_INTERNAL__TEST_LOWLINKS_FS: "C:\\uv"
           # Write pending snapshots to a separate directory for artifact upload
           INSTA_UPDATE: new
