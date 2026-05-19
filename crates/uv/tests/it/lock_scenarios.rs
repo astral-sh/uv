@@ -101,9 +101,7 @@ fn wrong_backtracking_basic() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -272,9 +270,7 @@ fn wrong_backtracking_indirect() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -419,9 +415,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -539,9 +533,7 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -644,9 +636,7 @@ fn fork_basic() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -784,9 +774,7 @@ fn conflict_in_fork() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -805,6 +793,8 @@ fn conflict_in_fork() -> Result<()> {
               a{sys_platform == 'os2'}==1.0.0
               a{sys_platform == 'os2'}>=2
           and your project depends on a{sys_platform == 'os2'}<2, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     "
     );
 
@@ -854,9 +844,7 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -939,9 +927,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -1123,9 +1109,7 @@ fn fork_upgrade() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -1249,9 +1233,7 @@ fn fork_incomplete_markers() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -1408,9 +1390,7 @@ fn fork_marker_accrue() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -1547,9 +1527,7 @@ fn fork_marker_disjoint() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -1619,9 +1597,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -1805,9 +1781,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -1980,9 +1954,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -2148,9 +2120,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -2302,9 +2272,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -2464,9 +2432,7 @@ fn fork_marker_inherit() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -2608,9 +2574,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -2769,9 +2733,7 @@ fn fork_marker_selection() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -2929,9 +2891,7 @@ fn fork_marker_track() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -3087,9 +3047,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -3227,9 +3185,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -3301,9 +3257,7 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -3392,9 +3346,7 @@ fn fork_overlapping_markers_basic() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -3565,9 +3517,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -3807,9 +3757,7 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -3951,9 +3899,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -4240,9 +4186,7 @@ fn preferences_dependent_forking() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -4420,9 +4364,7 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -4577,9 +4519,7 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -4666,9 +4606,7 @@ fn fork_requires_python_full() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -4760,9 +4698,7 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -4858,9 +4794,7 @@ fn fork_requires_python() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -4943,9 +4877,7 @@ fn requires_python_wheels() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -5044,9 +4976,7 @@ fn unreachable_package() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -5150,9 +5080,7 @@ fn unreachable_wheels() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -5285,9 +5213,7 @@ fn marker_variants_have_different_extras() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -5427,9 +5353,7 @@ fn virtual_package_extra_priorities() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -5544,9 +5468,7 @@ fn requires_python_subset() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
@@ -5655,9 +5577,7 @@ fn specific_architecture() -> Result<()> {
         "###,
     )?;
 
-    let mut filters = context.filters();
-    // The "hint" about non-current environments is platform-dependent, so filter it out.
-    filters.push((r"\n\s+hint: .*", ""));
+    let filters = context.filters();
 
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);

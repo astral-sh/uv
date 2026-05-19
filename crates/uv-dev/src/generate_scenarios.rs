@@ -104,7 +104,7 @@ fn load_scenarios() -> Result<Vec<ScenarioCase>> {
                 .extension()
                 .is_some_and(|extension| extension == "toml")
         })
-        .map(|entry| entry.into_path())
+        .map(walkdir::DirEntry::into_path)
         .collect::<Vec<_>>();
     entries.sort();
 
@@ -129,10 +129,10 @@ fn path_to_forward_slashes(path: &Path) -> String {
         .join("/")
 }
 
-fn scenarios_for_template<'a>(
+fn scenarios_for_template(
     template: TemplateKind,
-    scenarios: &'a [ScenarioCase],
-) -> Vec<&'a ScenarioCase> {
+    scenarios: &[ScenarioCase],
+) -> Vec<&ScenarioCase> {
     scenarios
         .iter()
         .filter(|case| match template {
@@ -325,14 +325,8 @@ fn render_compile_case(output: &mut String, case: &ScenarioCase) -> Result<()> {
     .unwrap();
     output.push('\n');
     output.push_str("    let requirements_in = context.temp_dir.child(\"requirements.in\");\n");
-    for requirement in &case.scenario.root.requires {
-        writeln!(
-            output,
-            "    requirements_in.write_str(\"{}\")?;",
-            requirement
-        )
-        .unwrap();
-    }
+    let requirements = compile_requirements(&case.scenario.root.requires);
+    writeln!(output, "    requirements_in.write_str({requirements:?})?;").unwrap();
     output.push('\n');
     render_expected_explanation(output, &case.scenario, "    // ");
     output.push_str(
@@ -436,9 +430,7 @@ fn render_lock_case(output: &mut String, case: &ScenarioCase) -> Result<()> {
     }
     output.push_str("        \"###\n");
     output.push_str("    )?;\n\n");
-    output.push_str("    let mut filters = context.filters();\n");
-    output.push_str("    // The \"hint\" about non-current environments is platform-dependent, so filter it out.\n");
-    output.push_str("    filters.push((r\"\\n\\s+hint: .*\", \"\"));\n\n");
+    output.push_str("    let filters = context.filters();\n\n");
     output.push_str("    let mut cmd = context.lock();\n");
     output.push_str("    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);\n");
     output.push_str("    cmd.arg(\"--index-url\").arg(server.index_url());\n");
@@ -546,6 +538,10 @@ fn render_expected_explanation(output: &mut String, scenario: &Scenario, prefix:
             writeln!(output, "{prefix}{line}").unwrap();
         }
     }
+}
+
+fn compile_requirements(requirements: &[Requirement]) -> String {
+    requirements.iter().map(ToString::to_string).join("\n")
 }
 
 fn render_case_docs(output: &mut String, scenario: &Scenario) -> Result<()> {
@@ -797,5 +793,20 @@ fn requirement_specifiers(requirement: &Requirement) -> Option<&uv_pep440::Versi
     match requirement.version_or_url.as_ref()? {
         VersionOrUrl::VersionSpecifier(specifiers) => Some(specifiers),
         VersionOrUrl::Url(_) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compile_requirements;
+
+    #[test]
+    fn compile_requirements_preserve_multiple_root_entries() {
+        let requirements = [
+            "a==1.0.0".parse().expect("valid requirement"),
+            "b>=2.0.0".parse().expect("valid requirement"),
+        ];
+
+        assert_eq!(compile_requirements(&requirements), "a==1.0.0\nb>=2.0.0");
     }
 }
