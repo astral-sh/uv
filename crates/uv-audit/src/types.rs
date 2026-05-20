@@ -163,9 +163,10 @@ impl Vulnerability {
     ) -> Result<Option<&Version>, VersionSpecifierBuildError> {
         let constraint =
             VersionSpecifier::from_version(Operator::TildeEqual, self.dependency.version.clone())?;
-        let constraint = match patch_only {
-            true => constraint,
-            false => constraint.only_minor_release(),
+        let constraint = if patch_only {
+            constraint
+        } else {
+            constraint.only_minor_release()
         };
 
         Ok(self
