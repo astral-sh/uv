@@ -85,7 +85,9 @@ impl Pypi {
             .flat_map(|(dependency, vulnerabilities)| {
                 vulnerabilities
                     .into_iter()
-                    .filter_map(move |vulnerability| Self::vulnerability_to_finding(&dependency, vulnerability))
+                    .filter_map(move |vulnerability| {
+                        Self::vulnerability_to_finding(&dependency, vulnerability)
+                    })
             })
             .collect();
 
@@ -98,7 +100,11 @@ impl Pypi {
     ) -> Result<Vec<Vulnerability>, Error> {
         let url = self
             .base_url
-            .join(&format!("pypi/{}/{}/json", dependency.name(), dependency.version()))
+            .join(&format!(
+                "pypi/{}/{}/json",
+                dependency.name(),
+                dependency.version()
+            ))
             .map_err(|error| Error::Url(self.base_url.clone(), error))?;
         let response: ReleaseResponse = self
             .client
@@ -137,20 +143,22 @@ impl Pypi {
             })
             .collect();
 
-        Some(types::Finding::Vulnerability(Box::new(types::Vulnerability::new(
-            dependency.clone(),
-            types::VulnerabilityID::new(vulnerability.id),
-            vulnerability.summary,
-            vulnerability.details,
-            vulnerability.link,
-            fix_versions,
-            vulnerability
-                .aliases
-                .into_iter()
-                .map(types::VulnerabilityID::new)
-                .collect(),
-            None,
-            None,
-        ))))
+        Some(types::Finding::Vulnerability(Box::new(
+            types::Vulnerability::new(
+                dependency.clone(),
+                types::VulnerabilityID::new(vulnerability.id),
+                vulnerability.summary,
+                vulnerability.details,
+                vulnerability.link,
+                fix_versions,
+                vulnerability
+                    .aliases
+                    .into_iter()
+                    .map(types::VulnerabilityID::new)
+                    .collect(),
+                None,
+                None,
+            ),
+        )))
     }
 }

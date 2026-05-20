@@ -25,8 +25,8 @@ use uv_audit::{
     AdverseStatus, Dependency, Finding, ProjectStatus, ProjectStatusAudit, Vulnerability,
     VulnerabilityID, VulnerabilityServiceFormat, osv, pypi,
 };
-use uv_cache_key::CanonicalUrl;
 use uv_cache::Cache;
+use uv_cache_key::CanonicalUrl;
 use uv_cli::AuditOutputFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple};
@@ -286,7 +286,10 @@ pub(crate) async fn audit(
                 }
                 let client = base_client.for_host(&pypi_url).raw_client().clone();
                 let service = pypi::Pypi::new(client, Some(pypi_url), concurrency);
-                trace!("Auditing {n} dependencies against PyPI", n = auditable.len());
+                trace!(
+                    "Auditing {n} dependencies against PyPI",
+                    n = auditable.len()
+                );
                 service
                     .query_batch(&dependencies)
                     .await

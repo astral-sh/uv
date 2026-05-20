@@ -3,8 +3,8 @@
 pub use project_status::ProjectStatusAudit;
 
 pub mod osv;
-pub mod pypi;
 mod project_status;
+pub mod pypi;
 
 /// The shape of the vulnerability service.
 #[derive(Copy, Clone, Debug)]
