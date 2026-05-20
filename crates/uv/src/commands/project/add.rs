@@ -336,6 +336,10 @@ pub(crate) async fn add(
         .clone()
         .keyring(settings.resolver.keyring_provider);
 
+    // True if the user passes `uv add --constraints <file_or_url>`,
+    // i.e. `uv add` with no packages
+    let only_constraints = requirements.is_empty() && !constraints.is_empty();
+
     // Read the requirements.
     let RequirementsSpecification {
         requirements,
@@ -643,6 +647,14 @@ pub(crate) async fn add(
         index,
         &mut toml,
     )?;
+
+    // Write constraints to `[tool.uv].constraint-dependencies`
+    if only_constraints {
+        for constraint in &constraints {
+            let requirement = constraint.requirement.clone().into();
+            toml.add_constraint_dependency(&requirement)?;
+        }
+    }
 
     // If no requirements were added but a dependency group or optional dependency was specified,
     // ensure the group/extra exists. This handles the case where `uv add -r requirements.txt

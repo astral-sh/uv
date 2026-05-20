@@ -142,6 +142,23 @@ all dependencies from the file:
 
 ```console
 $ # Add all dependencies from `requirements.txt`.
+$ uv add -r requirements.txt
+```
+
+If you have a separate constraints file, you can import it from a local file or URL. When `uv add`
+is invoked with `--constraints` on its own, uv writes the constraints to
+`[tool.uv].constraint-dependencies`:
+
+```console
+$ uv add -c constraints.txt
+$ uv add -c https://example.com/constraints.txt
+```
+
+If you provide packages or `-r/--requirements` inputs too, the constraints are only used during
+resolution and are not added to `pyproject.toml`:
+
+```console
+$ uv add fastapi -c constraints.txt
 $ uv add -r requirements.txt -c constraints.txt
 ```
 

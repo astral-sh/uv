@@ -1119,7 +1119,7 @@ fn add_raw_error() -> Result<()> {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used with '--raw'
 
-    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>|--constraints <CONSTRAINTS>>
 
     For more information, try '--help'.
     ");
@@ -2362,7 +2362,7 @@ fn disallow_group_script_add() -> Result<()> {
     ----- stderr -----
     error: the argument '--group <GROUP>' cannot be used with '--script <SCRIPT>'
 
-    Usage: uv add --cache-dir [CACHE_DIR] --group <GROUP> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
+    Usage: uv add --cache-dir [CACHE_DIR] --group <GROUP> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>|--constraints <CONSTRAINTS>>
 
     For more information, try '--help'.
     ");
@@ -4595,7 +4595,7 @@ fn add_reject_multiple_git_ref_flags() {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used with '--branch <BRANCH>'
 
-    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>|--constraints <CONSTRAINTS>>
 
     For more information, try '--help'.
     "
@@ -4616,7 +4616,7 @@ fn add_reject_multiple_git_ref_flags() {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used with '--rev <REV>'
 
-    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>|--constraints <CONSTRAINTS>>
 
     For more information, try '--help'.
     "
@@ -4637,7 +4637,7 @@ fn add_reject_multiple_git_ref_flags() {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used multiple times
 
-    Usage: uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
+    Usage: uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>|--constraints <CONSTRAINTS>>
 
     For more information, try '--help'.
     "
@@ -5797,9 +5797,9 @@ fn add_requirements_file() -> Result<()> {
 
     ----- stderr -----
     error: the following required arguments were not provided:
-      <PACKAGES|--requirements <REQUIREMENTS>>
+      <PACKAGES|--requirements <REQUIREMENTS>|--constraints <CONSTRAINTS>>
 
-    Usage: uv add --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
+    Usage: uv add --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>|--constraints <CONSTRAINTS>>
 
     For more information, try '--help'.
     ");
@@ -15226,6 +15226,659 @@ fn add_git_lfs_error() -> Result<()> {
     ----- stderr -----
     error: `typing-extensions` did not resolve to a Git repository, but a Git extension (`--lfs`) was provided.
     ");
+
+    Ok(())
+}
+
+/// Import constraints from a requirements file, ignoring comments and blank lines, and normalize
+/// constraint formatting
+#[test]
+fn add_constraints_from_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+
+    constraints_txt.write_str(indoc! {r"
+        # This is a comment
+        requests >= 2.31, < 3
+
+        boto3 == 1.40.0
+
+        numpy < 2
+    "})?;
+
+    context
+        .add()
+        .arg("--constraints")
+        .arg("constraints.txt")
+        .assert()
+        .success();
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        constraint-dependencies = [
+            "boto3==1.40.0",
+            "numpy<2",
+            "requests>=2.31,<3",
+        ]
+        "#
+        );
+    });
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        constraints = [
+            { name = "boto3", specifier = "==1.40.0" },
+            { name = "numpy", specifier = "<2" },
+            { name = "requests", specifier = ">=2.31,<3" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Import constraints from a remote requirements file, ignoring comments and blank lines, and
+/// normalize constraint formatting
+#[tokio::test]
+async fn add_constraints_from_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/constraints.txt"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {r"
+            # This is a comment
+            requests >= 2.31, < 3
+
+            boto3 == 1.40.0
+
+            numpy < 2
+        "}))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    context
+        .add()
+        .arg("--constraints")
+        .arg(format!("{}/constraints.txt", server.uri()))
+        .assert()
+        .success();
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        constraint-dependencies = [
+            "boto3==1.40.0",
+            "numpy<2",
+            "requests>=2.31,<3",
+        ]
+        "#
+        );
+    });
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        constraints = [
+            { name = "boto3", specifier = "==1.40.0" },
+            { name = "numpy", specifier = "<2" },
+            { name = "requests", specifier = ">=2.31,<3" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Merge imported constraints into existing `constraint-dependencies`.
+#[test]
+fn add_constraints_updates_existing() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        constraint-dependencies = ["numpy<2", "requests>=2.31,<3"]
+    "#})?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(indoc! {r"
+        requests >= 2.31, < 3
+
+        boto3 == 1.40.0
+
+        numpy < 2
+    "})?;
+
+    context
+        .add()
+        .arg("--constraints")
+        .arg("constraints.txt")
+        .arg("--frozen")
+        .assert()
+        .success();
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        constraint-dependencies = [
+            "boto3==1.40.0",
+            "numpy<2",
+            "requests>=2.31,<3",
+        ]
+        "#
+        );
+    });
+
+    constraints_txt.write_str(indoc! {r"
+        requests >= 2.32, < 3
+
+        boto3 == 1.34.0
+    "})?;
+
+    context
+        .add()
+        .arg("--constraints")
+        .arg("constraints.txt")
+        .arg("--frozen")
+        .assert()
+        .success();
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        constraint-dependencies = [
+            "boto3==1.34.0",
+            "numpy<2",
+            "requests>=2.32,<3",
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Preserve existing ordering when `constraint-dependencies` is intentionally unsorted.
+#[test]
+fn add_constraints_preserves_unsorted_order() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        constraint-dependencies = ["requests>=2.31,<3", "boto3==1.40.0"]
+    "#})?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("numpy < 2")?;
+
+    context
+        .add()
+        .arg("--constraints")
+        .arg("constraints.txt")
+        .arg("--frozen")
+        .assert()
+        .success();
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        constraint-dependencies = [
+            "requests>=2.31,<3",
+            "boto3==1.40.0",
+            "numpy<2",
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Import constraints without creating a lockfile when `--frozen` is set.
+#[test]
+fn add_constraints_frozen() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(indoc! {r"
+        requests >= 2.31, < 3
+
+        boto3 == 1.40.0
+
+        numpy < 2
+    "})?;
+
+    context
+        .add()
+        .arg("--constraints")
+        .arg("constraints.txt")
+        .arg("--frozen")
+        .assert()
+        .success();
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        constraint-dependencies = [
+            "boto3==1.40.0",
+            "numpy<2",
+            "requests>=2.31,<3",
+        ]
+        "#
+        );
+    });
+
+    assert!(!context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+/// Warn and leave `pyproject.toml` unchanged when the constraints file is empty.
+#[test]
+fn add_constraints_empty_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("")?;
+
+    uv_snapshot!(context.filters(), context.add().arg("--constraints").arg("constraints.txt").arg("--frozen"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Requirements file `constraints.txt` does not contain any dependencies
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Error on missing or invalid constraints files.
+#[test]
+fn add_constraints_error() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("--constraints").arg("nonexistent.txt").arg("--frozen"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: File not found: `nonexistent.txt`
+    ");
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(indoc! {r"
+        not valid!!!
+    "})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("--constraints").arg("constraints.txt").arg("--frozen"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Couldn't parse requirement in `constraints.txt` at position 0
+      Caused by: Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `v`
+    not valid!!!
+        ^
+    ");
+
+    Ok(())
+}
+
+/// When packages are added, constraints affect resolution but are not imported.
+#[test]
+fn add_package_with_constraints_does_not_import_constraints() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(indoc! {r"
+        requests >= 2.31, < 3
+
+        boto3 == 1.40.0
+
+        numpy < 2
+    "})?;
+
+    // `uv add <package> --constraints ...` should only use constraints during resolution.
+    // so it will not add it to the pyproject.toml file. This is existing behavior.
+    context
+        .add()
+        .arg("iniconfig==2.0.0")
+        .arg("--constraints")
+        .arg("constraints.txt")
+        .arg("--frozen")
+        .assert()
+        .success();
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig==2.0.0",
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// When requirements are added, constraints are not imported even if the requirements file is
+/// empty.
+#[test]
+fn add_empty_requirements_with_constraints_does_not_import_constraints() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(indoc! {r"
+        requests >= 2.31, < 3
+
+        boto3 == 1.40.0
+
+        numpy < 2
+    "})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .add()
+            .arg("-r")
+            .arg("requirements.txt")
+            .arg("--constraints")
+            .arg("constraints.txt")
+            .arg("--frozen"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Requirements file `requirements.txt` does not contain any dependencies
+    "
+    );
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// When requirements are added, constraints are not imported.
+#[test]
+fn add_requirements_with_constraints_does_not_import_constraints() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig==2.0.0\n")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(indoc! {r"
+        requests >= 2.31, < 3
+
+        boto3 == 1.40.0
+
+        numpy < 2
+    "})?;
+
+    context
+        .add()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--constraints")
+        .arg("constraints.txt")
+        .arg("--frozen")
+        .assert()
+        .success();
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig==2.0.0",
+        ]
+        "#
+        );
+    });
 
     Ok(())
 }
