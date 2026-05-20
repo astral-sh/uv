@@ -20,7 +20,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
-use uv_workspace::pyproject::DependencyType;
+use uv_workspace::pyproject::{DependencyType, PyProjectToml};
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
@@ -450,9 +450,11 @@ impl RemoveTarget {
                 Ok(Self::Script(script))
             }
             Self::Project(project) => {
+                let pyproject_path = project.root().join("pyproject.toml");
                 let project = project
                     .update_member(
-                        toml::from_str(content).map_err(ProjectError::PyprojectTomlParse)?,
+                        PyProjectToml::from_string(content.to_string(), &pyproject_path)
+                            .map_err(ProjectError::PyprojectTomlParse)?,
                     )?
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;
                 Ok(Self::Project(project))

@@ -23,6 +23,7 @@ use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::VirtualProject;
+use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::pyproject_mut::Error;
 use uv_workspace::{
     DiscoveryOptions, WorkspaceCache, WorkspaceError,
@@ -448,7 +449,10 @@ fn update_project(
 
     // Update the `pyproject.toml` in-memory.
     let project = project
-        .update_member(toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?)?
+        .update_member(
+            PyProjectToml::from_string(content, pyproject_path)
+                .map_err(ProjectError::PyprojectTomlParse)?,
+        )?
         .ok_or(ProjectError::PyprojectTomlUpdate)?;
 
     Ok(project)

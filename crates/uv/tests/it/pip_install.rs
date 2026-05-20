@@ -7457,7 +7457,6 @@ fn already_installed_remote_url() {
       × No solution found when resolving dependencies:
       ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that your requirements are unsatisfiable.
 
-
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     ");
 }
@@ -14308,7 +14307,6 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
 
       help: `child` was included because `parent` (v0.1.0) depends on `child`
 
-
     hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
@@ -15473,7 +15471,7 @@ fn abi_compatibility_on_freethreaded_python() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      Caused by: A path dependency is incompatible with the current platform: [WORKSPACE]/test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl
+      Caused by: A path ([WORKSPACE]/test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl) dependency is incompatible with the current platform
 
     hint: You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the CPython 3.14 ABI (`cp314`), which requires a GIL-enabled interpreter
     ");
@@ -15624,7 +15622,7 @@ fn abi_compatibility_on_nondebug_python_with_debug_wheel() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      Caused by: A path dependency is incompatible with the current platform: cpython_debug_package/dist/cpython_debug_package-1.0.0-cp314-cp314d-manylinux_2_17_x86_64.whl
+      Caused by: A path (cpython_debug_package/dist/cpython_debug_package-1.0.0-cp314-cp314d-manylinux_2_17_x86_64.whl) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with CPython 3.14 (`cp314d`), but you're using CPython 3.14 (`cp314`)
     ");

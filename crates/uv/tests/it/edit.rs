@@ -15034,6 +15034,173 @@ fn add_path_outside_workspace_no_default() -> Result<()> {
     Ok(())
 }
 
+/// Existing sources should survive the in-memory project refresh before re-locking.
+#[test]
+fn add_preserves_existing_sources_during_staged_update() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "preserved-source-dependency",
+        ]
+
+        [tool.uv.sources]
+        preserved-source-dependency = { path = "preserved-source-dependency" }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("preserved-source-dependency")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "preserved-source-dependency"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+    context
+        .temp_dir
+        .child("preserved-source-dependency")
+        .child("src")
+        .child("preserved_source_dependency")
+        .child("__init__.py")
+        .touch()?;
+
+    context
+        .temp_dir
+        .child("added-source-dependency")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "added-source-dependency"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+    context
+        .temp_dir
+        .child("added-source-dependency")
+        .child("src")
+        .child("added_source_dependency")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("./added-source-dependency")
+        .arg("--no-workspace")
+        .arg("--no-sync"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Existing sources should survive the in-memory project refresh before re-locking.
+#[test]
+fn remove_preserves_existing_sources_during_staged_update() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "preserved-source-dependency",
+            "removed-source-dependency",
+        ]
+
+        [tool.uv.sources]
+        preserved-source-dependency = { path = "preserved-source-dependency" }
+        removed-source-dependency = { path = "removed-source-dependency" }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("preserved-source-dependency")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "preserved-source-dependency"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+    context
+        .temp_dir
+        .child("preserved-source-dependency")
+        .child("src")
+        .child("preserved_source_dependency")
+        .child("__init__.py")
+        .touch()?;
+
+    context
+        .temp_dir
+        .child("removed-source-dependency")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "removed-source-dependency"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+    context
+        .temp_dir
+        .child("removed-source-dependency")
+        .child("src")
+        .child("removed_source_dependency")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context
+        .remove()
+        .arg("removed-source-dependency")
+        .arg("--no-sync"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// See: <https://github.com/astral-sh/uv/issues/14961>
 #[test]
 fn add_multiline_indentation() -> Result<()> {

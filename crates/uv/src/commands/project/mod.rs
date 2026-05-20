@@ -260,7 +260,7 @@ pub(crate) enum ProjectError {
     UvLockParse(#[source] toml::de::Error),
 
     #[error("Failed to parse `pyproject.toml`")]
-    PyprojectTomlParse(#[source] toml::de::Error),
+    PyprojectTomlParse(#[source] uv_workspace::pyproject::PyprojectTomlError),
 
     #[error("Failed to update `pyproject.toml`")]
     PyprojectTomlUpdate,

@@ -7178,7 +7178,6 @@ fn offline_find_links() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can conclude that your requirements are unsatisfiable.
 
-
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
     );
@@ -14442,6 +14441,8 @@ fn universal_required_environment() -> Result<()> {
       × No solution found when resolving dependencies for split (markers: platform_machine == 'arm64'):
       ╰─▶ Because only no-sdist-no-wheels-with-matching-platform-a==1.0.0 is available and no-sdist-no-wheels-with-matching-platform-a==1.0.0 has no `platform_machine == 'arm64'`-compatible wheels, we can conclude that all versions of no-sdist-no-wheels-with-matching-platform-a cannot be used.
           And because project depends on no-sdist-no-wheels-with-matching-platform-a, we can conclude that your requirements are unsatisfiable.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     ");
 
     Ok(())

@@ -35278,7 +35278,7 @@ fn lock_required_environment_cycle_reports_resolution_error() -> Result<()> {
     uv_snapshot!(
         filters,
         context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER),
-        @r"
+        @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -35287,6 +35287,8 @@ fn lock_required_environment_cycle_reports_resolution_error() -> Result<()> {
       × No solution found when resolving dependencies for split (markers: platform_machine == 'arm64'):
       ╰─▶ Because no-sdist-no-wheels-with-matching-platform-a==1.0.0 has no `platform_machine == 'arm64'`-compatible wheels and only no-sdist-no-wheels-with-matching-platform-a==1.0.0 is available, we can conclude that all versions of no-sdist-no-wheels-with-matching-platform-a cannot be used.
           And because pkg-a depends on no-sdist-no-wheels-with-matching-platform-a and your workspace requires pkg-a, we can conclude that your workspace's requirements are unsatisfiable.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     "
     );
 
