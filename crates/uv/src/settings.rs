@@ -846,13 +846,16 @@ impl ToolRunSettings {
 
         let filesystem_options = filesystem.map(FilesystemOptions::into_options);
 
-        let options =
-            resolver_installer_options(installer, build).combine(ResolverInstallerOptions::from(
-                filesystem_options
-                    .as_ref()
-                    .map(|options| options.top_level.clone())
-                    .unwrap_or_default(),
-            ));
+        let options = resolver_installer_options_with_environment(
+            resolver_installer_options(installer, build),
+            &environment,
+        )
+        .combine(ResolverInstallerOptions::from(
+            filesystem_options
+                .as_ref()
+                .map(|options| options.top_level.clone())
+                .unwrap_or_default(),
+        ));
 
         let filesystem_install_mirrors = filesystem_options
             .map(|options| options.install_mirrors.clone())
@@ -968,13 +971,16 @@ impl ToolInstallSettings {
 
         let filesystem_options = filesystem.map(FilesystemOptions::into_options);
 
-        let options =
-            resolver_installer_options(installer, build).combine(ResolverInstallerOptions::from(
-                filesystem_options
-                    .as_ref()
-                    .map(|options| options.top_level.clone())
-                    .unwrap_or_default(),
-            ));
+        let options = resolver_installer_options_with_environment(
+            resolver_installer_options(installer, build),
+            &environment,
+        )
+        .combine(ResolverInstallerOptions::from(
+            filesystem_options
+                .as_ref()
+                .map(|options| options.top_level.clone())
+                .unwrap_or_default(),
+        ));
 
         let filesystem_install_mirrors = filesystem_options
             .map(|options| options.install_mirrors.clone())
@@ -1123,7 +1129,10 @@ impl ToolUpgradeSettings {
             no_sources_package,
         };
 
-        let args = resolver_installer_options(installer, build);
+        let args = resolver_installer_options_with_environment(
+            resolver_installer_options(installer, build),
+            environment,
+        );
         let filesystem = filesystem.map(FilesystemOptions::into_options);
         let filesystem_install_mirrors = filesystem
             .clone()
@@ -3975,29 +3984,37 @@ pub(crate) struct ResolverInstallerSettings {
 impl ResolverInstallerSettings {
     /// Reconcile the [`ResolverInstallerSettings`] from the CLI and filesystem configuration.
     pub(crate) fn combine(
-        mut args: ResolverInstallerOptions,
+        args: ResolverInstallerOptions,
         filesystem: Option<FilesystemOptions>,
         environment: &EnvironmentOptions,
     ) -> Self {
-        args.no_binary_package = args
-            .no_binary_package
-            .or(environment.no_binary_package.clone());
-        args.no_build_package = args
-            .no_build_package
-            .or(environment.no_build_package.clone());
-        args.no_sources_package = args
-            .no_sources_package
-            .or(environment.no_sources_package.clone());
-
-        let options = args.combine(ResolverInstallerOptions::from(
-            filesystem
-                .map(FilesystemOptions::into_options)
-                .map(|options| options.top_level)
-                .unwrap_or_default(),
-        ));
+        let options = resolver_installer_options_with_environment(args, environment).combine(
+            ResolverInstallerOptions::from(
+                filesystem
+                    .map(FilesystemOptions::into_options)
+                    .map(|options| options.top_level)
+                    .unwrap_or_default(),
+            ),
+        );
 
         Self::from(options)
     }
+}
+
+fn resolver_installer_options_with_environment(
+    mut options: ResolverInstallerOptions,
+    environment: &EnvironmentOptions,
+) -> ResolverInstallerOptions {
+    options.no_binary_package = options
+        .no_binary_package
+        .or(environment.no_binary_package.clone());
+    options.no_build_package = options
+        .no_build_package
+        .or(environment.no_build_package.clone());
+    options.no_sources_package = options
+        .no_sources_package
+        .or(environment.no_sources_package.clone());
+    options
 }
 
 impl From<ResolverInstallerOptions> for ResolverInstallerSettings {

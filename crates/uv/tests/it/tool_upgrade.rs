@@ -1057,6 +1057,42 @@ fn tool_upgrade_settings() {
 }
 
 #[test]
+fn tool_upgrade_no_build_package_env_var() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("black")
+        .arg("--with")
+        .arg("django-allauth==0.51.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("--reinstall")
+        .arg("black")
+        .env(EnvVars::UV_NO_BUILD_PACKAGE, "django-allauth")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to upgrade black
+      Caused by: Because django-allauth==0.51.0 has no usable wheels and you require django-allauth==0.51.0, we can conclude that your requirements are unsatisfiable.
+
+                 hint: Wheels are required for `django-allauth` because building from source is disabled for `django-allauth` (i.e., with `--no-build-package django-allauth`)
+    ");
+}
+
+#[test]
 fn tool_upgrade_respect_constraints() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
