@@ -1508,6 +1508,7 @@ fn tool_install_suggest_other_packages_with_executable() {
     success: false
     exit_code: 2
     ----- stdout -----
+    No executables are provided by package `fastapi`; removing tool
 
     ----- stderr -----
     Resolved 35 packages in [TIME]
@@ -1547,7 +1548,7 @@ fn tool_install_suggest_other_packages_with_executable() {
      + uvicorn==0.29.0
      + watchfiles==0.21.0
      + websockets==12.0
-    error: No executables are provided by package `fastapi`
+    error: Failed to install entrypoints for `fastapi`
 
     hint: An executable with the name `fastapi` is available via dependency `fastapi-cli`.
           Did you mean `uv tool install fastapi-cli`?
@@ -1882,6 +1883,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
     success: false
     exit_code: 2
     ----- stdout -----
+    No executables are provided by package `black`; removing tool
 
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -1895,7 +1897,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
      - packaging==24.0
      - pathspec==0.12.1
      - platformdirs==4.2.0
-    error: No executables are provided by package `black`
+    error: Failed to install entrypoints for `black`
     ");
 
     // Re-request `black`. It should reinstall, without requiring `--force`.
@@ -2719,13 +2721,14 @@ fn tool_install_no_entrypoints() {
     success: false
     exit_code: 2
     ----- stdout -----
+    No executables are provided by package `iniconfig`; removing tool
 
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    error: No executables are provided by package `iniconfig`
+    error: Failed to install entrypoints for `iniconfig`
     ");
 
     // Ensure the tool environment is not created.

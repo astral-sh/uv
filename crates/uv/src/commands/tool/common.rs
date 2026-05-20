@@ -34,33 +34,44 @@ use crate::commands::pip;
 
 /// An error raised when a tool package provides no executables.
 #[derive(Debug, Error)]
-#[error("No executables are provided by package `{package}`")]
-pub(crate) struct NoExecutablesError {
-    /// The package that provides no executables.
-    package: PackageName,
-    /// If the package is a dependency (not the root), suggest `--with`.
-    is_dependency: bool,
-    /// Executables found in dependencies of the package that match the package name.
-    matching_dependency_packages: Vec<PackageName>,
+pub(crate) enum NoExecutablesError {
+    /// A dependency was requested as a source of tool executables.
+    #[error("No executables are provided by package `{package}`")]
+    Dependency { package: PackageName },
+    /// The root package cannot be installed as a tool.
+    #[error("Failed to install entrypoints for `{package}`")]
+    Root {
+        package: PackageName,
+        /// Executables found in dependencies of the package that match the package name.
+        matching_dependency_packages: Vec<PackageName>,
+    },
 }
 
 impl Hint for NoExecutablesError {
     fn hints(&self) -> Hints<'_> {
         let mut hints = Hints::none();
-        if self.is_dependency {
-            hints.push(format!(
-                "Use `--with {}` to include `{}` as a dependency without installing its executables",
-                self.package.cyan(),
-                self.package.cyan(),
-            ));
-        }
-        match self.matching_dependency_packages.as_slice() {
+        let (package, matching_dependency_packages) = match self {
+            Self::Dependency { package } => {
+                hints.push(format!(
+                    "Use `--with {}` to include `{}` as a dependency without installing its executables",
+                    package.cyan(),
+                    package.cyan(),
+                ));
+                return hints;
+            }
+            Self::Root {
+                package,
+                matching_dependency_packages,
+            } => (package, matching_dependency_packages),
+        };
+
+        match matching_dependency_packages.as_slice() {
             [] => {}
             [dep] => {
                 let command = format!("uv tool install {dep}");
                 hints.push(format!(
                     "An executable with the name `{}` is available via dependency `{}`.\n      Did you mean `{}`?",
-                    self.package.cyan(),
+                    package.cyan(),
                     dep.cyan(),
                     command.bold(),
                 ));
@@ -72,7 +83,7 @@ impl Hint for NoExecutablesError {
                     .join("\n");
                 hints.push(format!(
                     "An executable with the name `{}` is available via the following dependencies:\n{dep_list}\n      Did you mean to install one of them instead?",
-                    self.package.cyan(),
+                    package.cyan(),
                 ));
             }
         }
@@ -281,23 +292,24 @@ pub(crate) fn finalize_tool_install(
             .collect::<BTreeSet<_>>();
 
         if target_entrypoints.is_empty() {
-            let is_dependency = package != name;
-            let matching_dependency_packages = if is_dependency {
-                Vec::new()
+            let err = if package != name {
+                NoExecutablesError::Dependency {
+                    package: package.clone(),
+                }
             } else {
-                matching_packages(package.as_ref(), &site_packages)
+                NoExecutablesError::Root {
+                    package: package.clone(),
+                    matching_dependency_packages: matching_packages(
+                        package.as_ref(),
+                        &site_packages,
+                    )
                     .into_iter()
                     .map(|dist| dist.name().clone())
-                    .collect()
+                    .collect(),
+                }
             };
 
-            let err = NoExecutablesError {
-                package: package.clone(),
-                is_dependency,
-                matching_dependency_packages,
-            };
-
-            if is_dependency {
+            if package != name {
                 // Non-root package: display the error with hints and continue.
                 writeln!(
                     printer.stdout(),
@@ -308,6 +320,12 @@ pub(crate) fn finalize_tool_install(
             }
 
             // For the root package, this is a fatal error.
+            writeln!(
+                printer.stdout(),
+                "No executables are provided by package `{}`; removing tool",
+                package.cyan()
+            )?;
+
             // Clean up the environment we just created.
             installed_tools.remove_environment(name)?;
 
