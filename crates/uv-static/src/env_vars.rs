@@ -187,6 +187,10 @@ impl EnvVars {
     #[attr_added_in("0.2.30")]
     pub const UV_NO_CONFIG: &'static str = "UV_NO_CONFIG";
 
+    /// If set, uv will not read system-level configuration files.
+    #[attr_added_in("next release")]
+    pub const UV_NO_SYSTEM_CONFIG: &'static str = "UV_NO_SYSTEM_CONFIG";
+
     /// Equivalent to the `--isolated` command-line argument. If set, uv will avoid discovering
     /// a `pyproject.toml` or `uv.toml` file.
     #[attr_added_in("0.8.14")]
