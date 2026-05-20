@@ -83,7 +83,7 @@ impl std::str::FromStr for Netrc {
                 break;
             }
             if tt.chars().nth(0) == Some('#') {
-                if lexer.lineno == saved_lineno && tt.len() == 1 {
+                if lexer.lineno == saved_lineno {
                     lexer.read_line();
                 }
                 continue;
