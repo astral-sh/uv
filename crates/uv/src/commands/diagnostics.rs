@@ -396,34 +396,6 @@ fn collect_hint<T: Hint + std::error::Error + 'static>(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::borrow::Cow;
-
-    use uv_workspace::pyproject::{PyprojectTomlError, SourceError};
-
-    use super::hints_for_error;
-
-    #[test]
-    fn collects_source_hints_through_pyproject_errors() {
-        let err = anyhow::Error::new(PyprojectTomlError::Source(SourceError::OverlappingMarkers(
-            "sys_platform == 'win32'".to_string(),
-            "python_version == '3.12'".to_string(),
-            "python_version != '3.12'".to_string(),
-        )));
-
-        let hints = hints_for_error(&err)
-            .into_iter()
-            .map(Cow::into_owned)
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            hints,
-            vec!["replace `python_version == '3.12'` with `python_version != '3.12'`.".to_string()]
-        );
-    }
-}
-
 /// Format a [`DerivationChain`] as a human-readable error message.
 fn format_chain(name: &PackageName, version: Option<&Version>, chain: &DerivationChain) -> String {
     /// Format a step in the [`DerivationChain`] as a human-readable error message.
@@ -541,4 +513,32 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
         message = format!("{message} `{}`", name.cyan());
     }
     message
+}
+
+#[cfg(test)]
+mod tests {
+    use std::borrow::Cow;
+
+    use uv_workspace::pyproject::{PyprojectTomlError, SourceError};
+
+    use super::hints_for_error;
+
+    #[test]
+    fn collects_source_hints_through_pyproject_errors() {
+        let err = anyhow::Error::new(PyprojectTomlError::Source(SourceError::OverlappingMarkers(
+            "sys_platform == 'win32'".to_string(),
+            "python_version == '3.12'".to_string(),
+            "python_version != '3.12'".to_string(),
+        )));
+
+        let hints = hints_for_error(&err)
+            .into_iter()
+            .map(Cow::into_owned)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            hints,
+            vec!["replace `python_version == '3.12'` with `python_version != '3.12'`.".to_string()]
+        );
+    }
 }
