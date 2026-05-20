@@ -353,7 +353,7 @@ pub struct ToolUv {
             pydantic = { path = "/path/to/pydantic", editable = true }
         "#
     )]
-    #[serde(default, skip_deserializing)]
+    #[serde(default, deserialize_with = "ignore_tool_uv_sources")]
     pub sources: Option<ToolUvSources>,
 
     /// The indexes to use when resolving dependencies.
@@ -739,6 +739,14 @@ pub struct ToolUv {
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUvSources(BTreeMap<PackageName, Sources>);
+
+fn ignore_tool_uv_sources<'de, D>(deserializer: D) -> Result<Option<ToolUvSources>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    serde::de::IgnoredAny::deserialize(deserializer)?;
+    Ok(None)
+}
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
