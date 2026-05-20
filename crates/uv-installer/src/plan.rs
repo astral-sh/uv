@@ -93,7 +93,7 @@ impl fmt::Display for IncompatibleWheelHint {
                         format_language_tag(*current),
                     )
                 } else {
-                    write!(f, "The wheel requires {}", format_language_tags(wheel_tags),)
+                    write!(f, "The wheel requires {}", format_language_tags(wheel_tags))
                 }
             }
             Self::Abi {
@@ -151,7 +151,7 @@ impl fmt::Display for IncompatibleWheelHint {
                         format_platform_tag(current),
                     )
                 } else {
-                    write!(f, "The wheel requires {}", format_platform_tags(wheel_tags),)
+                    write!(f, "The wheel requires {}", format_platform_tags(wheel_tags))
                 }
             }
         }

@@ -80,9 +80,6 @@ impl fmt::Display for Hints<'_> {
         for hint in &self.0 {
             write!(f, "\n{HintPrefix} {hint}")?;
         }
-        if !self.0.is_empty() {
-            writeln!(f)?;
-        }
         Ok(())
     }
 }

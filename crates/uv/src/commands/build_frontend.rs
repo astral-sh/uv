@@ -453,6 +453,9 @@ async fn build_impl(
                 });
                 anstream::eprint!("{report:?}");
                 anstream::eprint!("{hints}");
+                if !hints.is_empty() {
+                    anstream::eprintln!();
+                }
 
                 success = false;
             }
