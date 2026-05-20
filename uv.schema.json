@@ -1975,8 +1975,12 @@
               "$ref": "#/definitions/MarkerTree"
             },
             "workspace": {
-              "description": "When set to `false`, the package will be fetched from the remote index, rather than\nincluded as a workspace package.",
-              "type": "boolean"
+              "description": "`true` selects the current workspace. A string selects another workspace discovered\nfrom the given path.\n\nWhen set to `false`, the package will be fetched from the remote index, rather than\nincluded as a workspace package.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/WorkspaceReference"
+                }
+              ]
             }
           },
           "additionalProperties": false,
@@ -2591,6 +2595,17 @@
         }
       },
       "additionalProperties": false
+    },
+    "WorkspaceReference": {
+      "description": "A reference to either the current workspace or a workspace discovered from a path.",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/definitions/PortablePathBuf"
+        }
+      ]
     }
   }
 }

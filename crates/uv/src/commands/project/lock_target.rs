@@ -13,7 +13,7 @@ use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_resolver::{Lock, LockVersion, VERSION};
 use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroup};
-use uv_workspace::{Editability, Workspace, WorkspaceMember};
+use uv_workspace::{Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
 use crate::commands::project::{ProjectError, find_requires_python};
 
@@ -351,6 +351,7 @@ impl<'lock> LockTarget<'lock> {
         requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
         locations: &IndexLocations,
         sources: &NoSources,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Vec<Requirement>, uv_distribution::MetadataError> {
         match self {
@@ -371,6 +372,7 @@ impl<'lock> LockTarget<'lock> {
                     workspace,
                     locations,
                     sources,
+                    workspace_cache,
                     credentials_cache,
                 )?;
 
@@ -415,6 +417,7 @@ impl<'lock> LockTarget<'lock> {
                                 sources_map,
                                 indexes,
                                 locations,
+                                workspace_cache,
                                 credentials_cache,
                             )
                             .map(move |requirement| match requirement {

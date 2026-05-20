@@ -399,11 +399,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             if let Some(spec) = script_specification(
                 (&script).into(),
                 &settings.resolver,
+                workspace_cache,
                 client_builder.credentials_cache(),
             )? {
                 let script_extra_build_requires = script_extra_build_requires(
                     (&script).into(),
                     &settings.resolver,
+                    workspace_cache,
                     client_builder.credentials_cache(),
                 )?
                 .into_inner();
