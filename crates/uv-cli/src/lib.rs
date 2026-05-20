@@ -5291,6 +5291,7 @@ pub struct AuditArgs {
     /// changed with `--service-url`. The defaults are:
     ///
     /// * OSV: <https://api.osv.dev/>
+    /// * PyPI: <https://pypi.org/>
     #[arg(long, value_enum, default_value = "osv")]
     pub service_format: VulnerabilityServiceFormat,
 
@@ -5298,8 +5299,12 @@ pub struct AuditArgs {
     ///
     /// If not provided, the default URL for the selected service will be used.
     ///
-    /// The service needs to use the OSV protocol, unless a different
-    /// format was requested by `--service-format`.
+    /// For `--service-format osv`, the service must implement the OSV API.
+    /// For `--service-format pypi`, the service must be a Warehouse-compatible
+    /// PyPI API base URL.
+    ///
+    /// When using `--service-format pypi`, packages from incompatible indexes
+    /// are skipped instead of being queried against the configured service.
     #[arg(long, value_hint = ValueHint::Url)]
     pub service_url: Option<String>,
 }

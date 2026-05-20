@@ -148,6 +148,277 @@ async fn audit_json_no_vulnerabilities() {
     "#);
 }
 
+/// Audit a project with the PyPI vulnerability service and no vulnerabilities found.
+#[tokio::test]
+async fn audit_pypi_no_vulnerabilities() {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+    write_audit_json_project(&context, &format!("{}/simple", server.uri()));
+
+    Mock::given(method("GET"))
+        .and(path("/pypi/iniconfig/2.0.0/json"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "info": {},
+            "last_serial": 123,
+            "urls": [],
+            "vulnerabilities": []
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--frozen")
+        .arg("--service-format")
+        .arg("pypi")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+/// Audit with the PyPI service skips packages from incompatible indexes.
+#[tokio::test]
+async fn audit_pypi_skips_incompatible_indexes() {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+    write_audit_json_project(&context, &proxy.url("/simple"));
+
+    let server = MockServer::start().await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--frozen")
+        .arg("--service-format")
+        .arg("pypi")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Skipped 1 package during PyPI vulnerability lookup because its source index is not compatible with the configured service URL.
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+/// Audit a project with the PyPI vulnerability service and find a vulnerability.
+#[tokio::test]
+async fn audit_pypi_vulnerability_found() {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+    write_audit_json_project(&context, &format!("{}/simple", server.uri()));
+
+    Mock::given(method("GET"))
+        .and(path("/pypi/iniconfig/2.0.0/json"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "info": {},
+            "last_serial": 123,
+            "urls": [],
+            "vulnerabilities": [{
+                "aliases": ["CVE-2026-0001"],
+                "details": "A detailed test vulnerability in iniconfig.",
+                "fixed_in": ["2.1.0"],
+                "id": "PYSEC-2026-0001",
+                "link": "https://example.com/advisory/PYSEC-2026-0001",
+                "summary": "A test vulnerability in iniconfig",
+                "withdrawn": null
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--frozen")
+        .arg("--service-format")
+        .arg("pypi")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    Vulnerabilities:
+
+    iniconfig 2.0.0 has 1 known vulnerability:
+
+    - PYSEC-2026-0001: A test vulnerability in iniconfig
+
+      Fixed in: 2.1.0
+
+      Advisory information: https://example.com/advisory/PYSEC-2026-0001
+
+
+    ----- stderr -----
+    Found 1 known vulnerability and no adverse project statuses in 1 package
+    ");
+}
+
+/// Withdrawn PyPI vulnerabilities are suppressed.
+#[tokio::test]
+async fn audit_pypi_withdrawn_vulnerability() {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+    write_audit_json_project(&context, &format!("{}/simple", server.uri()));
+
+    Mock::given(method("GET"))
+        .and(path("/pypi/iniconfig/2.0.0/json"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "info": {},
+            "last_serial": 123,
+            "urls": [],
+            "vulnerabilities": [{
+                "aliases": [],
+                "details": "A withdrawn vulnerability.",
+                "fixed_in": ["2.1.0"],
+                "id": "PYSEC-2026-0002",
+                "link": "https://example.com/advisory/PYSEC-2026-0002",
+                "summary": "A withdrawn vulnerability in iniconfig",
+                "withdrawn": "2026-01-01T00:00:00Z"
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--frozen")
+        .arg("--service-format")
+        .arg("pypi")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+/// PyPI vulnerability findings and project statuses are reported together.
+#[tokio::test]
+async fn audit_pypi_vulnerability_and_project_status() {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+    write_audit_json_project(&context, &format!("{}/simple", server.uri()));
+    let simple_detail = json!({
+        "alternate-locations": [],
+        "files": [{
+            "filename": "iniconfig-2.0.0-py3-none-any.whl",
+            "hashes": {
+                "sha256": "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374"
+            },
+            "requires-python": ">=3.7",
+            "size": 5892,
+            "upload-time": "2023-01-07T11:08:09.864Z",
+            "url": format!(
+                "{}/files/iniconfig-2.0.0-py3-none-any.whl",
+                server.uri()
+            ),
+            "yanked": false
+        }],
+        "meta": {
+            "api-version": "1.4"
+        },
+        "name": "iniconfig",
+        "project-status": {
+            "status": "archived",
+            "reason": "No longer maintained"
+        },
+        "versions": ["2.0.0"]
+    })
+    .to_string();
+
+    Mock::given(method("GET"))
+        .and(path("/pypi/iniconfig/2.0.0/json"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "info": {},
+            "last_serial": 123,
+            "urls": [],
+            "vulnerabilities": [{
+                "aliases": [],
+                "details": "A detailed test vulnerability in iniconfig.",
+                "fixed_in": ["2.1.0"],
+                "id": "PYSEC-2026-0003",
+                "link": "https://example.com/advisory/PYSEC-2026-0003",
+                "summary": "A test vulnerability in iniconfig",
+                "withdrawn": null
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/simple/iniconfig/"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw(simple_detail.clone(), "application/vnd.pypi.simple.v1+json"),
+        )
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/simple/iniconfig"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw(simple_detail, "application/vnd.pypi.simple.v1+json"),
+        )
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--frozen")
+        .arg("--service-format")
+        .arg("pypi")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    Vulnerabilities:
+
+    iniconfig 2.0.0 has 1 known vulnerability:
+
+    - PYSEC-2026-0003: A test vulnerability in iniconfig
+
+      Fixed in: 2.1.0
+
+      Advisory information: https://example.com/advisory/PYSEC-2026-0003
+
+
+    Adverse statuses:
+
+    - iniconfig is archived: No longer maintained
+
+    ----- stderr -----
+    Found 1 known vulnerability and 1 adverse project status in 1 package
+    ");
+}
+
 /// Requesting JSON output warns unless the JSON preview feature is enabled.
 #[tokio::test]
 async fn audit_json_preview_warning() {

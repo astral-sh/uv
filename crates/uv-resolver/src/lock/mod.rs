@@ -807,7 +807,7 @@ impl Lock {
         });
         let packages = by_name_version
             .into_iter()
-            .map(|((_, version), package)| (package, version))
+            .map(|((_, version), package)| AuditablePackage { package, version })
             .collect();
         Auditable { packages }
     }
@@ -2329,10 +2329,30 @@ impl Lock {
 /// audit sources (e.g. per-version vulnerability databases and per-project
 /// status markers) can share one walk rather than each re-traversing the
 /// lockfile.
+#[derive(Debug, Copy, Clone)]
+pub struct AuditablePackage<'lock> {
+    package: &'lock Package,
+    version: &'lock Version,
+}
+
+impl<'lock> AuditablePackage<'lock> {
+    pub fn name(&self) -> &'lock PackageName {
+        self.package.name()
+    }
+
+    pub fn version(&self) -> &'lock Version {
+        self.version
+    }
+
+    pub fn index(&self, root: &Path) -> Result<Option<IndexUrl>, LockError> {
+        self.package.index(root)
+    }
+}
+
 #[derive(Debug)]
 pub struct Auditable<'lock> {
     /// Packages deduplicated by `(name, version)` and sorted by the same key.
-    packages: Vec<(&'lock Package, &'lock Version)>,
+    packages: Vec<AuditablePackage<'lock>>,
 }
 
 struct SourceTreeRequiresDist {
@@ -2355,7 +2375,12 @@ impl<'lock> Auditable<'lock> {
     pub fn packages(&self) -> impl Iterator<Item = (&'lock PackageName, &'lock Version)> + '_ {
         self.packages
             .iter()
-            .map(|(package, version)| (package.name(), *version))
+            .map(|package| (package.name(), package.version()))
+    }
+
+    /// Iterate over the auditable packages, preserving package-level source metadata.
+    pub fn entries(&self) -> impl Iterator<Item = AuditablePackage<'lock>> + '_ {
+        self.packages.iter().copied()
     }
 
     /// Return the distinct registry-hosted projects among the auditable
@@ -2364,7 +2389,7 @@ impl<'lock> Auditable<'lock> {
     pub fn projects(&self, root: &Path) -> Result<Vec<(&'lock PackageName, IndexUrl)>, LockError> {
         let mut seen: FxHashSet<(&PackageName, String)> = FxHashSet::default();
         let mut projects: Vec<(&PackageName, IndexUrl)> = Vec::with_capacity(self.packages.len());
-        for (package, _version) in &self.packages {
+        for package in &self.packages {
             if let Some(index) = package.index(root)?
                 && seen.insert((package.name(), index.url().to_string()))
             {

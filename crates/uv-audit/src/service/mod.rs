@@ -3,6 +3,7 @@
 pub use project_status::ProjectStatusAudit;
 
 pub mod osv;
+pub mod pypi;
 mod project_status;
 
 /// The shape of the vulnerability service.
@@ -10,4 +11,5 @@ mod project_status;
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum VulnerabilityServiceFormat {
     Osv,
+    Pypi,
 }

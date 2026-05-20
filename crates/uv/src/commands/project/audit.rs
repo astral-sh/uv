@@ -23,8 +23,9 @@ use rustc_hash::FxHashSet;
 use tracing::trace;
 use uv_audit::{
     AdverseStatus, Dependency, Finding, ProjectStatus, ProjectStatusAudit, Vulnerability,
-    VulnerabilityID, VulnerabilityServiceFormat, osv,
+    VulnerabilityID, VulnerabilityServiceFormat, osv, pypi,
 };
+use uv_cache_key::CanonicalUrl;
 use uv_cache::Cache;
 use uv_cli::AuditOutputFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
@@ -33,6 +34,7 @@ use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_redacted::DisplaySafeUrl;
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
@@ -228,10 +230,6 @@ pub(crate) async fn audit(
 
     // Perform the audit.
     let reporter = AuditReporter::from(printer);
-    let dependencies: Vec<Dependency> = auditable
-        .packages()
-        .map(|(name, version)| Dependency::new(name.clone(), version.clone()))
-        .collect();
     let base_client = client_builder.clone().build()?;
 
     let registry_client = RegistryClientBuilder::new(client_builder, cache.clone())
@@ -242,9 +240,13 @@ pub(crate) async fn audit(
     let status_audit =
         ProjectStatusAudit::new(&registry_client, &capabilities, concurrency.clone());
 
-    let osv_future = async {
+    let vulnerability_future = async {
         match service {
             VulnerabilityServiceFormat::Osv => {
+                let dependencies: Vec<Dependency> = auditable
+                    .packages()
+                    .map(|(name, version)| Dependency::new(name.clone(), version.clone()))
+                    .collect();
                 let osv_url = service_url
                     .as_deref()
                     .unwrap_or(osv::API_BASE)
@@ -253,7 +255,43 @@ pub(crate) async fn audit(
                 let client = base_client.for_host(&osv_url).raw_client().clone();
                 let service = osv::Osv::new(client, Some(osv_url), concurrency);
                 trace!("Auditing {n} dependencies against OSV", n = auditable.len());
-                service.query_batch(&dependencies, osv::Filter::All).await
+                service
+                    .query_batch(&dependencies, osv::Filter::All)
+                    .await
+                    .map_err(anyhow::Error::from)
+                    .map(|findings| (findings, 0usize))
+            }
+            VulnerabilityServiceFormat::Pypi => {
+                let pypi_url = service_url
+                    .as_deref()
+                    .unwrap_or(pypi::API_BASE)
+                    .parse()
+                    .expect("invalid PyPI service URL");
+                let pypi_root = pypi_service_root(&pypi_url);
+                let mut dependencies = Vec::with_capacity(auditable.len());
+                let mut skipped = 0usize;
+                for package in auditable.entries() {
+                    let Some(index) = package.index(target.install_path())? else {
+                        skipped += 1;
+                        continue;
+                    };
+                    if !pypi_service_compatible(&index, &pypi_root) {
+                        skipped += 1;
+                        continue;
+                    }
+                    dependencies.push(Dependency::new(
+                        package.name().clone(),
+                        package.version().clone(),
+                    ));
+                }
+                let client = base_client.for_host(&pypi_url).raw_client().clone();
+                let service = pypi::Pypi::new(client, Some(pypi_url), concurrency);
+                trace!("Auditing {n} dependencies against PyPI", n = auditable.len());
+                service
+                    .query_batch(&dependencies)
+                    .await
+                    .map_err(anyhow::Error::from)
+                    .map(|findings| (findings, skipped))
             }
         }
     };
@@ -264,11 +302,20 @@ pub(crate) async fn audit(
         );
         status_audit.query_batch(&projects).await
     };
-    let (osv_findings, status_findings) = tokio::join!(osv_future, status_future);
-    let mut all_findings = osv_findings?;
+    let (vulnerability_findings, status_findings) =
+        tokio::join!(vulnerability_future, status_future);
+    let (mut all_findings, skipped) = vulnerability_findings?;
     all_findings.extend(status_findings);
 
     reporter.on_audit_complete();
+
+    if skipped > 0 {
+        let package_noun = if skipped == 1 { "package" } else { "packages" };
+        let pronoun = if skipped == 1 { "its" } else { "their" };
+        warn_user!(
+            "Skipped {skipped} {package_noun} during PyPI vulnerability lookup because {pronoun} source index is not compatible with the configured service URL."
+        );
+    }
 
     // Filter out ignored vulnerabilities, tracking how many were ignored
     // and which ignore rules actually matched.
@@ -313,6 +360,31 @@ pub(crate) async fn audit(
         findings: all_findings,
     };
     display.render()
+}
+
+fn pypi_service_root(service_url: &DisplaySafeUrl) -> DisplaySafeUrl {
+    let mut root = service_url.clone();
+    let strip_simple = {
+        let Some(mut segments) = root.path_segments() else {
+            return root;
+        };
+        let last = match segments.next_back() {
+            Some("") => segments.next_back(),
+            segment => segment,
+        };
+        matches!(last, Some(segment) if segment.eq_ignore_ascii_case("simple") || segment.eq_ignore_ascii_case("+simple"))
+    };
+    if strip_simple && let Ok(mut segments) = root.path_segments_mut() {
+        segments.pop_if_empty().pop();
+    }
+    root
+}
+
+fn pypi_service_compatible(index: &IndexUrl, service_root: &DisplaySafeUrl) -> bool {
+    let Some(index_root) = index.root() else {
+        return false;
+    };
+    CanonicalUrl::new(&index_root) == CanonicalUrl::new(service_root)
 }
 
 struct AuditResults {
