@@ -273,6 +273,80 @@ async fn audit_vulnerability_found() {
     ");
 }
 
+/// Ensure audit tolerates OSV vulnerability records with empty range events (`{}`).
+#[tokio::test]
+async fn audit_empty_osv_range_event() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "PYSEC-2026-89"}]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/PYSEC-2026-89"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "PYSEC-2026-89",
+            "modified": "2026-05-20T08:00:29.202212087Z",
+            "summary": "Malformed range event in OSV record",
+            "affected": [{
+                "ranges": [{
+                    "type": "ECOSYSTEM",
+                    "events": [
+                        {"introduced": "0"},
+                        {}
+                    ]
+                }]
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    Vulnerabilities:
+
+    iniconfig 2.0.0 has 1 known vulnerability:
+
+    - PYSEC-2026-89: Malformed range event in OSV record
+
+      No fix versions available
+
+      Advisory information: https://osv.dev/vulnerability/PYSEC-2026-89
+
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Found 1 known vulnerability and no adverse project statuses in 1 package
+    ");
+}
+
 /// Audit a project with no dependencies.
 #[tokio::test]
 async fn audit_no_dependencies() {

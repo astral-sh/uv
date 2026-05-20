@@ -14,7 +14,7 @@ use crate::types;
 use futures::{StreamExt as _, TryStreamExt as _};
 use jiff::Timestamp;
 use reqwest_middleware::ClientWithMiddleware;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use uv_configuration::Concurrency;
 use uv_pep440::Version;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
@@ -66,6 +66,51 @@ enum Event {
     Limit(#[allow(dead_code)] String),
 }
 
+/// Raw event object from OSV, used to tolerate malformed entries (e.g. `{}`).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+struct EventRaw {
+    introduced: Option<String>,
+    fixed: Option<String>,
+    last_affected: Option<String>,
+    limit: Option<String>,
+}
+
+impl EventRaw {
+    fn into_event(self) -> Option<Event> {
+        if let Some(version) = self.introduced {
+            return Some(Event::Introduced(version));
+        }
+        if let Some(version) = self.fixed {
+            return Some(Event::Fixed(version));
+        }
+        if let Some(version) = self.last_affected {
+            return Some(Event::LastAffected(version));
+        }
+        if let Some(version) = self.limit {
+            return Some(Event::Limit(version));
+        }
+        None
+    }
+}
+
+/// Deserialize OSV range events, skipping empty or unrecognized entries.
+fn deserialize_events<'de, D>(deserializer: D) -> Result<Vec<Event>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw = Vec::<EventRaw>::deserialize(deserializer)?;
+    let mut events = Vec::with_capacity(raw.len());
+    for entry in raw {
+        if let Some(event) = entry.into_event() {
+            events.push(event);
+        } else {
+            trace!("Skipping empty or unrecognized OSV range event");
+        }
+    }
+    Ok(events)
+}
+
 /// The type of a version range in an OSV vulnerability record.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
@@ -91,6 +136,7 @@ enum RangeType {
 struct Range {
     #[serde(rename = "type")]
     range_type: RangeType,
+    #[serde(deserialize_with = "deserialize_events")]
     events: Vec<Event>,
 }
 
@@ -434,13 +480,17 @@ mod tests {
 
     use super::Event;
     use super::Osv;
+    use super::Range;
 
     #[test]
     fn test_deserialize_events() {
-        let json = r#"[{ "introduced": "0" }, { "fixed": "46.0.5" }]"#;
-        let events: Vec<Event> = serde_json::from_str(json).expect("Failed to deserialize events");
+        let range: Range = serde_json::from_value(json!({
+            "type": "ECOSYSTEM",
+            "events": [{ "introduced": "0" }, { "fixed": "46.0.5" }],
+        }))
+        .expect("deserialize range");
 
-        insta::assert_debug_snapshot!(events, @r#"
+        insta::assert_debug_snapshot!(range.events, @r#"
         [
             Introduced(
                 "0",
@@ -450,6 +500,49 @@ mod tests {
             ),
         ]
         "#);
+    }
+
+    #[test]
+    fn test_deserialize_events_skips_empty_object() {
+        let range: Range = serde_json::from_value(json!({
+            "type": "ECOSYSTEM",
+            "events": [{ "introduced": "0" }, {}],
+        }))
+        .expect("deserialize range");
+
+        insta::assert_debug_snapshot!(range.events, @r#"
+        [
+            Introduced(
+                "0",
+            ),
+        ]
+        "#);
+    }
+
+    #[test]
+    fn test_deserialize_vulnerability_with_empty_range_event() {
+        let vuln: super::Vulnerability = serde_json::from_value(json!({
+            "id": "PYSEC-2026-89",
+            "modified": "2026-05-20T08:00:29.202212087Z",
+            "published": "2026-03-05T15:16:11.243Z",
+            "summary": "Example vulnerability",
+            "affected": [{
+                "ranges": [{
+                    "type": "ECOSYSTEM",
+                    "events": [
+                        { "introduced": "0" },
+                        {}
+                    ]
+                }]
+            }]
+        }))
+        .expect("deserialize vulnerability");
+
+        assert_eq!(vuln.id, "PYSEC-2026-89");
+        let ranges = vuln.affected.unwrap();
+        let events = &ranges[0].ranges.as_ref().unwrap()[0].events;
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], Event::Introduced(_)));
     }
 
     #[test]
