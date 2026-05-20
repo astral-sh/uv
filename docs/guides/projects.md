@@ -230,6 +230,12 @@ print("hello world")
 $ uv run example.py
 ```
 
+Or, to start an interactive Python REPL with the project's dependencies available:
+
+```console
+$ uv run python
+```
+
 Alternatively, you can use `uv sync` to manually update the environment then activate it before
 executing a command:
 

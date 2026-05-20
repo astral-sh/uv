@@ -22,6 +22,21 @@ $ # Running a `bash` script that requires the project to be available
 $ uv run bash scripts/foo.sh
 ```
 
+## Starting an interactive interpreter
+
+Invoking the Python interpreter without further arguments drops you into an interactive REPL,
+scoped to the project's environment:
+
+```console
+$ uv run python
+Python 3.13.0 (...)
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import example
+```
+
+Modules from the project (and its dependencies) are importable from the session, since the
+interpreter is invoked inside the project's virtual environment.
+
 ## Requesting additional dependencies
 
 Additional dependencies or different versions of dependencies can be requested per invocation.
