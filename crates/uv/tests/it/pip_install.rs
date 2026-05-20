@@ -4280,7 +4280,7 @@ fn build_prerelease_hint() -> Result<()> {
       ╰─▶ Because only b<=0.1 is available and a==0.1.0 depends on b>0.1, we can conclude that a==0.1.0 cannot be used.
           And because only a==0.1.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
 
-          hint: Only pre-releases of `b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically. Add `b>=1.0.0a1` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
+    hint: Only pre-releases of `b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically. Add `b>=1.0.0a1` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
     "
     );
 
