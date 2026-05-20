@@ -3571,7 +3571,7 @@ pub struct RunArgs {
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long, value_hint = ValueHint::Other)]
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -3915,7 +3915,7 @@ pub struct SyncArgs {
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long, value_hint = ValueHint::Other)]
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -4730,7 +4730,7 @@ pub struct TreeArgs {
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -4906,7 +4906,7 @@ pub struct ExportArgs {
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long)]
+    #[arg(long, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -5192,7 +5192,7 @@ pub struct AuditArgs {
     /// Don't audit the specified dependency group [env: `UV_NO_GROUP`=]
     ///
     /// May be provided multiple times.
-    #[arg(long, value_hint = ValueHint::Other)]
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
     pub no_group: Vec<GroupName>,
 
     /// Don't audit the default dependency groups.
@@ -6188,7 +6188,7 @@ pub struct ToolUpgradeArgs {
     pub no_sources: bool,
 
     /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
-    #[arg(long, help_heading = "Resolver options")]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
     pub no_sources_package: Vec<PackageName>,
 
     #[command(flatten)]
@@ -7037,6 +7037,7 @@ pub struct BuildOptionsArgs {
     #[arg(
         long,
         help_heading = "Build options",
+        value_delimiter = ' ',
         value_hint = ValueHint::Other,
     )]
     pub no_build_package: Vec<PackageName>,
@@ -7066,6 +7067,7 @@ pub struct BuildOptionsArgs {
     #[arg(
         long,
         help_heading = "Build options",
+        value_delimiter = ' ',
         value_hint = ValueHint::Other,
     )]
     pub no_binary_package: Vec<PackageName>,
@@ -7257,7 +7259,7 @@ pub struct InstallerArgs {
     pub no_sources: bool,
 
     /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
-    #[arg(long, help_heading = "Resolver options")]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
     pub no_sources_package: Vec<PackageName>,
 }
 
@@ -7477,7 +7479,7 @@ pub struct ResolverArgs {
     pub no_sources: bool,
 
     /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
-    #[arg(long, help_heading = "Resolver options")]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
     pub no_sources_package: Vec<PackageName>,
 }
 
@@ -7754,7 +7756,7 @@ pub struct ResolverInstallerArgs {
     pub no_sources: bool,
 
     /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
-    #[arg(long, help_heading = "Resolver options")]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
     pub no_sources_package: Vec<PackageName>,
 }
 
