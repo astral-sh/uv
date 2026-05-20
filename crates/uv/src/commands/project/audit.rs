@@ -405,12 +405,13 @@ impl AuditResults {
                 (
                     vulnerability.dependency.name(),
                     vulnerability.dependency.version(),
+                    vulnerability.semver_compatible_fix(false).unwrap_or(None),
                 )
             });
 
             for (dependency, vulnerabilities) in &groups {
                 let vulnerabilities: Vec<_> = vulnerabilities.collect();
-                let (name, version) = dependency;
+                let (name, version, elligible_fix) = dependency;
 
                 writeln!(
                     self.printer.stdout_important(),
@@ -450,6 +451,15 @@ impl AuditResults {
                                 .map(std::string::ToString::to_string)
                                 .join(", ")
                                 .blue()
+                        )?;
+                    }
+
+                    if let Some(fix) = elligible_fix {
+                        writeln!(
+                            self.printer.stdout_important(),
+                            "  Pass {flag} to upgrade to {fix}\n",
+                            flag = "--fix".blue(),
+                            fix = fix.to_string().blue()
                         )?;
                     }
 
