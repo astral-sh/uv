@@ -5783,6 +5783,7 @@ dependencies = [
  "clap",
  "futures",
  "insta",
+ "itertools 0.14.0",
  "jiff",
  "reqwest",
  "rkyv",
