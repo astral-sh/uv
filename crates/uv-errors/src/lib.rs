@@ -57,6 +57,33 @@ impl Hints<'_> {
     }
 }
 
+/// A display adapter for an error followed by its hints.
+///
+/// Error renderers line-terminate the error before rendering [`Hints`]. Use
+/// this adapter when an error and its hints need to be formatted together.
+pub struct ErrorWithHints<'a, E> {
+    error: E,
+    hints: Hints<'a>,
+}
+
+impl<'a, E> ErrorWithHints<'a, E> {
+    /// Format an error followed by any hints.
+    pub fn new(error: E, hints: Hints<'a>) -> Self {
+        Self { error, hints }
+    }
+}
+
+impl<E: fmt::Display> fmt::Display for ErrorWithHints<'_, E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.error)?;
+        if !self.hints.is_empty() {
+            writeln!(f)?;
+            write!(f, "{}", self.hints)?;
+        }
+        Ok(())
+    }
+}
+
 impl<'a> From<&'a str> for Hints<'a> {
     fn from(hint: &'a str) -> Self {
         Self(vec![Cow::Borrowed(hint)])
@@ -104,7 +131,7 @@ impl fmt::Display for HintPrefix {
 
 #[cfg(test)]
 mod tests {
-    use super::Hints;
+    use super::{ErrorWithHints, HintPrefix, Hints};
 
     #[test]
     fn extend_deduplicates_matching_hints() {
@@ -117,5 +144,17 @@ mod tests {
             .map(std::borrow::Cow::into_owned)
             .collect::<Vec<_>>();
         assert_eq!(hints, vec!["same".to_string(), "other".to_string()]);
+    }
+
+    #[test]
+    fn error_with_hints_separates_hints_from_error() {
+        assert_eq!(
+            ErrorWithHints::new("error", Hints::from("fix it")).to_string(),
+            format!("error\n\n{HintPrefix} fix it")
+        );
+        assert_eq!(
+            ErrorWithHints::new("error", Hints::none()).to_string(),
+            "error"
+        );
     }
 }
