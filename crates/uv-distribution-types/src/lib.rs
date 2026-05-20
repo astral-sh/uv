@@ -493,18 +493,18 @@ impl Dist {
     }
 
     /// A remote source distribution from a `git+https://` or `git+ssh://` url.
-    pub fn from_git_url(
+    fn from_git_url(
         name: PackageName,
         url: VerbatimUrl,
         git: GitUrl,
         subdirectory: Option<Box<Path>>,
-    ) -> Result<Self, Error> {
-        Ok(Self::Source(SourceDist::Git(GitSourceDist {
+    ) -> Self {
+        Self::Source(SourceDist::Git(GitSourceDist {
             name,
             git: Box::new(git),
             subdirectory,
             url,
-        })))
+        }))
     }
 
     /// Create a [`Dist`] for a URL-based distribution.
@@ -527,9 +527,12 @@ impl Dist {
                 directory.editable,
                 directory.r#virtual,
             ),
-            ParsedUrl::Git(git) => {
-                Self::from_git_url(name, url.verbatim, git.url, git.subdirectory)
-            }
+            ParsedUrl::Git(git) => Ok(Self::from_git_url(
+                name,
+                url.verbatim,
+                git.url,
+                git.subdirectory,
+            )),
         }
     }
 

@@ -562,7 +562,8 @@ pub fn split_scheme(s: &str) -> Option<(&str, &str)> {
 }
 
 /// Strip the `file://localhost/` host from a file path.
-pub fn strip_host(path: &str) -> &str {
+#[cfg(feature = "non-pep508-extensions")]
+pub(crate) fn strip_host(path: &str) -> &str {
     // Ex) `file://localhost/...`.
     if let Some(path) = path
         .strip_prefix("//localhost")

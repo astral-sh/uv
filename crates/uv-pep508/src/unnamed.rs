@@ -7,10 +7,11 @@ use uv_fs::normalize_url_path;
 use uv_normalize::ExtraName;
 
 use crate::marker::parse;
+use crate::verbatim_url::strip_host;
 use crate::{
     Cursor, MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
     RequirementOrigin, Scheme, TracingReporter, VerbatimUrl, VerbatimUrlError, expand_env_vars,
-    parse_extras_cursor, split_extras, split_scheme, strip_host,
+    parse_extras_cursor, split_extras, split_scheme,
 };
 
 /// An extension over [`Pep508Url`] that also supports parsing unnamed requirements, namely paths.

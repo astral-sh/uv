@@ -1,6 +1,6 @@
 [package]
 name = "uv-resolver"
-version = "0.0.47"
+version = "0.0.48"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -82,4 +82,5 @@ insta = { workspace = true }
 toml = { workspace = true }
 
 [features]
+schemars = ["dep:schemars", "uv-distribution-types/schemars"]
 tracing-durations-export = []

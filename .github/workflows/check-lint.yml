@@ -28,7 +28,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.13"
+          version: "0.11.14"
       - run: uvx ruff check .
 
   ty:
@@ -41,7 +41,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.13"
+          version: "0.11.14"
       - run: |
           uvx ty check python/uv
           uvx \
@@ -75,7 +75,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.13"
+          version: "0.11.14"
       - run: uvx --from 'validate-pyproject[all,store]' validate-pyproject pyproject.toml
 
   readme:
@@ -151,9 +151,9 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install cargo shear"
-        uses: taiki-e/install-action@db5fb34fa772531a3ece57ca434f579eb334e0fb # v2.75.30
+        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
         with:
-          tool: cargo-shear@1.11.2
+          tool: cargo-shear@1.12.4
       - run: cargo shear --deny-warnings
 
   typos:
@@ -162,4 +162,4 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - uses: crate-ci/typos@bbaefadf97b0ec5fdc942684b647f1a6ab250274 # v1.46.0
+      - uses: crate-ci/typos@5374cbf686e897b15713110e233094e2874de7ef # v1.46.1

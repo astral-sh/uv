@@ -307,7 +307,7 @@ impl Keywords {
     }
 
     /// Read the `METADATA` format.
-    pub fn from_metadata(keywords: &str) -> Self {
+    fn from_metadata(keywords: &str) -> Self {
         Self(keywords.split(',').map(ToString::to_string).collect())
     }
 
@@ -336,7 +336,7 @@ impl ProjectUrls {
     }
 
     /// Read the `METADATA` format.
-    pub fn from_iter_str(project_urls: impl IntoIterator<Item = String>) -> Self {
+    fn from_iter_str(project_urls: impl IntoIterator<Item = String>) -> Self {
         Self(
             project_urls
                 .into_iter()

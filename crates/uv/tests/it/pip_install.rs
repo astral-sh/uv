@@ -11,9 +11,11 @@ use flate2::write::GzEncoder;
 use fs_err as fs;
 use fs_err::File;
 use futures::executor::block_on;
+use futures::io::AllowStdIo;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use url::Url;
 use walkdir::WalkDir;
 use wiremock::{
@@ -29,6 +31,27 @@ use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, apply_filters, build_vendor_links_url, download_to_disk,
     get_bin, packse_index_url, uv_snapshot, venv_bin_path,
 };
+
+fn write_tar_gz(file: File, entries: &[(&str, &str)]) -> Result<()> {
+    let enc = GzEncoder::new(file, flate2::Compression::default());
+    let mut tar = tokio_tar::Builder::new_non_terminated(AllowStdIo::new(enc).compat_write());
+
+    for (path, contents) in entries {
+        let mut header = tokio_tar::Header::new_gnu();
+        header.set_size(contents.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        block_on(tar.append_data(
+            &mut header,
+            path,
+            AllowStdIo::new(Cursor::new(contents)).compat(),
+        ))?;
+    }
+
+    let writer = block_on(tar.into_inner())?;
+    writer.into_inner().into_inner().finish()?;
+    Ok(())
+}
 
 #[test]
 fn missing_requirements_txt() {
@@ -10071,20 +10094,13 @@ fn test_dynamic_version_sdist_wrong_version() -> Result<()> {
     // Flush the file after we're done.
     {
         let file = File::create(source_dist.path())?;
-        let enc = GzEncoder::new(file, flate2::Compression::default());
-        let mut tar = tar::Builder::new(enc);
-
-        for (path, contents) in [
-            ("foo-1.2.3/pyproject.toml", pyproject_toml),
-            ("foo-1.2.3/setup.py", setup_py),
-        ] {
-            let mut header = tar::Header::new_gnu();
-            header.set_size(contents.len() as u64);
-            header.set_mode(0o644);
-            header.set_cksum();
-            tar.append_data(&mut header, path, Cursor::new(contents))?;
-        }
-        tar.finish()?;
+        write_tar_gz(
+            file,
+            &[
+                ("foo-1.2.3/pyproject.toml", pyproject_toml),
+                ("foo-1.2.3/setup.py", setup_py),
+            ],
+        )?;
     }
 
     uv_snapshot!(context.filters(), context
@@ -13266,9 +13282,213 @@ fn reserved_script_name() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     error: Failed to install: project-0.1.0-py3-none-any.whl (project==0.1.0 (from file://[TEMP_DIR]/))
-      Caused by: Scripts must not use the reserved name python
+      Caused by: Scripts must not use the reserved name `python`, got: `python`
     "
     );
+
+    Ok(())
+}
+
+fn repacked_wheel_with_entrypoint(
+    context: &TestContext,
+    section: &str,
+    entrypoint_name: &str,
+) -> Result<PathBuf> {
+    context.init().arg("--lib").arg("foo").assert().success();
+    context.build().arg("--wheel").arg("foo").assert().success();
+
+    let built_wheel = context.temp_dir.join("foo/dist/foo-0.1.0-py3-none-any.whl");
+    let unpacked = context.temp_dir.join("foo-unpacked");
+    uv_extract::unzip(File::open(&built_wheel)?, &unpacked)?;
+
+    fs::write(
+        unpacked.join("foo-0.1.0.dist-info/entry_points.txt"),
+        formatdoc! {"
+            [{section}]
+            {entrypoint_name} = foo:main
+            ",
+        },
+    )?;
+
+    let repacked_wheel = context.temp_dir.join("foo-0.1.0-py3-none-any.whl");
+    let mut writer = ZipFileWriter::new(Vec::new());
+    for entry in WalkDir::new(&unpacked) {
+        let entry = entry?;
+        let path = entry.path();
+        let name = path.strip_prefix(&unpacked)?;
+        if name.as_os_str().is_empty() {
+            continue;
+        }
+        // Zip entries must use forward slashes, even on Windows.
+        let mut name = PortablePath::from(name).to_string();
+        if path.is_dir() {
+            name.push('/');
+            let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+            block_on(writer.write_entry_whole(entry, &[]))?;
+        } else {
+            let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+            block_on(writer.write_entry_whole(entry, &fs_err::read(path)?))?;
+        }
+    }
+    fs_err::write(&repacked_wheel, block_on(writer.close())?)?;
+
+    Ok(repacked_wheel)
+}
+
+#[test]
+fn reject_wheel_entrypoint_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Build a normal wheel, then rewrite its entry-point metadata to exercise the installer
+    // directly, rather than relying on backend-side validation.
+    let escaped_entrypoint = context.temp_dir.child("escaped-entrypoint");
+    let repacked_wheel = repacked_wheel_with_entrypoint(
+        &context,
+        "console_scripts",
+        &escaped_entrypoint.path().portable_display().to_string(),
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+      Caused by: The wheel is invalid: Script path must resolve to a file within the scripts directory: `[TEMP_DIR]/escaped-entrypoint`
+    "
+    );
+
+    escaped_entrypoint.assert(predicates::path::missing());
+
+    Ok(())
+}
+
+#[test]
+fn reject_normalized_reserved_wheel_entrypoint_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let repacked_wheel =
+        repacked_wheel_with_entrypoint(&context, "console_scripts", "nested/../python")?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+      Caused by: Scripts must not use the reserved name `python`, got: `nested/../python`
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn reject_normalized_reserved_gui_wheel_entrypoint_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let repacked_wheel =
+        repacked_wheel_with_entrypoint(&context, "gui_scripts", "nested/../python")?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+      Caused by: Scripts must not use the reserved name `python`, got: `nested/../python`
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn warn_normalized_activation_wheel_entrypoint_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let repacked_wheel =
+        repacked_wheel_with_entrypoint(&context, "console_scripts", "nested/../activate.bash")?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    warning: The script name `activate.bash` is reserved for virtual environment activation scripts.
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn accept_normalized_gui_wheel_entrypoint_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let repacked_wheel =
+        repacked_wheel_with_entrypoint(&context, "gui_scripts", "nested/../normalized-gui")?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+    "
+    );
+
+    let script_name = if cfg!(windows) {
+        "normalized-gui.exe"
+    } else {
+        "normalized-gui"
+    };
+    let normalized_script = venv_bin_path(&context.venv).join(script_name);
+    assert!(normalized_script.exists());
+
+    Ok(())
+}
+
+#[test]
+fn accept_normalized_wheel_entrypoint_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let repacked_wheel =
+        repacked_wheel_with_entrypoint(&context, "console_scripts", "nested/../normalized-script")?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+    "
+    );
+
+    let script_name = if cfg!(windows) {
+        "normalized-script.exe"
+    } else {
+        "normalized-script"
+    };
+    let normalized_script = venv_bin_path(&context.venv).join(script_name);
+    assert!(normalized_script.exists());
 
     Ok(())
 }

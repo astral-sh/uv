@@ -101,7 +101,7 @@ pub fn find_archive_dist_info<'a, T: Copy>(
 
 /// Returns `true` if the file is a `METADATA` file in a `.dist-info` directory that matches the
 /// wheel filename.
-pub fn is_metadata_entry(path: &str, filename: &WheelFilename) -> Result<bool, Error> {
+fn is_metadata_entry(path: &str, filename: &WheelFilename) -> Result<bool, Error> {
     let Some((dist_info_dir, file)) = path.split_once('/') else {
         return Ok(false);
     };
@@ -161,10 +161,7 @@ pub fn read_archive_metadata(
 /// Find the `.dist-info` directory in an unzipped wheel.
 ///
 /// See: <https://github.com/PyO3/python-pkginfo-rs>
-pub fn find_flat_dist_info(
-    filename: &WheelFilename,
-    path: impl AsRef<Path>,
-) -> Result<String, Error> {
+fn find_flat_dist_info(filename: &WheelFilename, path: impl AsRef<Path>) -> Result<String, Error> {
     // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level.
     let Some(dist_info_prefix) = fs_err::read_dir(path.as_ref())
         .map_err(Error::Io)?
@@ -206,7 +203,7 @@ pub fn find_flat_dist_info(
 }
 
 /// Read the wheel `METADATA` metadata from a `.dist-info` directory.
-pub fn read_dist_info_metadata(
+fn read_dist_info_metadata(
     dist_info_prefix: &str,
     wheel: impl AsRef<Path>,
 ) -> Result<Vec<u8>, Error> {

@@ -36,7 +36,7 @@ pub enum AcceleratorError {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum Accelerator {
+pub(crate) enum Accelerator {
     /// The CUDA driver version (e.g., `550.144.03`).
     ///
     /// This is in contrast to the CUDA toolkit version (e.g., `12.8.0`).
@@ -76,7 +76,7 @@ impl Accelerator {
     /// 6. `rocm_agent_enumerator`, which lists the AMD GPU architectures.
     /// 7. `/sys/bus/pci/devices`, filtering for the Intel GPU via PCI.
     /// 8. The Windows device tree, filtering for present Intel display adapters via PCI.
-    pub fn detect() -> Result<Option<Self>, AcceleratorError> {
+    pub(crate) fn detect() -> Result<Option<Self>, AcceleratorError> {
         // Read from `UV_CUDA_DRIVER_VERSION`.
         if let Ok(driver_version) = std::env::var(EnvVars::UV_CUDA_DRIVER_VERSION) {
             let driver_version = Version::from_str(&driver_version)?;

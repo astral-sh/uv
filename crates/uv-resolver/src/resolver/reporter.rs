@@ -4,8 +4,6 @@ use uv_distribution_types::{BuildableSource, VersionOrUrlRef};
 use uv_normalize::PackageName;
 use uv_redacted::DisplaySafeUrl;
 
-pub type BuildId = usize;
-
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
     fn on_progress(&self, name: &PackageName, version: &VersionOrUrlRef);

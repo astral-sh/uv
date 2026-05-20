@@ -1,8 +1,12 @@
-pub mod runnable;
+mod runnable;
 mod shlex;
-pub mod windows;
+#[cfg(windows)]
+mod windows;
 
+pub use runnable::WindowsRunnable;
 pub use shlex::{escape_posix_for_single_quotes, shlex_posix, shlex_windows};
+#[cfg(windows)]
+pub use windows::prepend_path;
 
 use std::env::home_dir;
 use std::path::{Path, PathBuf};
@@ -132,7 +136,7 @@ impl Shell {
     /// assert_eq!(Shell::from_shell_path("/usr/bin/zsh"), Some(Shell::Zsh));
     /// assert_eq!(Shell::from_shell_path("/opt/my_custom_shell"), None);
     /// ```
-    pub fn from_shell_path(path: impl AsRef<Path>) -> Option<Self> {
+    fn from_shell_path(path: impl AsRef<Path>) -> Option<Self> {
         parse_shell_from_path(path.as_ref())
     }
 

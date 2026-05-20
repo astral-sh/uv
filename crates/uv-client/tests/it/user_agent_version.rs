@@ -5,8 +5,8 @@ use insta::{assert_json_snapshot, assert_snapshot, with_settings};
 use url::Url;
 
 use uv_cache::Cache;
+use uv_client::BaseClientBuilder;
 use uv_client::RegistryClientBuilder;
-use uv_client::{BaseClientBuilder, LineHaul};
 use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
 use uv_platform_tags::{Arch, Os, Platform};
 use uv_redacted::DisplaySafeUrl;
@@ -48,8 +48,7 @@ async fn test_user_agent_has_version() -> Result<()> {
         .split_once(' ')
         .expect("Failed to split User-Agent header");
 
-    // Deserializing Linehaul
-    let linehaul: LineHaul = serde_json::from_str(uv_linehaul)?;
+    let linehaul: serde_json::Value = serde_json::from_str(uv_linehaul)?;
 
     // Assert linehaul user agent
     let version = escaped_version();
@@ -60,11 +59,11 @@ async fn test_user_agent_has_version() -> Result<()> {
         // Assert uv version
         assert_snapshot!(uv_version, @"uv/[VERSION]");
         // Assert linehaul json
-        assert_json_snapshot!(&linehaul.installer, @r#"
+        assert_json_snapshot!(&linehaul["installer"], @r#"
         {
           "name": "uv",
-          "version": "[VERSION]",
-          "subcommand": null
+          "subcommand": null,
+          "version": "[VERSION]"
         }
         "#);
     });
@@ -108,8 +107,7 @@ async fn test_user_agent_has_subcommand() -> Result<()> {
         .split_once(' ')
         .expect("Failed to split User-Agent header");
 
-    // Deserializing Linehaul
-    let linehaul: LineHaul = serde_json::from_str(uv_linehaul)?;
+    let linehaul: serde_json::Value = serde_json::from_str(uv_linehaul)?;
 
     // Assert linehaul user agent
     let version = escaped_version();
@@ -120,14 +118,14 @@ async fn test_user_agent_has_subcommand() -> Result<()> {
         // Assert uv version
         assert_snapshot!(uv_version, @"uv/[VERSION]");
         // Assert linehaul json
-        assert_json_snapshot!(&linehaul.installer, @r#"
+        assert_json_snapshot!(&linehaul["installer"], @r#"
         {
           "name": "uv",
-          "version": "[VERSION]",
           "subcommand": [
             "foo",
             "bar"
-          ]
+          ],
+          "version": "[VERSION]"
         }
         "#);
     });
@@ -208,8 +206,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
         .split_once(' ')
         .expect("Failed to split User-Agent header");
 
-    // Deserializing Linehaul
-    let linehaul: LineHaul = serde_json::from_str(uv_linehaul)?;
+    let linehaul: serde_json::Value = serde_json::from_str(uv_linehaul)?;
 
     // Assert linehaul user agent
     let version = escaped_version();
@@ -225,69 +222,73 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
             ".ci" => "[ci]"
         }, @r#"
         {
-          "installer": {
-            "name": "uv",
-            "version": "[VERSION]",
-            "subcommand": null
-          },
-          "python": "3.12.2",
+          "ci": "[ci]",
+          "cpu": "x86_64",
+          "distro": "[distro]",
           "implementation": {
             "name": "CPython",
             "version": "3.12.2"
           },
-          "distro": "[distro]",
+          "installer": {
+            "name": "uv",
+            "subcommand": null,
+            "version": "[VERSION]"
+          },
+          "openssl_version": null,
+          "python": "3.12.2",
+          "rustc_version": null,
+          "setuptools_version": null,
           "system": {
             "name": "Linux",
             "release": "6.5.0-1016-azure"
-          },
-          "cpu": "x86_64",
-          "openssl_version": null,
-          "setuptools_version": null,
-          "rustc_version": null,
-          "ci": "[ci]"
+          }
         }
         "#);
     });
 
     // Assert distro
     if cfg!(windows) {
-        assert_json_snapshot!(&linehaul.distro, @"null");
+        assert_json_snapshot!(&linehaul["distro"], @"null");
     } else if cfg!(target_os = "linux") {
-        assert_json_snapshot!(&linehaul.distro, {
+        assert_json_snapshot!(&linehaul["distro"], {
             ".id" => "[distro.id]",
             ".name" => "[distro.name]",
             ".version" => "[distro.version]"
             // We mock the libc version already
         }, @r#"
         {
-          "name": "[distro.name]",
-          "version": "[distro.version]",
           "id": "[distro.id]",
           "libc": {
             "lib": "glibc",
             "version": "2.38"
-          }
+          },
+          "name": "[distro.name]",
+          "version": "[distro.version]"
         }
         "#
         );
         // Check dynamic values
-        let distro_info = linehaul
-            .distro
-            .expect("got no distro, but expected one in linehaul");
+        let distro_info = &linehaul["distro"];
         // Gather distribution info from /etc/os-release.
-        let release_info = uv_platform::host::LinuxOsRelease::from_env()
+        let release_info = uv_platform::LinuxOsRelease::from_env()
             .expect("got no os release info, but expected one in linux");
-        assert_eq!(distro_info.id, release_info.version_codename);
-        assert_eq!(distro_info.name, release_info.name);
-        assert_eq!(distro_info.version, release_info.version_id);
+        assert_eq!(
+            distro_info["id"].as_str(),
+            release_info.version_codename.as_deref()
+        );
+        assert_eq!(distro_info["name"].as_str(), release_info.name.as_deref());
+        assert_eq!(
+            distro_info["version"].as_str(),
+            release_info.version_id.as_deref()
+        );
     } else if cfg!(target_os = "macos") {
         // We mock the macOS distro
-        assert_json_snapshot!(&linehaul.distro, @r###"
+        assert_json_snapshot!(&linehaul["distro"], @r###"
             {
-              "name": "macOS",
-              "version": "14.4",
               "id": null,
-              "libc": null
+              "libc": null,
+              "name": "macOS",
+              "version": "14.4"
             }"###
         );
     }

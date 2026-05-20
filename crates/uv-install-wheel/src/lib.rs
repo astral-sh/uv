@@ -12,10 +12,10 @@ use uv_pep440::Version;
 use uv_pypi_types::Scheme;
 
 pub use install::install_wheel;
-pub use linker::{InstallState, LinkMode, link_wheel_files};
+pub use linker::{InstallState, LinkMode};
 pub use record::RecordEntry;
 pub use uninstall::{Uninstall, uninstall_egg, uninstall_legacy_editable, uninstall_wheel};
-pub use wheel::{LibKind, WheelFile, read_record, validate_and_heal_record};
+pub use wheel::{WheelFile, read_record, validate_and_heal_record};
 
 mod install;
 mod linker;
@@ -86,8 +86,8 @@ pub enum Error {
     InvalidEggLink(PathBuf),
     #[error(transparent)]
     LauncherError(#[from] uv_trampoline_builder::Error),
-    #[error("Scripts must not use the reserved name {0}")]
-    ReservedScriptName(String),
+    #[error("Scripts must not use the reserved name `{reserved}`, got: `{declared}`")]
+    ReservedScriptName { reserved: String, declared: String },
     #[error(transparent)]
     Copy(#[from] uv_fs::link::LinkError),
 }

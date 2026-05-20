@@ -359,11 +359,6 @@ impl Tool {
         &self.requirements
     }
 
-    /// Return the primary requirement for the tool itself.
-    pub fn target_requirement(&self) -> Option<&Requirement> {
-        self.requirements.first()
-    }
-
     pub fn constraints(&self) -> &[Requirement] {
         &self.constraints
     }

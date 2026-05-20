@@ -16477,3 +16477,68 @@ fn sync_reinstalls_on_version_change() -> Result<()> {
 
     Ok(())
 }
+
+/// Regression test for #19419: `uv sync --frozen` must honor credentials
+/// declared in a workspace member's `[tool.uv.sources]`.
+#[test]
+#[cfg(feature = "test-git")]
+fn sync_frozen_workspace_member_git_credentials() -> Result<()> {
+    use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
+
+    let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc::indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["uv-private-pypackage"]
+
+        [tool.uv.workspace]
+        members = ["nested"]
+    "#})?;
+
+    let nested = context.temp_dir.child("nested");
+    nested.create_dir_all()?;
+    nested.child("pyproject.toml").write_str(&formatdoc! {
+        r#"
+        [project]
+        name = "nested"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["uv-private-pypackage"]
+
+        [tool.uv.sources]
+        uv-private-pypackage = {{ git = "https://{token}@github.com/astral-test/uv-private-pypackage" }}
+        "#,
+        token = token,
+    })?;
+
+    // `uv lock` reads the member's `[tool.uv.sources]` and resolves successfully.
+    uv_snapshot!(&context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // `uv sync --frozen` must propagate credentials from the member's
+    // `[tool.uv.sources]` to `GIT_STORE`. Use `--reinstall --no-cache` so the
+    // git fetch actually runs.
+    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+    ");
+
+    Ok(())
+}

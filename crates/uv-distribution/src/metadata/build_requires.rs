@@ -71,7 +71,7 @@ impl BuildRequires {
     }
 
     /// Lower the `build-system.requires` field from a `pyproject.toml` file.
-    pub fn from_project_workspace(
+    fn from_project_workspace(
         metadata: uv_pypi_types::BuildRequires,
         project_workspace: &ProjectWorkspace,
         locations: &IndexLocations,

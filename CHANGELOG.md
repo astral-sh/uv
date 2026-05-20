@@ -3,6 +3,49 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.15
+
+Released on 2026-05-18.
+
+### Security
+
+- Fix a TAR parser differential, see [GHSA-3cv2-h65g-fgmm](https://github.com/astral-sh/tokio-tar/security/advisories/GHSA-3cv2-h65g-fgmm) ([#19463](https://github.com/astral-sh/uv/pull/19463))
+- Enforce that entry points cannot escape in the scripts directory, see [GHSA-4gg8-gxpx-9rph](https://github.com/astral-sh/uv/security/advisories/GHSA-4gg8-gxpx-9rph) ([#19464](https://github.com/astral-sh/uv/pull/19464))
+
+### Enhancements
+
+- Add TOML v1.1 -> v1.0 backwards compatibility for source distributions ([#18741](https://github.com/astral-sh/uv/pull/18741))
+- Add support for Azure request signing ([#19421](https://github.com/astral-sh/uv/pull/19421))
+- Apply stricter validation to all wheel filename segments ([#19364](https://github.com/astral-sh/uv/pull/19364))
+- Reject empty strings as an invalid package name ([#19435](https://github.com/astral-sh/uv/pull/19435))
+- Use structured errors for signing authentication failures ([#19422](https://github.com/astral-sh/uv/pull/19422))
+
+### Preview
+
+- uv audit: Add JSON output ([#19305](https://github.com/astral-sh/uv/pull/19305))
+
+### Configuration
+
+- Respect `required-environments` in `uv pip compile` ([#19378](https://github.com/astral-sh/uv/pull/19378))
+
+### Performance
+
+- Avoid parsing JSON manifest when local Python is available ([#19398](https://github.com/astral-sh/uv/pull/19398))
+- Avoid walking nested directories in linker conflict registration ([#19382](https://github.com/astral-sh/uv/pull/19382))
+- Optimize async wheel ZIP writing ([#19383](https://github.com/astral-sh/uv/pull/19383))
+- Fix dead "already trimmed" fast-path in `Version::only_release_trimmed` ([#19425](https://github.com/astral-sh/uv/pull/19425))
+
+### Bug fixes
+
+- Apply workspace-member `[tool.uv.sources]` credentials under `uv sync --frozen` ([#19423](https://github.com/astral-sh/uv/pull/19423))
+- Skip empty directories in uv build outputs ([#19437](https://github.com/astral-sh/uv/pull/19437))
+- Fix Git submodule handling when using relative paths ([#12156](https://github.com/astral-sh/uv/pull/12156))
+- Fix line number reporting in netrc parsing ([#19452](https://github.com/astral-sh/uv/pull/19452))
+
+### Documentation
+
+- Move Bazel auth helper setup into integration guide ([#19392](https://github.com/astral-sh/uv/pull/19392))
+
 ## 0.11.14
 
 Released on 2026-05-12.
@@ -856,5 +899,3 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
-
-

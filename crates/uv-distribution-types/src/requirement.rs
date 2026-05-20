@@ -23,7 +23,7 @@ use uv_pypi_types::{
 };
 
 #[derive(Debug, Error)]
-pub enum RequirementError {
+pub(crate) enum RequirementError {
     #[error(transparent)]
     VerbatimUrlError(#[from] uv_pep508::VerbatimUrlError),
     #[error(transparent)]

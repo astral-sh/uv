@@ -38,7 +38,7 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
-use uv_shell::runnable::WindowsRunnable;
+use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_tool::{InstalledTools, entrypoint_paths};
 use uv_warnings::warn_user;

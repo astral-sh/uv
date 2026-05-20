@@ -72,7 +72,7 @@ fn parse_marker_operator<T: Pep508Url>(
 /// '`os_name`', '`sys_platform`', '`platform_release`', '`platform_system`', '`platform_version`',
 /// '`platform_machine`', '`platform_python_implementation`', '`implementation_name`',
 /// '`implementation_version`', 'extra'
-pub(crate) fn parse_marker_value<T: Pep508Url>(
+fn parse_marker_value<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
 ) -> Result<MarkerValue, Pep508Error<T>> {

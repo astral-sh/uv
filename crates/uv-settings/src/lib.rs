@@ -76,6 +76,10 @@ impl FilesystemOptions {
     }
 
     pub fn system() -> Result<Option<Self>, Error> {
+        if parse_boolish_environment_variable(EnvVars::UV_NO_SYSTEM_CONFIG)? == Some(true) {
+            return Ok(None);
+        }
+
         let Some(file) = system_config_file() else {
             return Ok(None);
         };

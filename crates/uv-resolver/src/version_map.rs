@@ -160,7 +160,7 @@ impl VersionMap {
     }
 
     /// Return the [`ResolutionMetadata`] for the given version, if any.
-    pub fn get_metadata(&self, version: &Version) -> Option<&ResolutionMetadata> {
+    pub(crate) fn get_metadata(&self, version: &Version) -> Option<&ResolutionMetadata> {
         match self.inner {
             VersionMapInner::Eager(_) => None,
             VersionMapInner::Lazy(ref lazy) => lazy.core_metadata.get(version),

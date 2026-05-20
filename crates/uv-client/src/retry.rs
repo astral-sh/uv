@@ -70,7 +70,7 @@ impl RetryState {
     /// The number of retries across all requests.
     ///
     /// After a failed retryable request, this equals the maximum number of retries.
-    pub fn total_retries(&self) -> u32 {
+    pub(crate) fn total_retries(&self) -> u32 {
         self.total_retries
     }
 

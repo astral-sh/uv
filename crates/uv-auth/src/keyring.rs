@@ -24,14 +24,14 @@ pub enum Error {
     Keyring(#[from] uv_keyring::Error),
 
     #[error("The '{0}' keyring provider does not support storing credentials")]
-    StoreUnsupported(KeyringProviderBackend),
+    StoreUnsupported(&'static str),
 
     #[error("The '{0}' keyring provider does not support removing credentials")]
-    RemoveUnsupported(KeyringProviderBackend),
+    RemoveUnsupported(&'static str),
 }
 
-#[derive(Debug, Clone)]
-pub enum KeyringProviderBackend {
+#[derive(Debug)]
+enum KeyringProviderBackend {
     /// Use a native system keyring integration for credentials.
     Native,
     /// Use the external `keyring` command for credentials.
@@ -40,14 +40,20 @@ pub enum KeyringProviderBackend {
     Dummy(Vec<(String, &'static str, &'static str)>),
 }
 
+impl KeyringProviderBackend {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Native => "native",
+            Self::Subprocess => "subprocess",
+            #[cfg(test)]
+            Self::Dummy(_) => "dummy",
+        }
+    }
+}
+
 impl std::fmt::Display for KeyringProviderBackend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Native => write!(f, "native"),
-            Self::Subprocess => write!(f, "subprocess"),
-            #[cfg(test)]
-            Self::Dummy(_) => write!(f, "dummy"),
-        }
+        f.write_str(self.name())
     }
 }
 
@@ -68,7 +74,7 @@ impl KeyringProvider {
 
     /// Store credentials for the given [`DisplaySafeUrl`] to the keyring.
     ///
-    /// Only [`KeyringProviderBackend::Native`] is supported at this time.
+    /// Only the native keyring provider is supported at this time.
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
     pub async fn store(
         &self,
@@ -109,11 +115,9 @@ impl KeyringProvider {
                 self.store_native(&target, username, password).await?;
                 Ok(true)
             }
-            KeyringProviderBackend::Subprocess => {
-                Err(Error::StoreUnsupported(self.backend.clone()))
-            }
+            KeyringProviderBackend::Subprocess => Err(Error::StoreUnsupported(self.backend.name())),
             #[cfg(test)]
-            KeyringProviderBackend::Dummy(_) => Err(Error::StoreUnsupported(self.backend.clone())),
+            KeyringProviderBackend::Dummy(_) => Err(Error::StoreUnsupported(self.backend.name())),
         }
     }
 
@@ -133,7 +137,7 @@ impl KeyringProvider {
 
     /// Remove credentials for the given [`DisplaySafeUrl`] and username from the keyring.
     ///
-    /// Only [`KeyringProviderBackend::Native`] is supported at this time.
+    /// Only the native keyring provider is supported at this time.
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
     pub async fn remove(&self, url: &DisplaySafeUrl, username: &str) -> Result<(), Error> {
         // Ensure we strip credentials from the URL before storing
@@ -162,10 +166,10 @@ impl KeyringProvider {
                 Ok(())
             }
             KeyringProviderBackend::Subprocess => {
-                Err(Error::RemoveUnsupported(self.backend.clone()))
+                Err(Error::RemoveUnsupported(self.backend.name()))
             }
             #[cfg(test)]
-            KeyringProviderBackend::Dummy(_) => Err(Error::RemoveUnsupported(self.backend.clone())),
+            KeyringProviderBackend::Dummy(_) => Err(Error::RemoveUnsupported(self.backend.name())),
         }
     }
 

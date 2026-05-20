@@ -79,7 +79,7 @@ impl HashPolicy<'_> {
     }
 
     /// Returns `true` if the given hashes include the algorithms required by the policy.
-    pub fn has_required_algorithms(&self, hashes: &[HashDigest]) -> bool {
+    fn has_required_algorithms(&self, hashes: &[HashDigest]) -> bool {
         match self {
             Self::None => true,
             Self::Generate(_) => hashes

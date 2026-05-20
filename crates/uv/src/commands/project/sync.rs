@@ -101,7 +101,7 @@ pub(crate) async fn sync(
             VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions {
-                    members: MemberDiscovery::None,
+                    members: MemberDiscovery::Existing,
                     ..DiscoveryOptions::default()
                 },
                 workspace_cache,

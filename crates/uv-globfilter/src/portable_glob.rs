@@ -100,7 +100,7 @@ impl PortableGlobParser {
     }
 
     /// See [`parse_portable_glob`].
-    pub fn check(&self, glob: &str) -> Result<(), PortableGlobError> {
+    fn check(self, glob: &str) -> Result<(), PortableGlobError> {
         let mut chars = glob.chars().enumerate().peekable();
         // A `..` is on a parent directory indicator at the start of the string or after a directory
         // separator.

@@ -453,7 +453,7 @@ impl PythonInstallation {
 
     /// Emit a warning when the interpreter is a managed prerelease and a matching stable
     /// build can be installed via `uv python upgrade`.
-    pub(crate) fn warn_if_outdated_prerelease(
+    fn warn_if_outdated_prerelease(
         &self,
         request: &PythonRequest,
         download_list: &ManagedPythonDownloadList,
@@ -567,7 +567,7 @@ impl PythonInstallationKey {
         }
     }
 
-    pub fn new_from_version(
+    pub(crate) fn new_from_version(
         implementation: LenientImplementationName,
         version: &PythonVersion,
         platform: Platform,
@@ -606,7 +606,8 @@ impl PythonInstallationKey {
     }
 
     /// The version in `x.y.z` format.
-    pub fn sys_version(&self) -> String {
+    #[cfg(windows)]
+    pub(crate) fn sys_version(&self) -> String {
         format!("{}.{}.{}", self.major, self.minor, self.patch)
     }
 

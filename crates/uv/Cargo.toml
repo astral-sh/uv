@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.11.14"
+version = "0.11.15"
 description = "A Python package and project manager"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -48,13 +48,13 @@ uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
 uv-publish = { workspace = true }
 uv-pypi-types = { workspace = true }
-uv-python = { workspace = true, features = ["schemars"] }
+uv-python = { workspace = true }
 uv-redacted = { workspace = true }
 uv-requirements = { workspace = true }
 uv-requirements-txt = { workspace = true }
 uv-resolver = { workspace = true }
 uv-scripts = { workspace = true }
-uv-settings = { workspace = true, features = ["schemars"] }
+uv-settings = { workspace = true }
 uv-shell = { workspace = true }
 uv-static = { workspace = true }
 uv-test = { workspace = true, optional = true }
@@ -106,7 +106,7 @@ toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"], optional = true }
-tracing-subscriber = { workspace = true, features = ["env-filter", "json", "registry"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "registry"] }
 tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
@@ -146,7 +146,7 @@ predicates = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
 sha2 = { workspace = true }
-tar = { workspace = true }
+astral-tokio-tar = { workspace = true }
 tempfile = { workspace = true }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true }

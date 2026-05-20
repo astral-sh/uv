@@ -369,7 +369,7 @@ fn python_executables_from_installed<'a>(
                     "Searching for managed installations at `{}`",
                     installed_installations.root().user_display()
                 );
-                let installations = installed_installations.find_matching_current_platform()?;
+                let installations = ManagedPythonInstallations::find_matching_current_platform()?;
 
                 let build_versions = python_build_versions_from_env()?;
 
@@ -1572,7 +1572,7 @@ fn warn_on_unsupported_python(interpreter: &Interpreter) {
 ///
 /// See: <https://github.com/astral-sh/rye/blob/b0e9eccf05fe4ff0ae7b0250a248c54f2d780b4d/rye/src/cli/shim.rs#L108>
 #[cfg(windows)]
-pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
+fn is_windows_store_shim(path: &Path) -> bool {
     use std::os::windows::fs::MetadataExt;
     use std::os::windows::prelude::OsStrExt;
     use windows::Win32::Foundation::CloseHandle;
@@ -1750,7 +1750,7 @@ impl PythonVariant {
 
     /// Return the lib suffix for the variant, e.g., `t` for `python3.13t` but an empty string for
     /// `python3.13d` or `python3.13`.
-    pub fn lib_suffix(self) -> &'static str {
+    pub(crate) fn lib_suffix(self) -> &'static str {
         match self {
             Self::Default | Self::Debug | Self::Gil | Self::GilDebug => "",
             Self::Freethreaded | Self::FreethreadedDebug => "t",
@@ -1773,8 +1773,8 @@ impl PythonVariant {
 }
 impl PythonRequest {
     /// Create a request from a `Requires-Python` constraint.
-    pub fn from_requires_python(requires_python: RequiresPython) -> Option<Self> {
-        let specifiers = requires_python.into_specifiers();
+    pub fn from_requires_python(requires_python: &RequiresPython) -> Option<Self> {
+        let specifiers = requires_python.specifiers().clone();
         if specifiers.is_empty() {
             return None;
         }
@@ -2204,7 +2204,7 @@ impl PythonRequest {
     ///
     /// Returns `None` if the request doesn't carry version constraints (e.g., a path or
     /// executable name).
-    pub fn as_version_specifiers(&self) -> Option<VersionSpecifiers> {
+    fn as_version_specifiers(&self) -> Option<VersionSpecifiers> {
         match self {
             Self::Version(version) | Self::ImplementationVersion(_, version) => {
                 version.as_version_specifiers()
@@ -2305,7 +2305,7 @@ impl PythonSource {
     /// This enables targeting the virtual environment with uv by putting its `bin/` on the `PATH`
     /// without setting `VIRTUAL_ENV` — but if there's another interpreter before it we will ignore
     /// it.
-    pub(crate) fn is_maybe_virtualenv(self) -> bool {
+    fn is_maybe_virtualenv(self) -> bool {
         match self {
             Self::ProvidedPath
             | Self::ActiveEnvironment
@@ -2320,7 +2320,7 @@ impl PythonSource {
 
     /// Whether this source is "explicit", e.g., it was directly provided by the user or is
     /// an active virtual environment.
-    pub(crate) fn is_explicit(self) -> bool {
+    fn is_explicit(self) -> bool {
         match self {
             Self::ProvidedPath
             | Self::ParentInterpreter
@@ -2337,7 +2337,7 @@ impl PythonSource {
     }
 
     /// Whether this source **could** be a system interpreter.
-    pub(crate) fn is_maybe_system(self) -> bool {
+    fn is_maybe_system(self) -> bool {
         match self {
             Self::CondaPrefix
             | Self::BaseCondaPrefix
@@ -2386,7 +2386,7 @@ impl PythonPreference {
     ///
     /// Unlike [`PythonPreference::allows_source`], which checks the [`PythonSource`], this checks
     /// whether the interpreter's base prefix is in a managed location.
-    pub fn allows_interpreter(self, interpreter: &Interpreter) -> bool {
+    fn allows_interpreter(self, interpreter: &Interpreter) -> bool {
         match self {
             Self::OnlyManaged => interpreter.is_managed(),
             Self::OnlySystem => !interpreter.is_managed(),
@@ -2837,7 +2837,7 @@ impl VersionRequest {
     /// Check if the request is for a version supported by uv.
     ///
     /// If not, an `Err` is returned with an explanatory message.
-    pub(crate) fn check_supported(&self) -> Result<(), String> {
+    fn check_supported(&self) -> Result<(), String> {
         match self {
             Self::Any | Self::Default => (),
             Self::Major(major, _) => {
@@ -2898,7 +2898,7 @@ impl VersionRequest {
     /// [`VersionRequest::Any`] for sources that should allow non-default interpreters like
     /// free-threaded variants.
     #[must_use]
-    pub(crate) fn into_request_for_source(self, source: PythonSource) -> Self {
+    fn into_request_for_source(self, source: PythonSource) -> Self {
         match self {
             Self::Default => match source {
                 PythonSource::ParentInterpreter
@@ -3201,38 +3201,6 @@ impl VersionRequest {
         }
     }
 
-    /// Return a new [`VersionRequest`] with the [`PythonVariant`] if it has one.
-    ///
-    /// This is useful for converting the string representation to pep440.
-    #[must_use]
-    pub fn without_python_variant(self) -> Self {
-        // TODO(zanieb): Replace this entire function with a utility that casts this to a version
-        // without using `VersionRequest::to_string`.
-        match self {
-            Self::Any | Self::Default => self,
-            Self::Major(major, _) => Self::Major(major, PythonVariant::Default),
-            Self::MajorMinor(major, minor, _) => {
-                Self::MajorMinor(major, minor, PythonVariant::Default)
-            }
-            Self::MajorMinorPatch(major, minor, patch, _) => {
-                Self::MajorMinorPatch(major, minor, patch, PythonVariant::Default)
-            }
-            Self::MajorMinorPrerelease(major, minor, prerelease, _) => {
-                Self::MajorMinorPrerelease(major, minor, prerelease, PythonVariant::Default)
-            }
-            Self::MajorMinorPatchPrerelease(major, minor, patch, prerelease, _) => {
-                Self::MajorMinorPatchPrerelease(
-                    major,
-                    minor,
-                    patch,
-                    prerelease,
-                    PythonVariant::Default,
-                )
-            }
-            Self::Range(specifiers, _) => Self::Range(specifiers, PythonVariant::Default),
-        }
-    }
-
     /// Return the [`PythonVariant`] of the request, if any.
     pub(crate) fn variant(&self) -> Option<PythonVariant> {
         match self {
@@ -3278,7 +3246,7 @@ impl VersionRequest {
     ///
     /// Returns `None` for requests without version constraints (e.g., [`VersionRequest::Default`]
     /// and [`VersionRequest::Any`]).
-    pub fn as_version_specifiers(&self) -> Option<VersionSpecifiers> {
+    fn as_version_specifiers(&self) -> Option<VersionSpecifiers> {
         match self {
             Self::Default | Self::Any => None,
             Self::Major(major, _) => Some(VersionSpecifiers::from(
@@ -3563,18 +3531,6 @@ impl PythonPreference {
                     &[PythonSource::SearchPath]
                 }
             }
-        }
-    }
-
-    /// Return the canonical name.
-    // TODO(zanieb): This should be a `Display` impl and we should have a different view for
-    // the sources
-    pub fn canonical_name(&self) -> &'static str {
-        match self {
-            Self::OnlyManaged => "only managed",
-            Self::Managed => "prefer managed",
-            Self::System => "prefer system",
-            Self::OnlySystem => "only system",
         }
     }
 }

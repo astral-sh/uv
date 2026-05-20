@@ -13,7 +13,7 @@ use uv_cache_key::cache_digest;
 use uv_git_types::{GitOid, GitReference, GitUrl};
 use uv_redacted::DisplaySafeUrl;
 
-use crate::GIT_STORE;
+use crate::credentials::GIT_STORE;
 use crate::git::{GitDatabase, GitRemote};
 
 /// A remote Git source that can be checked out locally.
@@ -44,7 +44,7 @@ impl GitSource {
 
     /// Disable SSL verification for this [`GitSource`].
     #[must_use]
-    pub fn dangerous(self) -> Self {
+    pub(crate) fn dangerous(self) -> Self {
         Self {
             disable_ssl: true,
             ..self
@@ -202,14 +202,6 @@ impl Fetch {
 
     pub fn lfs_ready(&self) -> &bool {
         &self.lfs_ready
-    }
-
-    pub fn into_git(self) -> GitUrl {
-        self.git
-    }
-
-    pub fn into_path(self) -> PathBuf {
-        self.path
     }
 }
 
