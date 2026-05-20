@@ -116,11 +116,6 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"([^\s])[ \t]+(\r?\n)", "$1$2"),
     // Filter SSL certificate loading debug messages (environment-dependent)
     (r"DEBUG Loaded \d+ certificate\(s\) from [^\n]+\n", ""),
-    // Ignore the intentionally empty Unix system config fixture used to isolate host state.
-    (
-        r"DEBUG Found system configuration in: `[^\n]*config/uv/uv\.toml`\r?\n",
-        "",
-    ),
 ];
 
 /// Create a context for tests which simplifies shared behavior across tests.
@@ -853,18 +848,6 @@ impl TestContext {
         let home_dir = ChildPath::new(root.path()).child("home");
         fs_err::create_dir_all(&home_dir).expect("Failed to create test home directory");
 
-        // Keep Unix system configuration discovery inside the test root instead of
-        // falling back to a host-level `/etc/uv/uv.toml`.
-        if cfg!(not(windows)) {
-            let system_config_dir = home_dir.child("config").child("uv");
-            fs_err::create_dir_all(&system_config_dir)
-                .expect("Failed to create test system configuration directory");
-            system_config_dir
-                .child("uv.toml")
-                .write_str("")
-                .expect("Failed to create test system configuration file");
-        }
-
         let user_config_dir = if cfg!(windows) {
             ChildPath::new(home_dir.path())
         } else {
@@ -1189,6 +1172,8 @@ impl TestContext {
             .env_remove(EnvVars::VIRTUAL_ENV)
             // Disable wrapping of uv output for readability / determinism in snapshots.
             .env(EnvVars::UV_NO_WRAP, "1")
+            // Avoid reading host system configuration unless a test opts in.
+            .env(EnvVars::UV_NO_SYSTEM_CONFIG, "1")
             // While we disable wrapping in uv above, invoked tools may still wrap their output so
             // we set a fixed `COLUMNS` value for isolation from terminal width.
             .env(EnvVars::COLUMNS, "100")

@@ -5,17 +5,20 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::io::{Cursor, Write};
+use std::io::Cursor;
 
+use async_zip::base::write::ZipFileWriter;
+use async_zip::{Compression as ZipCompression, ZipEntryBuilder};
 use flate2::Compression;
 use flate2::write::GzEncoder;
+use futures::executor::block_on;
+use futures::io::AllowStdIo;
 use indoc::formatdoc;
 use sha2::{Digest, Sha256};
+use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::Requirement;
-use zip::ZipWriter;
-use zip::write::SimpleFileOptions;
 
 /// Generate a wheel (`.whl`) as an in-memory ZIP archive.
 ///
@@ -31,19 +34,22 @@ pub fn generate_wheel(
     let normalized = name.as_dist_info_name();
     let dist_info = format!("{normalized}-{version}.dist-info");
 
-    let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
-    let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    let mut zip = ZipFileWriter::new(Vec::new());
 
     let init_py = format!("__version__ = \"{version}\"\n");
-    zip.start_file(format!("{normalized}/__init__.py"), opts)
-        .expect("failed to start wheel module file");
-    zip.write_all(init_py.as_bytes())
+    let init_py_entry = ZipEntryBuilder::new(
+        format!("{normalized}/__init__.py").into(),
+        ZipCompression::Stored,
+    );
+    block_on(zip.write_entry_whole(init_py_entry, init_py.as_bytes()))
         .expect("failed to write wheel module file");
 
     let metadata = build_metadata(name, version, requires, extras, requires_python);
-    zip.start_file(format!("{dist_info}/METADATA"), opts)
-        .expect("failed to start wheel metadata file");
-    zip.write_all(metadata.as_bytes())
+    let metadata_entry = ZipEntryBuilder::new(
+        format!("{dist_info}/METADATA").into(),
+        ZipCompression::Stored,
+    );
+    block_on(zip.write_entry_whole(metadata_entry, metadata.as_bytes()))
         .expect("failed to write wheel metadata file");
 
     let wheel_info = format!(
@@ -52,19 +58,16 @@ pub fn generate_wheel(
          Root-Is-Purelib: true\n\
          Tag: {tag}\n"
     );
-    zip.start_file(format!("{dist_info}/WHEEL"), opts)
-        .expect("failed to start WHEEL metadata file");
-    zip.write_all(wheel_info.as_bytes())
+    let wheel_info_entry =
+        ZipEntryBuilder::new(format!("{dist_info}/WHEEL").into(), ZipCompression::Stored);
+    block_on(zip.write_entry_whole(wheel_info_entry, wheel_info.as_bytes()))
         .expect("failed to write WHEEL metadata file");
 
-    zip.start_file(format!("{dist_info}/RECORD"), opts)
-        .expect("failed to start RECORD file");
-    zip.write_all(b"").expect("failed to write RECORD file");
+    let record_entry =
+        ZipEntryBuilder::new(format!("{dist_info}/RECORD").into(), ZipCompression::Stored);
+    block_on(zip.write_entry_whole(record_entry, b"")).expect("failed to write RECORD file");
 
-    let bytes = zip
-        .finish()
-        .expect("failed to finish in-memory wheel")
-        .into_inner();
+    let bytes = block_on(zip.close()).expect("failed to finish in-memory wheel");
     let filename = format!("{normalized}-{version}-{tag}.whl");
     (filename, bytes)
 }
@@ -87,7 +90,7 @@ pub fn generate_sdist(
 
     let buf = Vec::new();
     let encoder = GzEncoder::new(buf, Compression::fast());
-    let mut tar = tar::Builder::new(encoder);
+    let mut tar = tokio_tar::Builder::new_non_terminated(AllowStdIo::new(encoder).compat_write());
 
     let pyproject = build_pyproject_toml(name, version, requires, extras, requires_python);
     append_tar_file(
@@ -106,9 +109,8 @@ pub fn generate_sdist(
         init_py.as_bytes(),
     );
 
-    let encoder = tar
-        .into_inner()
-        .expect("failed to finish in-memory source archive");
+    let writer = block_on(tar.into_inner()).expect("failed to finish in-memory source archive");
+    let encoder = writer.into_inner().into_inner();
     let bytes = encoder
         .finish()
         .expect("failed to finish in-memory gzip stream");
@@ -215,13 +217,21 @@ fn build_pyproject_toml(
 }
 
 /// Append a file entry to a tar archive from a byte slice.
-fn append_tar_file(tar: &mut tar::Builder<GzEncoder<Vec<u8>>>, path: &str, data: &[u8]) {
-    let mut header = tar::Header::new_gnu();
+fn append_tar_file<W>(tar: &mut tokio_tar::Builder<W>, path: &str, data: &[u8])
+where
+    W: tokio::io::AsyncWrite + Unpin + Send,
+{
+    let mut header = tokio_tar::Header::new_gnu();
+    header.set_entry_type(tokio_tar::EntryType::Regular);
     header.set_size(data.len() as u64);
     header.set_mode(0o644);
     header.set_cksum();
-    tar.append_data(&mut header, path, data)
-        .expect("failed to append file to in-memory source archive");
+    block_on(tar.append_data(
+        &mut header,
+        path,
+        AllowStdIo::new(Cursor::new(data)).compat(),
+    ))
+    .expect("failed to append file to in-memory source archive");
 }
 
 /// Compute the SHA-256 hex digest of a byte slice.
@@ -233,7 +243,10 @@ pub fn sha256_hex(data: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::pin::Pin;
     use std::str::FromStr;
+
+    use futures::StreamExt;
 
     use super::*;
 
@@ -252,9 +265,19 @@ mod tests {
         );
         assert_eq!(filename, "my_package-1.0.0-py3-none-any.whl");
 
-        let reader = Cursor::new(&bytes);
-        let archive = zip::ZipArchive::new(reader).expect("wheel should be a valid zip");
-        let names: Vec<_> = archive.file_names().collect();
+        let archive = block_on(async_zip::base::read::mem::ZipFileReader::new(bytes))
+            .expect("wheel should be a valid zip");
+        let names: Vec<_> = archive
+            .file()
+            .entries()
+            .iter()
+            .map(|entry| {
+                entry
+                    .filename()
+                    .as_str()
+                    .expect("wheel path should be UTF-8")
+            })
+            .collect();
         assert!(names.contains(&"my_package/__init__.py"));
         assert!(names.contains(&"my_package-1.0.0.dist-info/METADATA"));
         assert!(names.contains(&"my_package-1.0.0.dist-info/WHEEL"));
@@ -274,19 +297,24 @@ mod tests {
         );
         assert_eq!(filename, "my_package-1.0.0.tar.gz");
 
-        let decoder = flate2::read::GzDecoder::new(Cursor::new(&bytes));
-        let mut archive = tar::Archive::new(decoder);
-        let mut names = Vec::new();
-        for entry in archive.entries().expect("sdist archive should be readable") {
-            let entry = entry.expect("sdist archive entry should be readable");
-            names.push(
-                entry
-                    .path()
-                    .expect("sdist archive entry should have a path")
-                    .to_string_lossy()
-                    .to_string(),
-            );
-        }
+        let decoder = flate2::read::GzDecoder::new(Cursor::new(bytes));
+        let mut archive = tokio_tar::Archive::new(AllowStdIo::new(decoder).compat());
+        let names = block_on(async {
+            let mut entries = archive.entries().expect("sdist archive should be readable");
+            let mut entries = Pin::new(&mut entries);
+            let mut names = Vec::new();
+            while let Some(entry) = entries.next().await {
+                let entry = entry.expect("sdist archive entry should be readable");
+                names.push(
+                    entry
+                        .path()
+                        .expect("sdist archive entry should have a path")
+                        .to_string_lossy()
+                        .to_string(),
+                );
+            }
+            names
+        });
 
         assert!(names.contains(&"my_package-1.0.0/pyproject.toml".to_string()));
         assert!(names.contains(&"my_package-1.0.0/PKG-INFO".to_string()));
