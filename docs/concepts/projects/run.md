@@ -24,8 +24,8 @@ $ uv run bash scripts/foo.sh
 
 ## Starting an interactive interpreter
 
-Invoking the Python interpreter without further arguments drops you into an interactive REPL,
-scoped to the project's environment:
+Invoking the Python interpreter without further arguments drops you into an interactive REPL, scoped
+to the project's environment:
 
 ```console
 $ uv run python
