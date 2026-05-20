@@ -48,8 +48,12 @@ impl Hints<'_> {
 
     /// Extend with another set of hints, converting borrowed hints to owned.
     pub fn extend(&mut self, other: Hints<'_>) {
-        self.0
-            .extend(other.0.into_iter().map(|cow| Cow::Owned(cow.into_owned())));
+        for hint in other.0 {
+            let hint = Cow::Owned(hint.into_owned());
+            if !self.0.iter().any(|existing| existing == &hint) {
+                self.0.push(hint);
+            }
+        }
     }
 }
 
@@ -76,6 +80,9 @@ impl fmt::Display for Hints<'_> {
         for hint in &self.0 {
             write!(f, "\n{HintPrefix} {hint}")?;
         }
+        if !self.0.is_empty() {
+            writeln!(f)?;
+        }
         Ok(())
     }
 }
@@ -95,5 +102,23 @@ pub struct HintPrefix;
 impl fmt::Display for HintPrefix {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}{}", "hint".bold().cyan(), ":".bold())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Hints;
+
+    #[test]
+    fn extend_deduplicates_matching_hints() {
+        let mut hints = Hints::from("same");
+        hints.extend(Hints::from("same"));
+        hints.extend(Hints::from("other"));
+
+        let hints = hints
+            .into_iter()
+            .map(std::borrow::Cow::into_owned)
+            .collect::<Vec<_>>();
+        assert_eq!(hints, vec!["same".to_string(), "other".to_string()]);
     }
 }

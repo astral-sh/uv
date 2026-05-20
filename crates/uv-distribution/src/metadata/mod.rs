@@ -53,6 +53,15 @@ pub enum MetadataError {
     IncompleteSourceGroup(PackageName, GroupName),
 }
 
+impl uv_errors::Hint for MetadataError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::LoweringError(_, err) | Self::GroupLoweringError(_, _, err) => err.hints(),
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Metadata {
     // Mandatory fields

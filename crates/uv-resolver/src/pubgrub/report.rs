@@ -1220,7 +1220,7 @@ fn is_compatible_release_upper_bound(version: &Version) -> bool {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ExcludeNewerVersionDetail {
+pub struct ExcludeNewerVersionDetail {
     version: Version,
     publish_date: Option<String>,
     singleton: bool,
@@ -1997,11 +1997,9 @@ impl std::fmt::Display for PubGrubHint {
                     ),
                     EffectiveExcludeNewerSource::Index => write!(
                         f,
-                        "{}{} `{}` was filtered by the index-specific `{}` setting to only include \
+                        "`{}` was filtered by the index-specific `{}` setting to only include \
                         packages uploaded before {}.{latest} Consider updating that index's cutoff, setting \
                         it to `false`, or using `{}` to override the cutoff for this package.",
-                        "hint".bold().cyan(),
-                        ":".bold(),
                         package.cyan(),
                         "exclude-newer".green(),
                         exclude_newer.cyan(),

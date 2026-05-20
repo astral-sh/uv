@@ -299,8 +299,11 @@ pub(crate) fn finalize_tool_install(
 
             if is_dependency {
                 // Non-root package: display the error with hints and continue.
-                write!(printer.stdout(), "{err}{}", err.hints())?;
-                writeln!(printer.stdout())?;
+                let hints = err.hints();
+                write!(printer.stdout(), "{err}{hints}")?;
+                if hints.is_empty() {
+                    writeln!(printer.stdout())?;
+                }
                 continue;
             }
 

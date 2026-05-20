@@ -1123,6 +1123,14 @@ impl uv_errors::Hint for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::Resolve(resolve_err) => resolve_err.hints(),
+            Self::Anyhow(err) => {
+                for cause in err.chain() {
+                    if let Some(extra_err) = cause.downcast_ref::<ExtrasWithoutSourceError>() {
+                        return uv_errors::Hint::hints(extra_err);
+                    }
+                }
+                uv_errors::Hints::none()
+            }
             _ => uv_errors::Hints::none(),
         }
     }

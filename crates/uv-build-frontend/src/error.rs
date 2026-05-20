@@ -127,6 +127,7 @@ impl Hint for Error {
                 "Build failures usually indicate a problem with the package or the build environment.",
             ),
             Self::MissingHeader(err) => Hints::from(err.cause.to_string()),
+            Self::Lowering(err) => err.hints(),
             Self::RequirementsResolve(_, err) | Self::RequirementsInstall(_, err) => err.hints(),
             _ => Hints::none(),
         }

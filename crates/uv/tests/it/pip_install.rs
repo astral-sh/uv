@@ -1493,6 +1493,8 @@ fn install_extras() -> Result<()> {
 
     ----- stderr -----
     error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file
+
+    hint: Use `<dir>[extra]` syntax or `-r <file>` instead.
     "
     );
 
@@ -1506,6 +1508,8 @@ fn install_extras() -> Result<()> {
 
     ----- stderr -----
     error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file
+
+    hint: Use `package[extra]` syntax instead.
     "
     );
 
@@ -1522,6 +1526,8 @@ fn install_extras() -> Result<()> {
 
     ----- stderr -----
     error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file
+
+    hint: Use `package[extra]` syntax instead.
     "
     );
 
@@ -3500,7 +3506,7 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because only setuptools<=40.4.3 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: `setuptools` was filtered by `exclude-newer` to only include packages uploaded before 2018-10-09T00:00:00Z. The latest version satisfying the requirement is v69.2.0, published at 2024-03-13T11:20:54.103Z. Consider using `exclude-newer-package` to override the cutoff for this package.
+    hint: `setuptools` was filtered by `exclude-newer` to only include packages uploaded before 2018-10-09T00:00:00Z. The latest version satisfying the requirement is v69.2.0, published at 2024-03-13T11:20:54.103Z. Consider using `exclude-newer-package` to override the cutoff for this package.
     "
     );
 

@@ -221,6 +221,7 @@ impl uv_errors::Hint for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::Build(err) => err.hints(),
+            Self::MetadataLowering(err) => err.hints(),
             _ => uv_errors::Hints::none(),
         }
     }

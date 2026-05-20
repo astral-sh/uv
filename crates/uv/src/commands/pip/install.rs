@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use thiserror::Error;
-use tracing::{Level, debug, enabled, info_span, warn};
+use tracing::{Level, debug, enabled, warn};
 
 use uv_errors::{Hint, Hints};
 

@@ -15,7 +15,10 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use std::path::Path;
 use url::Url;
-use wiremock::{Mock, MockServer, ResponseTemplate, matchers::{method, path}};
+use wiremock::{
+    Mock, MockServer, ResponseTemplate,
+    matchers::{method, path},
+};
 
 #[cfg(feature = "test-git-lfs")]
 use uv_cache_key::{RepositoryUrl, cache_digest};
@@ -8777,6 +8780,8 @@ fn fail_to_add_revert_project() -> Result<()> {
             File "<string>", line 1, in <module>
           ZeroDivisionError: division by zero
 
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment.
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "#);
@@ -8878,6 +8883,8 @@ fn fail_to_edit_revert_project() -> Result<()> {
               exec(code, locals())
             File "<string>", line 1, in <module>
           ZeroDivisionError: division by zero
+
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
 
     hint: Build failures usually indicate a problem with the package or the build environment.
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
@@ -8991,6 +8998,8 @@ fn fail_to_add_revert_workspace_root() -> Result<()> {
               exec(code, locals())
             File "<string>", line 1, in <module>
           ZeroDivisionError: division by zero
+
+      help: `broken` was included because `parent` (v0.1.0) depends on `broken`
 
     hint: Build failures usually indicate a problem with the package or the build environment.
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
@@ -9106,6 +9115,8 @@ fn fail_to_add_revert_workspace_member() -> Result<()> {
               exec(code, locals())
             File "<string>", line 1, in <module>
           ZeroDivisionError: division by zero
+
+      help: `broken` was included because `child` (v0.1.0) depends on `broken`
 
     hint: Build failures usually indicate a problem with the package or the build environment.
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
