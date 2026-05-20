@@ -686,6 +686,8 @@ pub struct Concurrency {
     pub downloads: Option<NonZeroUsize>,
     pub builds: Option<NonZeroUsize>,
     pub installs: Option<NonZeroUsize>,
+    pub uploads: Option<NonZeroUsize>,
+    pub pyx_wheel_validations: Option<NonZeroUsize>,
 }
 
 /// A boolean flag parsed from an environment variable.
@@ -790,6 +792,11 @@ impl EnvironmentOptions {
                 builds: parse_integer_environment_variable(EnvVars::UV_CONCURRENT_BUILDS, None)?,
                 installs: parse_integer_environment_variable(
                     EnvVars::UV_CONCURRENT_INSTALLS,
+                    None,
+                )?,
+                uploads: parse_integer_environment_variable(EnvVars::UV_CONCURRENT_UPLOADS, None)?,
+                pyx_wheel_validations: parse_integer_environment_variable(
+                    EnvVars::UV_CONCURRENT_PYX_WHEEL_VALIDATIONS,
                     None,
                 )?,
             },
