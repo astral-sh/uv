@@ -3,6 +3,7 @@ use owo_colors::OwoColorize;
 use serde::Serialize;
 use std::fmt::Write as _;
 use std::path::Path;
+use uv_audit::fix::collect_updates;
 
 use crate::commands::ExitStatus;
 use crate::commands::diagnostics;
@@ -423,7 +424,7 @@ impl AuditResults {
                     },
                 )?;
 
-                for vulnerability in vulnerabilities {
+                for vulnerability in vulnerabilities.clone() {
                     writeln!(
                         self.printer.stdout_important(),
                         "- {id}: {description}",
@@ -452,15 +453,6 @@ impl AuditResults {
                         )?;
                     }
 
-                    if let Some(fix) = vulnerability.semver_compatible_fix(false).unwrap_or(None) {
-                        writeln!(
-                            self.printer.stdout_important(),
-                            "  Pass {flag} to upgrade to {fix}\n",
-                            flag = "--fix".blue(),
-                            fix = fix.to_string().blue()
-                        )?;
-                    }
-
                     if let Some(link) = &vulnerability.link {
                         writeln!(
                             self.printer.stdout_important(),
@@ -468,6 +460,15 @@ impl AuditResults {
                             link = link.as_str().blue()
                         )?;
                     }
+                }
+
+                if let Some(version) = collect_updates(&vulnerabilities).unwrap_or_default() {
+                    writeln!(
+                        self.printer.stdout_important(),
+                        "  Fix available: {version}. Pass {flag} to update.\n",
+                        version = version.to_string().blue(),
+                        flag = "--fix".blue()
+                    )?;
                 }
             }
         }

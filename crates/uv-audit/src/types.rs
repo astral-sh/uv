@@ -156,18 +156,10 @@ impl Vulnerability {
     /// Choose the best semver-compatible fix.
     ///
     /// Performs a compatibility (~=) check on available fixes and chooses the lowest value.
-    /// If `patch_only` is `true`, only patch-level (i.e. 0.0.x) fixes will be considered.
-    pub fn semver_compatible_fix(
-        &self,
-        patch_only: bool,
-    ) -> Result<Option<&Version>, VersionSpecifierBuildError> {
+    pub fn semver_compatible_fix(&self) -> Result<Option<&Version>, VersionSpecifierBuildError> {
         let constraint =
-            VersionSpecifier::from_version(Operator::TildeEqual, self.dependency.version.clone())?;
-        let constraint = if patch_only {
-            constraint
-        } else {
-            constraint.only_minor_release()
-        };
+            VersionSpecifier::from_version(Operator::TildeEqual, self.dependency.version.clone())?
+                .only_minor_release();
 
         Ok(self
             .fix_versions
