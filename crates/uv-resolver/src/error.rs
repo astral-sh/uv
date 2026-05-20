@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, Bound};
 use std::fmt::Formatter;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use indexmap::IndexSet;
 use itertools::Itertools;
@@ -27,7 +27,7 @@ use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
-use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter};
+use crate::pubgrub::{PubGrubHint, PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{
@@ -148,6 +148,15 @@ pub enum ResolveError {
     },
 }
 
+impl uv_errors::Hint for ResolveError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::NoSolution(no_solution) => uv_errors::Hint::hints(no_solution.as_ref()),
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
     /// Drop the value we want to send to not leak the private type we're sending.
     /// The tokio error only says "channel closed", so we don't lose information.
@@ -188,6 +197,8 @@ pub struct NoSolutionError {
     tags: Option<Tags>,
     workspace_members: BTreeSet<PackageName>,
     options: Options,
+    /// Cached report and hints, computed once on first access.
+    cached: OnceLock<(String, IndexSet<PubGrubHint>)>,
 }
 
 impl NoSolutionError {
@@ -231,7 +242,13 @@ impl NoSolutionError {
             tags,
             workspace_members,
             options,
+            cached: OnceLock::new(),
         }
+    }
+
+    /// Get the cached report and hints, computing them on first access.
+    fn cached(&self) -> &(String, IndexSet<PubGrubHint>) {
+        self.cached.get_or_init(|| self.compute_report_and_hints())
     }
 
     /// Given a [`DerivationTree`], collapse any [`External::FromDependencyOf`] incompatibilities
@@ -388,58 +405,24 @@ impl NoSolutionError {
             .filter_map(|p| p.name())
             .unique()
     }
-}
 
-impl std::fmt::Debug for NoSolutionError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // Include every field except `index`, which doesn't implement `Debug`.
-        let Self {
-            error,
-            index: _,
-            included_versions,
-            available_versions,
-            available_indexes,
-            selector,
-            python_requirement,
-            index_locations,
-            index_capabilities,
-            unavailable_packages,
-            incomplete_packages,
-            fork_urls,
-            fork_indexes,
-            env,
-            current_environment,
-            tags,
-            workspace_members,
-            options,
-        } = self;
-        f.debug_struct("NoSolutionError")
-            .field("error", error)
-            .field("included_versions", included_versions)
-            .field("available_versions", available_versions)
-            .field("available_indexes", available_indexes)
-            .field("selector", selector)
-            .field("python_requirement", python_requirement)
-            .field("index_locations", index_locations)
-            .field("index_capabilities", index_capabilities)
-            .field("unavailable_packages", unavailable_packages)
-            .field("incomplete_packages", incomplete_packages)
-            .field("fork_urls", fork_urls)
-            .field("fork_indexes", fork_indexes)
-            .field("env", env)
-            .field("current_environment", current_environment)
-            .field("tags", tags)
-            .field("workspace_members", workspace_members)
-            .field("options", options)
-            .finish()
+    /// Generate the report and hints for this resolution failure.
+    ///
+    /// Returns the formatted report string and structured [`PubGrubHint`] values.
+    /// The result is cached so repeated calls (e.g., from both `Display` and
+    /// explicit hint collection) don't recompute the derivation tree.
+    /// Return the formatted report string.
+    pub fn report(&self) -> &str {
+        &self.cached().0
     }
-}
 
-impl std::error::Error for NoSolutionError {}
+    /// Return the computed PubGrub hints.
+    pub fn pubgrub_hints(&self) -> &IndexSet<PubGrubHint> {
+        &self.cached().1
+    }
 
-impl std::fmt::Display for NoSolutionError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // Write the derivation report.
+    /// Compute the reduced derivation tree, formatted report string, and hints.
+    fn compute_report_and_hints(&self) -> (String, IndexSet<PubGrubHint>) {
         let formatter = PubGrubReportFormatter {
             included_versions: &self.included_versions,
             available_versions: &self.available_versions,
@@ -488,11 +471,9 @@ impl std::fmt::Display for NoSolutionError {
         }
 
         let report = DefaultStringReporter::report_with_formatter(&tree, &formatter);
-        write!(f, "{report}")?;
 
-        // Include any additional hints.
-        let mut additional_hints = IndexSet::default();
         let inherited_exclude_newer_ranges = FxHashMap::default();
+        let mut hints = IndexSet::default();
         formatter.generate_hints(
             &tree,
             &self.index,
@@ -510,13 +491,81 @@ impl std::fmt::Display for NoSolutionError {
             &self.workspace_members,
             &self.options,
             &inherited_exclude_newer_ranges,
-            &mut additional_hints,
+            &mut hints,
         );
-        for hint in additional_hints {
-            write!(f, "\n\n{hint}")?;
-        }
 
-        Ok(())
+        (report, hints)
+    }
+}
+
+impl std::fmt::Debug for NoSolutionError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // Include every field except `index` (no Debug) and `cached` (derived).
+        let Self {
+            error,
+            index: _,
+            included_versions,
+            available_versions,
+            available_indexes,
+            selector,
+            python_requirement,
+            index_locations,
+            index_capabilities,
+            unavailable_packages,
+            incomplete_packages,
+            fork_urls,
+            fork_indexes,
+            env,
+            current_environment,
+            tags,
+            workspace_members,
+            options,
+            cached: _,
+        } = self;
+        f.debug_struct("NoSolutionError")
+            .field("error", error)
+            .field("included_versions", included_versions)
+            .field("available_versions", available_versions)
+            .field("available_indexes", available_indexes)
+            .field("selector", selector)
+            .field("python_requirement", python_requirement)
+            .field("index_locations", index_locations)
+            .field("index_capabilities", index_capabilities)
+            .field("unavailable_packages", unavailable_packages)
+            .field("incomplete_packages", incomplete_packages)
+            .field("fork_urls", fork_urls)
+            .field("fork_indexes", fork_indexes)
+            .field("env", env)
+            .field("current_environment", current_environment)
+            .field("tags", tags)
+            .field("workspace_members", workspace_members)
+            .field("options", options)
+            .finish()
+    }
+}
+
+impl std::error::Error for NoSolutionError {}
+
+impl uv_errors::Hint for NoSolutionError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        self.pubgrub_hints()
+            .iter()
+            .map(ToString::to_string)
+            .collect()
+    }
+}
+
+impl uv_errors::Hint for Box<NoSolutionError> {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        self.as_ref().hints()
+    }
+}
+
+impl std::fmt::Display for NoSolutionError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // Write only the derivation report. Hints are available separately
+        // via `hints()` and rendered by the caller.
+        write!(f, "{}", self.report())
     }
 }
 

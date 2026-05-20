@@ -496,7 +496,8 @@ fn build_fail() -> Result<()> {
       × Failed to build `[TEMP_DIR]/project`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
     Ok(())
@@ -826,7 +827,8 @@ fn build_all_with_failure() -> Result<()> {
       × Failed to build `member-b @ [TEMP_DIR]/project/packages/member_b`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
     ");
@@ -1712,7 +1714,8 @@ fn build_hide_build_output_on_failure() -> Result<()> {
       × Failed to build `[TEMP_DIR]/project`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     Ok(())
@@ -1809,6 +1812,53 @@ fn build_tool_uv_sources() -> Result<()> {
         .child("dist")
         .child("project-0.1.0-py3-none-any.whl")
         .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+#[test]
+fn build_named_index_config_file_hint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.sources]
+        hatchling = { index = "privindex" }
+        "#,
+    )?;
+
+    project.child("uv.toml").write_str(
+        r#"
+        [[index]]
+        name = "privindex"
+        url = "https://example.com/simple"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.build().current_dir(project.path()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+      × Failed to build `[TEMP_DIR]/project`
+      ├─▶ Failed to parse entry: `hatchling`
+      ╰─▶ Package `hatchling` references an undeclared index: `privindex`
+
+    hint: Index `privindex` was found in a project-level `uv.toml`, but indexes referenced via `tool.uv.sources` must be defined in the project's `pyproject.toml`
+    ");
 
     Ok(())
 }
@@ -2557,7 +2607,8 @@ fn force_pep517() -> Result<()> {
       × Failed to build `[TEMP_DIR]/`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `uv_build.build_sdist` failed (exit status: 1)
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     Ok(())

@@ -875,7 +875,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
 
     // Running `uv sync` should always fail, as now sphinx is involved
@@ -890,7 +890,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
 
     // Adding group requires python should fix it
@@ -1019,7 +1019,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
 
     // Running `uv sync --group mygroup` should definitely fail, as now sphinx is involved
@@ -1035,7 +1035,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
 
     // Adding group requires python should fix it
@@ -1694,13 +1694,13 @@ fn sync_build_isolation_package() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+    hint: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
+    hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          [tool.uv.extra-build-dependencies]
-          source-distribution = ["hatchling"]
+    [tool.uv.extra-build-dependencies]
+    source-distribution = ["hatchling"]
 
-          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
-      help: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
+    or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
     "#);
 
     // Install `hatchling` for `source-distribution`.
@@ -1782,13 +1782,13 @@ fn sync_build_isolation_package_order() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+    hint: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
+    hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          [tool.uv.extra-build-dependencies]
-          source-distribution = ["hatchling"]
+    [tool.uv.extra-build-dependencies]
+    source-distribution = ["hatchling"]
 
-          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
-      help: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
+    or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
     "#);
 
     // Add `hatchling`.
@@ -1958,13 +1958,13 @@ fn sync_build_isolation_extra() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+    hint: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
+    hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          [tool.uv.extra-build-dependencies]
-          source-distribution = ["hatchling"]
+    [tool.uv.extra-build-dependencies]
+    source-distribution = ["hatchling"]
 
-          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
-      help: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
+    or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
     "#);
 
     // Running `uv sync` with `--all-extras` should succeed, because we install the build dependencies
@@ -2098,8 +2098,9 @@ fn sync_extra_build_dependencies() -> Result<()> {
           [stderr]
           Missing `anyio` module
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Adding `extra-build-dependencies` should solve the issue
@@ -2173,8 +2174,9 @@ fn sync_extra_build_dependencies() -> Result<()> {
           [stderr]
           Missing `anyio` module
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Write a test package that arbitrarily bans `anyio` at build time
@@ -2241,8 +2243,9 @@ fn sync_extra_build_dependencies() -> Result<()> {
           [stderr]
           Found `anyio` module
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `bad-child` was included because `parent` (v0.1.0) depends on `bad-child`
+
+    hint: `bad-child` was included because `parent` (v0.1.0) depends on `bad-child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // But `anyio` is not provided to `bad_child` if scoped to `child`
@@ -2335,7 +2338,8 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
           [stderr]
           Missing `anyio` module
 
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Adding `extra-build-dependencies` should solve the issue
@@ -2440,8 +2444,9 @@ fn sync_extra_build_dependencies_setuptools() -> Result<()> {
           [stderr]
           Missing `anyio` module
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Adding `extra-build-dependencies` should solve the issue
@@ -2629,8 +2634,9 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
           [stderr]
           Expected `anyio` version 3.0 but got 4.3.0
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Ensure that we're resolving to `4.3.0`, the "latest" on PyPI.
@@ -2683,8 +2689,9 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
           [stderr]
           Expected `anyio` version 4.3 but got 3.5.0
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     uv_snapshot!(context.filters(), context.sync()
@@ -2779,8 +2786,9 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
           [stderr]
           Found system anyio instead of local anyio
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `project` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `project` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     Ok(())
@@ -2847,13 +2855,13 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
               import anyio
           ModuleNotFoundError: No module named 'anyio'
 
-          hint: This error likely indicates that `child@0.1.0` depends on `anyio`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `anyio` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: This error likely indicates that `child@0.1.0` depends on `anyio`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `anyio` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          [tool.uv.extra-build-dependencies]
-          child = ["anyio"]
+    [tool.uv.extra-build-dependencies]
+    child = ["anyio"]
 
-          or `uv pip install anyio` into the environment and re-run with `--no-build-isolation`.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    or `uv pip install anyio` into the environment and re-run with `--no-build-isolation`.
     "#);
 
     // Adding `extra-build-dependencies` should solve the issue
@@ -2913,13 +2921,13 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
               import sklearn
           ModuleNotFoundError: No module named 'sklearn'
 
-          hint: This error likely indicates that `child@0.1.0` depends on `scikit-learn`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `scikit-learn` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: This error likely indicates that `child@0.1.0` depends on `scikit-learn`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `scikit-learn` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          [tool.uv.extra-build-dependencies]
-          child = ["scikit-learn"]
+    [tool.uv.extra-build-dependencies]
+    child = ["scikit-learn"]
 
-          or `uv pip install scikit-learn` into the environment and re-run with `--no-build-isolation`.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    or `uv pip install scikit-learn` into the environment and re-run with `--no-build-isolation`.
     "#);
 
     // Adding `extra-build-dependencies` should solve the issue
@@ -6245,7 +6253,8 @@ fn sync_extra_build_dependencies_script() -> Result<()> {
           [stderr]
           Missing `anyio` module
 
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Add extra build dependencies to the script
@@ -10339,8 +10348,9 @@ fn sync_derivation_chain() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
+
+    hint: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
     Ok(())
@@ -10402,8 +10412,9 @@ fn sync_derivation_chain_extra() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref`
+
+    hint: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref`
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
     Ok(())
@@ -10467,8 +10478,9 @@ fn sync_derivation_chain_group() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
+
+    hint: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
     Ok(())
@@ -10915,7 +10927,8 @@ fn mismatched_name_self_editable() -> Result<()> {
     Resolved 2 packages in [TIME]
       × Failed to build `foo @ file://[TEMP_DIR]/`
       ╰─▶ Package metadata name `project` does not match given name `foo`
-      help: `foo` was included because `project` (v0.1.0) depends on `foo`
+
+    hint: `foo` was included because `project` (v0.1.0) depends on `foo`
     ");
 
     Ok(())
@@ -11394,7 +11407,8 @@ fn url_hash_mismatch() -> Result<()> {
 
           Computed:
             sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
-      help: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
+
+    hint: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
     ");
 
     Ok(())
@@ -11467,7 +11481,8 @@ fn path_hash_mismatch() -> Result<()> {
 
           Computed:
             sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
-      help: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
+
+    hint: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
     ");
 
     Ok(())
@@ -14567,8 +14582,9 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
           [stderr]
           Expected `anyio` version 3.0 but got 4.3.0
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Now constrain the `anyio` build dependency to match the runtime
@@ -14633,8 +14649,9 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
           [stderr]
           Expected `anyio` version 4.0 but got 3.7.1
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     uv_snapshot!(context.filters(), context.sync()
@@ -14694,7 +14711,8 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
       ├─▶ Failed to resolve requirements from `build-system.requires` and `extra-build-dependencies`
       ├─▶ No solution found when resolving: `hatchling`, `anyio>3.8, <4.2`, `anyio==3.7.1 (index: https://pypi.org/simple)`
       ╰─▶ Because you require anyio>3.8,<4.2 and anyio==3.7.1, we can conclude that your requirements are unsatisfiable.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
     ");
 
     // Adding a version specifier should also fail
@@ -14796,7 +14814,8 @@ fn sync_extra_build_variables() -> Result<()> {
           [stderr]
           Expected `anyio` version 3.0 but got 4.3.0
 
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Set the variable in TOML (to an incorrect value).
@@ -14829,7 +14848,8 @@ fn sync_extra_build_variables() -> Result<()> {
           [stderr]
           Expected `anyio` version 3.0 but got 4.3.0
 
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Set the variable in TOML (to a correct value).
@@ -14889,7 +14909,8 @@ fn reject_unmatched_runtime() -> Result<()> {
     ----- stderr -----
       × Failed to download and build `source-distribution==0.0.3`
       ╰─▶ Extra build requirement `iniconfig` was declared with `match-runtime = true`, but `source-distribution` does not declare static metadata, making runtime-matching impossible
-      help: `source-distribution` (v0.0.3) was included because `foo` (v0.1.0) depends on `source-distribution`
+
+    hint: `source-distribution` (v0.0.3) was included because `foo` (v0.1.0) depends on `source-distribution`
     ");
 
     Ok(())

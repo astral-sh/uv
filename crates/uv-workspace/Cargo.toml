@@ -16,10 +16,11 @@ doctest = false
 workspace = true
 
 [dependencies]
-uv-build-backend = { workspace = true }
+uv-build-backend = { workspace = true, features = ["schemars"] }
 uv-cache-key = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-types = { workspace = true }
+uv-errors = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-git-types = { workspace = true }
 uv-macros = { workspace = true }
@@ -37,7 +38,6 @@ fs-err = { workspace = true }
 glob = { workspace = true }
 ignore = { workspace = true }
 itertools = { workspace = true }
-owo-colors = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }

@@ -5,6 +5,7 @@ use std::path::Path;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
+use uv_errors::ErrorWithHints;
 use uv_fs::Simplified;
 use uv_preview::Preview;
 use uv_python::{
@@ -156,7 +157,11 @@ pub(crate) async fn find_script(
     .await
     {
         Err(error) => {
-            writeln!(printer.stderr(), "{error}")?;
+            writeln!(
+                printer.stderr(),
+                "{}",
+                ErrorWithHints::new(&error, uv_errors::Hint::hints(&error))
+            )?;
             return Ok(ExitStatus::Failure);
         }
         Ok(ScriptInterpreter::Interpreter(interpreter)) => interpreter,

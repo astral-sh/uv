@@ -15,7 +15,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use glob::Pattern;
-use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashSet};
 use serde::de::SeqAccess;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -40,6 +39,12 @@ use uv_redacted::DisplaySafeUrl;
 pub enum PyprojectTomlError {
     #[error(transparent)]
     Toml(#[from] toml::de::Error),
+    #[error("Failed to parse `tool.uv.sources`")]
+    Source(
+        #[from]
+        #[source]
+        SourceError,
+    ),
     #[error(
         "`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set"
     )]
@@ -123,7 +128,25 @@ impl PyProjectToml {
     /// Parse a `PyProjectToml` from a raw TOML string.
     #[instrument("toml::from_str workspace", skip_all, fields(path = %_path.as_ref().display()))]
     pub fn from_string(raw: String, _path: impl AsRef<Path>) -> Result<Self, PyprojectTomlError> {
-        let pyproject = toml::from_str(&raw).map_err(PyprojectTomlError::Toml)?;
+        let sources_wire =
+            toml::from_str::<PyProjectTomlSourcesWire>(&raw).map_err(PyprojectTomlError::Toml)?;
+        let sources = sources_wire
+            .tool
+            .and_then(|tool| tool.uv)
+            .and_then(|uv| uv.sources)
+            .map(ToolUvSources::try_from)
+            .transpose()?;
+
+        let mut pyproject: Self = toml::from_str(&raw).map_err(PyprojectTomlError::Toml)?;
+        if let Some(sources) = sources {
+            let tool_uv = pyproject
+                .tool
+                .as_mut()
+                .and_then(|tool| tool.uv.as_mut())
+                .expect("tool.uv must exist when tool.uv.sources is present");
+            tool_uv.sources = Some(sources);
+        }
+
         Ok(Self { raw, ..pyproject })
     }
 
@@ -330,6 +353,7 @@ pub struct ToolUv {
             pydantic = { path = "/path/to/pydantic", editable = true }
         "#
     )]
+    #[serde(default, deserialize_with = "ignore_tool_uv_sources")]
     pub sources: Option<ToolUvSources>,
 
     /// The indexes to use when resolving dependencies.
@@ -716,6 +740,34 @@ pub struct ToolUv {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUvSources(BTreeMap<PackageName, Sources>);
 
+fn ignore_tool_uv_sources<'de, D>(deserializer: D) -> Result<Option<ToolUvSources>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    serde::de::IgnoredAny::deserialize(deserializer)?;
+    Ok(None)
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct PyProjectTomlSourcesWire {
+    tool: Option<ToolSourcesWire>,
+}
+
+#[derive(Deserialize, Debug)]
+struct ToolSourcesWire {
+    uv: Option<ToolUvSourcesOnlyWire>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct ToolUvSourcesOnlyWire {
+    sources: Option<ToolUvSourcesWire>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+struct ToolUvSourcesWire(BTreeMap<PackageName, SourcesWire>);
+
 impl ToolUvSources {
     /// Returns the underlying `BTreeMap` of package names to sources.
     pub fn inner(&self) -> &BTreeMap<PackageName, Sources> {
@@ -726,6 +778,31 @@ impl ToolUvSources {
     #[must_use]
     pub fn into_inner(self) -> BTreeMap<PackageName, Sources> {
         self.0
+    }
+}
+
+impl TryFrom<ToolUvSourcesWire> for ToolUvSources {
+    type Error = SourceError;
+
+    fn try_from(wire: ToolUvSourcesWire) -> Result<Self, Self::Error> {
+        wire.0
+            .into_iter()
+            .map(|(name, sources)| Sources::try_from(sources).map(|sources| (name, sources)))
+            .collect::<Result<BTreeMap<_, _>, _>>()
+            .map(Self)
+    }
+}
+
+/// Ensure that all keys in the TOML table are unique.
+impl<'de> serde::de::Deserialize<'de> for ToolUvSourcesWire {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_unique_map(deserializer, |key: &PackageName| {
+            format!("duplicate sources for package `{key}`")
+        })
+        .map(ToolUvSourcesWire)
     }
 }
 
@@ -1596,8 +1673,7 @@ pub enum SourceError {
     Absolute(#[from] std::io::Error),
     #[error("Path contains invalid characters: `{}`", _0.display())]
     NonUtf8Path(PathBuf),
-    #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold()
-    )]
+    #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.")]
     OverlappingMarkers(String, String, String),
     #[error(
         "When multiple sources are provided, each source must include a platform marker (e.g., `marker = \"sys_platform == 'linux'\"`)"
@@ -1605,6 +1681,17 @@ pub enum SourceError {
     MissingMarkers,
     #[error("Must provide at least one source")]
     EmptySources,
+}
+
+impl uv_errors::Hint for SourceError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::OverlappingMarkers(_, rhs, replacement) => {
+                uv_errors::Hints::from(format!("replace `{rhs}` with `{replacement}`"))
+            }
+            _ => uv_errors::Hints::none(),
+        }
+    }
 }
 
 impl Source {
@@ -1846,6 +1933,20 @@ pub enum DependencyType {
     Optional(ExtraName),
     /// A dependency in `dependency-groups.{0}`.
     Group(GroupName),
+}
+
+impl DependencyType {
+    /// Return the TOML table name(s) for this dependency type.
+    pub fn toml_table_name(&self) -> String {
+        match self {
+            Self::Production => "`project.dependencies`".to_string(),
+            Self::Dev => {
+                "`tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`".to_string()
+            }
+            Self::Optional(extra) => format!("`project.optional-dependencies.{extra}`"),
+            Self::Group(group) => format!("`dependency-groups.{group}`"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

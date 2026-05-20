@@ -1,16 +1,19 @@
-use anyhow::{Context, bail};
-use itertools::Itertools;
-use owo_colors::OwoColorize;
 use std::{
     collections::{BTreeSet, Bound},
     ffi::OsString,
     fmt::Write,
     path::Path,
 };
+
+use anyhow::{Context, bail};
+use itertools::Itertools;
+use owo_colors::OwoColorize;
+use thiserror::Error;
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_distribution_types::{InstalledDist, Name, Requirement};
+use uv_errors::{ErrorWithHints, Hint, Hints};
 use uv_fs::Simplified;
 #[cfg(unix)]
 use uv_fs::replace_symlink;
@@ -28,6 +31,65 @@ use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip;
+
+/// An error raised when a tool package provides no executables.
+#[derive(Debug, Error)]
+pub(crate) enum NoExecutablesError {
+    /// A dependency was requested as a source of tool executables.
+    #[error("No executables are provided by package `{package}`")]
+    Dependency { package: PackageName },
+    /// The root package cannot be installed as a tool.
+    #[error("Failed to install entrypoints for `{package}`")]
+    Root {
+        package: PackageName,
+        /// Executables found in dependencies of the package that match the package name.
+        matching_dependency_packages: Vec<PackageName>,
+    },
+}
+
+impl Hint for NoExecutablesError {
+    fn hints(&self) -> Hints<'_> {
+        let mut hints = Hints::none();
+        let (package, matching_dependency_packages) = match self {
+            Self::Dependency { package } => {
+                hints.push(format!(
+                    "Use `--with {}` to include `{}` as a dependency without installing its executables",
+                    package.cyan(),
+                    package.cyan(),
+                ));
+                return hints;
+            }
+            Self::Root {
+                package,
+                matching_dependency_packages,
+            } => (package, matching_dependency_packages),
+        };
+
+        match matching_dependency_packages.as_slice() {
+            [] => {}
+            [dep] => {
+                let command = format!("uv tool install {dep}");
+                hints.push(format!(
+                    "An executable with the name `{}` is available via dependency `{}`.\n      Did you mean `{}`?",
+                    package.cyan(),
+                    dep.cyan(),
+                    command.bold(),
+                ));
+            }
+            deps => {
+                let dep_list = deps
+                    .iter()
+                    .map(|dep| format!("- {}", dep.cyan()))
+                    .join("\n");
+                hints.push(format!(
+                    "An executable with the name `{}` is available via the following dependencies:\n{dep_list}\n      Did you mean to install one of them instead?",
+                    package.cyan(),
+                ));
+            }
+        }
+        hints
+    }
+}
 use crate::commands::project::ProjectError;
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
@@ -230,36 +292,44 @@ pub(crate) fn finalize_tool_install(
             .collect::<BTreeSet<_>>();
 
         if target_entrypoints.is_empty() {
-            // If package is not the root package, suggest to install it as a dependency.
+            let err = if package != name {
+                NoExecutablesError::Dependency {
+                    package: package.clone(),
+                }
+            } else {
+                NoExecutablesError::Root {
+                    package: package.clone(),
+                    matching_dependency_packages: matching_packages(
+                        package.as_ref(),
+                        &site_packages,
+                    )
+                    .into_iter()
+                    .map(|dist| dist.name().clone())
+                    .collect(),
+                }
+            };
+
             if package != name {
+                // Non-root package: display the error with hints and continue.
                 writeln!(
                     printer.stdout(),
-                    "No executables are provided by package `{}`\n{}{} Use `--with {}` to include `{}` as a dependency without installing its executables.",
-                    package.cyan(),
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    package.cyan(),
-                    package.cyan(),
+                    "{}",
+                    ErrorWithHints::new(&err, err.hints())
                 )?;
                 continue;
             }
 
-            // For the root package, this is a fatal error
+            // For the root package, this is a fatal error.
             writeln!(
                 printer.stdout(),
                 "No executables are provided by package `{}`; removing tool",
                 package.cyan()
             )?;
 
-            hint_executable_from_dependency(package, &site_packages, printer)?;
-
             // Clean up the environment we just created.
             installed_tools.remove_environment(name)?;
 
-            return Err(anyhow::anyhow!(
-                "Failed to install entrypoints for `{}`",
-                package.cyan()
-            ));
+            return Err(err.into());
         }
 
         // Error if we're overwriting an existing entrypoint, unless the user passed `--force`.
@@ -379,47 +449,4 @@ fn warn_out_of_path(executable_directory: &Path) {
             );
         }
     }
-}
-
-/// Displays a hint if an executable matching the package name can be found in a dependency of the package.
-fn hint_executable_from_dependency(
-    name: &PackageName,
-    site_packages: &SitePackages,
-    printer: Printer,
-) -> anyhow::Result<()> {
-    let packages = matching_packages(name.as_ref(), site_packages);
-    match packages.as_slice() {
-        [] => {}
-        [package] => {
-            let command = format!("uv tool install {}", package.name());
-            writeln!(
-                printer.stdout(),
-                "{}{} An executable with the name `{}` is available via dependency `{}`.\n      Did you mean `{}`?",
-                "hint".bold().cyan(),
-                ":".bold(),
-                name.cyan(),
-                package.name().cyan(),
-                command.bold(),
-            )?;
-        }
-        packages => {
-            writeln!(
-                printer.stdout(),
-                "{}{} An executable with the name `{}` is available via the following dependencies::",
-                "hint".bold().cyan(),
-                ":".bold(),
-                name.cyan(),
-            )?;
-
-            for package in packages {
-                writeln!(printer.stdout(), "- {}", package.name().cyan())?;
-            }
-            writeln!(
-                printer.stdout(),
-                "      Did you mean to install one of them instead?"
-            )?;
-        }
-    }
-
-    Ok(())
 }
