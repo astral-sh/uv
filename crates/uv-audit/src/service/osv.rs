@@ -8,7 +8,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::str::FromStr as _;
-use tracing::trace;
+use tracing::{trace, warn};
 
 use crate::types;
 use futures::{StreamExt as _, TryStreamExt as _};
@@ -298,11 +298,14 @@ impl Osv {
         let vuln_details = futures::stream::iter(unique_ids)
             .map(async |id| {
                 let vuln = self.fetch_vuln(&id).await?;
-                Ok::<(String, Vulnerability), Error>((id, vuln))
+                Ok::<Option<(String, Vulnerability)>, Error>(vuln.map(|vuln| (id, vuln)))
             })
             .buffer_unordered(self.concurrency.downloads)
-            .try_collect::<FxHashMap<String, Vulnerability>>()
-            .await?;
+            .try_collect::<Vec<Option<(String, Vulnerability)>>>()
+            .await?
+            .into_iter()
+            .flatten()
+            .collect::<FxHashMap<String, Vulnerability>>();
 
         // Build findings from the accumulated (dependency, vuln_id) pairs.
         let findings = dep_vuln_ids
@@ -318,22 +321,30 @@ impl Osv {
     }
 
     /// Fetch a full vulnerability record by ID from OSV.
-    async fn fetch_vuln(&self, id: &str) -> Result<Vulnerability, Error> {
+    ///
+    /// Returns `None` when OSV returns a record that cannot be deserialized.
+    async fn fetch_vuln(&self, id: &str) -> Result<Option<Vulnerability>, Error> {
         let url = self
             .base_url
             .join(&format!("v1/vulns/{id}"))
             .map_err(|e| Error::Url(self.base_url.clone(), e))?;
-        let vuln: Vulnerability = self
+        let response = self
             .client
             .get(url.as_ref())
             .send()
             .await?
             .error_for_status()
-            .map_err(reqwest_middleware::Error::Reqwest)?
-            .json()
-            .await
             .map_err(reqwest_middleware::Error::Reqwest)?;
-        Ok(vuln)
+
+        match response.json::<Vulnerability>().await {
+            Ok(vuln) => Ok(Some(vuln)),
+            Err(err) if err.is_decode() => {
+                warn!("Skipping malformed OSV record {id}");
+                trace!("Failed to deserialize OSV record {id}: {err}");
+                Ok(None)
+            }
+            Err(err) => Err(reqwest_middleware::Error::Reqwest(err).into()),
+        }
     }
 
     /// Convert an OSV-specific [`Vulnerability`] record to a [`types::Finding`].
@@ -449,6 +460,17 @@ mod tests {
                 "46.0.5",
             ),
         ]
+        "#);
+    }
+
+    #[test]
+    fn test_deserialize_empty_event() {
+        let event = serde_json::from_str::<Event>("{}");
+
+        insta::assert_debug_snapshot!(event, @r#"
+        Err(
+            Error("expected value", line: 1, column: 2),
+        )
         "#);
     }
 

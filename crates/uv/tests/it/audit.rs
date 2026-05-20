@@ -551,6 +551,102 @@ async fn audit_multiple_vulnerabilities_same_package() {
     ");
 }
 
+/// Audit a project and continue after OSV returns a malformed vulnerability record.
+///
+/// Reproduces bug #19492: <https://github.com/astral-sh/uv/issues/19492>
+#[tokio::test]
+async fn audit_malformed_vulnerability_record() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "VULN-VALID"}, {"id": "VULN-MALFORMED"}]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/VULN-VALID"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "VULN-VALID",
+            "modified": "2026-01-01T00:00:00Z",
+            "summary": "A valid vulnerability",
+            "affected": [{
+                "ranges": [{
+                    "type": "ECOSYSTEM",
+                    "events": [
+                        {"introduced": "0"},
+                        {"fixed": "2.1.0"}
+                    ]
+                }]
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/VULN-MALFORMED"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "VULN-MALFORMED",
+            "modified": "2026-01-01T00:00:00Z",
+            "summary": "A malformed vulnerability",
+            "affected": [{
+                "ranges": [{
+                    "type": "ECOSYSTEM",
+                    "events": [
+                        {"fixed": "2.1.0"},
+                        {},
+                    ]
+                }]
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    Vulnerabilities:
+
+    iniconfig 2.0.0 has 1 known vulnerability:
+
+    - VULN-VALID: A valid vulnerability
+
+      Fixed in: 2.1.0
+
+      Advisory information: https://osv.dev/vulnerability/VULN-VALID
+
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    WARN Skipping malformed OSV record VULN-MALFORMED
+    Found 1 known vulnerability and no adverse project statuses in 1 package
+    ");
+}
+
 /// `--no-dev` excludes dev dependencies from the audit.
 #[tokio::test]
 async fn audit_no_dev() {
