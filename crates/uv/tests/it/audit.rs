@@ -642,7 +642,7 @@ async fn audit_malformed_vulnerability_record() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    WARN Skipping malformed OSV record VULN-MALFORMED
+    warning: Skipping malformed OSV record VULN-MALFORMED
     Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
 }

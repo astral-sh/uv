@@ -8,7 +8,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::str::FromStr as _;
-use tracing::{trace, warn};
+use tracing::trace;
 
 use crate::types;
 use futures::{StreamExt as _, TryStreamExt as _};
@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use uv_configuration::Concurrency;
 use uv_pep440::Version;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_warnings::warn_user;
 
 pub const API_BASE: &str = "https://api.osv.dev/";
 
@@ -339,7 +340,7 @@ impl Osv {
         match response.json::<Vulnerability>().await {
             Ok(vuln) => Ok(Some(vuln)),
             Err(err) if err.is_decode() => {
-                warn!("Skipping malformed OSV record {id}");
+                warn_user!("Skipping malformed OSV record {id}");
                 trace!("Failed to deserialize OSV record {id}: {err}");
                 Ok(None)
             }
