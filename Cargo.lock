@@ -5800,6 +5800,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-redacted",
  "uv-small-str",
+ "uv-warnings",
  "wiremock",
 ]
 
