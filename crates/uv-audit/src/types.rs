@@ -2,7 +2,7 @@
 
 use jiff::Timestamp;
 use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifierBuildError};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
@@ -151,6 +151,28 @@ impl Vulnerability {
                     || id.as_str().starts_with("CVE-")
             })
             .unwrap_or(&self.id)
+    }
+
+    /// Choose the best semver-compatible fix.
+    ///
+    /// Performs a compatibility (~=) check on available fixes and chooses the lowest value.
+    /// If `patch_only` is `true`, only patch-level (i.e. 0.0.x) fixes will be considered.
+    pub fn semver_compatible_fix(
+        &self,
+        patch_only: bool,
+    ) -> Result<Option<&Version>, VersionSpecifierBuildError> {
+        let constraint =
+            VersionSpecifier::from_version(Operator::TildeEqual, self.dependency.version.clone())?;
+        let constraint = match patch_only {
+            true => constraint,
+            false => constraint.only_minor_release(),
+        };
+
+        Ok(self
+            .fix_versions
+            .iter()
+            .filter(|fix| constraint.contains(fix))
+            .min())
     }
 }
 
