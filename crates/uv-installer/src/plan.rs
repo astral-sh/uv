@@ -6,7 +6,6 @@ use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
-use url::Url;
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::Timestamp;
 use uv_configuration::{BuildOptions, Reinstall};
@@ -24,6 +23,7 @@ use uv_normalize::PackageName;
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, Tags};
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonEnvironment;
+use uv_redacted::DisplaySafeUrl;
 use uv_types::HashStrategy;
 
 use crate::satisfies::RequirementSatisfaction;
@@ -40,7 +40,7 @@ pub struct IncompatibleWheelError {
 
 #[derive(Debug)]
 enum IncompatibleWheelKind {
-    Url(Url),
+    Url(DisplaySafeUrl),
     Path(PathBuf),
 }
 
@@ -422,7 +422,7 @@ impl<'a> Planner<'a> {
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                     if !wheel.filename.is_compatible(tags) {
                         return Err(IncompatibleWheelError {
-                            kind: IncompatibleWheelKind::Url(wheel.url.to_url().into()),
+                            kind: IncompatibleWheelKind::Url(wheel.url.to_url()),
                             compatibility_hint: generate_wheel_compatibility_hint(
                                 &wheel.filename,
                                 tags,
