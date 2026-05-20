@@ -54,6 +54,7 @@ clap = { workspace = true }
 criterion = { version = "4.0.3", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
 jiff = { workspace = true }
 tokio = { workspace = true }
+tempfile = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["uv-extract"]

@@ -2869,7 +2869,7 @@ pub mod benchmark {
 
     /// Initialize process-global uv state once before timing benchmark invocations.
     pub async fn initialize(cli: Cli) -> Result<()> {
-        ensure_success(run(cli, Initialization::Enabled).await?)
+        ensure_success(Box::pin(run(cli, Initialization::Enabled)).await?)
     }
 
     /// Run one benchmark invocation after global uv state has already been initialized.
@@ -2877,7 +2877,7 @@ pub mod benchmark {
     /// Benchmark invocations should keep the process-global options aligned with the initialization
     /// call.
     pub async fn invoke(cli: Cli) -> Result<()> {
-        ensure_success(run(cli, Initialization::Skipped).await?)
+        ensure_success(Box::pin(run(cli, Initialization::Skipped)).await?)
     }
 
     fn ensure_success(status: ExitStatus) -> Result<()> {

@@ -5867,6 +5867,7 @@ dependencies = [
  "clap",
  "codspeed-criterion-compat",
  "jiff",
+ "tempfile",
  "tokio",
  "uv",
  "uv-cache",
