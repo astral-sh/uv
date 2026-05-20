@@ -340,7 +340,7 @@ impl Osv {
         match response.json::<Vulnerability>().await {
             Ok(vuln) => Ok(Some(vuln)),
             Err(err) if err.is_decode() => {
-                warn_user!("Skipping malformed OSV record {id}");
+                warn_user!("Skipping malformed OSV record: {id}");
                 trace!("Failed to deserialize OSV record {id}: {err}");
                 Ok(None)
             }
