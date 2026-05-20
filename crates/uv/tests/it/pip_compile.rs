@@ -14422,7 +14422,7 @@ fn universal_required_environment() -> Result<()> {
         .into_iter()
         .chain([(
             // This hint is only shown when the current platform doesn't match the target.
-            r"\n\n\s+hint: The resolution failed for an environment that is not the current one[^\n]*",
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
             "",
         )])
         .collect();
@@ -14441,8 +14441,6 @@ fn universal_required_environment() -> Result<()> {
       × No solution found when resolving dependencies for split (markers: platform_machine == 'arm64'):
       ╰─▶ Because only no-sdist-no-wheels-with-matching-platform-a==1.0.0 is available and no-sdist-no-wheels-with-matching-platform-a==1.0.0 has no `platform_machine == 'arm64'`-compatible wheels, we can conclude that all versions of no-sdist-no-wheels-with-matching-platform-a cannot be used.
           And because project depends on no-sdist-no-wheels-with-matching-platform-a, we can conclude that your requirements are unsatisfiable.
-
-    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     ");
 
     Ok(())
