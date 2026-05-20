@@ -12,10 +12,9 @@ pub fn shlex_posix(executable: impl AsRef<Path>) -> String {
     //
     // > Use single quotes, and put single quotes into double quotes
     // > The string $'b is then quoted as '$'"'"'b'
-    if executable
-        .chars()
-        .any(|c| !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '@' | '%' | '+' | '=' | ':' | ',' | '.' | '/' | '_' | '-'))
-    {
+    if executable.chars().any(|c| {
+        !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '@' | '%' | '+' | '=' | ':' | ',' | '.' | '/' | '_' | '-')
+    }) {
         format!("'{}'", escape_posix_for_single_quotes(&executable))
     } else {
         executable
@@ -63,9 +62,18 @@ mod tests {
     #[test]
     fn test_shlex_posix_no_quoting_needed() {
         // Purely safe characters: no quoting expected.
-        assert_eq!(shlex_posix(Path::new("/usr/bin/python3")), "/usr/bin/python3");
-        assert_eq!(shlex_posix(Path::new("./venv/bin/activate")), "./venv/bin/activate");
-        assert_eq!(shlex_posix(Path::new("/home/user/.venv/bin/activate")), "/home/user/.venv/bin/activate");
+        assert_eq!(
+            shlex_posix(Path::new("/usr/bin/python3")),
+            "/usr/bin/python3"
+        );
+        assert_eq!(
+            shlex_posix(Path::new("./venv/bin/activate")),
+            "./venv/bin/activate"
+        );
+        assert_eq!(
+            shlex_posix(Path::new("/home/user/.venv/bin/activate")),
+            "/home/user/.venv/bin/activate"
+        );
     }
 
     #[test]
@@ -89,7 +97,9 @@ mod tests {
     fn test_shlex_posix_parentheses_trigger_quoting() {
         // Parentheses are common on macOS (e.g., "Applications (Rosetta)").
         assert_eq!(
-            shlex_posix(Path::new("/Users/user/Applications (Rosetta)/.venv/bin/activate")),
+            shlex_posix(Path::new(
+                "/Users/user/Applications (Rosetta)/.venv/bin/activate"
+            )),
             "'/Users/user/Applications (Rosetta)/.venv/bin/activate'"
         );
     }
@@ -106,6 +116,9 @@ mod tests {
     #[test]
     fn test_escape_posix_for_single_quotes() {
         assert_eq!(escape_posix_for_single_quotes("it's"), "it'\"'\"'s");
-        assert_eq!(escape_posix_for_single_quotes("no quotes here"), "no quotes here");
+        assert_eq!(
+            escape_posix_for_single_quotes("no quotes here"),
+            "no quotes here"
+        );
     }
 }
