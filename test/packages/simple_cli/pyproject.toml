@@ -1,0 +1,17 @@
+[project]
+name = "simple-cli"
+version = "0.1.0"
+description = "A simple CLI for testing"
+authors = [
+    {name = "Astral Software Inc.", email = "hey@astral.sh"},
+]
+dependencies = []
+requires-python = ">=3.8"
+license = {text = "MIT"}
+
+[project.scripts]
+simple-cli = "simple_cli:main"
+
+[build-system]
+requires = ["flit_core>=3.4,<4"]
+build-backend = "flit_core.buildapi"
