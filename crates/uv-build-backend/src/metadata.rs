@@ -12,7 +12,7 @@ use uv_warnings::warn_user_once;
 use version_ranges::Ranges;
 use walkdir::WalkDir;
 
-use uv_fs::Simplified;
+use uv_fs::{Simplified, normalize_path_under};
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
@@ -59,6 +59,8 @@ pub enum ValidationError {
         "Entrypoint groups must consist of letters and numbers separated by dots, invalid group: {0}"
     )]
     InvalidGroup(String),
+    #[error("Script entry point names must not escape the scripts directory: `{0}`")]
+    UnsafeScriptName(String),
     #[error("Use `project.scripts` instead of `project.entry-points.console_scripts`")]
     ReservedScripts,
     #[error("Use `project.gui-scripts` instead of `project.entry-points.gui_scripts`")]
@@ -730,6 +732,12 @@ impl PyProjectToml {
 
         let _ = writeln!(writer, "[{group}]");
         for (name, object_reference) in entries {
+            if matches!(group, "console_scripts" | "gui_scripts")
+                && normalize_path_under(Path::new("scripts").join(name), "scripts").is_none()
+            {
+                return Err(ValidationError::UnsafeScriptName(name.clone()));
+            }
+
             if !name
                 .chars()
                 .all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '_')

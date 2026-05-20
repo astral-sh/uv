@@ -2065,6 +2065,50 @@ fn build_fast_path() -> Result<()> {
     Ok(())
 }
 
+/// Reject script entry point names that the installer would write outside the scripts directory.
+#[test]
+fn build_unsafe_script_entry_point_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.init().assert().success();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [project.scripts]
+        "../script" = "project:main"
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+      × Failed to build `[TEMP_DIR]/`
+      ├─▶ Invalid project metadata
+      ╰─▶ Script entry point names must not escape the scripts directory: `../script`
+    ");
+
+    Ok(())
+}
+
 /// Test the `--list` option.
 #[test]
 fn build_list_files() -> Result<()> {
