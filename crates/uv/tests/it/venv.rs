@@ -1506,7 +1506,7 @@ fn create_venv_apostrophe() {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: Testing's
-    Activate with: source Testing's/[BIN]/activate
+    Activate with: source 'Testing'"'"'s/[BIN]/activate'
     "
     );
 
