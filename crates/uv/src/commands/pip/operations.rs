@@ -1148,9 +1148,9 @@ pub(crate) struct ExtrasWithoutSourceError {
 impl uv_errors::Hint for ExtrasWithoutSourceError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         uv_errors::Hints::from(if self.has_editable {
-            "Use `<dir>[extra]` syntax or `-r <file>` instead."
+            "Use `<dir>[extra]` syntax or `-r <file>` instead"
         } else {
-            "Use `package[extra]` syntax instead."
+            "Use `package[extra]` syntax instead"
         })
     }
 }

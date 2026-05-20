@@ -169,34 +169,10 @@ pub(crate) fn dist_error(
         dist: Box<Dist>,
         #[source]
         cause: Arc<uv_distribution::Error>,
-        #[help]
-        help: Option<String>,
     }
 
-    let help = SUGGESTIONS
-        .get(dist.name())
-        .map(|suggestion| {
-            format!(
-                "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                dist.name().cyan(),
-                suggestion.cyan(),
-                suggestion.cyan(),
-            )
-        })
-        .or_else(|| {
-            if chain.is_empty() {
-                None
-            } else {
-                Some(format_chain(dist.name(), dist.version(), chain))
-            }
-        });
-    let hints = cause.hints().into_owned();
-    let report = miette::Report::new(Diagnostic {
-        kind,
-        dist,
-        cause,
-        help,
-    });
+    let hints = dist_hints(dist.name(), dist.version(), chain, cause.hints());
+    let report = miette::Report::new(Diagnostic { kind, dist, cause });
     anstream::eprint!("{report:?}");
     anstream::eprint!("{hints}");
 }
@@ -218,34 +194,10 @@ fn requested_dist_error(
         dist: Box<RequestedDist>,
         #[source]
         cause: Arc<uv_distribution::Error>,
-        #[help]
-        help: Option<String>,
     }
 
-    let help = SUGGESTIONS
-        .get(dist.name())
-        .map(|suggestion| {
-            format!(
-                "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                dist.name().cyan(),
-                suggestion.cyan(),
-                suggestion.cyan(),
-            )
-        })
-        .or_else(|| {
-            if chain.is_empty() {
-                None
-            } else {
-                Some(format_chain(dist.name(), dist.version(), chain))
-            }
-        });
-    let hints = cause.hints().into_owned();
-    let report = miette::Report::new(Diagnostic {
-        kind,
-        dist,
-        cause,
-        help,
-    });
+    let hints = dist_hints(dist.name(), dist.version(), chain, cause.hints());
+    let report = miette::Report::new(Diagnostic { kind, dist, cause });
     anstream::eprint!("{report:?}");
     anstream::eprint!("{hints}");
 }
@@ -267,33 +219,13 @@ fn dependencies_error(
         version: Version,
         #[source]
         cause: Box<uv_resolver::ResolveError>,
-        #[help]
-        help: Option<String>,
     }
 
-    let help = SUGGESTIONS
-        .get(name)
-        .map(|suggestion| {
-            format!(
-                "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                name.cyan(),
-                suggestion.cyan(),
-                suggestion.cyan(),
-            )
-        })
-        .or_else(|| {
-            if chain.is_empty() {
-                None
-            } else {
-                Some(format_chain(name, Some(version), chain))
-            }
-        });
-    let hints = error.hints().into_owned();
+    let hints = dist_hints(name, Some(version), chain, error.hints());
     let report = miette::Report::new(Diagnostic {
         name: name.clone(),
         version: version.clone(),
         cause: error,
-        help,
     });
     anstream::eprint!("{report:?}");
     anstream::eprint!("{hints}");
@@ -370,6 +302,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<NoExecutablesError>(cause, &mut hints);
         collect_hint::<ExternallyManagedError>(cause, &mut hints);
         collect_hint::<MissingProjectVersionError>(cause, &mut hints);
+        collect_hint::<uv_build_backend::Error>(cause, &mut hints);
         collect_hint::<uv_build_frontend::Error>(cause, &mut hints);
         collect_hint::<uv_python::Error>(cause, &mut hints);
         collect_hint::<uv_installer::IncompatibleWheelError>(cause, &mut hints);
@@ -394,6 +327,28 @@ fn collect_hint<T: Hint + std::error::Error + 'static>(
     if let Some(inner) = cause.downcast_ref::<T>() {
         hints.extend(inner.hints());
     }
+}
+
+/// Format package context that should follow a distribution error as hints.
+fn dist_hints(
+    name: &PackageName,
+    version: Option<&Version>,
+    chain: &DerivationChain,
+    cause_hints: Hints<'_>,
+) -> Hints<'static> {
+    let mut hints = Hints::none();
+    if let Some(suggestion) = SUGGESTIONS.get(name) {
+        hints.push(format!(
+            "`{}` is often confused for `{}`. Did you mean to install `{}` instead?",
+            name.cyan(),
+            suggestion.cyan(),
+            suggestion.cyan(),
+        ));
+    } else if !chain.is_empty() {
+        hints.push(format_chain(name, version, chain));
+    }
+    hints.extend(cause_hints);
+    hints.into_owned()
 }
 
 /// Format a [`DerivationChain`] as a human-readable error message.
@@ -538,7 +493,7 @@ mod tests {
 
         assert_eq!(
             hints,
-            vec!["replace `python_version == '3.12'` with `python_version != '3.12'`.".to_string()]
+            vec!["replace `python_version == '3.12'` with `python_version != '3.12'`".to_string()]
         );
     }
 }

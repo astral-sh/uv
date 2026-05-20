@@ -223,6 +223,7 @@ impl PortableGlobParser {
 mod tests {
     use super::*;
     use insta::assert_snapshot;
+    use uv_errors::{ErrorWithHints, Hint};
 
     #[test]
     fn test_error() {
@@ -277,11 +278,16 @@ mod tests {
         );
         let parse_err_uv = |glob| {
             let error = PortableGlobParser::Uv.parse(glob).unwrap_err();
-            anstream::adapter::strip_str(&error.to_string()).to_string()
+            let formatted = ErrorWithHints::new(error.to_string(), error.hints()).to_string();
+            anstream::adapter::strip_str(&formatted).to_string()
         };
         assert_snapshot!(
             parse_err_uv(r"**/@test"),
-            @"Invalid character `@` at position 3 in glob: `**/@test`"
+            @r"
+        Invalid character `@` at position 3 in glob: `**/@test`
+
+        hint: Characters can be escaped with a backslash
+        "
         );
         // Escaping slashes is not allowed.
         assert_snapshot!(

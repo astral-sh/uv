@@ -445,6 +445,7 @@ async fn perform_install(
                 request.request.to_canonical_string()
             )?;
             if is_from_python_version_file {
+                // TODO(zanieb): Consider refactoring this to use an error type.
                 write!(
                     printer.stderr(),
                     "{}",

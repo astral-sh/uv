@@ -124,7 +124,7 @@ impl Hint for Error {
     fn hints(&self) -> Hints<'_> {
         match self {
             Self::BuildBackend(_) => Hints::from(
-                "Build failures usually indicate a problem with the package or the build environment.",
+                "Build failures usually indicate a problem with the package or the build environment",
             ),
             Self::MissingHeader(err) => Hints::from(err.cause.to_string()),
             Self::Lowering(err) => err.hints(),

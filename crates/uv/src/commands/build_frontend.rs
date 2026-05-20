@@ -102,6 +102,7 @@ enum Error {
 fn collect_build_hints(err: &Error) -> uv_errors::Hints<'_> {
     use uv_errors::Hint;
     match err {
+        Error::BuildBackend(err) => err.hints(),
         Error::BuildFrontend(err) => err.hints(),
         Error::BuildDispatch(err) => err.hints(),
         Error::Project(err) => err.hints(),

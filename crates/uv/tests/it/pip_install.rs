@@ -537,7 +537,7 @@ dependencies = ["flask==1.0.x"]
           configuration error: `project.dependencies[0]` must be pep508
 
 
-    hint: Build failures usually indicate a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment
     "##
     );
 
@@ -1494,7 +1494,7 @@ fn install_extras() -> Result<()> {
     ----- stderr -----
     error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file
 
-    hint: Use `<dir>[extra]` syntax or `-r <file>` instead.
+    hint: Use `<dir>[extra]` syntax or `-r <file>` instead
     "
     );
 
@@ -1509,7 +1509,7 @@ fn install_extras() -> Result<()> {
     ----- stderr -----
     error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file
 
-    hint: Use `package[extra]` syntax instead.
+    hint: Use `package[extra]` syntax instead
     "
     );
 
@@ -1527,7 +1527,7 @@ fn install_extras() -> Result<()> {
     ----- stderr -----
     error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file
 
-    hint: Use `package[extra]` syntax instead.
+    hint: Use `package[extra]` syntax instead
     "
     );
 
@@ -6572,7 +6572,7 @@ async fn install_package_basic_auth_from_keyring_wrong_password() {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
     "
     );
 }
@@ -6617,7 +6617,7 @@ async fn install_package_basic_auth_from_keyring_wrong_username() {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
     "
     );
 }
@@ -9979,9 +9979,9 @@ fn sklearn() {
           More information is available at
           https://github.com/scikit-learn/sklearn-pypi-package
 
-      help: `sklearn` is often confused for `scikit-learn` Did you mean to install `scikit-learn` instead?
 
-    hint: Build failures usually indicate a problem with the package or the build environment.
+    hint: `sklearn` is often confused for `scikit-learn`. Did you mean to install `scikit-learn` instead?
+    hint: Build failures usually indicate a problem with the package or the build environment
     "
     );
 }
@@ -10036,9 +10036,9 @@ fn resolve_derivation_chain() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-      help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
 
-    hint: Build failures usually indicate a problem with the package or the build environment.
+    hint: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#
     );
 
@@ -10376,7 +10376,8 @@ fn direct_url_hash_source_tree_dependency() -> Result<()> {
 
           Computed:
             sha256:ee81583f376bb38e5e7af425d2453e5e8d4b57bfbf45e5dba1a75329c202652e
-      help: `protobug` (v0.3.0) was included because `pylock` (v0.1.0) depends on `protobug`
+
+    hint: `protobug` (v0.3.0) was included because `pylock` (v0.1.0) depends on `protobug`
     "
     );
 
@@ -14237,9 +14238,9 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
           [stderr]
           Expected `anyio` version 3.0 but got 4.3.0
 
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
 
-    hint: Build failures usually indicate a problem with the package or the build environment.
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Now constrain the `anyio` build dependency to match the runtime
@@ -14305,9 +14306,9 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
           [stderr]
           Expected `anyio` version 4.0 but got 3.7.1
 
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
 
-    hint: Build failures usually indicate a problem with the package or the build environment.
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     uv_snapshot!(context.filters(), context.pip_install().arg(".")

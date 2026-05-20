@@ -85,7 +85,7 @@ impl uv_errors::Hint for ExternallyInstalledError {
                 source.update_instructions(),
             ))
         } else {
-            uv_errors::Hints::from("Please use your package manager to update uv.")
+            uv_errors::Hints::from("Please use your package manager to update uv")
         }
     }
 }

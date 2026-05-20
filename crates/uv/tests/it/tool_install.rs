@@ -2789,7 +2789,7 @@ fn tool_install_uninstallable() {
 
 
 
-    hint: Build failures usually indicate a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Ensure the tool environment is not created.
@@ -5435,7 +5435,9 @@ fn tool_install_with_executables_from_no_entrypoints() {
     exit_code: 0
     ----- stdout -----
     No executables are provided by package `requests`
-    hint: Use `--with requests` to include `requests` as a dependency without installing its executables.
+
+    hint: Use `--with requests` to include `requests` as a dependency without installing its executables
+
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]

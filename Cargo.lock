@@ -5921,6 +5921,7 @@ dependencies = [
 name = "uv-build-backend"
 version = "0.0.48"
 dependencies = [
+ "anstream",
  "astral-tokio-tar",
  "astral-version-ranges",
  "astral_async_zip",
@@ -5947,6 +5948,7 @@ dependencies = [
  "toml",
  "tracing",
  "uv-distribution-filename",
+ "uv-errors",
  "uv-fs",
  "uv-globfilter",
  "uv-macros",

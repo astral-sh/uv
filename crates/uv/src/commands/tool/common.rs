@@ -13,7 +13,7 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_distribution_types::{InstalledDist, Name, Requirement};
-use uv_errors::{Hint, Hints};
+use uv_errors::{ErrorWithHints, Hint, Hints};
 use uv_fs::Simplified;
 #[cfg(unix)]
 use uv_fs::replace_symlink;
@@ -49,7 +49,7 @@ impl Hint for NoExecutablesError {
         let mut hints = Hints::none();
         if self.is_dependency {
             hints.push(format!(
-                "Use `--with {}` to include `{}` as a dependency without installing its executables.",
+                "Use `--with {}` to include `{}` as a dependency without installing its executables",
                 self.package.cyan(),
                 self.package.cyan(),
             ));
@@ -299,11 +299,11 @@ pub(crate) fn finalize_tool_install(
 
             if is_dependency {
                 // Non-root package: display the error with hints and continue.
-                let hints = err.hints();
-                write!(printer.stdout(), "{err}{hints}")?;
-                if hints.is_empty() {
-                    writeln!(printer.stdout())?;
-                }
+                writeln!(
+                    printer.stdout(),
+                    "{}",
+                    ErrorWithHints::new(&err, err.hints())
+                )?;
                 continue;
             }
 

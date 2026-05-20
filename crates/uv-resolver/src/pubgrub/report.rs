@@ -1808,7 +1808,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::UnauthorizedIndex { index } => {
                 write!(
                     f,
-                    "An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
+                    "An index URL ({}) could not be queried due to a lack of valid authentication credentials ({})",
                     index.without_credentials().cyan(),
                     "401 Unauthorized".red(),
                 )
