@@ -712,7 +712,7 @@ pub(crate) async fn add(
     };
 
     // Update the `pypackage.toml` in-memory.
-    let target = target.update(&content)?;
+    let target = target.update(&content, &WorkspaceCache::default())?;
 
     // Set the Ctrl-C handler to revert changes on exit.
     let _ = ctrlc::set_handler({
@@ -1169,7 +1169,7 @@ async fn lock_and_sync(
             target.write(&content)?;
 
             // Update the `pypackage.toml` in-memory.
-            target = target.update(&content)?;
+            target = target.update(&content, &WorkspaceCache::default())?;
 
             // Invalidate the project metadata.
             if let AddTarget::Project(VirtualProject::Project(ref project), _) = target {
@@ -1396,7 +1396,7 @@ impl AddTarget {
     }
 
     /// Update the target in-memory to incorporate the new content.
-    fn update(self, content: &str) -> Result<Self, ProjectError> {
+    fn update(self, content: &str, workspace_cache: &WorkspaceCache) -> Result<Self, ProjectError> {
         match self {
             Self::Script(mut script, interpreter) => {
                 script.metadata = Pep723Metadata::from_str(content)
@@ -1409,6 +1409,7 @@ impl AddTarget {
                     .update_member(
                         PyProjectToml::from_string(content.to_string(), &pyproject_path)
                             .map_err(ProjectError::PyprojectTomlParse)?,
+                        workspace_cache,
                     )?
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;
                 Ok(Self::Project(project, venv))
@@ -1425,10 +1426,14 @@ impl AddTarget {
         };
         let lock = target.read_bytes().await?;
 
-        // Clone the target.
+        // Obtain a detached a copy of the old structure so we can revert to it without
+        // breaking the assumption that the workspace cache is only used by the modifying code
+        // when changing it.
         match self {
             Self::Script(script, _) => Ok(AddTargetSnapshot::Script(script.clone(), lock)),
-            Self::Project(project, _) => Ok(AddTargetSnapshot::Project(project.clone(), lock)),
+            Self::Project(project, _) => {
+                Ok(AddTargetSnapshot::Project(project.clone_detach(), lock))
+            }
         }
     }
 }

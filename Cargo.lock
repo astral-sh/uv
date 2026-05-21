@@ -7466,6 +7466,7 @@ dependencies = [
  "uv-git-types",
  "uv-macros",
  "uv-normalize",
+ "uv-once-map",
  "uv-options-metadata",
  "uv-pep440",
  "uv-pep508",

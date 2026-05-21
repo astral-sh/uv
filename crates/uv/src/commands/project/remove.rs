@@ -208,7 +208,7 @@ pub(crate) async fn remove(
     }
 
     // Update the `pypackage.toml` in-memory.
-    let target = target.update(&content)?;
+    let target = target.update(&content, &WorkspaceCache::default())?;
 
     // Determine enabled groups and extras
     let default_groups = match &target {
@@ -441,7 +441,7 @@ impl RemoveTarget {
     }
 
     /// Update the target in-memory to incorporate the new content.
-    fn update(self, content: &str) -> Result<Self, ProjectError> {
+    fn update(self, content: &str, workspace_cache: &WorkspaceCache) -> Result<Self, ProjectError> {
         match self {
             Self::Script(mut script) => {
                 script.metadata = Pep723Metadata::from_str(content)
@@ -454,6 +454,7 @@ impl RemoveTarget {
                     .update_member(
                         PyProjectToml::from_string(content.to_string(), &pyproject_path)
                             .map_err(ProjectError::PyprojectTomlParse)?,
+                        workspace_cache,
                     )?
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;
                 Ok(Self::Project(project))
