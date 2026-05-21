@@ -328,8 +328,10 @@ fn python_pin(c: &mut Criterion<WallTime>, harness: &Harness) {
 }
 
 fn tool_run_warm_ruff(c: &mut Criterion<WallTime>, harness: &Harness) {
+    let script = path_string(harness.script_fixture());
+
     bench_cli(c, harness, "tool_run_warm_ruff", || {
-        tool_run_cli(harness.cache_dir())
+        tool_run_cli(harness.cache_dir(), &script)
     });
 }
 
@@ -759,6 +761,7 @@ fn init_cli(project: &str) -> Cli {
         "--no-config",
         "--offline",
         "--quiet",
+        "--quiet",
         "init",
         "--bare",
         "--no-pin-python",
@@ -777,6 +780,7 @@ fn project_cli(cache_dir: &str, project: &str, command: &[&str]) -> Cli {
         "--cache-dir",
         cache_dir,
         "--offline",
+        "--quiet",
         "--quiet",
     ];
     args.extend_from_slice(command);
@@ -797,6 +801,7 @@ fn venv_cli(cache_dir: &str, environment: &str, clear: bool) -> Cli {
             "--no-config",
             "--offline",
             "--quiet",
+            "--quiet",
             "venv",
             "--no-project",
             "--clear",
@@ -808,6 +813,7 @@ fn venv_cli(cache_dir: &str, environment: &str, clear: bool) -> Cli {
             cache_dir,
             "--no-config",
             "--offline",
+            "--quiet",
             "--quiet",
             "venv",
             "--no-project",
@@ -825,6 +831,7 @@ fn project_venv_cli(cache_dir: &str, project: &str, environment: &str) -> Cli {
         cache_dir,
         "--offline",
         "--quiet",
+        "--quiet",
         "venv",
         "--clear",
         environment,
@@ -837,6 +844,7 @@ fn run_script_cli(cache_dir: &str, script: &str) -> Cli {
         cache_dir,
         "--no-config",
         "--offline",
+        "--quiet",
         "--quiet",
         "run",
         "--no-project",
@@ -851,6 +859,7 @@ fn script_cli(cache_dir: &str, command: &[&str]) -> Cli {
         "--no-config",
         "--offline",
         "--quiet",
+        "--quiet",
     ];
     args.extend_from_slice(command);
     cli(&args)
@@ -862,6 +871,7 @@ fn python_cli(cache_dir: &str, command: &[&str]) -> Cli {
         cache_dir,
         "--no-config",
         "--offline",
+        "--quiet",
         "--quiet",
         "python",
     ];
@@ -878,6 +888,7 @@ fn python_pin_cli(cache_dir: &str, directory: &str) -> Cli {
         "--no-config",
         "--offline",
         "--quiet",
+        "--quiet",
         "python",
         "pin",
         "3.12",
@@ -885,12 +896,13 @@ fn python_pin_cli(cache_dir: &str, directory: &str) -> Cli {
     ])
 }
 
-fn tool_run_cli(cache_dir: &str) -> Cli {
+fn tool_run_cli(cache_dir: &str, script: &str) -> Cli {
     cli(&[
         "--cache-dir",
         cache_dir,
         "--no-config",
         "--offline",
+        "--quiet",
         "--quiet",
         "tool",
         "run",
@@ -898,7 +910,9 @@ fn tool_run_cli(cache_dir: &str) -> Cli {
         "--from",
         "ruff==0.5.0",
         "ruff",
-        "--version",
+        "check",
+        "--quiet",
+        script,
     ])
 }
 
@@ -908,6 +922,7 @@ fn pip_compile_cli(requirements: &str, cache_dir: &str, output_file: &str) -> Cl
         cache_dir,
         "--no-config",
         "--offline",
+        "--quiet",
         "--quiet",
         "pip",
         "compile",
@@ -954,6 +969,7 @@ fn pip_cli(cache_dir: &str, command: &[&str]) -> Cli {
         "--no-config",
         "--offline",
         "--quiet",
+        "--quiet",
         "pip",
     ];
     args.extend_from_slice(command);
@@ -966,6 +982,7 @@ fn build_cli(cache_dir: &str, package: &str, output: &str, distribution: &str) -
         "--cache-dir",
         cache_dir,
         "--offline",
+        "--quiet",
         "--quiet",
         "build",
         distribution,
