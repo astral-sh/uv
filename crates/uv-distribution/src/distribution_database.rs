@@ -12,7 +12,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, info_span, instrument, warn};
 use url::Url;
 
-use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
+use uv_cache::{ArchiveId, Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
@@ -1051,7 +1051,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let archive = pointer
             .filter(|pointer| pointer.is_up_to_date(modified))
             .map(LocalArchivePointer::into_archive)
-            .filter(|archive| archive.has_digests(hashes));
+            .filter(|archive| archive.has_digests(hashes))
+            .filter(|archive| archive.exists(self.build_context.cache()));
 
         // If the file is already unzipped, and the cache is up-to-date, return it.
         if let Some(archive) = archive {
@@ -1332,6 +1333,11 @@ impl HttpArchivePointer {
         }
     }
 
+    /// Returns `true` if the archive referenced by the pointer exists in the cache.
+    pub fn exists(&self, cache: &Cache) -> bool {
+        self.archive.exists(cache)
+    }
+
     /// Return the [`Archive`] from the pointer.
     pub fn into_archive(self) -> Archive {
         self.archive
@@ -1377,6 +1383,11 @@ impl LocalArchivePointer {
     /// Returns `true` if the archive is up-to-date with the given modified timestamp.
     pub fn is_up_to_date(&self, modified: Timestamp) -> bool {
         self.timestamp == modified
+    }
+
+    /// Returns `true` if the archive referenced by the pointer exists in the cache.
+    pub fn exists(&self, cache: &Cache) -> bool {
+        self.archive.exists(cache)
     }
 
     /// Return the [`Archive`] from the pointer.

@@ -15951,3 +15951,116 @@ fn handle_record_mismatches() -> Result<()> {
 
     Ok(())
 }
+
+/// Installing a URL-specified wheel should succeed even when the associated cache archive has been removed.
+///
+/// Regression test for <https://github.com/astral-sh/uv/issues/6147>.
+#[test]
+fn install_url_wheel_missing_archive() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let wheel = context
+        .workspace_root
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
+    let url = Url::from_file_path(&wheel).unwrap();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("ok @ {url}")), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_uninstall().arg("ok"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
+    "
+    );
+
+    let archive_dir = context.cache_dir.child("archive-v0");
+    fs_err::remove_dir_all(archive_dir)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("ok @ {url}")), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
+    "
+    );
+
+    Ok(())
+}
+
+/// Installing a path-specified wheel should succeed even when the associated cache archive has been removed.
+///
+/// Regression test for <https://github.com/astral-sh/uv/issues/6147>.
+#[test]
+fn install_path_wheel_missing_archive() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let wheel = context
+        .workspace_root
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_uninstall().arg("ok"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
+    "
+    );
+
+    let archive_dir = context.cache_dir.child("archive-v0");
+    fs_err::remove_dir_all(archive_dir)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
+    "
+    );
+
+    Ok(())
+}
