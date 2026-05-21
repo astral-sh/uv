@@ -7,7 +7,8 @@ use uv_git_types::GitUrl;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::{
-    HashDigest, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl,
+    HashDigest, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl,
+    ParsedPathUrl, ParsedUrl,
 };
 use uv_redacted::DisplaySafeUrl;
 
@@ -83,7 +84,8 @@ impl VersionId {
         match url {
             ParsedUrl::Path(path) => Self::from_path_url(path),
             ParsedUrl::Directory(directory) => Self::from_directory_url(directory),
-            ParsedUrl::Git(git) => Self::from_git_url(git),
+            ParsedUrl::GitDirectory(git) => Self::from_git_directory_url(git),
+            ParsedUrl::GitPath(git) => Self::from_git_path_url(git),
             ParsedUrl::Archive(archive) => Self::from_archive_url(archive),
         }
     }
@@ -134,8 +136,12 @@ impl VersionId {
         Self::from_directory(directory.install_path.as_ref())
     }
 
-    fn from_git_url(git: &ParsedGitUrl) -> Self {
+    fn from_git_directory_url(git: &ParsedGitDirectoryUrl) -> Self {
         Self::from_git(&git.url, git.subdirectory.as_deref())
+    }
+
+    fn from_git_path_url(git: &ParsedGitPathUrl) -> Self {
+        Self::from_git(&git.url, Some(&git.install_path))
     }
 }
 
