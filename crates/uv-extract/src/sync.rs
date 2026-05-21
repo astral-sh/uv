@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
 use crate::vendor::CloneableSeekableReader;
@@ -8,16 +8,22 @@ use async_zip::error::ZipError;
 use futures::executor::block_on;
 use futures::io::{AllowStdIo, AsyncReadExt, AsyncWriteExt};
 use rayon::prelude::*;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::warn;
 use uv_configuration::initialize_rayon_once;
 use uv_warnings::warn_user_once;
+
+struct DuplicateEntry {
+    path: PathBuf,
+    original: usize,
+    duplicate: usize,
+}
 
 /// Unzip a `.zip` archive into the target directory.
 ///
 /// Returns the list of unpacked files and their sizes.
 pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>, Error> {
-    let (reader, filename) = reader.into_parts();
+    let filename = reader.path().to_owned();
 
     // Parse the central directory once, then clone the archive reader per Rayon worker so
     // extraction stays parallel for already-downloaded wheels.
@@ -26,6 +32,76 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
     )))?;
     let directories = Mutex::new(FxHashSet::default());
     let skip_validation = insecure_no_validate();
+
+    let mut seen_files = FxHashMap::default();
+    let mut duplicate_files = Vec::new();
+    for (file_number, entry) in archive.file().entries().iter().enumerate() {
+        let file_name = match entry.filename().as_str() {
+            Ok(file_name) => file_name,
+            Err(ZipError::StringNotUtf8) => {
+                return Err(Error::CentralDirectoryEntryNotUtf8 {
+                    index: file_number as u64,
+                });
+            }
+            Err(err) => return Err(err.into()),
+        };
+
+        if let Err(e) = validate_archive_member_name(file_name) {
+            if !skip_validation {
+                return Err(e);
+            }
+        }
+
+        let Some(enclosed_name) = crate::stream::enclosed_name(file_name) else {
+            continue;
+        };
+
+        if entry.dir()? {
+            continue;
+        }
+
+        let normalized_name = normalize_enclosed_name(&enclosed_name);
+        match seen_files.entry(normalized_name) {
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(file_number);
+            }
+            std::collections::hash_map::Entry::Occupied(entry) => {
+                duplicate_files.push(DuplicateEntry {
+                    path: enclosed_name,
+                    original: *entry.get(),
+                    duplicate: file_number,
+                });
+            }
+        }
+    }
+
+    let mut duplicate_contents: FxHashMap<usize, Vec<u8>> = FxHashMap::default();
+    let mut duplicate_file_numbers = FxHashSet::default();
+    for duplicate in duplicate_files {
+        let existing_contents = match duplicate_contents.entry(duplicate.original) {
+            std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+            std::collections::hash_map::Entry::Vacant(entry) => entry.insert(read_entry_contents(
+                &archive,
+                duplicate.original,
+                &duplicate.path,
+                skip_validation,
+            )?),
+        };
+
+        let duplicate_contents = read_entry_contents(
+            &archive,
+            duplicate.duplicate,
+            &duplicate.path,
+            skip_validation,
+        )?;
+        if *existing_contents != duplicate_contents && !skip_validation {
+            return Err(Error::DuplicateLocalFileHeader {
+                path: duplicate.path,
+            });
+        }
+        duplicate_file_numbers.insert(duplicate.duplicate);
+    }
+
     // Initialize the threadpool with the user settings.
     initialize_rayon_once();
     (0..archive.file().entries().len())
@@ -66,6 +142,10 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
                 return Ok(None);
             };
 
+            if duplicate_file_numbers.contains(&file_number) {
+                return Ok(Some((enclosed_name, entry.uncompressed_size())));
+            }
+
             // Create necessary parent directories.
             let path = target.join(&enclosed_name);
             if entry.dir()? {
@@ -84,7 +164,7 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
             }
 
             // Copy the file contents.
-            let outfile = fs_err::File::create(&path).map_err(Error::Io)?;
+            let outfile = fs_err::File::create_new(&path).map_err(Error::Io)?;
             let size = entry.uncompressed_size();
             let writer = if let Ok(size) = usize::try_from(size) {
                 std::io::BufWriter::with_capacity(std::cmp::min(size, 1024 * 1024), outfile)
@@ -157,6 +237,58 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
         .collect::<Result<_, Error>>()
 }
 
+fn read_entry_contents(
+    archive: &ZipFileReader<AllowStdIo<CloneableSeekableReader<fs_err::File>>>,
+    file_number: usize,
+    path: &Path,
+    skip_validation: bool,
+) -> Result<Vec<u8>, Error> {
+    let mut archive = archive.clone();
+    let entry = archive.file().entries()[file_number].clone();
+    let mut contents = Vec::new();
+    let (copied, computed_crc32) = block_on(async {
+        let mut file = archive.reader_with_entry(file_number).await?;
+        let copied = file
+            .read_to_end(&mut contents)
+            .await
+            .map_err(Error::io_or_compression)?;
+        Ok::<_, Error>((copied as u64, file.compute_hash()))
+    })?;
+
+    if copied != entry.uncompressed_size() && !skip_validation {
+        return Err(Error::BadUncompressedSize {
+            path: path.to_path_buf(),
+            computed: copied,
+            expected: entry.uncompressed_size(),
+        });
+    }
+
+    if computed_crc32 != entry.crc32() && !skip_validation {
+        return Err(Error::BadCrc32 {
+            path: path.to_path_buf(),
+            computed: computed_crc32,
+            expected: entry.crc32(),
+        });
+    }
+
+    Ok(contents)
+}
+
+fn normalize_enclosed_name(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(component) => normalized.push(component),
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::CurDir => {}
+            Component::Prefix(_) | Component::RootDir => {}
+        }
+    }
+    normalized
+}
+
 /// Extract the top-level directory from an unpacked archive.
 ///
 /// The specification says:
@@ -179,5 +311,62 @@ pub fn strip_component(source: impl AsRef<Path>) -> Result<PathBuf, Error> {
                 .map(|entry| entry.file_name())
                 .collect(),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use async_zip::base::write::ZipFileWriter;
+    use async_zip::{Compression, ZipEntryBuilder};
+    use futures::executor::block_on;
+    use tokio_util::compat::FuturesAsyncReadCompatExt;
+
+    use crate::Error;
+
+    fn duplicate_zip(first: &[u8], second: &[u8]) -> Result<Vec<u8>, async_zip::error::ZipError> {
+        let mut writer = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("package/__init__.py".into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, first))?;
+        let entry = ZipEntryBuilder::new("package/__init__.py".into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, second))?;
+        block_on(writer.close())
+    }
+
+    fn assert_duplicate_error(err: Error) {
+        match err {
+            Error::DuplicateLocalFileHeader { path } => {
+                assert_eq!(path, PathBuf::from("package/__init__.py"));
+            }
+            err => panic!("expected duplicate local file header error, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn sync_unzip_rejects_duplicate_file_with_different_contents()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let archive = tempfile::NamedTempFile::new()?;
+        fs_err::write(archive.path(), duplicate_zip(b"first", b"second")?)?;
+
+        let target = tempfile::tempdir()?;
+        let err = super::unzip(fs_err::File::open(archive.path())?, target.path()).unwrap_err();
+        assert_duplicate_error(err);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn stream_unzip_rejects_duplicate_file_with_different_contents()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let target = tempfile::tempdir()?;
+        let reader = futures::io::Cursor::new(duplicate_zip(b"first", b"second")?).compat();
+
+        let err = crate::stream::unzip("duplicate.zip", reader, target.path())
+            .await
+            .unwrap_err();
+        assert_duplicate_error(err);
+
+        Ok(())
     }
 }
