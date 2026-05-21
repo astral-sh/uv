@@ -1090,7 +1090,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let archive = pointer
             .filter(|pointer| pointer.is_up_to_date(modified))
             .map(PathArchivePointer::into_archive)
-            .filter(|archive| archive.has_digests(hashes));
+            .filter(|archive| archive.has_digests(hashes))
             .filter(|archive| archive.exists(self.build_context.cache()));
 
         // If the file is already unzipped, and the cache is up-to-date, return it.
