@@ -54,12 +54,7 @@ impl SourceDistFilename {
         // to `foo-bar` (7 bytes). Using the normalized length as an index into the stem would
         // yield the wrong split point.
         let sep_pos = memchr::memchr_iter(b'-', stem.as_bytes())
-            .find(|&pos| {
-                PackageName::from_str(&stem[..pos])
-                    .ok()
-                    .as_ref()
-                    == Some(package_name)
-            })
+            .find(|&pos| PackageName::from_str(&stem[..pos]).ok().as_ref() == Some(package_name))
             .ok_or_else(|| SourceDistFilenameError {
                 filename: filename.to_string(),
                 kind: SourceDistFilenameErrorKind::Filename(package_name.clone()),
@@ -237,7 +232,7 @@ mod tests {
     /// form must parse correctly. For example, `Foo__Bar` (8 bytes) normalizes to `foo-bar`
     /// (7 bytes) because the double underscore collapses to a single hyphen. The old code used
     /// `package_name.as_ref().len()` (= 7) as a byte offset into the stem `Foo__Bar-1.0`,
-    /// producing `"Foo__Ba"` instead of `"Foo__Bar"` and `"r-1.0"` instead of `"1.0"`.
+    /// producing `"Foo__Bar-1.0"` split as `"Foo__Ba"` + `"r-1.0"` instead of `"Foo__Bar"` + `"1.0"`.
     #[test]
     fn unnormalized_name_different_byte_length() {
         let package_name = PackageName::from_str("foo__bar").unwrap();
