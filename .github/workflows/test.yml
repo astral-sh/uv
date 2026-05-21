@@ -265,6 +265,7 @@ jobs:
           UV_LINK_MODE: copy
           RUST_BACKTRACE: 1
           UV_INTERNAL__TEST_ALT_FS: "\\\\localhost\\uv-alt-fs"
+          UV_INTERNAL__TEST_SMB_FS: "\\\\localhost\\uv-alt-fs"
           UV_INTERNAL__TEST_LOWLINKS_FS: "C:\\uv"
           # Write pending snapshots to a separate directory for artifact upload
           INSTA_UPDATE: new

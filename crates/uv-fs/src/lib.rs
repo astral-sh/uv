@@ -304,21 +304,20 @@ mod tests {
     }
 
     #[test]
-    fn create_junction_failure_removes_directory() -> std::io::Result<()> {
+    fn create_junction_from_smb_failure_removes_directory() -> std::io::Result<()> {
         #[expect(clippy::print_stderr)]
-        let Some(alt_fs) = std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_ALT_FS).ok() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_ALT_FS not set");
+        let Some(smb_fs) = std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_SMB_FS).ok() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_SMB_FS not set");
             return Ok(());
         };
-        fs_err::create_dir_all(&alt_fs)?;
-        let alt_tempdir = tempfile::tempdir_in(alt_fs)?;
+        fs_err::create_dir_all(&smb_fs)?;
+        let alt_tempdir = tempfile::tempdir_in(smb_fs)?;
         let tempdir = tempfile::tempdir()?;
         let link = tempdir.path().join("link");
         let target = alt_tempdir.path().join("target");
         fs_err::create_dir(&target)?;
 
         let err = create_junction(&target, &link).unwrap_err();
-        // This relies on ALT_FS pointing at a SMB share
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidFilename);
         assert!(!link.exists());
         Ok(())
