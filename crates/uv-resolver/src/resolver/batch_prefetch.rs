@@ -111,13 +111,13 @@ impl BatchPrefetcher {
                 .index
                 .explicit()
                 .wait_blocking(&(name.clone(), index.url().clone()))
-                .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
+                .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))?
         } else {
             self.prefetch_runner
                 .index
                 .implicit()
                 .wait_blocking(name)
-                .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
+                .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))?
         };
 
         let phase = BatchPrefetchStrategy::Compatible {
