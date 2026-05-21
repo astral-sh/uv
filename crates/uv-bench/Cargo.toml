@@ -38,6 +38,7 @@ uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
+uv-fs = { workspace = true }
 uv-install-wheel = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
@@ -52,6 +53,7 @@ uv-workspace = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
 criterion = { version = "4.0.3", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
+fs-err = { workspace = true }
 jiff = { workspace = true }
 tokio = { workspace = true }
 tempfile = { workspace = true }
