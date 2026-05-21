@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.9"
 
 [options]
-exclude-newer = "2024-08-09T05:00:00Z"
+exclude-newer = "2024-08-08T00:00:00Z"
 
 [manifest]
 members = [

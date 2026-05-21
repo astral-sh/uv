@@ -125,7 +125,12 @@ fn lock_check(c: &mut Criterion<WallTime>, harness: &Harness) {
         project_cli(
             harness.cache_dir(),
             &project,
-            &["lock", "--locked", "--exclude-newer", "2024-08-08"],
+            &[
+                "lock",
+                "--locked",
+                "--exclude-newer",
+                "2024-08-08T00:00:00Z",
+            ],
         )
     });
 }
@@ -142,7 +147,7 @@ fn lock_create(c: &mut Criterion<WallTime>, harness: &Harness) {
                 project_cli(
                     harness.cache_dir(),
                     &project,
-                    &["lock", "--exclude-newer", "2024-08-08"],
+                    &["lock", "--exclude-newer", "2024-08-08T00:00:00Z"],
                 )
             },
             |cli| harness.invoke(cli),

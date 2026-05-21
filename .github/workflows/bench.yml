@@ -44,7 +44,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsasl2-dev libldap2-dev libkrb5-dev
           cargo run --bin uv -- --no-config venv --cache-dir .cache
-          cargo run --bin uv -- --no-config lock --locked --project crates/uv-bench/fixtures/project --cache-dir .cache --exclude-newer 2024-08-08
+          cargo run --bin uv -- --no-config lock --locked --project crates/uv-bench/fixtures/project --cache-dir .cache --exclude-newer 2024-08-08T00:00:00Z
           UV_PROJECT_ENVIRONMENT=/tmp/uv-bench-project-env cargo run --bin uv -- --no-config sync --frozen --project crates/uv-bench/fixtures/project --cache-dir .cache
           cargo run --bin uv -- --no-config pip compile test/requirements/jupyter.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
           cargo run --bin uv -- --no-config pip compile test/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
@@ -124,7 +124,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsasl2-dev libldap2-dev libkrb5-dev
           cargo run --bin uv -- --no-config venv --cache-dir .cache
-          cargo run --bin uv -- --no-config lock --locked --project crates/uv-bench/fixtures/project --cache-dir .cache --exclude-newer 2024-08-08
+          cargo run --bin uv -- --no-config lock --locked --project crates/uv-bench/fixtures/project --cache-dir .cache --exclude-newer 2024-08-08T00:00:00Z
           UV_PROJECT_ENVIRONMENT=/tmp/uv-bench-project-env cargo run --bin uv -- --no-config sync --frozen --project crates/uv-bench/fixtures/project --cache-dir .cache
           cargo run --bin uv -- --no-config pip compile test/requirements/jupyter.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
           cargo run --bin uv -- --no-config pip compile test/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
