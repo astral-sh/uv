@@ -1,5 +1,6 @@
 //! Benchmarks for whole-invocation uv command paths.
 
+use std::env;
 use std::hint::black_box;
 use std::path::{Path, PathBuf};
 
@@ -306,7 +307,7 @@ struct Harness {
 
 impl Harness {
     fn new() -> Self {
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let manifest_dir = env::current_dir().expect("resolve benchmark manifest directory");
         let workspace_root = manifest_dir.join("../..");
         let cache_dir = path_string(&workspace_root.join(".cache"));
         let requirements = path_string(&workspace_root.join("test/requirements/jupyter.in"));
