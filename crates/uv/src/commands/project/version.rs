@@ -21,7 +21,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{BumpCommand, PrereleaseKind, Version};
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_workspace::VirtualProject;
 use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::pyproject_mut::Error;
@@ -95,6 +95,7 @@ pub(crate) async fn project_version(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    malware_settings: MalwareCheckSettings,
 ) -> Result<ExitStatus> {
     // Read the metadata
     let project = find_target(
@@ -356,6 +357,7 @@ pub(crate) async fn project_version(
             cache,
             printer,
             preview,
+            &malware_settings,
         ))
         .await?
     } else {
@@ -584,6 +586,7 @@ async fn lock_and_sync(
     cache: &Cache,
     printer: Printer,
     preview: Preview,
+    malware_settings: &MalwareCheckSettings,
 ) -> Result<ExitStatus> {
     // If frozen, don't touch the lock or sync at all
     if frozen.is_some() {
@@ -737,6 +740,7 @@ async fn lock_and_sync(
         DryRun::Disabled,
         printer,
         preview,
+        malware_settings,
     )
     .await
     {

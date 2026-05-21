@@ -12,6 +12,7 @@ use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
+use uv_redacted::DisplaySafeUrl;
 use uv_static::{EnvVars, InvalidEnvironmentVariable, parse_boolish_environment_variable};
 use uv_warnings::warn_user;
 
@@ -760,6 +761,8 @@ pub struct EnvironmentOptions {
     pub venv_clear: EnvFlag,
     pub venv_relocatable: EnvFlag,
     pub init_bare: EnvFlag,
+    pub malware_check: EnvFlag,
+    pub malware_check_url: Option<DisplaySafeUrl>,
 }
 
 impl EnvironmentOptions {
@@ -862,6 +865,18 @@ impl EnvironmentOptions {
             venv_clear: EnvFlag::new(EnvVars::UV_VENV_CLEAR)?,
             venv_relocatable: EnvFlag::new(EnvVars::UV_VENV_RELOCATABLE)?,
             init_bare: EnvFlag::new(EnvVars::UV_INIT_BARE)?,
+            malware_check: EnvFlag::new(EnvVars::UV_MALWARE_CHECK)?,
+            malware_check_url: parse_string_environment_variable(EnvVars::UV_MALWARE_CHECK_URL)?
+                .map(|value| {
+                    value.parse::<DisplaySafeUrl>().map_err(|err| {
+                        Error::InvalidEnvironmentVariable(InvalidEnvironmentVariable {
+                            name: EnvVars::UV_MALWARE_CHECK_URL.to_string(),
+                            value,
+                            err: err.to_string(),
+                        })
+                    })
+                })
+                .transpose()?,
         })
     }
 }

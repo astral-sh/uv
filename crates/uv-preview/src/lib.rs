@@ -253,6 +253,7 @@ pub enum PreviewFeature {
     IndexExcludeNewer = 1 << 28,
     AzureEndpoint = 1 << 29,
     TomlBackwardsCompatibility = 1 << 30,
+    MalwareCheck = 1 << 31,
 }
 
 impl PreviewFeature {
@@ -290,6 +291,7 @@ impl PreviewFeature {
             Self::IndexExcludeNewer => "index-exclude-newer",
             Self::AzureEndpoint => "azure-endpoint",
             Self::TomlBackwardsCompatibility => "toml-backwards-compatibility",
+            Self::MalwareCheck => "malware-check",
         }
     }
 }
@@ -340,6 +342,7 @@ impl FromStr for PreviewFeature {
             "index-exclude-newer" => Self::IndexExcludeNewer,
             "azure-endpoint" => Self::AzureEndpoint,
             "toml-backwards-compatibility" => Self::TomlBackwardsCompatibility,
+            "malware-check" => Self::MalwareCheck,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -598,6 +601,7 @@ mod tests {
             PreviewFeature::TomlBackwardsCompatibility.as_str(),
             "toml-backwards-compatibility"
         );
+        assert_eq!(PreviewFeature::MalwareCheck.as_str(), "malware-check");
     }
 
     #[test]
