@@ -1,18 +1,20 @@
 //! Resolve the current [`ProjectWorkspace`] or [`Workspace`].
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::hash::BuildHasherDefault;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use glob::{GlobError, PatternError, glob};
 use itertools::Itertools;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxHashSet, FxHasher};
 use tracing::{debug, trace, warn};
 
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_distribution_types::{Index, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified, normalize_path};
 use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
+use uv_once_map::OnceMap;
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl};
 use uv_pypi_types::{ConflictError, Conflicts, SupportedEnvironments, VerbatimParsedUrl};
@@ -25,22 +27,64 @@ use crate::pyproject::{
 };
 
 type WorkspaceMembers = Arc<BTreeMap<PackageName, WorkspaceMember>>;
-
-/// Cache key for workspace discovery.
-///
-/// Given this key, the discovered workspace member list is the same.
-#[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
-struct WorkspaceCacheKey {
-    workspace_root: PathBuf,
-    discovery_options: DiscoveryOptions,
-}
+type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
+/// `None` means there was an error during discovery.
+type CachedWorkspace = Option<Arc<Workspace>>;
 
 /// Cache for workspace discovery.
 ///
 /// Avoid re-reading the `pyproject.toml` files in a workspace for each member by caching the
 /// workspace members by their workspace root.
+///
+/// The cache contains references to the workspace root from each workspace member.
+///
+/// The cache makes assumptions about [`DiscoveryOptions`]:
+/// * For a given discovery path, `stop_discovery_at` either always or never sits between a project
+///   and a workspace root. This means that we don't need to key discovery on `stop_discovery_at`.
+/// * TODO(konsti): Support caching for [`MemberDiscovery`] modes that aren't `All`.
 #[derive(Debug, Default, Clone)]
-pub struct WorkspaceCache(Arc<Mutex<FxHashMap<WorkspaceCacheKey, WorkspaceMembers>>>);
+pub struct WorkspaceCache {
+    workspaces: Arc<FxOnceMap<PathBuf, CachedWorkspace>>,
+}
+
+impl WorkspaceCache {
+    fn insert(&self, workspace: Arc<Workspace>) {
+        for package in workspace.packages.values() {
+            self.workspaces
+                .done(package.root.clone(), Some(workspace.clone()));
+        }
+        self.workspaces
+            .done(workspace.install_path.clone(), Some(workspace));
+    }
+
+    // Handle an error without leaving the map dangling.
+    fn insert_none(&self, install_path: PathBuf) {
+        self.workspaces.done(install_path, None);
+    }
+
+    /// Register workspace discovery for a root, or wait for an in-flight discovery.
+    async fn register_or_wait(&self, workspace_root: &PathBuf) -> Option<Arc<Workspace>> {
+        self.workspaces
+            .register_or_wait(workspace_root)
+            .await
+            .flatten()
+    }
+
+    /// Get the cached workspace, if any, from the path to the workspace root or to a member root.
+    fn get(&self, path: &Path) -> Option<Arc<Workspace>> {
+        self.workspaces.get(path).flatten()
+    }
+
+    /// Remove all cached workspace entries for the given workspace root. Used before modifying the
+    /// workspace.
+    pub fn remove(&self, install_path: &Path) {
+        if let Some(Some(workspace)) = self.workspaces.remove(install_path) {
+            for member in workspace.packages.values() {
+                self.workspaces.remove(&member.root);
+            }
+        }
+    }
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum WorkspaceError {
@@ -83,6 +127,8 @@ pub enum WorkspaceError {
     Toml(PathBuf, #[source] Box<PyprojectTomlError>),
     #[error(transparent)]
     Conflicts(#[from] ConflictError),
+    // On Windows and Unix, this is not a regular IO failure, but requires e.g. `current_dir` to
+    // fail.
     #[error("Failed to normalize workspace member path")]
     Normalize(#[source] std::io::Error),
 }
@@ -176,6 +222,12 @@ impl Workspace {
             .ok_or(WorkspaceError::MissingPyprojectToml)?
             .to_path_buf();
 
+        if options.members == MemberDiscovery::All
+            && let Some(workspace) = cache.get(&path)
+        {
+            return Ok(workspace);
+        }
+
         let pyproject_path = project_path.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
         let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
@@ -229,6 +281,13 @@ impl Workspace {
                 )
             };
 
+        if options.members == MemberDiscovery::All {
+            // Ensure that workspace discovery runs only once for any given workspace root.
+            if let Some(workspace) = cache.register_or_wait(&workspace_root).await {
+                return Ok(workspace);
+            }
+        }
+
         debug!(
             "Found workspace root: `{}`",
             workspace_root.simplified_display()
@@ -245,7 +304,7 @@ impl Workspace {
                 pyproject_toml,
             });
 
-        Self::collect_members(
+        match Self::build(
             workspace_root.clone(),
             workspace_definition,
             workspace_pyproject_toml,
@@ -254,32 +313,43 @@ impl Workspace {
             cache,
         )
         .await
+        {
+            Ok(workspace) => Ok(workspace),
+            Err(error) => {
+                if options.members == MemberDiscovery::All {
+                    cache.insert_none(workspace_root);
+                }
+                Err(error)
+            }
+        }
     }
 
     /// Set the current project to the given workspace member.
     ///
     /// Returns `None` if the package is not part of the workspace.
     fn with_current_project(
-        slf: Arc<Self>,
+        self: Arc<Self>,
         package_name: PackageName,
     ) -> Option<ProjectWorkspace> {
-        let member = slf.packages.get(&package_name)?;
+        let member = self.packages.get(&package_name)?;
         Some(ProjectWorkspace {
             project_root: member.root().clone(),
             project_name: package_name,
-            workspace: slf,
+            workspace: self,
         })
     }
 
     /// Set the [`ProjectWorkspace`] for a given workspace member.
     ///
-    /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
-    pub fn update_member(
-        slf: Arc<Self>,
+    /// Assumes that the project name is unchanged in the updated [`PyProjectToml`], and that the
+    /// caller holds the only reference to this workspace (to avoid a situation where another part
+    /// of uv still holds a reference to the old workspace structure).
+    fn update_member(
+        self: Arc<Self>,
         package_name: &PackageName,
         pyproject_toml: PyProjectToml,
     ) -> Result<Option<Arc<Self>>, WorkspaceError> {
-        let slf = Arc::try_unwrap(slf).unwrap_or_else(|slf| {
+        let slf = Arc::try_unwrap(self).unwrap_or_else(|slf| {
             if cfg!(debug_assertions) {
                 panic!(
                     "Cannot modify workspace still in use with {} references",
@@ -830,8 +900,8 @@ impl Workspace {
         }
     }
 
-    /// Collect the workspace member projects from the `members` and `excludes` entries.
-    async fn collect_members(
+    /// Collect the workspace member projects and build the workspace object.
+    async fn build(
         workspace_root: PathBuf,
         workspace_definition: ToolUvWorkspace,
         workspace_pyproject_toml: PyProjectToml,
@@ -839,44 +909,26 @@ impl Workspace {
         options: &DiscoveryOptions,
         cache: &WorkspaceCache,
     ) -> Result<Arc<Self>, WorkspaceError> {
-        let cache_key = WorkspaceCacheKey {
-            workspace_root: workspace_root.clone(),
-            discovery_options: options.clone(),
-        };
-        let cache_entry = {
-            // Acquire the lock for the minimal required region
-            let cache = cache.0.lock().expect("there was a panic in another thread");
-            cache.get(&cache_key).cloned()
-        };
-        let mut workspace_members = if let Some(workspace_members) = cache_entry {
-            trace!(
-                "Cached workspace members for: `{}`",
-                &workspace_root.simplified_display()
-            );
-            workspace_members
-        } else {
-            trace!(
-                "Discovering workspace members for: `{}`",
-                &workspace_root.simplified_display()
-            );
-            let workspace_members = Self::collect_members_only(
-                &workspace_root,
-                &workspace_definition,
-                &workspace_pyproject_toml,
-                options,
-            )
-            .await?;
-            {
-                // Acquire the lock for the minimal required region
-                let mut cache = cache.0.lock().expect("there was a panic in another thread");
-                cache.insert(cache_key, Arc::new(workspace_members.clone()));
-            }
-            Arc::new(workspace_members)
-        };
+        trace!(
+            "Discovering workspace members for: `{}`",
+            &workspace_root.simplified_display()
+        );
+        let workspace_members = Self::collect_members_only(
+            &workspace_root,
+            &workspace_definition,
+            &workspace_pyproject_toml,
+            options,
+        )
+        .await?;
+        let mut workspace_members = Arc::new(workspace_members);
 
         // For the cases such as `MemberDiscovery::None`, add the current project if missing.
         if let Some(root_member) = current_project {
             if !workspace_members.contains_key(&root_member.project.name) {
+                assert!(matches!(
+                    options.members,
+                    MemberDiscovery::None | MemberDiscovery::Ignore(_)
+                ));
                 debug!(
                     "Adding current workspace member: `{}`",
                     root_member.root.simplified_display()
@@ -935,7 +987,11 @@ impl Workspace {
             indexes: workspace_indexes,
             pyproject_toml: workspace_pyproject_toml,
         };
-        Ok(Arc::new(workspace))
+        let workspace = Arc::new(workspace);
+        if options.members == MemberDiscovery::All {
+            cache.insert(workspace.clone());
+        }
+        Ok(workspace)
     }
 
     async fn collect_members_only(
@@ -951,11 +1007,6 @@ impl Workspace {
         // Add the project at the workspace root, if it exists and if it's distinct from the current
         // project. If it is the current project, it is added as such in the next step.
         if let Some(project) = &workspace_pyproject_toml.project {
-            let pyproject_path = workspace_root.join("pyproject.toml");
-            let contents = fs_err::read_to_string(&pyproject_path)?;
-            let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
-                .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
-
             debug!(
                 "Adding root workspace member: `{}`",
                 workspace_root.simplified_display()
@@ -967,7 +1018,7 @@ impl Workspace {
                 WorkspaceMember {
                     root: workspace_root.clone(),
                     project: project.clone(),
-                    pyproject_toml,
+                    pyproject_toml: workspace_pyproject_toml.clone(),
                 },
             );
         }
@@ -1281,6 +1332,27 @@ pub struct ProjectWorkspace {
 }
 
 impl ProjectWorkspace {
+    fn from_cache(
+        project_root: &Path,
+        options: &DiscoveryOptions,
+        cache: &WorkspaceCache,
+    ) -> Option<Self> {
+        if options.members != MemberDiscovery::All {
+            return None;
+        }
+        let workspace = cache.get(project_root)?;
+        let (project_name, _member) = workspace
+            .packages
+            .iter()
+            .find(|(_project_name, member)| member.root() == project_root)?;
+
+        Some(Self {
+            project_root: project_root.to_path_buf(),
+            project_name: project_name.clone(),
+            workspace,
+        })
+    }
+
     /// Find the current project and workspace, given the current directory.
     ///
     /// `stop_discovery_at` must be either `None` or an ancestor of the current directory. If set,
@@ -1290,6 +1362,10 @@ impl ProjectWorkspace {
         options: &DiscoveryOptions,
         cache: &WorkspaceCache,
     ) -> Result<Self, WorkspaceError> {
+        assert!(
+            path.is_absolute(),
+            "project workspace discovery with relative path"
+        );
         let project_root = path
             .ancestors()
             .take_while(|path| {
@@ -1318,8 +1394,13 @@ impl ProjectWorkspace {
         options: &DiscoveryOptions,
         cache: &WorkspaceCache,
     ) -> Result<Self, WorkspaceError> {
+        if let Some(project) = Self::from_cache(project_root, options, cache) {
+            return Ok(project);
+        }
+
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
+
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
         let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
@@ -1336,12 +1417,16 @@ impl ProjectWorkspace {
     /// If the current directory contains a `pyproject.toml` with a `project` table, discover the
     /// workspace and return it, otherwise it is a dynamic path dependency and we return `Ok(None)`.
     pub async fn from_maybe_project_root(
-        install_path: &Path,
+        project_root: &Path,
         options: &DiscoveryOptions,
         cache: &WorkspaceCache,
     ) -> Result<Option<Self>, WorkspaceError> {
+        if let Some(project) = Self::from_cache(project_root, options, cache) {
+            return Ok(Some(project));
+        }
+
         // Read the `pyproject.toml`.
-        let pyproject_path = install_path.join("pyproject.toml");
+        let pyproject_path = project_root.join("pyproject.toml");
         let Ok(contents) = fs_err::tokio::read_to_string(&pyproject_path).await else {
             // No `pyproject.toml`, but there may still be a `setup.py` or `setup.cfg`.
             return Ok(None);
@@ -1355,7 +1440,7 @@ impl ProjectWorkspace {
             return Ok(None);
         };
 
-        match Self::from_project(install_path, &project, &pyproject_toml, options, cache).await {
+        match Self::from_project(project_root, &project, &pyproject_toml, options, cache).await {
             Ok(workspace) => Ok(Some(workspace)),
             Err(WorkspaceError::NonWorkspace(_)) => Ok(None),
             Err(err) => Err(err),
@@ -1386,10 +1471,7 @@ impl ProjectWorkspace {
     /// Set the `pyproject.toml` for the current project.
     ///
     /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
-    pub fn update_member(
-        self,
-        pyproject_toml: PyProjectToml,
-    ) -> Result<Option<Self>, WorkspaceError> {
+    fn update_member(self, pyproject_toml: PyProjectToml) -> Result<Option<Self>, WorkspaceError> {
         let Some(workspace) =
             Workspace::update_member(self.workspace, &self.project_name, pyproject_toml)?
         else {
@@ -1421,6 +1503,10 @@ impl ProjectWorkspace {
         {
             debug!("Project `{}` is marked as unmanaged", project.name);
             return Err(WorkspaceError::NonWorkspace(project_path.to_path_buf()));
+        }
+
+        if let Some(project) = Self::from_cache(&project_path, options, cache) {
+            return Ok(project);
         }
 
         // Check if the current project is also an explicit workspace root.
@@ -1476,27 +1562,49 @@ impl ProjectWorkspace {
                 indexes: Vec::default(),
                 pyproject_toml: project_pyproject_toml.clone(),
             };
+            let workspace = Arc::new(workspace);
+            cache.insert(workspace.clone());
             return Ok(Self {
                 project_root: project_path.to_path_buf(),
                 project_name: project.name.clone(),
-                workspace: Arc::new(workspace),
+                workspace,
             });
         };
+
+        if options.members == MemberDiscovery::All {
+            // Ensure that workspace discovery runs only once for any given workspace root.
+            if let Some(workspace) = cache.register_or_wait(&workspace_root).await {
+                return Ok(Self {
+                    project_root: project_path.to_path_buf(),
+                    project_name: project.name.clone(),
+                    workspace,
+                });
+            }
+        }
 
         debug!(
             "Found workspace root: `{}`",
             workspace_root.simplified_display()
         );
 
-        let workspace = Workspace::collect_members(
-            workspace_root,
+        let workspace = match Workspace::build(
+            workspace_root.clone(),
             workspace_definition,
             workspace_pyproject_toml,
             Some(current_project),
             options,
             cache,
         )
-        .await?;
+        .await
+        {
+            Ok(workspace) => workspace,
+            Err(error) => {
+                if options.members == MemberDiscovery::All {
+                    cache.insert_none(workspace_root);
+                }
+                return Err(error);
+            }
+        };
 
         Ok(Self {
             project_root: project_path.to_path_buf(),
@@ -1730,6 +1838,26 @@ impl VirtualProject {
             project_root.simplified_display()
         );
 
+        // Fast path.
+        if options.members == MemberDiscovery::All
+            && let Some(workspace) = cache.get(project_root)
+        {
+            let virtual_project = if let Some((project_name, _member)) = workspace
+                .packages
+                .iter()
+                .find(|(_package_name, member)| member.root == project_root)
+            {
+                Self::Project(ProjectWorkspace {
+                    project_root: project_root.to_path_buf(),
+                    project_name: project_name.clone(),
+                    workspace,
+                })
+            } else {
+                Self::NonProject(workspace.clone())
+            };
+            return Ok(virtual_project);
+        }
+
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
@@ -1759,8 +1887,8 @@ impl VirtualProject {
                 .map_err(WorkspaceError::Normalize)?
                 .clone();
 
-            let workspace = Workspace::collect_members(
-                project_path,
+            let workspace = Workspace::build(
+                project_path.clone(),
                 workspace.clone(),
                 pyproject_toml,
                 None,
@@ -1768,7 +1896,6 @@ impl VirtualProject {
                 cache,
             )
             .await?;
-
             Ok(Self::NonProject(workspace))
         } else {
             // Otherwise it's a pyproject.toml that maybe contains dependency-groups
@@ -1777,13 +1904,15 @@ impl VirtualProject {
                 .map_err(WorkspaceError::Normalize)?
                 .clone();
 
-            let workspace = Workspace::collect_members(
+            let workspace = Workspace::build(
                 project_path,
                 ToolUvWorkspace::default(),
                 pyproject_toml,
                 None,
                 options,
-                cache,
+                // Avoid populating the shared cache with a synthetic workspace that
+                // `Workspace::discover` would reject as missing a `[project]` table.
+                &WorkspaceCache::default(),
             )
             .await?;
 
@@ -1813,10 +1942,15 @@ impl VirtualProject {
     /// Update the `pyproject.toml` for the current project.
     ///
     /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
+    ///
+    /// The [`WorkspaceCache`] is passed to ensure the caller doesn't forget to clear it.
     pub fn update_member(
         self,
         pyproject_toml: PyProjectToml,
+        workspace_cache: &WorkspaceCache,
     ) -> Result<Option<Self>, WorkspaceError> {
+        // Our modifying operations run on a single workspace, clear that workspace.
+        workspace_cache.remove(&self.workspace().install_path);
         Ok(match self {
             Self::Project(project) => {
                 let Some(project) = project.update_member(pyproject_toml)? else {
@@ -1825,14 +1959,39 @@ impl VirtualProject {
                 Some(Self::Project(project))
             }
             Self::NonProject(workspace) => {
+                let workspace = Arc::try_unwrap(workspace).unwrap_or_else(|workspace| {
+                    if cfg!(debug_assertions) {
+                        panic!(
+                            "Cannot modify workspace still in use with {} references",
+                            Arc::strong_count(&workspace)
+                        );
+                    } else {
+                        (*workspace).clone()
+                    }
+                });
                 // If this is a non-project workspace root, then by definition the root isn't a
                 // member, so we can just update the top-level `pyproject.toml`.
-                Some(Self::NonProject(Arc::new(Workspace {
+                let workspace = Workspace {
                     pyproject_toml,
-                    ..(*workspace).clone()
-                })))
+                    ..workspace
+                };
+                Some(Self::NonProject(Arc::new(workspace)))
             }
         })
+    }
+
+    /// Clone while detaching from the original workspace `Arc`, freeing the original state for
+    /// modification.
+    #[must_use]
+    pub fn clone_detach(&self) -> Self {
+        match self {
+            Self::Project(project) => Self::Project(ProjectWorkspace {
+                project_root: project.project_root.clone(),
+                project_name: project.project_name.clone(),
+                workspace: Arc::new((*project.workspace).clone()),
+            }),
+            Self::NonProject(workspace) => Self::NonProject(Arc::new((**workspace).clone())),
+        }
     }
 
     /// Return the root of the project.
@@ -1879,6 +2038,8 @@ mod tests {
     use std::env;
     use std::path::Path;
     use std::str::FromStr;
+    use std::sync::Arc;
+    use std::time::Duration;
 
     use anyhow::Result;
     use assert_fs::fixture::ChildPath;
@@ -1889,7 +2050,7 @@ mod tests {
     use uv_pypi_types::DependencyGroupSpecifier;
 
     use crate::pyproject::PyProjectToml;
-    use crate::workspace::{DiscoveryOptions, ProjectWorkspace};
+    use crate::workspace::{DiscoveryOptions, ProjectWorkspace, Workspace};
     use crate::{WorkspaceCache, WorkspaceError};
 
     async fn workspace_test(folder: &str) -> (ProjectWorkspace, String) {
@@ -2261,6 +2422,147 @@ mod tests {
             }
             "#);
         });
+    }
+
+    #[tokio::test]
+    async fn workspace_cache_reuses_workspace_for_member() -> Result<()> {
+        let root = tempfile::TempDir::new()?;
+        let root = ChildPath::new(root.path());
+
+        root.child("pyproject.toml").write_str(
+            r#"
+            [project]
+            name = "albatross"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv.workspace]
+            members = ["packages/*"]
+            "#,
+        )?;
+
+        root.child("packages")
+            .child("seeds")
+            .child("pyproject.toml")
+            .write_str(
+                r#"
+            [project]
+            name = "seeds"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            "#,
+            )?;
+
+        let cache = WorkspaceCache::default();
+        let root_workspace =
+            Workspace::discover(root.as_ref(), &DiscoveryOptions::default(), &cache).await?;
+        let member_workspace = Workspace::discover(
+            root.child("packages").child("seeds").as_ref(),
+            &DiscoveryOptions::default(),
+            &cache,
+        )
+        .await?;
+
+        assert!(Arc::ptr_eq(&root_workspace, &member_workspace));
+
+        root.child("pyproject.toml")
+            .write_str("not valid toml >.<")?;
+        let member_project = ProjectWorkspace::from_maybe_project_root(
+            root.child("packages").child("seeds").as_ref(),
+            &DiscoveryOptions::default(),
+            &cache,
+        )
+        .await?
+        .expect("cached workspace member ignores invalid change in the meantime");
+
+        assert!(Arc::ptr_eq(&root_workspace, &member_project.workspace));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn workspace_cache_recovers_after_error() -> Result<()> {
+        fn is_child1_editable_conflict(error: &WorkspaceError) -> bool {
+            match error {
+                WorkspaceError::EditableConflict(package) => package.as_str() == "child1",
+                _ => false,
+            }
+        }
+
+        let root = tempfile::TempDir::new()?;
+        let root = ChildPath::new(root.path());
+
+        root.child("pyproject.toml").write_str(
+            r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["child1"]
+
+            [tool.uv.workspace]
+            members = ["child1", "child2"]
+
+            [tool.uv.sources]
+            child1 = { workspace = true, editable = false }
+            "#,
+        )?;
+
+        root.child("child1").child("pyproject.toml").write_str(
+            r#"
+            [project]
+            name = "child1"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            "#,
+        )?;
+
+        let child2 = root.child("child2").child("pyproject.toml");
+        child2.write_str(
+            r#"
+            [project]
+            name = "child2"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["child1"]
+
+            [tool.uv.sources]
+            child1 = { workspace = true, editable = true }
+            "#,
+        )?;
+
+        let cache = WorkspaceCache::default();
+        let first = Workspace::discover(root.as_ref(), &DiscoveryOptions::default(), &cache).await;
+        assert!(matches!(first, Err(ref error) if is_child1_editable_conflict(error)));
+
+        let second = tokio::time::timeout(
+            Duration::from_secs(1),
+            Workspace::discover(root.as_ref(), &DiscoveryOptions::default(), &cache),
+        )
+        .await;
+        assert!(matches!(second, Ok(Err(ref error)) if is_child1_editable_conflict(error)));
+
+        child2.write_str(
+            r#"
+            [project]
+            name = "child2"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["child1"]
+
+            [tool.uv.sources]
+            child1 = { workspace = true, editable = false }
+            "#,
+        )?;
+
+        let recovered = tokio::time::timeout(
+            Duration::from_secs(1),
+            Workspace::discover(root.as_ref(), &DiscoveryOptions::default(), &cache),
+        )
+        .await;
+        assert!(matches!(recovered, Ok(Ok(_))));
+
+        Ok(())
     }
 
     #[tokio::test]
