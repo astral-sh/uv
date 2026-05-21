@@ -309,9 +309,18 @@ def main() -> None:
 
     token = os.environ.get("CARGO_REGISTRY_TOKEN", "")
     if not token:
+        crate_names = ", ".join(crate["name"] for crate in candidates)
+        print(
+            f"Crates requiring crates.io publish setup: {crate_names}",
+            file=sys.stderr,
+        )
         print(
             "error: CARGO_REGISTRY_TOKEN is required (with `publish-new`"
             " and `trusted-publishing` scopes)",
+            file=sys.stderr,
+        )
+        print(
+            "\nPlease reach out to Zanie about releases which add a new crate.",
             file=sys.stderr,
         )
         sys.exit(1)
