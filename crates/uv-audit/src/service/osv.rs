@@ -39,6 +39,13 @@ pub enum Error {
     /// An error when constructing the URL for an API request.
     #[error("Invalid API URL: {0}")]
     Url(DisplaySafeUrl, #[source] DisplaySafeUrlError),
+    /// An error when OSV returns an invalid vulnerability record.
+    #[error("OSV returned a malformed vulnerability record for `{id}`")]
+    MalformedRecord {
+        id: String,
+        #[source]
+        err: reqwest_middleware::Error,
+    },
 }
 
 /// Package specification for OSV queries.
@@ -403,9 +410,10 @@ impl Osv {
             .await
             .map_err(|err| match err {
                 CachedClientError::Client(err) => Error::Client(err),
-                CachedClientError::Callback { err, .. } => {
-                    Error::ReqwestMiddleware(reqwest_middleware::Error::Reqwest(err))
-                }
+                CachedClientError::Callback { err, .. } => Error::MalformedRecord {
+                    id: id.to_string(),
+                    err: reqwest_middleware::Error::Reqwest(err),
+                },
             })?;
 
         Ok(vuln)

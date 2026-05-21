@@ -1509,8 +1509,6 @@ fn tool_install_suggest_other_packages_with_executable() {
     exit_code: 2
     ----- stdout -----
     No executables are provided by package `fastapi`; removing tool
-    hint: An executable with the name `fastapi` is available via dependency `fastapi-cli`.
-          Did you mean `uv tool install fastapi-cli`?
 
     ----- stderr -----
     Resolved 35 packages in [TIME]
@@ -1551,6 +1549,9 @@ fn tool_install_suggest_other_packages_with_executable() {
      + watchfiles==0.21.0
      + websockets==12.0
     error: Failed to install entrypoints for `fastapi`
+
+    hint: An executable with the name `fastapi` is available via dependency `fastapi-cli`.
+          Did you mean `uv tool install fastapi-cli`?
     ");
 }
 
@@ -2790,7 +2791,8 @@ fn tool_install_uninstallable() {
           #
 
 
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Ensure the tool environment is not created.
@@ -5436,7 +5438,8 @@ fn tool_install_with_executables_from_no_entrypoints() {
     exit_code: 0
     ----- stdout -----
     No executables are provided by package `requests`
-    hint: Use `--with requests` to include `requests` as a dependency without installing its executables.
+
+    hint: Use `--with requests` to include `requests` as a dependency without installing its executables
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
@@ -5564,7 +5567,7 @@ fn tool_install_find_links() {
       ╰─▶ Because only basic-app==0.1 is available and basic-app==0.1 needs to be downloaded from a registry, we can conclude that all versions of basic-app cannot be used.
           And because you require basic-app, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
 }
 

@@ -11,8 +11,8 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
+uv-errors = { workspace = true }
 globset = { workspace = true }
-owo-colors = { workspace = true }
 regex = { workspace = true }
 regex-automata = { workspace = true }
 thiserror = { workspace = true }

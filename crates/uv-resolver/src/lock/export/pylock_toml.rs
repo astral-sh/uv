@@ -161,11 +161,17 @@ impl std::error::Error for PylockTomlError {
 
 impl std::fmt::Display for PylockTomlError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.kind)?;
+        write!(f, "{}", self.kind)
+    }
+}
+
+impl uv_errors::Hint for PylockTomlError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
         if let Some(hint) = &self.hint {
-            write!(f, "\n\n{hint}")?;
+            uv_errors::Hints::from(hint.to_string())
+        } else {
+            uv_errors::Hints::none()
         }
-        Ok(())
     }
 }
 

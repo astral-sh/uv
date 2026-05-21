@@ -87,6 +87,15 @@ pub enum Error {
     TarWrite(PathBuf, #[source] io::Error),
 }
 
+impl uv_errors::Hint for Error {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::PortableGlob { source, .. } => uv_errors::Hint::hints(source),
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 /// Dispatcher between writing to a directory, writing to a zip, writing to a `.tar.gz` and
 /// listing files.
 ///
@@ -476,6 +485,7 @@ mod tests {
     use std::pin::Pin;
     use tempfile::TempDir;
     use uv_distribution_filename::{SourceDistFilename, WheelFilename};
+    use uv_errors::{ErrorWithHints, Hint};
     use uv_fs::{copy_dir_all, relative_to};
     use uv_preview::PreviewFeature;
 
@@ -487,7 +497,26 @@ mod tests {
         let context = iter::successors(std::error::Error::source(&err), |&err| err.source())
             .map(|err| format!("  Caused by: {err}"))
             .join("\n");
-        err.to_string() + "\n" + &context
+        let formatted = err.to_string() + "\n" + &context;
+        let formatted = ErrorWithHints::new(formatted, err.hints()).to_string();
+        anstream::adapter::strip_str(&formatted).to_string()
+    }
+
+    #[test]
+    fn format_err_renders_portable_glob_hints() {
+        let err = Error::PortableGlob {
+            field: "tool.uv.build-backend.source-include".to_string(),
+            source: uv_globfilter::PortableGlobParser::Uv
+                .parse("**/@test")
+                .unwrap_err(),
+        };
+
+        assert_snapshot!(format_err(&err), @r#"
+        Unsupported glob expression in: tool.uv.build-backend.source-include
+          Caused by: Invalid character `@` at position 3 in glob: `**/@test`
+
+        hint: Characters can be escaped with a backslash
+        "#);
     }
 
     /// File listings, generated archives and archive contents for both a build with

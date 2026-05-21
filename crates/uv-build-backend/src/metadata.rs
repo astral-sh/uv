@@ -59,6 +59,10 @@ pub enum ValidationError {
         "Entrypoint groups must consist of letters and numbers separated by dots, invalid group: {0}"
     )]
     InvalidGroup(String),
+    #[error(
+        "Script entry point name `{0}` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes"
+    )]
+    InvalidScriptName(String),
     #[error("Use `project.scripts` instead of `project.entry-points.console_scripts`")]
     ReservedScripts,
     #[error("Use `project.gui-scripts` instead of `project.entry-points.gui_scripts`")]
@@ -730,10 +734,18 @@ impl PyProjectToml {
 
         let _ = writeln!(writer, "[{group}]");
         for (name, object_reference) in entries {
-            if !name
-                .chars()
-                .all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '_')
+            let compliant_name = name.chars().all(|character| {
+                character.is_alphanumeric() || matches!(character, '.' | '-' | '_')
+            });
+            let dot_only_name = name.chars().all(|character| character == '.');
+
+            if matches!(group, "console_scripts" | "gui_scripts")
+                && (name.is_empty() || dot_only_name || !compliant_name)
             {
+                return Err(ValidationError::InvalidScriptName(name.clone()));
+            }
+
+            if !compliant_name {
                 warn!(
                     "Entrypoint names should consist of letters, numbers, dots, underscores and \
                     dashes; non-compliant name: {name}"

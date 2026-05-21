@@ -187,6 +187,10 @@ impl EnvVars {
     #[attr_added_in("0.2.30")]
     pub const UV_NO_CONFIG: &'static str = "UV_NO_CONFIG";
 
+    /// If set, uv will not read system-level configuration files.
+    #[attr_added_in("next release")]
+    pub const UV_NO_SYSTEM_CONFIG: &'static str = "UV_NO_SYSTEM_CONFIG";
+
     /// Equivalent to the `--isolated` command-line argument. If set, uv will avoid discovering
     /// a `pyproject.toml` or `uv.toml` file.
     #[attr_added_in("0.8.14")]
@@ -646,6 +650,13 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.10.5")]
     pub const UV_INTERNAL__TEST_ALT_FS: &'static str = "UV_INTERNAL__TEST_ALT_FS";
+
+    /// Network path to a directory on an SMB filesystem for testing.
+    ///
+    /// When populated, uv will run additional tests that cover SMB-specific filesystem behavior.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_INTERNAL__TEST_SMB_FS: &'static str = "UV_INTERNAL__TEST_SMB_FS";
 
     /// Path to a directory on a filesystem with a low hardlink limit (e.g., minix with ~250).
     ///
