@@ -405,7 +405,6 @@ pub(crate) enum Modifications {
 
 /// A distribution which was or would be modified
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[expect(clippy::large_enum_variant)]
 pub(crate) enum ChangedDist {
     Local(LocalDist),
     Remote(Arc<Dist>),

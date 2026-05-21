@@ -29,12 +29,15 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, FileLocation, GitSourceDist, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name,
-    PYPI_URL, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
-    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
+    Dist, FileLocation, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist, Identifier,
+    IndexLocations, IndexMetadata, IndexUrl, Name, PYPI_URL, PathBuiltDist, PathSourceDist,
+    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement,
+    RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata,
+    ToUrlError, UrlString,
 };
-use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
+use uv_fs::{
+    PortablePath, PortablePathBuf, Simplified, normalize_path, relative_to, try_relative_to_if,
+};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -47,7 +50,7 @@ use uv_platform_tags::{
 };
 use uv_pypi_types::{
     ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
-    ParsedGitUrl, PyProjectToml,
+    ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
@@ -2992,12 +2995,47 @@ impl Package {
                         let built_dist = BuiltDist::DirectUrl(direct_dist);
                         Dist::Built(built_dist)
                     }
-                    Source::Git(_, _) => {
-                        return Err(LockErrorKind::InvalidWheelSource {
-                            id: self.id.clone(),
-                            source_type: "Git",
-                        }
-                        .into());
+                    Source::Git(url, git) => {
+                        let Some(install_path) = git.path.as_ref() else {
+                            return Err(LockErrorKind::InvalidWheelSource {
+                                id: self.id.clone(),
+                                source_type: "Git",
+                            }
+                            .into());
+                        };
+
+                        // Remove the fragment and query from the URL; they're already present in the
+                        // `GitSource`.
+                        let mut url = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
+                        url.set_fragment(None);
+                        url.set_query(None);
+
+                        // Reconstruct the `GitUrl` from the `GitSource`.
+                        let git_url = GitUrl::from_commit(
+                            url,
+                            GitReference::from(git.kind.clone()),
+                            git.precise,
+                            git.lfs,
+                        )?;
+
+                        // Reconstruct the PEP 508-compatible URL from the `GitSource`.
+                        let url = DisplaySafeUrl::from(ParsedGitPathUrl {
+                            url: git_url.clone(),
+                            install_path: install_path.clone(),
+                            ext: DistExtension::Wheel,
+                        });
+
+                        let filename: WheelFilename =
+                            self.wheels[best_wheel_index].filename.clone();
+
+                        let git_dist = GitPathBuiltDist {
+                            filename,
+                            git: Box::new(git_url),
+                            install_path: install_path.clone(),
+                            url: VerbatimUrl::from_url(url),
+                        };
+                        let built_dist = BuiltDist::GitPath(git_dist);
+                        Dist::Built(built_dist)
                     }
                     Source::Directory(_) => {
                         return Err(LockErrorKind::InvalidWheelSource {
@@ -3170,7 +3208,6 @@ impl Package {
                 url.set_fragment(None);
                 url.set_query(None);
 
-                // Reconstruct the `GitUrl` from the `GitSource`.
                 let git_url = GitUrl::from_commit(
                     url,
                     GitReference::from(git.kind.clone()),
@@ -3178,19 +3215,47 @@ impl Package {
                     git.lfs,
                 )?;
 
-                // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-                let url = DisplaySafeUrl::from(ParsedGitUrl {
-                    url: git_url.clone(),
-                    subdirectory: git.subdirectory.clone(),
-                });
+                if let Some(install_path) = git.path.as_ref() {
+                    // A direct path source can also be a wheel, so validate the extension.
+                    let DistExtension::Source(ext) = DistExtension::from_path(install_path)
+                        .map_err(|err| LockErrorKind::MissingExtension {
+                            id: self.id.clone(),
+                            err,
+                        })?
+                    else {
+                        return Ok(None);
+                    };
 
-                let git_dist = GitSourceDist {
-                    name: self.id.name.clone(),
-                    url: VerbatimUrl::from_url(url),
-                    git: Box::new(git_url),
-                    subdirectory: git.subdirectory.clone(),
-                };
-                uv_distribution_types::SourceDist::Git(git_dist)
+                    // Reconstruct the PEP 508-compatible URL from the `GitSource`.
+                    let url = DisplaySafeUrl::from(ParsedGitPathUrl {
+                        url: git_url.clone(),
+                        install_path: install_path.clone(),
+                        ext: DistExtension::Source(ext),
+                    });
+
+                    let git_dist = GitPathSourceDist {
+                        name: self.id.name.clone(),
+                        url: VerbatimUrl::from_url(url),
+                        git: Box::new(git_url),
+                        install_path: install_path.clone(),
+                        ext,
+                    };
+                    uv_distribution_types::SourceDist::GitPath(git_dist)
+                } else {
+                    // Reconstruct the PEP 508-compatible URL from the `GitSource`.
+                    let url = DisplaySafeUrl::from(ParsedGitDirectoryUrl {
+                        url: git_url.clone(),
+                        subdirectory: git.subdirectory.clone(),
+                    });
+
+                    let git_dist = GitDirectorySourceDist {
+                        name: self.id.name.clone(),
+                        url: VerbatimUrl::from_url(url),
+                        git: Box::new(git_url),
+                        subdirectory: git.subdirectory.clone(),
+                    };
+                    uv_distribution_types::SourceDist::GitDirectory(git_dist)
+                }
             }
             Source::Direct(url, direct) => {
                 // A direct URL source can also be a wheel, so validate the extension.
@@ -3922,6 +3987,7 @@ impl Source {
             BuiltDist::Registry(ref reg_dist) => Self::from_registry_built_dist(reg_dist, root),
             BuiltDist::DirectUrl(ref direct_dist) => Ok(Self::from_direct_built_dist(direct_dist)),
             BuiltDist::Path(ref path_dist) => Self::from_path_built_dist(path_dist, root),
+            BuiltDist::GitPath(ref git_dist) => Self::from_git_path_built_dist(git_dist, root),
         }
     }
 
@@ -3936,8 +4002,11 @@ impl Source {
             uv_distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
                 Ok(Self::from_direct_source_dist(direct_dist))
             }
-            uv_distribution_types::SourceDist::Git(ref git_dist) => {
-                Ok(Self::from_git_dist(git_dist))
+            uv_distribution_types::SourceDist::GitDirectory(ref git_dist) => {
+                Ok(Self::from_git_directory_source_dist(git_dist))
+            }
+            uv_distribution_types::SourceDist::GitPath(ref git_dist) => {
+                Self::from_git_path_source_dist(git_dist, root)
             }
             uv_distribution_types::SourceDist::Path(ref path_dist) => {
                 Self::from_path_source_dist(path_dist, root)
@@ -4037,15 +4106,70 @@ impl Source {
         }
     }
 
-    fn from_git_dist(git_dist: &GitSourceDist) -> Self {
+    fn from_git_path_built_dist(
+        git_dist: &GitPathBuiltDist,
+        root: &Path,
+    ) -> Result<Self, LockError> {
+        let path = relative_to(&git_dist.install_path, root)
+            .or_else(|_| std::path::absolute(&git_dist.install_path))
+            .map_err(LockErrorKind::DistributionRelativePath)?;
+        Ok(Self::Git(
+            UrlString::from(locked_git_url(
+                &git_dist.git,
+                None,
+                Some(git_dist.install_path.as_path()),
+            )),
+            GitSource {
+                kind: GitSourceKind::from(git_dist.git.reference().clone()),
+                precise: git_dist.git.precise().unwrap_or_else(|| {
+                    panic!("Git distribution is missing a precise hash: {git_dist}")
+                }),
+                subdirectory: None,
+                path: Some(path),
+                lfs: git_dist.git.lfs(),
+            },
+        ))
+    }
+
+    fn from_git_path_source_dist(
+        git_dist: &GitPathSourceDist,
+        root: &Path,
+    ) -> Result<Self, LockError> {
+        let path = relative_to(&git_dist.install_path, root)
+            .or_else(|_| std::path::absolute(&git_dist.install_path))
+            .map_err(LockErrorKind::DistributionRelativePath)?;
+        Ok(Self::Git(
+            UrlString::from(locked_git_url(
+                &git_dist.git,
+                None,
+                Some(git_dist.install_path.as_path()),
+            )),
+            GitSource {
+                kind: GitSourceKind::from(git_dist.git.reference().clone()),
+                precise: git_dist.git.precise().unwrap_or_else(|| {
+                    panic!("Git distribution is missing a precise hash: {git_dist}")
+                }),
+                subdirectory: None,
+                path: Some(path),
+                lfs: git_dist.git.lfs(),
+            },
+        ))
+    }
+
+    fn from_git_directory_source_dist(git_dist: &GitDirectorySourceDist) -> Self {
         Self::Git(
-            UrlString::from(locked_git_url(git_dist)),
+            UrlString::from(locked_git_url(
+                &git_dist.git,
+                git_dist.subdirectory.as_deref(),
+                None,
+            )),
             GitSource {
                 kind: GitSourceKind::from(git_dist.git.reference().clone()),
                 precise: git_dist.git.precise().unwrap_or_else(|| {
                     panic!("Git distribution is missing a precise hash: {git_dist}")
                 }),
                 subdirectory: git_dist.subdirectory.clone(),
+                path: None,
                 lfs: git_dist.git.lfs(),
             },
         )
@@ -4206,9 +4330,8 @@ impl Source {
         match self {
             Self::Registry(..) => None,
             Self::Direct(..) | Self::Path(..) => Some(true),
-            Self::Git(..) | Self::Directory(..) | Self::Editable(..) | Self::Virtual(..) => {
-                Some(false)
-            }
+            Self::Git(.., GitSource { path, .. }) => Some(path.is_some()),
+            Self::Directory(..) | Self::Editable(..) | Self::Virtual(..) => Some(false),
         }
     }
 }
@@ -4368,6 +4491,7 @@ struct DirectSource {
 struct GitSource {
     precise: GitOid,
     subdirectory: Option<Box<Path>>,
+    path: Option<PathBuf>,
     kind: GitSourceKind,
     lfs: GitLfs,
 }
@@ -4386,6 +4510,7 @@ impl GitSource {
         let mut kind = GitSourceKind::DefaultBranch;
         let mut subdirectory = None;
         let mut lfs = GitLfs::Disabled;
+        let mut path = None;
         for (key, val) in url.query_pairs() {
             match &*key {
                 "tag" => kind = GitSourceKind::Tag(val.into_owned()),
@@ -4393,6 +4518,11 @@ impl GitSource {
                 "rev" => kind = GitSourceKind::Rev(val.into_owned()),
                 "subdirectory" => subdirectory = Some(PortablePathBuf::from(val.as_ref()).into()),
                 "lfs" => lfs = GitLfs::from(val.eq_ignore_ascii_case("true")),
+                "path" => {
+                    path = Some(PathBuf::from(Box::<Path>::from(PortablePathBuf::from(
+                        val.as_ref(),
+                    ))));
+                }
                 _ => {}
             }
         }
@@ -4403,6 +4533,7 @@ impl GitSource {
         Ok(Self {
             precise,
             subdirectory,
+            path,
             kind,
             lfs,
         })
@@ -4549,10 +4680,10 @@ impl SourceDist {
             uv_distribution_types::SourceDist::Path(_) => {
                 Self::from_path_dist(id, hashes).map(Some)
             }
-            // An actual sdist entry in the lockfile is only required when
-            // it's from a registry or a direct URL. Otherwise, it's strictly
-            // redundant with the information in all other kinds of `source`.
-            uv_distribution_types::SourceDist::Git(_)
+            uv_distribution_types::SourceDist::GitPath(_) => {
+                Self::from_git_path_dist(id, hashes).map(Some)
+            }
+            uv_distribution_types::SourceDist::GitDirectory(_)
             | uv_distribution_types::SourceDist::Directory(_) => Ok(None),
         }
     }
@@ -4683,6 +4814,24 @@ impl SourceDist {
             },
         })
     }
+
+    fn from_git_path_dist(id: &PackageId, hashes: &[HashDigest]) -> Result<Self, LockError> {
+        let Some(hash) = hashes.iter().max().cloned().map(Hash::from) else {
+            let kind = LockErrorKind::Hash {
+                id: id.clone(),
+                artifact_type: "Git archive source distribution",
+                expected: true,
+            };
+            return Err(kind.into());
+        };
+        Ok(Self::Metadata {
+            metadata: SourceDistMetadata {
+                hash: Some(hash),
+                size: None,
+                upload_time: None,
+            },
+        })
+    }
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -4770,9 +4919,13 @@ impl From<GitSourceKind> for GitReference {
     }
 }
 
-/// Construct the lockfile-compatible [`DisplaySafeUrl`] for a [`GitSourceDist`].
-fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
-    let mut url = git_dist.git.url().clone();
+/// Construct the lockfile-compatible [`DisplaySafeUrl`] for a [`GitUrl`].
+fn locked_git_url(
+    git: &GitUrl,
+    subdirectory: Option<&Path>,
+    path: Option<&Path>,
+) -> DisplaySafeUrl {
+    let mut url = git.url().clone();
 
     // Remove the credentials.
     url.remove_credentials();
@@ -4782,9 +4935,7 @@ fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
     url.set_query(None);
 
     // Put the subdirectory in the query.
-    if let Some(subdirectory) = git_dist
-        .subdirectory
-        .as_deref()
+    if let Some(subdirectory) = subdirectory
         .map(PortablePath::from)
         .as_ref()
         .map(PortablePath::to_string)
@@ -4793,13 +4944,22 @@ fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
             .append_pair("subdirectory", &subdirectory);
     }
 
+    // Put the path in the query.
+    if let Some(path) = path
+        .map(PortablePath::from)
+        .as_ref()
+        .map(PortablePath::to_string)
+    {
+        url.query_pairs_mut().append_pair("path", &path);
+    }
+
     // Put lfs=true in the package source git url only when explicitly enabled.
-    if git_dist.git.lfs().enabled() {
+    if git.lfs().enabled() {
         url.query_pairs_mut().append_pair("lfs", "true");
     }
 
     // Put the requested reference in the query.
-    match git_dist.git.reference() {
+    match git.reference() {
         GitReference::Branch(branch) => {
             url.query_pairs_mut().append_pair("branch", branch.as_str());
         }
@@ -4815,14 +4975,7 @@ fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
     }
 
     // Put the precise commit in the fragment.
-    url.set_fragment(
-        git_dist
-            .git
-            .precise()
-            .as_ref()
-            .map(GitOid::to_string)
-            .as_deref(),
-    );
+    url.set_fragment(git.precise().as_ref().map(GitOid::to_string).as_deref());
 
     url
 }
@@ -4914,6 +5067,9 @@ impl Wheel {
                 Ok(vec![Self::from_direct_dist(direct_dist, hashes)])
             }
             BuiltDist::Path(ref path_dist) => Ok(vec![Self::from_path_dist(path_dist, hashes)]),
+            BuiltDist::GitPath(ref git_dist) => {
+                Ok(vec![Self::from_git_path_dist(git_dist, hashes)])
+            }
         }
     }
 
@@ -5001,6 +5157,19 @@ impl Wheel {
     }
 
     fn from_path_dist(path_dist: &PathBuiltDist, hashes: &[HashDigest]) -> Self {
+        Self {
+            url: WheelWireSource::Filename {
+                filename: path_dist.filename.clone(),
+            },
+            hash: hashes.iter().max().cloned().map(Hash::from),
+            size: None,
+            upload_time: None,
+            filename: path_dist.filename.clone(),
+            zstd: None,
+        }
+    }
+
+    fn from_git_path_dist(path_dist: &GitPathBuiltDist, hashes: &[HashDigest]) -> Self {
         Self {
             url: WheelWireSource::Filename {
                 filename: path_dist.filename.clone(),
@@ -5532,7 +5701,7 @@ fn normalize_requirement(
 
     // Normalize the requirement source.
     match requirement.source {
-        RequirementSource::Git {
+        RequirementSource::GitDirectory {
             git,
             subdirectory,
             url: _,
@@ -5557,7 +5726,7 @@ fn normalize_requirement(
             };
 
             // Reconstruct the PEP 508 URL from the underlying data.
-            let url = DisplaySafeUrl::from(ParsedGitUrl {
+            let url = DisplaySafeUrl::from(ParsedGitDirectoryUrl {
                 url: git.clone(),
                 subdirectory: subdirectory.clone(),
             });
@@ -5567,9 +5736,55 @@ fn normalize_requirement(
                 extras: requirement.extras,
                 groups: requirement.groups,
                 marker: requires_python.simplify_markers(requirement.marker),
-                source: RequirementSource::Git {
+                source: RequirementSource::GitDirectory {
                     git,
                     subdirectory,
+                    url: VerbatimUrl::from_url(url),
+                },
+                origin: None,
+            })
+        }
+        RequirementSource::GitPath {
+            git,
+            install_path,
+            ext,
+            url: _,
+        } => {
+            // Reconstruct the Git URL.
+            let git = {
+                let mut repository = git.url().clone();
+
+                // Remove the credentials.
+                repository.remove_credentials();
+
+                // Remove the fragment and query from the URL; they're already present in the source.
+                repository.set_fragment(None);
+                repository.set_query(None);
+
+                GitUrl::from_fields(
+                    repository,
+                    git.reference().clone(),
+                    git.precise(),
+                    git.lfs(),
+                )?
+            };
+
+            // Reconstruct the PEP 508 URL from the underlying data.
+            let url = DisplaySafeUrl::from(ParsedGitPathUrl {
+                url: git.clone(),
+                install_path: install_path.clone(),
+                ext,
+            });
+
+            Ok(Requirement {
+                name: requirement.name,
+                extras: requirement.extras,
+                groups: requirement.groups,
+                marker: requires_python.simplify_markers(requirement.marker),
+                source: RequirementSource::GitPath {
+                    git,
+                    install_path,
+                    ext,
                     url: VerbatimUrl::from_url(url),
                 },
                 origin: None,
@@ -6179,7 +6394,7 @@ enum LockErrorKind {
         /// The specific type of artifact, e.g., "source package"
         /// or "wheel".
         artifact_type: &'static str,
-        /// When true, a hash is expected to be present.
+        /// Whether a hash was expected.
         expected: bool,
     },
     /// An error that occurs when a package is included with an extra name,

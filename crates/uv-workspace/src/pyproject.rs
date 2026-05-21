@@ -1197,8 +1197,10 @@ pub enum Source {
     Git {
         /// The repository URL (without the `git+` prefix).
         git: DisplaySafeUrl,
-        /// The path to the directory with the `pyproject.toml`, if it's not in the archive root.
+        /// The path to the directory with the `pyproject.toml`, if it's not in the repository root.
         subdirectory: Option<PortablePathBuf>,
+        /// The path to the archive within the repository.
+        path: Option<PortablePathBuf>,
         // Only one of the three may be used; we'll validate this later and emit a custom error.
         rev: Option<String>,
         tag: Option<String>,
@@ -1358,11 +1360,6 @@ impl<'de> Deserialize<'de> for Source {
                     "cannot specify both `git` and `workspace`",
                 ));
             }
-            if path.is_some() {
-                return Err(serde::de::Error::custom(
-                    "cannot specify both `git` and `path`",
-                ));
-            }
             if url.is_some() {
                 return Err(serde::de::Error::custom(
                     "cannot specify both `git` and `url`",
@@ -1376,6 +1373,11 @@ impl<'de> Deserialize<'de> for Source {
             if package.is_some() {
                 return Err(serde::de::Error::custom(
                     "cannot specify both `git` and `package`",
+                ));
+            }
+            if subdirectory.is_some() && path.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `subdirectory` and `path`",
                 ));
             }
 
@@ -1402,6 +1404,7 @@ impl<'de> Deserialize<'de> for Source {
             return Ok(Self::Git {
                 git,
                 subdirectory,
+                path,
                 rev,
                 tag,
                 branch,
@@ -1709,11 +1712,13 @@ impl Source {
         existing_sources: Option<&BTreeMap<PackageName, Sources>>,
     ) -> Result<Option<Self>, SourceError> {
         // If the user specified a Git reference for a non-Git source, try existing Git sources before erroring.
-        if !matches!(source, RequirementSource::Git { .. })
-            && (branch.is_some()
-                || tag.is_some()
-                || rev.is_some()
-                || matches!(lfs, GitLfsSetting::Enabled { .. }))
+        if !matches!(
+            source,
+            RequirementSource::GitDirectory { .. } | RequirementSource::GitPath { .. }
+        ) && (branch.is_some()
+            || tag.is_some()
+            || rev.is_some()
+            || matches!(lfs, GitLfsSetting::Enabled { .. }))
         {
             if let Some(sources) = existing_sources {
                 if let Some(package_sources) = sources.get(name) {
@@ -1721,6 +1726,7 @@ impl Source {
                         if let Self::Git {
                             git,
                             subdirectory,
+                            path,
                             marker,
                             extra,
                             group,
@@ -1735,6 +1741,7 @@ impl Source {
                                 branch,
                                 lfs: lfs.into(),
                                 marker: *marker,
+                                path: path.clone(),
                                 extra: extra.clone(),
                                 group: group.clone(),
                             }));
@@ -1780,7 +1787,10 @@ impl Source {
                 RequirementSource::Url { .. } => {
                     Err(SourceError::WorkspacePackageUrl(name.to_string()))
                 }
-                RequirementSource::Git { .. } => {
+                RequirementSource::GitDirectory { .. } => {
+                    Err(SourceError::WorkspacePackageGit(name.to_string()))
+                }
+                RequirementSource::GitPath { .. } => {
                     Err(SourceError::WorkspacePackageGit(name.to_string()))
                 }
                 RequirementSource::Path { .. } => {
@@ -1846,7 +1856,7 @@ impl Source {
                 extra: None,
                 group: None,
             },
-            RequirementSource::Git {
+            RequirementSource::GitDirectory {
                 git, subdirectory, ..
             } => {
                 if rev.is_none() && tag.is_none() && branch.is_none() {
@@ -1865,6 +1875,7 @@ impl Source {
                         lfs: lfs.into(),
                         git: git.url().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
+                        path: None,
                         marker: MarkerTree::TRUE,
                         extra: None,
                         group: None,
@@ -1877,6 +1888,46 @@ impl Source {
                         lfs: lfs.into(),
                         git: git.url().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
+                        path: None,
+                        marker: MarkerTree::TRUE,
+                        extra: None,
+                        group: None,
+                    }
+                }
+            }
+            RequirementSource::GitPath {
+                git, install_path, ..
+            } => {
+                if rev.is_none() && tag.is_none() && branch.is_none() {
+                    let rev = match git.reference() {
+                        GitReference::Branch(rev) => Some(rev),
+                        GitReference::Tag(rev) => Some(rev),
+                        GitReference::BranchOrTag(rev) => Some(rev),
+                        GitReference::BranchOrTagOrCommit(rev) => Some(rev),
+                        GitReference::NamedRef(rev) => Some(rev),
+                        GitReference::DefaultBranch => None,
+                    };
+                    Self::Git {
+                        rev: rev.cloned(),
+                        tag,
+                        branch,
+                        lfs: lfs.into(),
+                        git: git.url().clone(),
+                        subdirectory: None,
+                        path: Some(PortablePathBuf::from(install_path.as_path())),
+                        marker: MarkerTree::TRUE,
+                        extra: None,
+                        group: None,
+                    }
+                } else {
+                    Self::Git {
+                        rev,
+                        tag,
+                        branch,
+                        lfs: lfs.into(),
+                        git: git.url().clone(),
+                        subdirectory: None,
+                        path: Some(PortablePathBuf::from(install_path.as_path())),
                         marker: MarkerTree::TRUE,
                         extra: None,
                         group: None,

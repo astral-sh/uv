@@ -15,7 +15,10 @@ use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl, looks_like_git_repository};
-use uv_pypi_types::{ConflictItem, ParsedGitUrl, ParsedUrl, ParsedUrlError, VerbatimParsedUrl};
+use uv_pypi_types::{
+    ConflictItem, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl, ParsedUrlError,
+    VerbatimParsedUrl,
+};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_workspace::Workspace;
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
@@ -170,6 +173,7 @@ impl LoweredRequirement {
                         Source::Git {
                             git,
                             subdirectory,
+                            path,
                             rev,
                             tag,
                             branch,
@@ -180,6 +184,7 @@ impl LoweredRequirement {
                             let source = git_source(
                                 &git,
                                 subdirectory.map(Box::<Path>::from),
+                                path.map(Box::<Path>::from).map(PathBuf::from),
                                 rev,
                                 tag,
                                 branch,
@@ -307,7 +312,7 @@ impl LoweredRequirement {
                                     uv_fs::relative_to(member.root(), git_member.fetch_root)
                                         .expect("Workspace member must be relative");
                                 let subdirectory = normalize_path(subdirectory);
-                                RequirementSource::Git {
+                                RequirementSource::GitDirectory {
                                     git: git_member.git_source.git.clone(),
                                     subdirectory: if subdirectory == PathBuf::new() {
                                         None
@@ -416,6 +421,7 @@ impl LoweredRequirement {
                         Source::Git {
                             git,
                             subdirectory,
+                            path,
                             rev,
                             tag,
                             branch,
@@ -426,6 +432,7 @@ impl LoweredRequirement {
                             let source = git_source(
                                 &git,
                                 subdirectory.map(Box::<Path>::from),
+                                path.map(Box::<Path>::from).map(PathBuf::from),
                                 rev,
                                 tag,
                                 branch,
@@ -665,6 +672,7 @@ fn missing_index_hint(locations: &IndexLocations, index: &IndexName) -> Option<S
 fn git_source(
     git: &DisplaySafeUrl,
     subdirectory: Option<Box<Path>>,
+    path: Option<PathBuf>,
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
@@ -699,19 +707,40 @@ fn git_source(
     if lfs.enabled() {
         frags.push("lfs=true".to_string());
     }
+    if let Some(path) = path.as_ref() {
+        let path = path
+            .to_str()
+            .ok_or_else(|| LoweringError::NonUtf8Path(path.clone()))?;
+        frags.push(format!("path={path}"));
+    }
     if !frags.is_empty() {
         url.set_fragment(Some(&frags.join("&")));
     }
-
     let url = VerbatimUrl::from_url(url);
 
     let repository = git.clone();
+    let git = GitUrl::from_fields(repository, reference, None, lfs)?;
 
-    Ok(RequirementSource::Git {
-        url,
-        git: GitUrl::from_fields(repository, reference, None, lfs)?,
-        subdirectory,
-    })
+    if let Some(path) = path {
+        let ext = match DistExtension::from_path(&path) {
+            Ok(ext) => ext,
+            Err(err) => {
+                return Err(ParsedUrlError::MissingExtensionPath(path, err).into());
+            }
+        };
+        Ok(RequirementSource::GitPath {
+            url,
+            git,
+            install_path: path,
+            ext,
+        })
+    } else {
+        Ok(RequirementSource::GitDirectory {
+            url,
+            git,
+            subdirectory,
+        })
+    }
 }
 
 /// Convert a URL source into a [`RequirementSource`].
@@ -840,9 +869,8 @@ fn path_source(
             })
         }
     } else {
-        // TODO(charlie): If a Git repo contains a source that points to a file, what should we do?
-        if git_member.is_some() {
-            return Err(LoweringError::GitFile(url.to_string()));
+        if let Some(git_member) = git_member {
+            return git_path_source_from_path(install_path, git_member);
         }
         if editable == Some(true) {
             return Err(LoweringError::EditableFile(url.to_string()));
@@ -874,13 +902,38 @@ fn git_source_from_path(
     } else {
         Some(subdirectory.into_owned().into_boxed_path())
     };
-    let url = DisplaySafeUrl::from(ParsedGitUrl {
+    let url = DisplaySafeUrl::from(ParsedGitDirectoryUrl {
         url: git.clone(),
         subdirectory: subdirectory.clone(),
     });
-    Ok(RequirementSource::Git {
+    Ok(RequirementSource::GitDirectory {
         git,
         subdirectory,
+        url: VerbatimUrl::from_url(url),
+    })
+}
+
+fn git_path_source_from_path(
+    install_path: impl AsRef<Path>,
+    git_member: &GitWorkspaceMember,
+) -> Result<RequirementSource, LoweringError> {
+    let git = git_member.git_source.git.clone();
+    let install_path = git_path(install_path.as_ref())?;
+    let fetch_root = git_path(git_member.fetch_root)?;
+    let install_path =
+        uv_fs::relative_to(install_path, fetch_root).map_err(LoweringError::RelativeTo)?;
+    let install_path = normalize_path(install_path).into_owned();
+    let ext = DistExtension::from_path(&install_path)
+        .map_err(|err| ParsedUrlError::MissingExtensionPath(install_path.clone(), err))?;
+    let url = DisplaySafeUrl::from(ParsedGitPathUrl {
+        url: git.clone(),
+        install_path: install_path.clone(),
+        ext,
+    });
+    Ok(RequirementSource::GitPath {
+        git,
+        install_path,
+        ext,
         url: VerbatimUrl::from_url(url),
     })
 }

@@ -1801,11 +1801,22 @@
             "marker": {
               "$ref": "#/definitions/MarkerTree"
             },
+            "path": {
+              "description": "The path to the archive within the repository.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/PortablePathBuf"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "rev": {
               "type": ["string", "null"]
             },
             "subdirectory": {
-              "description": "The path to the directory with the `pyproject.toml`, if it's not in the archive root.",
+              "description": "The path to the directory with the `pyproject.toml`, if it's not in the repository root.",
               "anyOf": [
                 {
                   "$ref": "#/definitions/PortablePathBuf"

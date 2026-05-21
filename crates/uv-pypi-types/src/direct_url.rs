@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
@@ -43,6 +43,8 @@ pub enum DirectUrl {
         vcs_info: VcsInfo,
         #[serde(skip_serializing_if = "Option::is_none")]
         subdirectory: Option<Box<Path>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        path: Option<PathBuf>,
     },
 }
 
@@ -125,6 +127,7 @@ impl TryFrom<&DirectUrl> for DisplaySafeUrl {
                 url,
                 vcs_info,
                 subdirectory,
+                path,
             } => {
                 let mut url = Self::parse(&format!("{}+{}", vcs_info.vcs, url))?;
                 if let Some(commit_id) = &vcs_info.commit_id {
@@ -141,6 +144,9 @@ impl TryFrom<&DirectUrl> for DisplaySafeUrl {
                 // Displays nicely that lfs was used
                 if let Some(true) = vcs_info.git_lfs {
                     frags.push("lfs=true".to_string());
+                }
+                if let Some(path) = path {
+                    frags.push(format!("path={}", path.display()));
                 }
                 if !frags.is_empty() {
                     url.set_fragment(Some(&frags.join("&")));

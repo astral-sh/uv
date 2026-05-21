@@ -9,9 +9,7 @@ pub use crate::upgrade::{
     read_requirements_txt,
 };
 
-use uv_distribution_types::{
-    Dist, DistErrorKind, GitSourceDist, Requirement, RequirementSource, SourceDist,
-};
+use uv_distribution_types::{Dist, DistErrorKind, Requirement, RequirementSource};
 
 mod extras;
 mod lookahead;
@@ -75,16 +73,28 @@ pub(crate) fn required_dist(
             subdirectory.clone(),
             *ext,
         )?,
-        RequirementSource::Git {
+        RequirementSource::GitDirectory {
             git,
             subdirectory,
             url,
-        } => Dist::Source(SourceDist::Git(GitSourceDist {
-            name: requirement.name.clone(),
-            git: Box::new(git.clone()),
-            subdirectory: subdirectory.clone(),
-            url: url.clone(),
-        })),
+        } => Dist::from_git_directory_url(
+            requirement.name.clone(),
+            url.clone(),
+            git.clone(),
+            subdirectory.clone(),
+        )?,
+        RequirementSource::GitPath {
+            git,
+            install_path,
+            ext,
+            url,
+        } => Dist::from_git_path_url(
+            requirement.name.clone(),
+            url.clone(),
+            git.clone(),
+            install_path.clone(),
+            *ext,
+        )?,
         RequirementSource::Path {
             install_path,
             ext,

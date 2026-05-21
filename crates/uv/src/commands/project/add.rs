@@ -865,6 +865,7 @@ fn edits(
             Some(Source::Git {
                 mut git,
                 subdirectory,
+                path,
                 rev,
                 tag,
                 branch,
@@ -884,6 +885,7 @@ fn edits(
                 Some(Source::Git {
                     git,
                     subdirectory,
+                    path,
                     rev,
                     tag,
                     branch,

@@ -82,7 +82,10 @@ impl RequirementsTxtRequirement {
                     ParsedUrl::Archive(_) => {
                         return Err(EditableError::Https(requirement.name, url.to_string()));
                     }
-                    ParsedUrl::Git(_) => {
+                    ParsedUrl::GitDirectory(_) => {
+                        return Err(EditableError::Git(requirement.name, url.to_string()));
+                    }
+                    ParsedUrl::GitPath(_) => {
                         return Err(EditableError::Git(requirement.name, url.to_string()));
                     }
                 };
@@ -107,7 +110,10 @@ impl RequirementsTxtRequirement {
                     ParsedUrl::Archive(_) => {
                         return Err(EditableError::UnnamedHttps(requirement.to_string()));
                     }
-                    ParsedUrl::Git(_) => {
+                    ParsedUrl::GitDirectory(_) => {
+                        return Err(EditableError::UnnamedGit(requirement.to_string()));
+                    }
+                    ParsedUrl::GitPath(_) => {
                         return Err(EditableError::UnnamedGit(requirement.to_string()));
                     }
                 };

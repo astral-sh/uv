@@ -79,6 +79,17 @@ impl CachedDist {
                 build_info,
                 path,
             }),
+            Dist::Built(BuiltDist::GitPath(dist)) => Self::Url(CachedDirectUrlDist {
+                filename,
+                url: VerbatimParsedUrl {
+                    parsed_url: dist.parsed_url(),
+                    verbatim: dist.url,
+                },
+                hashes,
+                cache_info,
+                build_info,
+                path,
+            }),
             Dist::Source(SourceDist::Registry(_dist)) => Self::Registry(CachedRegistryDist {
                 filename,
                 path,
@@ -97,7 +108,18 @@ impl CachedDist {
                 build_info,
                 path,
             }),
-            Dist::Source(SourceDist::Git(dist)) => Self::Url(CachedDirectUrlDist {
+            Dist::Source(SourceDist::GitDirectory(dist)) => Self::Url(CachedDirectUrlDist {
+                filename,
+                url: VerbatimParsedUrl {
+                    parsed_url: dist.parsed_url(),
+                    verbatim: dist.url,
+                },
+                hashes,
+                cache_info,
+                build_info,
+                path,
+            }),
+            Dist::Source(SourceDist::GitPath(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: VerbatimParsedUrl {
                     parsed_url: dist.parsed_url(),
