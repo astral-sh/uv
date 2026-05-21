@@ -47,31 +47,28 @@ impl SourceDistFilename {
 
         let stem = &filename[..(filename.len() - (extension.name().len() + 1))];
 
-        if stem.len() <= package_name.as_ref().len() + "-".len() {
-            return Err(SourceDistFilenameError {
+        // Find the separator position by scanning for `-` occurrences in the stem and checking
+        // which prefix normalizes to the expected package name. This correctly handles filenames
+        // where the original (un-normalized) package name has a different byte length than the
+        // normalized form — e.g., `Foo__Bar-1.0.tar.gz` where `Foo__Bar` (8 bytes) normalizes
+        // to `foo-bar` (7 bytes). Using the normalized length as an index into the stem would
+        // yield the wrong split point.
+        let sep_pos = memchr::memchr_iter(b'-', stem.as_bytes())
+            .find(|&pos| {
+                PackageName::from_str(&stem[..pos])
+                    .ok()
+                    .as_ref()
+                    == Some(package_name)
+            })
+            .ok_or_else(|| SourceDistFilenameError {
                 filename: filename.to_string(),
                 kind: SourceDistFilenameErrorKind::Filename(package_name.clone()),
-            });
-        }
-        let actual_package_name = PackageName::from_str(&stem[..package_name.as_ref().len()])
-            .map_err(|err| SourceDistFilenameError {
-                filename: filename.to_string(),
-                kind: SourceDistFilenameErrorKind::PackageName(err),
             })?;
-        if actual_package_name != *package_name {
-            return Err(SourceDistFilenameError {
-                filename: filename.to_string(),
-                kind: SourceDistFilenameErrorKind::Filename(package_name.clone()),
-            });
-        }
 
-        // We checked the length above
         let version =
-            Version::from_str(&stem[package_name.as_ref().len() + "-".len()..]).map_err(|err| {
-                SourceDistFilenameError {
-                    filename: filename.to_string(),
-                    kind: SourceDistFilenameErrorKind::Version(err),
-                }
+            Version::from_str(&stem[sep_pos + 1..]).map_err(|err| SourceDistFilenameError {
+                filename: filename.to_string(),
+                kind: SourceDistFilenameErrorKind::Version(err),
             })?;
 
         Ok(Self {
