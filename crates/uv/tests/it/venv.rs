@@ -1046,9 +1046,11 @@ fn non_empty_dir_exists() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
 
     // Create a non-empty directory at `.venv`. Creating a virtualenv at the same path should fail,
-    // unless `--clear` is specified.
+    // even when `--clear` is specified, because the directory is not a virtual environment and
+    // `--clear` should not wipe arbitrary contents.
     context.venv.create_dir_all()?;
-    context.venv.child("file").touch()?;
+    let file = context.venv.child("file");
+    file.touch()?;
 
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
@@ -1072,16 +1074,21 @@ fn non_empty_dir_exists() -> Result<()> {
         .arg("--clear")
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/[BIN]/activate
-    "
-    );
+    error: Failed to create virtual environment
+      Caused by: A directory already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
+    ");
+
+    // The existing file should still be present; `--clear` must not wipe a non-virtual environment.
+    file.assert(predicates::path::is_file());
 
     Ok(())
 }

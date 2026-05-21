@@ -125,6 +125,8 @@ pub(crate) fn create(
                 OnExisting::Allow => {
                     debug!("Allowing existing {name} due to `--allow-existing`");
                 }
+                // Refuse to remove a non-virtual environment, even if `--clear` is provided.
+                OnExisting::Remove(_) if !is_virtualenv => return err,
                 OnExisting::Remove(reason) => {
                     debug!("Removing existing {name} ({reason})");
                     // Before removing the virtual environment, we need to canonicalize the path
