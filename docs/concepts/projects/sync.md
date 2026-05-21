@@ -192,6 +192,26 @@ project defines an upper bound for a package then an upgrade will not go beyond 
 These flags can also be provided to `uv sync` or `uv run` to update the lockfile _and_ the
 environment.
 
+## Resolving lockfile merge conflicts
+
+When the same lockfile is updated on two branches, merging or rebasing one into the other will
+typically produce a conflict in `uv.lock`. Because the lockfile is a resolved output rather than a
+hand-edited source file, the recommended workflow is to discard the conflicted lockfile and re-run
+the resolver rather than attempt a textual merge.
+
+After encountering a conflict during a merge of the parent branch, take the parent's lockfile and
+re-lock on top of the merged dependency state:
+
+```console
+$ git checkout <parent> -- uv.lock
+$ uv lock
+```
+
+This produces a single coherent resolution against the post-merge `pyproject.toml`, instead of an
+ad-hoc mix of pins from each side. If the resulting lockfile changes more than expected, the usual
+[upgrade flags](#upgrading-locked-package-versions) can be used to constrain or expand what gets
+relocked.
+
 ## Exporting the lockfile
 
 If you need to integrate uv with other tools or workflows, you can export `uv.lock` to different
