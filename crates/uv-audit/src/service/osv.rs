@@ -32,7 +32,7 @@ pub enum Error {
     Url(DisplaySafeUrl, #[source] DisplaySafeUrlError),
     /// An error when OSV returns an invalid vulnerability record.
     #[error("OSV returned a malformed vulnerability record for `{id}`")]
-    MalformedVulnerabilityRecord {
+    MalformedRecord {
         id: String,
         #[source]
         err: reqwest_middleware::Error,
@@ -339,7 +339,7 @@ impl Osv {
             .map_err(reqwest_middleware::Error::Reqwest)?
             .json()
             .await
-            .map_err(|err| Error::MalformedVulnerabilityRecord {
+            .map_err(|err| Error::MalformedRecord {
                 id: id.to_string(),
                 err: reqwest_middleware::Error::Reqwest(err),
             })?;
