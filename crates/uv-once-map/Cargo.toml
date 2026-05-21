@@ -18,5 +18,5 @@ workspace = true
 
 [dependencies]
 dashmap = { workspace = true }
-tokio = { workspace = true }
 futures = { workspace = true }
+tokio = { workspace = true }

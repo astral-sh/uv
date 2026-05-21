@@ -150,7 +150,12 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = dist.distribution_id();
-            if self.index.distributions().register(id.clone()) {
+            if let Some(response) = self.index.distributions().register_or_wait(&id).await {
+                let MetadataResponse::Found(archive) = &*response else {
+                    panic!("Failed to find metadata for: {requirement}");
+                };
+                archive.metadata.clone()
+            } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let archive = self
                     .database
@@ -166,17 +171,6 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .done(id, Arc::new(MetadataResponse::Found(archive)));
 
                 metadata
-            } else {
-                let response = self
-                    .index
-                    .distributions()
-                    .wait(&id)
-                    .await
-                    .expect("missing value for registered task");
-                let MetadataResponse::Found(archive) = &*response else {
-                    panic!("Failed to find metadata for: {requirement}");
-                };
-                archive.metadata.clone()
             }
         };
 
