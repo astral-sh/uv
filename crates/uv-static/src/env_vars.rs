@@ -188,7 +188,7 @@ impl EnvVars {
     pub const UV_NO_CONFIG: &'static str = "UV_NO_CONFIG";
 
     /// If set, uv will not read system-level configuration files.
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.11.16")]
     pub const UV_NO_SYSTEM_CONFIG: &'static str = "UV_NO_SYSTEM_CONFIG";
 
     /// Equivalent to the `--isolated` command-line argument. If set, uv will avoid discovering
@@ -558,13 +558,13 @@ impl EnvVars {
     ///
     /// When enabled, uv performs a lightweight check against the OSV database for known
     /// malware advisories after every lockfile sync. Set this variable to `0` to opt out.
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.11.16")]
     pub const UV_MALWARE_CHECK: &'static str = "UV_MALWARE_CHECK";
 
     /// Override the vulnerability service URL for the automatic malware check.
     ///
     /// Defaults to the OSV API endpoint (`https://api.osv.dev/`).
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.11.16")]
     pub const UV_MALWARE_CHECK_URL: &'static str = "UV_MALWARE_CHECK_URL";
 
     /// Provides the HTTP Basic authentication username for a named index.
@@ -655,7 +655,7 @@ impl EnvVars {
     ///
     /// When populated, uv will run additional tests that cover SMB-specific filesystem behavior.
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.11.16")]
     pub const UV_INTERNAL__TEST_SMB_FS: &'static str = "UV_INTERNAL__TEST_SMB_FS";
 
     /// Path to a directory on a filesystem with a low hardlink limit (e.g., minix with ~250).
