@@ -12,7 +12,7 @@ use uv_warnings::warn_user_once;
 use version_ranges::Ranges;
 use walkdir::WalkDir;
 
-use uv_fs::{Simplified, normalize_path_under};
+use uv_fs::Simplified;
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
@@ -59,8 +59,10 @@ pub enum ValidationError {
         "Entrypoint groups must consist of letters and numbers separated by dots, invalid group: {0}"
     )]
     InvalidGroup(String),
-    #[error("Script entry point names must not escape the scripts directory: `{0}`")]
-    UnsafeScriptName(String),
+    #[error(
+        "Script entry point name `{0}` must consist only of letters, numbers, dots, underscores and dashes"
+    )]
+    InvalidScriptName(String),
     #[error("Use `project.scripts` instead of `project.entry-points.console_scripts`")]
     ReservedScripts,
     #[error("Use `project.gui-scripts` instead of `project.entry-points.gui_scripts`")]
@@ -732,16 +734,18 @@ impl PyProjectToml {
 
         let _ = writeln!(writer, "[{group}]");
         for (name, object_reference) in entries {
+            let compliant_name = name.chars().all(|character| {
+                character.is_alphanumeric() || matches!(character, '.' | '-' | '_')
+            });
+            let dot_only_name = name.chars().all(|character| character == '.');
+
             if matches!(group, "console_scripts" | "gui_scripts")
-                && normalize_path_under(Path::new("scripts").join(name), "scripts").is_none()
+                && (name.is_empty() || dot_only_name || !compliant_name)
             {
-                return Err(ValidationError::UnsafeScriptName(name.clone()));
+                return Err(ValidationError::InvalidScriptName(name.clone()));
             }
 
-            if !name
-                .chars()
-                .all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '_')
-            {
+            if !compliant_name {
                 warn!(
                     "Entrypoint names should consist of letters, numbers, dots, underscores and \
                     dashes; non-compliant name: {name}"
