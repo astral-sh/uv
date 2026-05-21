@@ -60,7 +60,7 @@ pub enum ValidationError {
     )]
     InvalidGroup(String),
     #[error(
-        "Script entry point name `{0}` must consist only of letters, numbers, dots, underscores and dashes"
+        "Script entry point name `{0}` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes"
     )]
     InvalidScriptName(String),
     #[error("Use `project.scripts` instead of `project.entry-points.console_scripts`")]

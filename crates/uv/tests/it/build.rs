@@ -2103,7 +2103,7 @@ fn build_unsafe_script_entry_point_name() -> Result<()> {
     Building wheel (uv build backend)...
       × Failed to build `[TEMP_DIR]/`
       ├─▶ Invalid project metadata
-      ╰─▶ Script entry point name `../script` must consist only of letters, numbers, dots, underscores and dashes
+      ╰─▶ Script entry point name `../script` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
     ");
 
     Ok(())
@@ -2147,7 +2147,7 @@ fn build_dot_script_entry_point_name() -> Result<()> {
     Building wheel (uv build backend)...
       × Failed to build `[TEMP_DIR]/`
       ├─▶ Invalid project metadata
-      ╰─▶ Script entry point name `.` must consist only of letters, numbers, dots, underscores and dashes
+      ╰─▶ Script entry point name `.` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
     ");
 
     Ok(())
@@ -2191,7 +2191,7 @@ fn build_nested_script_entry_point_name() -> Result<()> {
     Building wheel (uv build backend)...
       × Failed to build `[TEMP_DIR]/`
       ├─▶ Invalid project metadata
-      ╰─▶ Script entry point name `nested/script` must consist only of letters, numbers, dots, underscores and dashes
+      ╰─▶ Script entry point name `nested/script` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
     ");
 
     Ok(())
