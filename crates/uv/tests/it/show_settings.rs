@@ -3653,7 +3653,8 @@ fn resolve_system_configuration_can_be_disabled() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env(EnvVars::XDG_CONFIG_DIRS, xdg.path()), @r#"
+        .env(EnvVars::XDG_CONFIG_DIRS, xdg.path())
+        .env_remove(EnvVars::UV_NO_SYSTEM_CONFIG), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
