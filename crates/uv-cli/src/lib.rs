@@ -3565,13 +3565,13 @@ pub struct RunArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_hint = ValueHint::Other)]
     pub group: Vec<GroupName>,
 
-    /// Disable the specified dependency group.
+    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
     ///
     /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -3909,13 +3909,13 @@ pub struct SyncArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_hint = ValueHint::Other)]
     pub group: Vec<GroupName>,
 
-    /// Disable the specified dependency group.
+    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
     ///
     /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -4724,13 +4724,13 @@ pub struct TreeArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
     pub group: Vec<GroupName>,
 
-    /// Disable the specified dependency group.
+    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
     ///
     /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
+    #[arg(long, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -4900,13 +4900,13 @@ pub struct ExportArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
     pub group: Vec<GroupName>,
 
-    /// Disable the specified dependency group.
+    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
     ///
     /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
+    #[arg(long, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -5189,10 +5189,10 @@ pub struct AuditArgs {
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
-    /// Don't audit the specified dependency group.
+    /// Don't audit the specified dependency group [env: `UV_NO_GROUP`=]
     ///
     /// May be provided multiple times.
-    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
     pub no_group: Vec<GroupName>,
 
     /// Don't audit the default dependency groups.
@@ -6187,8 +6187,8 @@ pub struct ToolUpgradeArgs {
     )]
     pub no_sources: bool,
 
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages.
-    #[arg(long, help_heading = "Resolver options", env = EnvVars::UV_NO_SOURCES_PACKAGE, value_delimiter = ' ')]
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
     pub no_sources_package: Vec<PackageName>,
 
     #[command(flatten)]
@@ -7033,11 +7033,10 @@ pub struct BuildOptionsArgs {
     )]
     pub build: bool,
 
-    /// Don't build source distributions for a specific package.
+    /// Don't build source distributions for a specific package [env: `UV_NO_BUILD_PACKAGE`=]
     #[arg(
         long,
         help_heading = "Build options",
-        env = EnvVars::UV_NO_BUILD_PACKAGE,
         value_delimiter = ' ',
         value_hint = ValueHint::Other,
     )]
@@ -7064,11 +7063,10 @@ pub struct BuildOptionsArgs {
     )]
     pub binary: bool,
 
-    /// Don't install pre-built wheels for a specific package.
+    /// Don't install pre-built wheels for a specific package [env: `UV_NO_BINARY_PACKAGE`=]
     #[arg(
         long,
         help_heading = "Build options",
-        env = EnvVars::UV_NO_BINARY_PACKAGE,
         value_delimiter = ' ',
         value_hint = ValueHint::Other,
     )]
@@ -7260,8 +7258,8 @@ pub struct InstallerArgs {
     )]
     pub no_sources: bool,
 
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages.
-    #[arg(long, help_heading = "Resolver options", env = EnvVars::UV_NO_SOURCES_PACKAGE, value_delimiter = ' ')]
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
     pub no_sources_package: Vec<PackageName>,
 }
 
@@ -7480,8 +7478,8 @@ pub struct ResolverArgs {
     )]
     pub no_sources: bool,
 
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages.
-    #[arg(long, help_heading = "Resolver options", env = EnvVars::UV_NO_SOURCES_PACKAGE, value_delimiter = ' ')]
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
     pub no_sources_package: Vec<PackageName>,
 }
 
@@ -7757,8 +7755,8 @@ pub struct ResolverInstallerArgs {
     )]
     pub no_sources: bool,
 
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages.
-    #[arg(long, help_heading = "Resolver options", env = EnvVars::UV_NO_SOURCES_PACKAGE, value_delimiter = ' ')]
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
     pub no_sources_package: Vec<PackageName>,
 }
 
