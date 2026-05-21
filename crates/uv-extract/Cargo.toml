@@ -46,6 +46,9 @@ default = []
 # Avoid a liblzma.so dependency
 static = ["xz2/static"]
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [package.metadata.cargo-shear]
 # NOTE: `async-compression` owns the actual Deflate codec, but we need to
 # explicitly declare `flate2` here so the workspace's `zlib-rs` backend stays

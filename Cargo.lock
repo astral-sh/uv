@@ -6436,6 +6436,7 @@ dependencies = [
  "reqwest",
  "rustc-hash",
  "sha2",
+ "tempfile",
  "thiserror",
  "tokio",
  "tokio-util",
