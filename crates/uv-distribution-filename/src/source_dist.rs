@@ -232,4 +232,34 @@ mod tests {
             .is_err()
         );
     }
+
+    /// Filenames with un-normalized package names whose byte length differs from the normalized
+    /// form must parse correctly. For example, `Foo__Bar` (8 bytes) normalizes to `foo-bar`
+    /// (7 bytes) because the double underscore collapses to a single hyphen. The old code used
+    /// `package_name.as_ref().len()` (= 7) as a byte offset into the stem `Foo__Bar-1.0`,
+    /// producing `"Foo__Ba"` instead of `"Foo__Bar"` and `"r-1.0"` instead of `"1.0"`.
+    #[test]
+    fn unnormalized_name_different_byte_length() {
+        let package_name = PackageName::from_str("foo__bar").unwrap();
+        // "foo__bar" normalizes to "foo-bar" (7 bytes), but the filename prefix is 8 bytes.
+        let parsed = SourceDistFilename::parse(
+            "foo__bar-1.2.3.tar.gz",
+            SourceDistExtension::from_path("foo__bar-1.2.3.tar.gz").unwrap(),
+            &package_name,
+        )
+        .expect("should parse a filename whose name has more bytes than its normalized form");
+        assert_eq!(parsed.version.to_string(), "1.2.3");
+        assert_eq!(parsed.name, package_name);
+
+        // Uppercase letters also change the byte count when mixed with normalizable separators.
+        // "MyPkg__lib" (10 bytes) normalizes to "mypkg-lib" (9 bytes).
+        let package_name2 = PackageName::from_str("MyPkg__lib").unwrap();
+        let parsed2 = SourceDistFilename::parse(
+            "MyPkg__lib-2.0.zip",
+            SourceDistExtension::from_path("MyPkg__lib-2.0.zip").unwrap(),
+            &package_name2,
+        )
+        .expect("should parse a filename with mixed-case and double-underscore prefix");
+        assert_eq!(parsed2.version.to_string(), "2.0");
+    }
 }
