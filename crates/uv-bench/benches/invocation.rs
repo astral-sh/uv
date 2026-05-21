@@ -1,4 +1,9 @@
 //! Benchmarks for whole-invocation uv command paths.
+//!
+//! This suite focuses on repeatable offline work from the project, script, environment, build, and
+//! pip interfaces. Service-facing and host-administration commands like `auth`, `publish`, `self`,
+//! cache management, Python installation, and tool installation are excluded until they have stable
+//! `CodSpeed` fixtures.
 
 use std::env;
 use std::hint::black_box;
@@ -13,21 +18,31 @@ use uv_fs::copy_dir_all;
 fn whole_invocation(c: &mut Criterion<WallTime>) {
     let harness = Harness::new();
 
+    // Project and workspace interface.
     init_bare_project(c, &harness);
     add_frozen(c, &harness);
     remove_frozen(c, &harness);
-    venv_create(c, &harness);
-    venv_clear(c, &harness);
     lock_create(c, &harness);
     lock_check(c, &harness);
     sync_install(c, &harness);
     sync_noop(c, &harness);
     sync_reinstall(c, &harness);
     run_project_python(c, &harness);
-    build_wheel(c, &harness);
+    run_script_python(c, &harness);
     export_frozen(c, &harness);
     tree_frozen(c, &harness);
     workspace_metadata_frozen(c, &harness);
+
+    // Environment and build operations.
+    venv_create(c, &harness);
+    venv_clear(c, &harness);
+    build_wheel(c, &harness);
+
+    // pip interface.
+    pip_install_warm(c, &harness);
+    pip_sync_install(c, &harness);
+    pip_sync_noop(c, &harness);
+    pip_sync_reinstall(c, &harness);
     pip_compile_warm_jupyter(c, &harness);
 }
 
@@ -213,6 +228,14 @@ fn run_project_python(c: &mut Criterion<WallTime>, harness: &Harness) {
     });
 }
 
+fn run_script_python(c: &mut Criterion<WallTime>, harness: &Harness) {
+    let script = path_string(harness.script_fixture());
+
+    bench_cli(c, harness, "run_script_python", || {
+        run_script_cli(harness.cache_dir(), &script)
+    });
+}
+
 fn build_wheel(c: &mut Criterion<WallTime>, harness: &Harness) {
     let package = harness.package();
     let package = path_string(package.path());
@@ -275,6 +298,91 @@ fn workspace_metadata_frozen(c: &mut Criterion<WallTime>, harness: &Harness) {
     });
 }
 
+fn pip_install_warm(c: &mut Criterion<WallTime>, harness: &Harness) {
+    let temporary_dir = TempDir::new().expect("create pip install benchmark directory");
+    let environment = temporary_dir.path().join(".venv");
+    let environment = path_string(&environment);
+
+    c.bench_function("pip_install_warm", |b| {
+        b.iter_batched(
+            || {
+                reset_path(Path::new(&environment));
+                harness.invoke(venv_cli(harness.cache_dir(), &environment, false));
+                pip_install_cli(harness.cache_dir(), &environment, "idna==3.7")
+            },
+            |cli| harness.invoke(cli),
+            BatchSize::PerIteration,
+        );
+    });
+}
+
+fn pip_sync_install(c: &mut Criterion<WallTime>, harness: &Harness) {
+    let temporary_dir = TempDir::new().expect("create pip sync benchmark directory");
+    let environment = temporary_dir.path().join(".venv");
+    let environment = path_string(&environment);
+
+    c.bench_function("pip_sync_install", |b| {
+        b.iter_batched(
+            || {
+                reset_path(Path::new(&environment));
+                harness.invoke(venv_cli(harness.cache_dir(), &environment, false));
+                pip_sync_cli(
+                    harness.cache_dir(),
+                    harness.pip_requirements(),
+                    &environment,
+                    &[],
+                )
+            },
+            |cli| harness.invoke(cli),
+            BatchSize::PerIteration,
+        );
+    });
+}
+
+fn pip_sync_noop(c: &mut Criterion<WallTime>, harness: &Harness) {
+    let temporary_dir = TempDir::new().expect("create pip sync benchmark directory");
+    let environment = temporary_dir.path().join(".venv");
+    let environment = path_string(&environment);
+    harness.invoke(venv_cli(harness.cache_dir(), &environment, false));
+    harness.invoke(pip_sync_cli(
+        harness.cache_dir(),
+        harness.pip_requirements(),
+        &environment,
+        &[],
+    ));
+
+    bench_cli(c, harness, "pip_sync_noop", || {
+        pip_sync_cli(
+            harness.cache_dir(),
+            harness.pip_requirements(),
+            &environment,
+            &[],
+        )
+    });
+}
+
+fn pip_sync_reinstall(c: &mut Criterion<WallTime>, harness: &Harness) {
+    let temporary_dir = TempDir::new().expect("create pip sync benchmark directory");
+    let environment = temporary_dir.path().join(".venv");
+    let environment = path_string(&environment);
+    harness.invoke(venv_cli(harness.cache_dir(), &environment, false));
+    harness.invoke(pip_sync_cli(
+        harness.cache_dir(),
+        harness.pip_requirements(),
+        &environment,
+        &[],
+    ));
+
+    bench_cli(c, harness, "pip_sync_reinstall", || {
+        pip_sync_cli(
+            harness.cache_dir(),
+            harness.pip_requirements(),
+            &environment,
+            &["--reinstall"],
+        )
+    });
+}
+
 fn pip_compile_warm_jupyter(c: &mut Criterion<WallTime>, harness: &Harness) {
     let output_dir = TempDir::new().expect("create pip compile benchmark directory");
     let output_file = output_dir.path().join("requirements.txt");
@@ -282,7 +390,7 @@ fn pip_compile_warm_jupyter(c: &mut Criterion<WallTime>, harness: &Harness) {
 
     bench_cli(c, harness, "pip_compile_warm_jupyter", || {
         pip_compile_cli(
-            harness.requirements(),
+            harness.jupyter_requirements(),
             harness.cache_dir(),
             black_box(&output_file),
         )
@@ -300,7 +408,9 @@ struct Harness {
     cache_dir: String,
     package_fixture: PathBuf,
     project_fixture: PathBuf,
-    requirements: String,
+    jupyter_requirements: String,
+    pip_requirements: String,
+    script_fixture: PathBuf,
     workspace_fixture: PathBuf,
     _initialization_dir: TempDir,
 }
@@ -310,7 +420,9 @@ impl Harness {
         let manifest_dir = env::current_dir().expect("resolve benchmark manifest directory");
         let workspace_root = manifest_dir.join("../..");
         let cache_dir = path_string(&workspace_root.join(".cache"));
-        let requirements = path_string(&workspace_root.join("test/requirements/jupyter.in"));
+        let jupyter_requirements =
+            path_string(&workspace_root.join("test/requirements/jupyter.in"));
+        let pip_requirements = path_string(&manifest_dir.join("fixtures/requirements.txt"));
         let initialization_dir = TempDir::new().expect("create initialization directory");
         let initialization_environment = initialization_dir.path().join(".venv");
         let initialization_environment = path_string(&initialization_environment);
@@ -331,8 +443,10 @@ impl Harness {
             runtime,
             cache_dir,
             package_fixture: manifest_dir.join("fixtures/package"),
+            jupyter_requirements,
+            pip_requirements,
             project_fixture: manifest_dir.join("fixtures/project"),
-            requirements,
+            script_fixture: manifest_dir.join("fixtures/script.py"),
             workspace_fixture: manifest_dir.join("fixtures/workspace"),
             _initialization_dir: initialization_dir,
         }
@@ -342,8 +456,16 @@ impl Harness {
         &self.cache_dir
     }
 
-    fn requirements(&self) -> &str {
-        &self.requirements
+    fn jupyter_requirements(&self) -> &str {
+        &self.jupyter_requirements
+    }
+
+    fn pip_requirements(&self) -> &str {
+        &self.pip_requirements
+    }
+
+    fn script_fixture(&self) -> &Path {
+        &self.script_fixture
     }
 
     fn invoke(&self, cli: Cli) {
@@ -489,6 +611,19 @@ fn project_venv_cli(cache_dir: &str, project: &str, environment: &str) -> Cli {
     ])
 }
 
+fn run_script_cli(cache_dir: &str, script: &str) -> Cli {
+    cli(&[
+        "--cache-dir",
+        cache_dir,
+        "--no-config",
+        "--offline",
+        "--quiet",
+        "run",
+        "--no-project",
+        script,
+    ])
+}
+
 fn pip_compile_cli(requirements: &str, cache_dir: &str, output_file: &str) -> Cli {
     cli(&[
         "--cache-dir",
@@ -501,10 +636,50 @@ fn pip_compile_cli(requirements: &str, cache_dir: &str, output_file: &str) -> Cl
         requirements,
         "--universal",
         "--exclude-newer",
-        "2024-08-08",
+        "2024-08-08T00:00:00Z",
         "--output-file",
         output_file,
     ])
+}
+
+fn pip_install_cli(cache_dir: &str, environment: &str, requirement: &str) -> Cli {
+    pip_cli(
+        cache_dir,
+        &[
+            "install",
+            requirement,
+            "--python",
+            environment,
+            "--exclude-newer",
+            "2024-08-08T00:00:00Z",
+        ],
+    )
+}
+
+fn pip_sync_cli(cache_dir: &str, requirements: &str, environment: &str, args: &[&str]) -> Cli {
+    let mut command = vec![
+        "sync",
+        requirements,
+        "--python",
+        environment,
+        "--exclude-newer",
+        "2024-08-08T00:00:00Z",
+    ];
+    command.extend_from_slice(args);
+    pip_cli(cache_dir, &command)
+}
+
+fn pip_cli(cache_dir: &str, command: &[&str]) -> Cli {
+    let mut args = vec![
+        "--cache-dir",
+        cache_dir,
+        "--no-config",
+        "--offline",
+        "--quiet",
+        "pip",
+    ];
+    args.extend_from_slice(command);
+    cli(&args)
 }
 
 fn build_cli(cache_dir: &str, package: &str, output: &str) -> Cli {

@@ -1,0 +1,3 @@
+idna==3.7
+iniconfig==2.0.0
+packaging==24.1
