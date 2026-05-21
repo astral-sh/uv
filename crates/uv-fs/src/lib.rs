@@ -302,6 +302,26 @@ mod tests {
         assert_eq!(read_link(&link)?, dunce::simplified(&target));
         Ok(())
     }
+
+    #[test]
+    fn create_junction_from_smb_failure_removes_directory() -> std::io::Result<()> {
+        #[expect(clippy::print_stderr)]
+        let Some(smb_fs) = std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_SMB_FS).ok() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_SMB_FS not set");
+            return Ok(());
+        };
+        fs_err::create_dir_all(&smb_fs)?;
+        let alt_tempdir = tempfile::tempdir_in(smb_fs)?;
+        let tempdir = tempfile::tempdir()?;
+        let link = tempdir.path().join("link");
+        let target = alt_tempdir.path().join("target");
+        fs_err::create_dir(&target)?;
+
+        let err = create_junction(&target, &link).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidFilename);
+        assert!(!link.exists());
+        Ok(())
+    }
 }
 
 /// Create a symlink at `dst` pointing to `src` on Unix or copy `src` to `dst` on Windows
