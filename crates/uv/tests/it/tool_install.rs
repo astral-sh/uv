@@ -2740,6 +2740,43 @@ fn tool_install_no_entrypoints() {
         .assert(predicate::path::missing());
 }
 
+#[test]
+fn tool_install_no_binary_package_env_var() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pytest")
+        .env(EnvVars::UV_NO_BINARY_PACKAGE, "iniconfig")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+    Installed 2 executables: py.test, pytest
+    ");
+
+    let receipt: toml::Value = toml::from_str(
+        &fs_err::read_to_string(tool_dir.join("pytest").join("uv-receipt.toml")).unwrap(),
+    )
+    .unwrap();
+    assert_snapshot!(
+        receipt["tool"]["options"]["no-binary-package"].to_string(),
+        @r#"["iniconfig"]"#
+    );
+}
+
 /// Test installing a package that can't be installed.
 #[test]
 fn tool_install_uninstallable() {

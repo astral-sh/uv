@@ -293,7 +293,11 @@ impl From<ResolverArgs> for PipOptions {
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
             no_sources: if no_sources { Some(true) } else { None },
-            no_sources_package: Some(no_sources_package),
+            no_sources_package: if no_sources_package.is_empty() {
+                None
+            } else {
+                Some(no_sources_package)
+            },
             ..Self::from(index_args)
         }
     }
@@ -339,7 +343,11 @@ impl From<InstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
-            no_sources_package: Some(no_sources_package),
+            no_sources_package: if no_sources_package.is_empty() {
+                None
+            } else {
+                Some(no_sources_package)
+            },
             ..Self::from(index_args)
         }
     }
@@ -414,7 +422,11 @@ impl From<ResolverInstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
-            no_sources_package: Some(no_sources_package),
+            no_sources_package: if no_sources_package.is_empty() {
+                None
+            } else {
+                Some(no_sources_package)
+            },
             ..Self::from(index_args)
         }
     }
@@ -582,11 +594,23 @@ pub fn resolver_options(
         link_mode,
         torch_backend: None,
         no_build: flag(no_build, build, "build"),
-        no_build_package: Some(no_build_package),
+        no_build_package: if no_build_package.is_empty() {
+            None
+        } else {
+            Some(no_build_package)
+        },
         no_binary: flag(no_binary, binary, "binary"),
-        no_binary_package: Some(no_binary_package),
+        no_binary_package: if no_binary_package.is_empty() {
+            None
+        } else {
+            Some(no_binary_package)
+        },
         no_sources: if no_sources { Some(true) } else { None },
-        no_sources_package: Some(no_sources_package),
+        no_sources_package: if no_sources_package.is_empty() {
+            None
+        } else {
+            Some(no_sources_package)
+        },
     }
 }
 

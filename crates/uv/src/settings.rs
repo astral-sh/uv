@@ -712,7 +712,11 @@ impl RunSettings {
                 no_dev.into(),
                 only_dev,
                 group,
-                no_group,
+                if no_group.is_empty() {
+                    environment.no_group.clone().unwrap_or_default()
+                } else {
+                    no_group
+                },
                 no_default_groups,
                 only_group,
                 all_groups,
@@ -748,6 +752,7 @@ impl RunSettings {
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
                 filesystem,
+                &environment,
             ),
             env_file: EnvFile::from_args(env_file, no_env_file),
             install_mirrors: environment
@@ -841,13 +846,16 @@ impl ToolRunSettings {
 
         let filesystem_options = filesystem.map(FilesystemOptions::into_options);
 
-        let options =
-            resolver_installer_options(installer, build).combine(ResolverInstallerOptions::from(
-                filesystem_options
-                    .as_ref()
-                    .map(|options| options.top_level.clone())
-                    .unwrap_or_default(),
-            ));
+        let options = resolver_installer_options_with_environment(
+            resolver_installer_options(installer, build),
+            &environment,
+        )
+        .combine(ResolverInstallerOptions::from(
+            filesystem_options
+                .as_ref()
+                .map(|options| options.top_level.clone())
+                .unwrap_or_default(),
+        ));
 
         let filesystem_install_mirrors = filesystem_options
             .map(|options| options.install_mirrors.clone())
@@ -963,13 +971,16 @@ impl ToolInstallSettings {
 
         let filesystem_options = filesystem.map(FilesystemOptions::into_options);
 
-        let options =
-            resolver_installer_options(installer, build).combine(ResolverInstallerOptions::from(
-                filesystem_options
-                    .as_ref()
-                    .map(|options| options.top_level.clone())
-                    .unwrap_or_default(),
-            ));
+        let options = resolver_installer_options_with_environment(
+            resolver_installer_options(installer, build),
+            &environment,
+        )
+        .combine(ResolverInstallerOptions::from(
+            filesystem_options
+                .as_ref()
+                .map(|options| options.top_level.clone())
+                .unwrap_or_default(),
+        ));
 
         let filesystem_install_mirrors = filesystem_options
             .map(|options| options.install_mirrors.clone())
@@ -1118,7 +1129,10 @@ impl ToolUpgradeSettings {
             no_sources_package,
         };
 
-        let args = resolver_installer_options(installer, build);
+        let args = resolver_installer_options_with_environment(
+            resolver_installer_options(installer, build),
+            environment,
+        );
         let filesystem = filesystem.map(FilesystemOptions::into_options);
         let filesystem_install_mirrors = filesystem
             .clone()
@@ -1733,6 +1747,7 @@ impl SyncSettings {
         let settings = ResolverInstallerSettings::combine(
             resolver_installer_options(installer, build),
             filesystem,
+            &environment,
         );
 
         let check = flag(check, no_check, "check").unwrap_or_default();
@@ -1787,7 +1802,11 @@ impl SyncSettings {
                 no_dev.into(),
                 only_dev,
                 group,
-                no_group,
+                if no_group.is_empty() {
+                    environment.no_group.clone().unwrap_or_default()
+                } else {
+                    no_group
+                },
                 no_default_groups,
                 only_group,
                 all_groups,
@@ -1878,7 +1897,11 @@ impl LockSettings {
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            settings: ResolverSettings::combine(
+                resolver_options(resolver, build),
+                filesystem,
+                &environment,
+            ),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -1932,7 +1955,11 @@ impl MetadataSettings {
             dry_run: DryRun::from_args(dry_run),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            settings: ResolverSettings::combine(
+                resolver_options(resolver, build),
+                filesystem,
+                &environment,
+            ),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2164,6 +2191,7 @@ impl AddSettings {
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
                 filesystem,
+                &environment,
             ),
             install_mirrors: environment
                 .install_mirrors
@@ -2263,6 +2291,7 @@ impl RemoveSettings {
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
                 filesystem,
+                &environment,
             ),
             install_mirrors: environment
                 .install_mirrors
@@ -2347,6 +2376,7 @@ impl VersionSettings {
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
                 filesystem,
+                &environment,
             ),
             install_mirrors: environment
                 .install_mirrors
@@ -2433,7 +2463,11 @@ impl TreeSettings {
                 no_dev.into(),
                 only_dev,
                 group,
-                no_group,
+                if no_group.is_empty() {
+                    environment.no_group.clone().unwrap_or_default()
+                } else {
+                    no_group
+                },
                 no_default_groups,
                 only_group,
                 all_groups,
@@ -2452,7 +2486,11 @@ impl TreeSettings {
             python_version,
             python_platform,
             python: python.and_then(Maybe::into_option),
-            resolver: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            resolver: ResolverSettings::combine(
+                resolver_options(resolver, build),
+                filesystem,
+                &environment,
+            ),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2582,7 +2620,11 @@ impl ExportSettings {
                 no_dev.into(),
                 only_dev,
                 group,
-                no_group,
+                if no_group.is_empty() {
+                    environment.no_group.clone().unwrap_or_default()
+                } else {
+                    no_group
+                },
                 no_default_groups,
                 only_group,
                 all_groups,
@@ -2607,7 +2649,11 @@ impl ExportSettings {
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            settings: ResolverSettings::combine(
+                resolver_options(resolver, build),
+                filesystem,
+                &environment,
+            ),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2732,7 +2778,11 @@ impl AuditSettings {
                 no_dev,
                 only_dev,
                 vec![],
-                no_group,
+                if no_group.is_empty() {
+                    environment.no_group.clone().unwrap_or_default()
+                } else {
+                    no_group
+                },
                 no_default_groups,
                 only_group.clone(),
                 only_group.is_empty() && !only_dev,
@@ -2741,10 +2791,14 @@ impl AuditSettings {
             frozen: resolve_frozen(frozen),
             python_version,
             python_platform,
+            settings: ResolverSettings::combine(
+                resolver_options(resolver, build),
+                filesystem,
+                &environment,
+            ),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
             output_format,
             service_format,
             service_url,
@@ -3677,7 +3731,11 @@ impl BuildSettings {
             ),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            settings: ResolverSettings::combine(
+                resolver_options(resolver, build),
+                filesystem,
+                &environment,
+            ),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -3834,7 +3892,21 @@ pub(crate) struct ResolverSettings {
 
 impl ResolverSettings {
     /// Resolve the [`ResolverSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn combine(args: ResolverOptions, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn combine(
+        mut args: ResolverOptions,
+        filesystem: Option<FilesystemOptions>,
+        environment: &EnvironmentOptions,
+    ) -> Self {
+        args.no_binary_package = args
+            .no_binary_package
+            .or(environment.no_binary_package.clone());
+        args.no_build_package = args
+            .no_build_package
+            .or(environment.no_build_package.clone());
+        args.no_sources_package = args
+            .no_sources_package
+            .or(environment.no_sources_package.clone());
+
         // The problem is that for `upgrade`... we want to combine the two `Upgrade` structs,
         // not the individual fields.
         let options = args.combine(ResolverOptions::from(
@@ -3914,16 +3986,35 @@ impl ResolverInstallerSettings {
     pub(crate) fn combine(
         args: ResolverInstallerOptions,
         filesystem: Option<FilesystemOptions>,
+        environment: &EnvironmentOptions,
     ) -> Self {
-        let options = args.combine(ResolverInstallerOptions::from(
-            filesystem
-                .map(FilesystemOptions::into_options)
-                .map(|options| options.top_level)
-                .unwrap_or_default(),
-        ));
+        let options = resolver_installer_options_with_environment(args, environment).combine(
+            ResolverInstallerOptions::from(
+                filesystem
+                    .map(FilesystemOptions::into_options)
+                    .map(|options| options.top_level)
+                    .unwrap_or_default(),
+            ),
+        );
 
         Self::from(options)
     }
+}
+
+fn resolver_installer_options_with_environment(
+    mut options: ResolverInstallerOptions,
+    environment: &EnvironmentOptions,
+) -> ResolverInstallerOptions {
+    options.no_binary_package = options
+        .no_binary_package
+        .or(environment.no_binary_package.clone());
+    options.no_build_package = options
+        .no_build_package
+        .or(environment.no_build_package.clone());
+    options.no_sources_package = options
+        .no_sources_package
+        .or(environment.no_sources_package.clone());
+    options
 }
 
 impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
@@ -4205,6 +4296,9 @@ impl PipSettings {
         let reinstall = reinstall.combine(top_level_reinstall);
         let reinstall_package = reinstall_package.combine(top_level_reinstall_package);
         let torch_backend = torch_backend.combine(top_level_torch_backend);
+        let args_no_sources_package = args
+            .no_sources_package
+            .or(environment.no_sources_package.clone());
 
         Self {
             index_locations: IndexLocations::new(
@@ -4360,7 +4454,7 @@ impl PipSettings {
                 .unwrap_or_default(),
             sources: NoSources::from_args(
                 args.no_sources.combine(no_sources),
-                args.no_sources_package
+                args_no_sources_package
                     .combine(no_sources_package)
                     .unwrap_or_default(),
             ),
