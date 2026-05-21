@@ -10,10 +10,7 @@ Released on 2026-05-21.
 ### Enhancements
 
 - Add support for direct archive dependencies in Git ([#10072](https://github.com/astral-sh/uv/pull/10072))
-- Refactor hint handling ([#18090](https://github.com/astral-sh/uv/pull/18090))
-- Reject unsafe entry points in `uv-build` ([#19495](https://github.com/astral-sh/uv/pull/19495))
-- Restrict delimiters in entry point parsing ([#19471](https://github.com/astral-sh/uv/pull/19471))
-- uv-netrc: fix multi-word no-space comment lines causing parse errors ([#19494](https://github.com/astral-sh/uv/pull/19494))
+- Adjust hint rendering ([#18090](https://github.com/astral-sh/uv/pull/18090))
 
 ### Preview features
 
@@ -28,6 +25,9 @@ Released on 2026-05-21.
 
 - Allow environment variables that take a list to be empty ([#19503](https://github.com/astral-sh/uv/pull/19503))
 - Ensure that incompatible wheel hints do not leak secrets ([#19504](https://github.com/astral-sh/uv/pull/19504))
+- Reject unsafe entry points in `uv-build` ([#19495](https://github.com/astral-sh/uv/pull/19495))
+- Restrict delimiters in entry point parsing ([#19471](https://github.com/astral-sh/uv/pull/19471))
+- uv-netrc: fix multi-word no-space comment lines causing parse errors ([#19494](https://github.com/astral-sh/uv/pull/19494))
 
 ### Documentation
 
