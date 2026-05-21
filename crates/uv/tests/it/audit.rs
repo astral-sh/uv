@@ -304,7 +304,23 @@ async fn audit_malformed_vulnerability_record() {
     Mock::given(method("GET"))
         .and(path("/v1/vulns/PYSEC-2023-0001"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "id": "PYSEC-2023-0001"
+            "id": "PYSEC-2023-0001",
+            "modified": "2026-01-01T00:00:00Z",
+            "summary": "A test vulnerability in iniconfig",
+            "affected": [{
+                "ranges": [{
+                    "type": "ECOSYSTEM",
+                    "events": [
+                        {"introduced": "0"},
+                        {}
+                    ]
+                }]
+            }],
+            "references": [{
+                "type": "ADVISORY",
+                "url": "https://example.com/advisory/PYSEC-2023-0001"
+            }]
+
         })))
         .mount(&server)
         .await;
@@ -323,7 +339,7 @@ async fn audit_malformed_vulnerability_record() {
     Resolved 2 packages in [TIME]
     error: OSV returned a malformed vulnerability record for `PYSEC-2023-0001`
       Caused by: error decoding response body
-      Caused by: missing field `modified` at line 1 column 24
+      Caused by: expected value at line 1 column 56
     ");
 }
 
