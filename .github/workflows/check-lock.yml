@@ -7,7 +7,7 @@ jobs:
   lock:
     timeout-minutes: 10
     runs-on: ubuntu-slim
-    name: "uv lock --check"
+    name: "uv lockfiles"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -18,7 +18,7 @@ jobs:
           version: "0.11.14"
       - name: "Check project lockfile"
         run: uv lock --check
-      - name: "Check PEP 723 script lockfiles"
+      - name: "Check script lockfiles"
         run: |
           while IFS= read -r lockfile; do
             uv lock --script "${lockfile%.lock}" --check
