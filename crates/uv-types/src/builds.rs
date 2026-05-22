@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use dashmap::DashMap;
+use papaya::HashMap;
 
 use uv_configuration::{BuildKind, NoSources};
 use uv_normalize::PackageName;
@@ -57,11 +57,11 @@ pub struct BuildKey {
 
 /// An arena of in-process builds.
 #[derive(Debug)]
-pub struct BuildArena<T>(Arc<DashMap<BuildKey, T>>);
+pub struct BuildArena<T>(Arc<HashMap<BuildKey, Arc<T>>>);
 
 impl<T> Default for BuildArena<T> {
     fn default() -> Self {
-        Self(Arc::new(DashMap::new()))
+        Self(Arc::new(HashMap::new()))
     }
 }
 
@@ -73,12 +73,12 @@ impl<T> Clone for BuildArena<T> {
 
 impl<T> BuildArena<T> {
     /// Insert a build entry into the arena.
-    pub fn insert(&self, key: BuildKey, value: T) {
-        self.0.insert(key, value);
+    pub fn insert(&self, key: BuildKey, value: impl Into<Arc<T>>) {
+        self.0.pin().insert(key, value.into());
     }
 
     /// Remove a build entry from the arena.
-    pub fn remove(&self, key: &BuildKey) -> Option<T> {
-        self.0.remove(key).map(|entry| entry.1)
+    pub fn remove(&self, key: &BuildKey) -> Option<Arc<T>> {
+        self.0.pin().remove(key).cloned()
     }
 }
