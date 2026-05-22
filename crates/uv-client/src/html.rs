@@ -32,6 +32,15 @@ fn attribute<'a>(tag: &'a HTMLTag<'_>, name: &'a str) -> Option<Cow<'a, str>> {
         })
 }
 
+/// Return `true` if the tag has the given case-insensitive HTML attribute name.
+fn has_attribute<'a>(tag: &'a HTMLTag<'_>, name: &'a str) -> bool {
+    tag.attributes().contains(name)
+        || tag
+            .attributes()
+            .iter()
+            .any(|(attribute_name, _)| attribute_name.eq_ignore_ascii_case(name))
+}
+
 /// A parsed structure from PyPI "HTML" index format for a single package.
 #[derive(Debug, Clone)]
 pub(crate) struct SimpleDetailHTML {
@@ -283,10 +292,14 @@ impl SimpleDetailHTML {
 
         // Extract the `yanked` field, which should be set on the `data-yanked`
         // attribute.
-        let yanked = if let Some(yanked) = attribute(link, "data-yanked") {
-            let yanked = std::str::from_utf8(yanked.as_bytes())?;
-            let yanked = html_escape::decode_html_entities(yanked);
-            Some(Box::new(Yanked::Reason(yanked.into())))
+        let yanked = if has_attribute(link, "data-yanked") {
+            if let Some(yanked) = attribute(link, "data-yanked") {
+                let yanked = std::str::from_utf8(yanked.as_bytes())?;
+                let yanked = html_escape::decode_html_entities(yanked);
+                Some(Box::new(Yanked::Reason(yanked.into())))
+            } else {
+                Some(Box::new(Yanked::Bool(true)))
+            }
         } else {
             None
         };
@@ -1678,6 +1691,7 @@ mod tests {
 <BODY>
     <A HREF="/files/fakeproject-1.2.3.tar.gz" DATA-REQUIRES-PYTHON="&gt;=3.12" DATA-CORE-METADATA="true" DATA-YANKED="broken release">fakeproject-1.2.3.tar.gz</A>
     <A HREF="/files/fakeproject-1.2.4.tar.gz" DATA-DIST-INFO-METADATA="false">fakeproject-1.2.4.tar.gz</A>
+    <A HREF="/files/fakeproject-1.2.5.tar.gz" DATA-YANKED>fakeproject-1.2.5.tar.gz</A>
 </BODY>
 </HTML>
         "#;
@@ -1754,6 +1768,26 @@ mod tests {
                     upload_time: None,
                     url: "/files/fakeproject-1.2.4.tar.gz",
                     yanked: None,
+                },
+                PypiFile {
+                    core_metadata: None,
+                    filename: "fakeproject-1.2.5.tar.gz",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/files/fakeproject-1.2.5.tar.gz",
+                    yanked: Some(
+                        Bool(
+                            true,
+                        ),
+                    ),
                 },
             ],
         )
