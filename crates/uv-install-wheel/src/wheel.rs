@@ -161,6 +161,8 @@ fn get_script_executable(python_executable: &Path, is_gui: bool) -> PathBuf {
 }
 
 const RESERVED_SCRIPT_NAMES_ERROR: &[&str; 3] = &["python", "pythonw", "python3"];
+const RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR: &str = "python3.";
+const RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR: &[&str; 2] = &["python3.", "pythonw3."];
 const RESERVED_SCRIPT_NAMES_WARN: &[&str; 2] = &["activate", "activate_this.py"];
 
 /// A form of [`Script`] guaranteed by [`ValidatedScript::try_from_script`] to be constrained to
@@ -193,25 +195,32 @@ impl<'script> ValidatedScript<'script> {
             );
         }
 
-        if RESERVED_SCRIPT_NAMES_ERROR.contains(&name.as_str())
-            || name
-                .strip_prefix("python3.")
-                .is_some_and(|suffix| suffix.parse::<u8>().is_ok())
+        // Reserve CPython launcher basenames emitted by `uv venv` across supported platforms.
+        // Apply the Windows launcher normalization before checking so wheel validity is portable.
+        // FIXME: What are the in-reality rules here for name normalization?
+        let normalized_name = name.strip_suffix(".py").unwrap_or(name.as_str());
+        if RESERVED_SCRIPT_NAMES_ERROR.contains(&normalized_name)
+            || normalized_name
+                .strip_prefix(RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR)
+                .is_some_and(|minor| minor.parse::<u8>().is_ok())
+            || RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR
+                .iter()
+                .any(|prefix| {
+                    normalized_name
+                        .strip_prefix(prefix)
+                        .and_then(|minor| minor.strip_suffix('t'))
+                        .is_some_and(|minor| minor.parse::<u8>().is_ok())
+                })
         {
             return Err(Error::ReservedScriptName {
-                reserved: name,
+                reserved: normalized_name.to_string(),
                 declared: script.name.clone(),
             });
         }
 
         let path = if cfg!(windows) {
             // On Windows we actually build an `.exe` wrapper.
-            let name = name
-                // FIXME: What are the in-reality rules here for names?
-                .strip_suffix(".py")
-                .unwrap_or(&name)
-                .to_string()
-                + std::env::consts::EXE_SUFFIX;
+            let name = normalized_name.to_string() + std::env::consts::EXE_SUFFIX;
 
             layout.scheme.scripts.join(name)
         } else {
