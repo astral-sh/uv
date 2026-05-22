@@ -287,24 +287,16 @@ impl SimpleDetailHTML {
         // Extract the `size` field, which should be set on the `data-size` attribute. This isn't
         // included in PEP 700, which omits the HTML API, but we respect it anyway. Since this
         // field isn't standardized, we discard errors.
-        let size = link
-            .attributes()
-            .get("data-size")
-            .flatten()
-            .and_then(|size| std::str::from_utf8(size.as_bytes()).ok())
-            .map(|size| html_escape::decode_html_entities(size))
-            .and_then(|size| size.parse().ok());
+        let size = attribute(link, "data-size")
+            .and_then(|size| html_escape::decode_html_entities(&size).parse().ok());
 
         // Extract the `upload-time` field, which should be set on the `data-upload-time` attribute. This isn't
         // included in PEP 700, which omits the HTML API, but we respect it anyway. Since this
         // field isn't standardized, we discard errors.
-        let upload_time = link
-            .attributes()
-            .get("data-upload-time")
-            .flatten()
-            .and_then(|upload_time| std::str::from_utf8(upload_time.as_bytes()).ok())
-            .map(|upload_time| html_escape::decode_html_entities(upload_time))
-            .and_then(|upload_time| Timestamp::from_str(&upload_time).ok());
+        let upload_time = attribute(link, "data-upload-time").and_then(|upload_time| {
+            let upload_time = html_escape::decode_html_entities(&upload_time);
+            Timestamp::from_str(&upload_time).ok()
+        });
 
         Ok(Some(PypiFile {
             core_metadata,
@@ -1792,6 +1784,37 @@ mod tests {
             ],
         }
         "#);
+    }
+
+    /// Test that optional Simple API HTML file attributes are ASCII case-insensitive.
+    #[test]
+    fn parse_optional_attributes_case_insensitively() {
+        let text = r#"
+<!DOCTYPE html>
+<HTML>
+<BODY>
+    <A HREF="/files/fakeproject-1.2.3.tar.gz" DATA-SIZE="15399" DATA-UPLOAD-TIME="2022-11-14T17:14:53.935145Z">fakeproject-1.2.3.tar.gz</A>
+</BODY>
+</HTML>
+        "#;
+
+        let result = SimpleDetailHTML::parse(
+            text,
+            &DisplaySafeUrl::parse("https://pypi.org/simple/fakeproject/").unwrap(),
+        )
+        .unwrap();
+        insta::assert_debug_snapshot!(
+            (result.files[0].size, result.files[0].upload_time.as_ref()), @r#"
+        (
+            Some(
+                15399,
+            ),
+            Some(
+                2022-11-14T17:14:53.935145Z,
+            ),
+        )
+        "#
+        );
     }
 
     // Test parsing project status metadata with emojis in the reason.
