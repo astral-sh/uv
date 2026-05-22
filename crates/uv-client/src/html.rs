@@ -119,11 +119,6 @@ impl SimpleDetailHTML {
     ///
     /// Precondition: `head` is a `<head>` tag.
     fn parse_project_status(parser: &Parser, head: &Node) -> Option<ProjectStatus> {
-        /// Extract the value of the `content` attribute from a tag.
-        fn content<'a>(tag: &'a HTMLTag<'a>) -> Option<Cow<'a, str>> {
-            attribute(tag, "content")
-        }
-
         let children = head.children()?;
 
         let mut status: Option<Status> = None;
@@ -143,13 +138,15 @@ impl SimpleDetailHTML {
             match name.as_ref() {
                 "pypi:project-status" => {
                     status = {
-                        let status = content(tag).as_deref().and_then(Status::new)?;
+                        let status = attribute(tag, "content").as_deref().and_then(Status::new)?;
                         Some(status)
                     };
                 }
                 "pypi:project-status-reason" => {
                     reason = {
-                        let Some(content) = content(tag).as_deref().map(SmallString::from) else {
+                        let Some(content) =
+                            attribute(tag, "content").as_deref().map(SmallString::from)
+                        else {
                             // TODO: Make this a hard error instead?
                             warn!("Invalid project status reason (missing)");
                             return None;
