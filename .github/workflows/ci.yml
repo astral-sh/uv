@@ -325,14 +325,18 @@ jobs:
           ../uv build
 
       - name: "Publish astral-test-pypa-gh-action"
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
-        with:
-          # With this GitHub action, we can't do as rigid checks as with our custom Python script, so we publish more
-          # leniently
-          skip-existing: "true"
-          verbose: "true"
-          repository-url: "https://test.pypi.org/legacy/"
-          packages-dir: "astral-test-pypa-gh-action/dist"
+        # Dogfood `uv publish` to publish the test package via TestPyPI's
+        # trusted publishing flow. Replaces `pypa/gh-action-pypi-publish`,
+        # which Renovate could not keep digest-pinned because its tags are
+        # annotated (see astral-sh/uv#15276 for the original investigation).
+        shell: bash -eo pipefail -O failglob {0}
+        run: |
+          ./uv publish \
+            --publish-url https://test.pypi.org/legacy/ \
+            --check-url https://test.pypi.org/simple/astral-test-pypa-gh-action/ \
+            --trusted-publishing automatic \
+            --verbose \
+            astral-test-pypa-gh-action/dist/*
 
       - name: "Request GitLab OIDC tokens for impersonation"
         uses: digital-blueprint/gitlab-pipeline-trigger-action@c59b56e9d2688ab42c1304322ac8831a4ef6f7d2 # v1.4.0
