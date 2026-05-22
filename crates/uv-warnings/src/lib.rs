@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::fmt;
 use std::iter;
 use std::sync::atomic::AtomicBool;
 use std::sync::{LazyLock, Mutex};
@@ -94,43 +95,69 @@ pub fn write_error_chain(
         "{}{} {}",
         level.as_ref().color(color).bold(),
         ":".bold(),
-        err.to_string().trim().bold()
+        err.display_chain(color),
     )?;
-    for source in iter::successors(err.source(), |&err| err.source()) {
-        let msg = source.to_string();
-        let mut lines = msg.lines();
-        if let Some(first) = lines.next() {
-            let padding = "  ";
-            let cause = "Caused by";
-            let child_padding = " ".repeat(padding.len() + cause.len() + 2);
-            writeln!(
-                &mut stream,
-                "{}{}: {}",
-                padding,
-                cause.color(color).bold(),
-                first.trim()
-            )?;
-            for line in lines {
-                let line = line.trim_end();
-                if line.is_empty() {
-                    // Avoid showing indents on empty lines
-                    writeln!(&mut stream)?;
-                } else {
-                    writeln!(&mut stream, "{}{}", child_padding, line.trim_end())?;
-                }
-            }
-        }
-    }
     Ok(())
 }
 
+/// Wrapper returned by [`DisplayChainExt::display_chain`].
+pub struct DisplayChain<E: Error, C: DynColor + Copy> {
+    error: E,
+    color: C,
+}
+
+impl<E: Error, C: DynColor + Copy> fmt::Display for DisplayChain<E, C> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.error.to_string().trim().bold())?;
+        for source in iter::successors(self.error.source(), |&err| err.source()) {
+            let msg = source.to_string();
+            let mut lines = msg.lines();
+            if let Some(first) = lines.next() {
+                let padding = "  ";
+                let cause = "Caused by";
+                let child_padding = " ".repeat(padding.len() + cause.len() + 2);
+                write!(
+                    f,
+                    "\n{}{}: {}",
+                    padding,
+                    cause.color(self.color).bold(),
+                    first.trim()
+                )?;
+                for line in lines {
+                    let line = line.trim_end();
+                    if line.is_empty() {
+                        // Avoid showing indents on empty lines
+                        writeln!(f)?;
+                    } else {
+                        write!(f, "\n{}{}", child_padding, line.trim_end())?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Extension trait for displaying an error and its full source chain
+pub trait DisplayChainExt: Error {
+    /// Returns a [`Display`](fmt::Display) wrapper that formats the entire error chain
+    ///
+    /// See [`write_error_chain`] for details on the format
+    fn display_chain<C: DynColor + Copy>(&self, color: C) -> DisplayChain<&Self, C> {
+        DisplayChain { error: self, color }
+    }
+}
+
+impl<E: Error + ?Sized> DisplayChainExt for E {}
+
 #[cfg(test)]
 mod tests {
-    use crate::write_error_chain;
+    use crate::{DisplayChainExt, write_error_chain};
     use anyhow::anyhow;
     use indoc::indoc;
     use insta::assert_snapshot;
     use owo_colors::AnsiColors;
+    use std::fmt::Write;
 
     #[test]
     fn format_multiline_message() {
@@ -154,5 +181,30 @@ mod tests {
                      For downloads, please refer to https://example.com/download/python3.13.tar.zst
           Caused by: Caused By: HTTP Error 400
         ");
+    }
+
+    #[test]
+    fn format_with_display_chain_ext() -> std::fmt::Result {
+        let err_middle = indoc! {"Failed to fetch https://example.com/upload/python3.13.tar.zst
+        Server says: This endpoint only support POST requests.
+
+        For downloads, please refer to https://example.com/download/python3.13.tar.zst"};
+        let err = anyhow!("Caused By: HTTP Error 400")
+            .context(err_middle)
+            .context("Failed to download Python 3.12");
+
+        let mut rendered = String::new();
+        write!(&mut rendered, "{}", err.display_chain(AnsiColors::Red))?;
+        let rendered = anstream::adapter::strip_str(&rendered);
+
+        assert_snapshot!(rendered, @"
+        Failed to download Python 3.12
+          Caused by: Failed to fetch https://example.com/upload/python3.13.tar.zst
+                     Server says: This endpoint only support POST requests.
+
+                     For downloads, please refer to https://example.com/download/python3.13.tar.zst
+          Caused by: Caused By: HTTP Error 400
+        ");
+        Ok(())
     }
 }
