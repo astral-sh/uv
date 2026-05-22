@@ -160,7 +160,9 @@ fn get_script_executable(python_executable: &Path, is_gui: bool) -> PathBuf {
     }
 }
 
-const RESERVED_SCRIPT_NAMES_ERROR: &[&str; 3] = &["python", "pythonw", "python3"];
+const RESERVED_SCRIPT_NAMES_ERROR: &[&str; 7] = &[
+    "python", "pythonw", "python3", "graalpy", "pypy", "pypy2", "pypy3",
+];
 const RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR: &str = "python3.";
 const RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR: &[&str; 2] = &["python3.", "pythonw3."];
 const RESERVED_SCRIPT_NAMES_WARN: &[&str; 2] = &["activate", "activate_this.py"];
@@ -195,7 +197,7 @@ impl<'script> ValidatedScript<'script> {
             );
         }
 
-        // Reserve CPython launcher basenames emitted by `uv venv` across supported platforms.
+        // Reserve launcher basenames emitted by `uv venv` across supported platforms.
         // Apply the Windows launcher normalization before checking so wheel validity is portable.
         // FIXME: What are the in-reality rules here for name normalization?
         let normalized_name = name.strip_suffix(".py").unwrap_or(name.as_str());
