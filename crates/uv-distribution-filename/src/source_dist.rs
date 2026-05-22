@@ -232,7 +232,7 @@ mod tests {
     /// form must parse correctly. For example, `Foo__Bar` (8 bytes) normalizes to `foo-bar`
     /// (7 bytes) because the double underscore collapses to a single hyphen. The old code used
     /// `package_name.as_ref().len()` (= 7) as a byte offset into the stem `Foo__Bar-1.0`,
-    /// producing `"Foo__Bar-1.0"` split as `"Foo__Ba"` + `"r-1.0"` instead of `"Foo__Bar"` + `"1.0"`.
+    /// producing a wrong prefix and an invalid version string rather than `"1.0"`.
     #[test]
     fn unnormalized_name_different_byte_length() {
         let package_name = PackageName::from_str("foo__bar").unwrap();
