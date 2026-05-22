@@ -67,9 +67,7 @@ impl SimpleDetailHTML {
             .nodes()
             .iter()
             .find(|node| node.as_tag().is_some_and(|tag| is_tag(tag, b"head")))
-            .map(|head| Self::parse_project_status(dom.parser(), head))
-            .transpose()?
-            .flatten()
+            .and_then(|head| Self::parse_project_status(dom.parser(), head))
             .unwrap_or_default();
 
         // Parse the first `<base>` tag, if any, to determine the base URL to which all
@@ -120,24 +118,13 @@ impl SimpleDetailHTML {
     /// Parse a [`ProjectStatus`] from the `<meta>` tags in the given `<head>`.
     ///
     /// Precondition: `head` is a `<head>` tag.
-    fn parse_project_status(parser: &Parser, head: &Node) -> Result<Option<ProjectStatus>, Error> {
+    fn parse_project_status(parser: &Parser, head: &Node) -> Option<ProjectStatus> {
         /// Extract the value of the `content` attribute from a tag.
-        fn content<'a>(tag: &'a HTMLTag<'a>) -> Result<Option<&'a str>, Error> {
-            let Some(content) = tag
-                .attributes()
-                .get("content")
-                .and_then(|bytes| bytes)
-                .map(|bytes| std::str::from_utf8(bytes.as_bytes()))
-                .transpose()?
-            else {
-                return Ok(None);
-            };
-            Ok(Some(content))
+        fn content<'a>(tag: &'a HTMLTag<'a>) -> Option<Cow<'a, str>> {
+            attribute(tag, "content")
         }
 
-        let Some(children) = head.children() else {
-            return Ok(None);
-        };
+        let children = head.children()?;
 
         let mut status: Option<Status> = None;
         let mut reason: Option<SmallString> = None;
@@ -147,28 +134,25 @@ impl SimpleDetailHTML {
                 _ => continue,
             };
 
-            let name = match tag.attributes().get("name").and_then(|bytes| bytes) {
-                Some(name) => std::str::from_utf8(name.as_bytes())?,
-                None => continue,
+            let Some(name) = attribute(tag, "name") else {
+                continue;
             };
 
             // Per PEP 792: both `pypi:project-status` and `pypi:project-status-reason`
             // are optional, but if present should be well-formed.
-            match name {
+            match name.as_ref() {
                 "pypi:project-status" => {
                     status = {
-                        let Some(status) = content(tag)?.and_then(Status::new) else {
-                            return Ok(None);
-                        };
+                        let status = content(tag).as_deref().and_then(Status::new)?;
                         Some(status)
                     };
                 }
                 "pypi:project-status-reason" => {
                     reason = {
-                        let Some(content) = content(tag)?.map(SmallString::from) else {
+                        let Some(content) = content(tag).as_deref().map(SmallString::from) else {
                             // TODO: Make this a hard error instead?
                             warn!("Invalid project status reason (missing)");
-                            return Ok(None);
+                            return None;
                         };
                         Some(content)
                     }
@@ -179,20 +163,19 @@ impl SimpleDetailHTML {
 
         if let Some(status) = status {
             let status = ProjectStatus { status, reason };
-            Ok(Some(status))
+            Some(status)
         } else {
-            Ok(None)
+            None
         }
     }
 
     /// Parse the `href` from a `<base>` tag.
     fn parse_base(base: &HTMLTag) -> Result<Option<DisplaySafeUrl>, Error> {
-        let Some(Some(href)) = base.attributes().get("href") else {
+        let Some(href) = attribute(base, "href") else {
             return Ok(None);
         };
-        let href = std::str::from_utf8(href.as_bytes())?;
         let url =
-            DisplaySafeUrl::parse(href).map_err(|err| Error::UrlParse(href.to_string(), err))?;
+            DisplaySafeUrl::parse(&href).map_err(|err| Error::UrlParse(href.to_string(), err))?;
         Ok(Some(url))
     }
 
@@ -1685,8 +1668,9 @@ mod tests {
 <!DOCTYPE html>
 <HTML>
 <HEAD>
-    <META name="pypi:project-status" content="archived">
-    <BASE href="https://index.python.org/">
+    <META NAME="pypi:project-status" CONTENT="archived">
+    <META NAME="pypi:project-status-reason" CONTENT="no longer maintained">
+    <BASE HREF="https://index.python.org/">
 </HEAD>
 <BODY>
     <A HREF="/files/fakeproject-1.2.3.tar.gz" DATA-REQUIRES-PYTHON="&gt;=3.12" DATA-CORE-METADATA="true" DATA-YANKED="broken release">fakeproject-1.2.3.tar.gz</A>
@@ -1710,7 +1694,9 @@ mod tests {
         (
             ProjectStatus {
                 status: Archived,
-                reason: None,
+                reason: Some(
+                    "no longer maintained",
+                ),
             },
             "https://index.python.org/",
             [
