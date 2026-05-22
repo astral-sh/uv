@@ -11,6 +11,11 @@ use uv_pypi_types::{HashError, LenientVersionSpecifiers};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 
+/// Return `true` if this tag has the given HTML element name.
+fn is_tag(tag: &HTMLTag<'_>, name: &[u8]) -> bool {
+    tag.name().as_bytes().eq_ignore_ascii_case(name)
+}
+
 /// A parsed structure from PyPI "HTML" index format for a single package.
 #[derive(Debug, Clone)]
 pub(crate) struct SimpleDetailHTML {
@@ -36,10 +41,7 @@ impl SimpleDetailHTML {
         let project_status = dom
             .nodes()
             .iter()
-            .find(|node| {
-                node.as_tag()
-                    .is_some_and(|tag| tag.name().as_bytes() == b"head")
-            })
+            .find(|node| node.as_tag().is_some_and(|tag| is_tag(tag, b"head")))
             .map(|head| Self::parse_project_status(dom.parser(), head))
             .transpose()?
             .flatten()
@@ -52,8 +54,8 @@ impl SimpleDetailHTML {
             dom.nodes()
                 .iter()
                 .filter_map(|node| node.as_tag())
-                .take_while(|tag| !matches!(tag.name().as_bytes(), b"a" | b"link"))
-                .find(|tag| tag.name().as_bytes() == b"base")
+                .take_while(|tag| !is_tag(tag, b"a") && !is_tag(tag, b"link"))
+                .find(|tag| is_tag(tag, b"base"))
                 .map(|base| Self::parse_base(base))
                 .transpose()?
                 .flatten()
@@ -65,7 +67,7 @@ impl SimpleDetailHTML {
             .nodes()
             .iter()
             .filter_map(|node| node.as_tag())
-            .filter(|link| link.name().as_bytes() == b"a")
+            .filter(|link| is_tag(link, b"a"))
             .map(|link| Self::parse_anchor(link))
             .filter_map(|result| match result {
                 Ok(None) => None,
@@ -116,7 +118,7 @@ impl SimpleDetailHTML {
         let mut reason: Option<SmallString> = None;
         for node in children.all(parser) {
             let tag = match node.as_tag() {
-                Some(tag) if tag.name().as_bytes() == b"meta" => tag,
+                Some(tag) if is_tag(tag, b"meta") => tag,
                 _ => continue,
             };
 
@@ -176,16 +178,15 @@ impl SimpleDetailHTML {
         // Extract the href.
         let Some(href) = link
             .attributes()
-            .get("href")
-            .flatten()
-            .filter(|bytes| !bytes.as_bytes().is_empty())
+            .iter()
+            .find_map(|(name, value)| name.eq_ignore_ascii_case("href").then_some(value).flatten())
+            .filter(|href| !href.is_empty())
         else {
             return Ok(None);
         };
-        let href = std::str::from_utf8(href.as_bytes())?;
 
         // Extract the hash, which should be in the fragment.
-        let decoded = html_escape::decode_html_entities(href);
+        let decoded = html_escape::decode_html_entities(&href);
         let (path, hashes) = if let Some((path, fragment)) = decoded.split_once('#') {
             let fragment = percent_encoding::percent_decode_str(fragment).decode_utf8()?;
             (
@@ -336,7 +337,7 @@ impl SimpleIndexHtml {
             .nodes()
             .iter()
             .filter_map(|node| node.as_tag())
-            .filter(|link| link.name().as_bytes() == b"a")
+            .filter(|link| is_tag(link, b"a"))
             .filter_map(|link| Self::parse_anchor_project_name(link, parser))
             .collect::<Vec<_>>();
 
@@ -1653,6 +1654,73 @@ mod tests {
             reason: Some(
                 "This project is haunted.",
             ),
+        }
+        "#);
+    }
+
+    /// Test that Simple API HTML element names and link `href` are ASCII case-insensitive.
+    #[test]
+    fn parse_simple_html_case_insensitively() {
+        let text = r#"
+<!DOCTYPE html>
+<HTML>
+<HEAD>
+    <META name="pypi:project-status" content="archived">
+    <BASE href="https://index.python.org/">
+</HEAD>
+<BODY>
+    <A HREF="/files/fakeproject-1.2.3.tar.gz">fakeproject-1.2.3.tar.gz</A>
+</BODY>
+</HTML>
+        "#;
+
+        let result = SimpleDetailHTML::parse(
+            text,
+            &DisplaySafeUrl::parse("https://pypi.org/simple/fakeproject/").unwrap(),
+        )
+        .unwrap();
+        insta::assert_debug_snapshot!(
+            (
+                &result.project_status,
+                result.base.as_str(),
+                result
+                    .files
+                    .iter()
+                    .map(|file| (&*file.filename, &*file.url))
+                    .collect::<Vec<_>>(),
+            ), @r#"
+        (
+            ProjectStatus {
+                status: Archived,
+                reason: None,
+            },
+            "https://index.python.org/",
+            [
+                (
+                    "fakeproject-1.2.3.tar.gz",
+                    "/files/fakeproject-1.2.3.tar.gz",
+                ),
+            ],
+        )
+        "#);
+
+        let text = r#"
+<!DOCTYPE html>
+<HTML>
+<BODY>
+    <A href="/simple/fakeproject/">fakeproject</A>
+</BODY>
+</HTML>
+        "#;
+
+        let result = SimpleIndexHtml::parse(text).unwrap();
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleIndexHtml {
+            projects: [
+                PackageName(
+                    "fakeproject",
+                ),
+            ],
         }
         "#);
     }
