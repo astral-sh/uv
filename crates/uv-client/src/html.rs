@@ -352,10 +352,7 @@ impl SimpleIndexHtml {
     /// Returns `None` if the `<a>` doesn't have an `href` attribute or text content.
     fn parse_anchor_project_name(link: &HTMLTag, parser: &tl::Parser) -> Option<PackageName> {
         // Extract the href.
-        link.attributes()
-            .get("href")
-            .flatten()
-            .filter(|bytes| !bytes.as_bytes().is_empty())?;
+        attribute(link, "href").filter(|href| !href.is_empty())?;
 
         // Extract the text content, which should be the project name.
         let inner_text = link.inner_text(parser);
@@ -1780,7 +1777,7 @@ mod tests {
 <!DOCTYPE html>
 <HTML>
 <BODY>
-    <A href="/simple/fakeproject/">fakeproject</A>
+    <A HREF="/simple/fakeproject/">fakeproject</A>
 </BODY>
 </HTML>
         "#;
