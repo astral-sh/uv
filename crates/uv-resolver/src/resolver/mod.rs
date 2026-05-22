@@ -9,10 +9,10 @@ use std::sync::Arc;
 use std::time::Instant;
 use std::{iter, slice, thread};
 
-use dashmap::DashMap;
 use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
+use papaya::HashMap;
 use pubgrub::{Id, IncompId, Incompatibility, Kind, Range, Ranges, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
@@ -130,9 +130,9 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     index: InMemoryIndex,
     installed_packages: InstalledPackages,
     /// Incompatibilities for packages that are entirely unavailable.
-    unavailable_packages: DashMap<PackageName, UnavailablePackage>,
+    unavailable_packages: HashMap<PackageName, UnavailablePackage>,
     /// Incompatibilities for packages that are unavailable at specific versions.
-    incomplete_packages: DashMap<PackageName, DashMap<Version, MetadataUnavailable>>,
+    incomplete_packages: HashMap<PackageName, HashMap<Version, MetadataUnavailable>>,
     /// The options that were used to configure this resolver.
     options: Options,
     /// The reporter to use for this resolver.
@@ -251,8 +251,8 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             python_requirement: python_requirement.clone(),
             conflicts,
             installed_packages,
-            unavailable_packages: DashMap::default(),
-            incomplete_packages: DashMap::default(),
+            unavailable_packages: HashMap::default(),
+            incomplete_packages: HashMap::default(),
             options,
             reporter: None,
         };
@@ -538,13 +538,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                         if let PubGrubPackageInner::Package { name, .. } = &**next_package {
                             // Check if the decision was due to the package being unavailable
-                            if let Some(entry) = self.unavailable_packages.get(name) {
+                            if let Some(reason) = self.unavailable_packages.pin().get(name) {
                                 state
                                     .pubgrub
                                     .add_incompatibility(Incompatibility::custom_term(
                                         next_id,
                                         term_intersection.clone(),
-                                        UnavailableReason::Package(entry.clone()),
+                                        UnavailableReason::Package(reason.clone()),
                                     ));
                                 continue;
                             }
@@ -1161,6 +1161,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             MetadataResponse::Found(archive) => &archive.metadata,
             MetadataResponse::Unavailable(reason) => {
                 self.unavailable_packages
+                    .pin()
                     .insert(name.clone(), reason.into());
                 return Ok(None);
             }
@@ -1284,16 +1285,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             VersionsResponse::Found(ref version_maps) => version_maps.as_slice(),
             VersionsResponse::NoIndex => {
                 self.unavailable_packages
+                    .pin()
                     .insert(name.clone(), UnavailablePackage::NoIndex);
                 &[]
             }
             VersionsResponse::Offline => {
                 self.unavailable_packages
+                    .pin()
                     .insert(name.clone(), UnavailablePackage::Offline);
                 &[]
             }
             VersionsResponse::NotFound => {
                 self.unavailable_packages
+                    .pin()
                     .insert(name.clone(), UnavailablePackage::NotFound);
                 &[]
             }
@@ -1834,7 +1838,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // If the package does not exist in the registry or locally, we cannot fetch its dependencies
                 if self.dependency_mode.is_transitive()
-                    && self.unavailable_packages.get(name).is_some()
+                    && self.unavailable_packages.pin().contains_key(name)
                     && self.installed_packages.get_packages(name).is_empty()
                 {
                     debug_assert!(
@@ -1862,10 +1866,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         } else {
                             warn!("{name} {message}");
                         }
-                        self.incomplete_packages
-                            .entry(name.clone())
-                            .or_default()
-                            .insert(version.clone(), reason.clone());
+                        let incomplete_packages = self.incomplete_packages.pin();
+                        let versions =
+                            incomplete_packages.get_or_insert_with(name.clone(), HashMap::default);
+                        versions.pin().insert(version.clone(), reason.clone());
                         return Ok(Dependencies::Unavailable(unavailable_version));
                     }
                     MetadataResponse::Error(dist, err) => {
@@ -2523,18 +2527,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     // Short-circuit if we did not find any versions for the package
                     VersionsResponse::NoIndex => {
                         self.unavailable_packages
+                            .pin()
                             .insert(package_name.clone(), UnavailablePackage::NoIndex);
 
                         return Ok(None);
                     }
                     VersionsResponse::Offline => {
                         self.unavailable_packages
+                            .pin()
                             .insert(package_name.clone(), UnavailablePackage::Offline);
 
                         return Ok(None);
                     }
                     VersionsResponse::NotFound => {
                         self.unavailable_packages
+                            .pin()
                             .insert(package_name.clone(), UnavailablePackage::NotFound);
 
                         return Ok(None);
@@ -2702,23 +2709,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let mut unavailable_packages = FxHashMap::default();
         for package in derivation_tree_packages(&err) {
             if let PubGrubPackageInner::Package { name, .. } = &**package {
-                if let Some(reason) = self.unavailable_packages.get(name) {
+                if let Some(reason) = self.unavailable_packages.pin().get(name) {
                     unavailable_packages.insert(name.clone(), reason.clone());
                 }
             }
         }
 
         let mut incomplete_packages = FxHashMap::default();
+        let incomplete_packages_cache = self.incomplete_packages.pin();
         for package in derivation_tree_packages(&err) {
-            if let PubGrubPackageInner::Package { name, .. } = &**package {
-                if let Some(versions) = self.incomplete_packages.get(name) {
-                    for entry in versions.iter() {
-                        let (version, reason) = entry.pair();
-                        incomplete_packages
-                            .entry(name.clone())
-                            .or_insert_with(BTreeMap::default)
-                            .insert(version.clone(), reason.clone());
-                    }
+            if let PubGrubPackageInner::Package { name, .. } = &**package
+                && let Some(versions) = incomplete_packages_cache.get(name)
+            {
+                for (version, reason) in versions.pin().iter() {
+                    incomplete_packages
+                        .entry(name.clone())
+                        .or_insert_with(BTreeMap::default)
+                        .insert(version.clone(), reason.clone());
                 }
             }
         }

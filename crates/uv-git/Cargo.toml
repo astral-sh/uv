@@ -27,7 +27,7 @@ uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }
 cargo-util = { workspace = true }
-dashmap = { workspace = true }
+papaya = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 owo-colors = { workspace = true }
 reqwest = { workspace = true }
