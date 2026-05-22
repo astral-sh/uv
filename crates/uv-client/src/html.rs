@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{borrow::Cow, str::FromStr};
 
 use jiff::Timestamp;
 use tl::{HTMLTag, Node, Parser};
@@ -14,6 +14,22 @@ use uv_small_str::SmallString;
 /// Return `true` if this tag has the given HTML element name.
 fn is_tag(tag: &HTMLTag<'_>, name: &[u8]) -> bool {
     tag.name().as_bytes().eq_ignore_ascii_case(name)
+}
+
+/// Return the value of the attribute with the given case-insensitive HTML attribute name.
+fn attribute<'a>(tag: &'a HTMLTag<'_>, name: &'a str) -> Option<Cow<'a, str>> {
+    tag.attributes()
+        .get(name)
+        .flatten()
+        .map(tl::Bytes::as_utf8_str)
+        .or_else(|| {
+            tag.attributes().iter().find_map(|(attribute_name, value)| {
+                attribute_name
+                    .eq_ignore_ascii_case(name)
+                    .then_some(value)
+                    .flatten()
+            })
+        })
 }
 
 /// A parsed structure from PyPI "HTML" index format for a single package.
@@ -176,12 +192,7 @@ impl SimpleDetailHTML {
     /// Returns `None` if the `<a>` doesn't have an `href` attribute.
     fn parse_anchor(link: &HTMLTag) -> Result<Option<PypiFile>, Error> {
         // Extract the href.
-        let Some(href) = link
-            .attributes()
-            .iter()
-            .find_map(|(name, value)| name.eq_ignore_ascii_case("href").then_some(value).flatten())
-            .filter(|href| !href.is_empty())
-        else {
+        let Some(href) = attribute(link, "href").filter(|href| !href.is_empty()) else {
             return Ok(None);
         };
 
@@ -238,8 +249,7 @@ impl SimpleDetailHTML {
 
         // Extract the `requires-python` value, which should be set on the
         // `data-requires-python` attribute.
-        let requires_python = if let Some(requires_python) =
-            link.attributes().get("data-requires-python").flatten()
+        let requires_python = if let Some(requires_python) = attribute(link, "data-requires-python")
         {
             let requires_python = std::str::from_utf8(requires_python.as_bytes())?;
             let requires_python = html_escape::decode_html_entities(requires_python);
@@ -251,11 +261,8 @@ impl SimpleDetailHTML {
         // Extract the `core-metadata` field, which is either set on:
         // - `data-core-metadata`, per PEP 714.
         // - `data-dist-info-metadata`, per PEP 658.
-        let core_metadata = if let Some(dist_info_metadata) = link
-            .attributes()
-            .get("data-core-metadata")
-            .flatten()
-            .or_else(|| link.attributes().get("data-dist-info-metadata").flatten())
+        let core_metadata = if let Some(dist_info_metadata) = attribute(link, "data-core-metadata")
+            .or_else(|| attribute(link, "data-dist-info-metadata"))
         {
             let dist_info_metadata = std::str::from_utf8(dist_info_metadata.as_bytes())?;
             let dist_info_metadata = html_escape::decode_html_entities(dist_info_metadata);
@@ -276,7 +283,7 @@ impl SimpleDetailHTML {
 
         // Extract the `yanked` field, which should be set on the `data-yanked`
         // attribute.
-        let yanked = if let Some(yanked) = link.attributes().get("data-yanked").flatten() {
+        let yanked = if let Some(yanked) = attribute(link, "data-yanked") {
             let yanked = std::str::from_utf8(yanked.as_bytes())?;
             let yanked = html_escape::decode_html_entities(yanked);
             Some(Box::new(Yanked::Reason(yanked.into())))
@@ -1669,7 +1676,8 @@ mod tests {
     <BASE href="https://index.python.org/">
 </HEAD>
 <BODY>
-    <A HREF="/files/fakeproject-1.2.3.tar.gz">fakeproject-1.2.3.tar.gz</A>
+    <A HREF="/files/fakeproject-1.2.3.tar.gz" DATA-REQUIRES-PYTHON="&gt;=3.12" DATA-CORE-METADATA="true" DATA-YANKED="broken release">fakeproject-1.2.3.tar.gz</A>
+    <A HREF="/files/fakeproject-1.2.4.tar.gz" DATA-DIST-INFO-METADATA="false">fakeproject-1.2.4.tar.gz</A>
 </BODY>
 </HTML>
         "#;
@@ -1683,11 +1691,7 @@ mod tests {
             (
                 &result.project_status,
                 result.base.as_str(),
-                result
-                    .files
-                    .iter()
-                    .map(|file| (&*file.filename, &*file.url))
-                    .collect::<Vec<_>>(),
+                &result.files,
             ), @r#"
         (
             ProjectStatus {
@@ -1696,10 +1700,61 @@ mod tests {
             },
             "https://index.python.org/",
             [
-                (
-                    "fakeproject-1.2.3.tar.gz",
-                    "/files/fakeproject-1.2.3.tar.gz",
-                ),
+                PypiFile {
+                    core_metadata: Some(
+                        Bool(
+                            true,
+                        ),
+                    ),
+                    filename: "fakeproject-1.2.3.tar.gz",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: Some(
+                        Ok(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: GreaterThanEqual,
+                                        version: "3.12",
+                                    },
+                                ],
+                            ),
+                        ),
+                    ),
+                    size: None,
+                    upload_time: None,
+                    url: "/files/fakeproject-1.2.3.tar.gz",
+                    yanked: Some(
+                        Reason(
+                            "broken release",
+                        ),
+                    ),
+                },
+                PypiFile {
+                    core_metadata: Some(
+                        Bool(
+                            false,
+                        ),
+                    ),
+                    filename: "fakeproject-1.2.4.tar.gz",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/files/fakeproject-1.2.4.tar.gz",
+                    yanked: None,
+                },
             ],
         )
         "#);
