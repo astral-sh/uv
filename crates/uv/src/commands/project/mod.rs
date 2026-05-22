@@ -717,7 +717,7 @@ impl ScriptInterpreter {
                         .path
                         .file_stem()
                         .and_then(|name| name.to_str())
-                        .and_then(|name| cache_name(name, None))
+                        .and_then(|name| cache_name(name, Some(100)))
                     {
                         format!("{file_name}-{digest}")
                     } else {
