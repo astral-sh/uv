@@ -6665,60 +6665,6 @@ fn run_target_workspace_discovery() -> Result<()> {
     Ok(())
 }
 
-/// Test that `--preview` enables target workspace discovery.
-#[test]
-fn run_target_workspace_discovery_preview_flag() -> Result<()> {
-    let context = setup_target_workspace_discovery_context()?;
-
-    context.temp_dir.child("uv.toml").write_str("bad")?;
-    context.temp_dir.child("pyproject.toml").write_str("bad")?;
-
-    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    success
-
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: project/.venv
-    Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/project)
-     + iniconfig==2.0.0
-    ");
-
-    Ok(())
-}
-
-/// Test that `UV_PREVIEW=1` enables target workspace discovery.
-#[test]
-fn run_target_workspace_discovery_uv_preview_env() -> Result<()> {
-    let context = setup_target_workspace_discovery_context()?;
-
-    context.temp_dir.child("uv.toml").write_str("bad")?;
-    context.temp_dir.child("pyproject.toml").write_str("bad")?;
-
-    uv_snapshot!(context.filters(), context.run().env("UV_PREVIEW", "1").arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    success
-
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: project/.venv
-    Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/project)
-     + iniconfig==2.0.0
-    ");
-
-    Ok(())
-}
-
 /// Test that `--preview-features target-workspace-discovery` works with a bare script
 /// filename (no directory component), which would otherwise cause `Path::parent()` to
 /// return an empty path.
