@@ -12,7 +12,7 @@ use uv_distribution_filename::{DistExtension, SourceDistExtension};
 use uv_fs::Simplified;
 use uv_git_types::GitReference;
 use uv_normalize::PackageName;
-use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
+use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl};
 use uv_redacted::DisplaySafeUrl;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
@@ -96,10 +96,20 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     .expect("Internal Git URLs must have supported schemes");
 
                     // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-                    let url = DisplaySafeUrl::from(ParsedGitUrl {
-                        url: git_url.clone(),
-                        subdirectory: git.subdirectory.clone(),
-                    });
+                    let url = if let Some(install_path) = git.path.as_ref() {
+                        let ext =
+                            DistExtension::from_path(install_path).map_err(|_| std::fmt::Error)?;
+                        DisplaySafeUrl::from(ParsedGitPathUrl {
+                            url: git_url.clone(),
+                            install_path: install_path.clone(),
+                            ext,
+                        })
+                    } else {
+                        DisplaySafeUrl::from(ParsedGitDirectoryUrl {
+                            url: git_url.clone(),
+                            subdirectory: git.subdirectory.clone(),
+                        })
+                    };
 
                     write!(f, "{} @ {}", package.id.name, url)?;
                 }

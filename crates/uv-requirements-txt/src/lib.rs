@@ -46,7 +46,7 @@ use unscanny::{Pattern, Scanner};
 use url::Url;
 
 #[cfg(feature = "http")]
-use uv_client::BaseClient;
+use uv_client::{BaseClient, ClientBuildError};
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_distribution_types::{
@@ -275,6 +275,15 @@ impl RequirementsTxt {
 
             #[cfg(feature = "http")]
             {
+                let url = requirements_txt.display().to_string();
+                let url = DisplaySafeUrl::parse(&url).map_err(|err| RequirementsTxtFileError {
+                    file: requirements_txt.to_path_buf(),
+                    error: RequirementsTxtParserError::InvalidUrl(
+                        requirements_txt.display().to_string(),
+                        err,
+                    ),
+                })?;
+
                 // Avoid constructing a client if network is disabled already
                 if client_builder.is_offline() {
                     return Err(RequirementsTxtFileError {
@@ -282,14 +291,17 @@ impl RequirementsTxt {
                         error: RequirementsTxtParserError::Io(io::Error::new(
                             io::ErrorKind::InvalidInput,
                             format!(
-                                "Network connectivity is disabled, but a remote requirements file was requested: {}",
-                                requirements_txt.display()
+                                "Network connectivity is disabled, but a remote requirements file was requested: {url}"
                             ),
                         )),
                     });
                 }
-
-                let client = client_builder.build();
+                let client = client_builder
+                    .build()
+                    .map_err(|err| RequirementsTxtFileError {
+                        file: requirements_txt.to_path_buf(),
+                        error: RequirementsTxtParserError::ClientBuild(url.clone(), Box::new(err)),
+                    })?;
                 let content = read_url_to_string(&requirements_txt, client)
                     .await
                     .map_err(|err| RequirementsTxtFileError {
@@ -571,7 +583,7 @@ impl RequirementsTxt {
     }
 
     /// Merge the data from a nested `requirements` file (`other`) into this one.
-    pub fn update_from(&mut self, other: Self) {
+    fn update_from(&mut self, other: Self) {
         let Self {
             requirements,
             constraints,
@@ -1195,6 +1207,8 @@ pub enum RequirementsTxtParserError {
     #[cfg(feature = "http")]
     Reqwest(DisplaySafeUrl, reqwest_middleware::Error),
     #[cfg(feature = "http")]
+    ClientBuild(DisplaySafeUrl, Box<ClientBuildError>),
+    #[cfg(feature = "http")]
     InvalidUrl(String, DisplaySafeUrlError),
 }
 
@@ -1266,6 +1280,10 @@ impl Display for RequirementsTxtParserError {
                 write!(f, "Error while accessing remote requirements file: `{url}`")
             }
             #[cfg(feature = "http")]
+            Self::ClientBuild(url, _err) => {
+                write!(f, "Error while accessing remote requirements file: `{url}`")
+            }
+            #[cfg(feature = "http")]
             Self::InvalidUrl(url, err) => {
                 match err {
                     DisplaySafeUrlError::Url(err) => write!(f, "Not a valid URL, {err}: `{url}`"),
@@ -1303,6 +1321,8 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::NonUnicodeUrl { .. } => None,
             #[cfg(feature = "http")]
             Self::Reqwest(_, err) => err.source(),
+            #[cfg(feature = "http")]
+            Self::ClientBuild(_, err) => Some(err.as_ref()),
             #[cfg(feature = "http")]
             Self::InvalidUrl(_, err) => err.source(),
         }
@@ -1431,6 +1451,10 @@ impl Display for RequirementsTxtFileError {
             }
             #[cfg(feature = "http")]
             RequirementsTxtParserError::Reqwest(url, _err) => {
+                write!(f, "Error while accessing remote requirements file: `{url}`")
+            }
+            #[cfg(feature = "http")]
+            RequirementsTxtParserError::ClientBuild(url, _err) => {
                 write!(f, "Error while accessing remote requirements file: `{url}`")
             }
             #[cfg(feature = "http")]

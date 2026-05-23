@@ -1,6 +1,6 @@
 [package]
 name = "uv-bin-install"
-version = "0.0.35"
+version = "0.0.49"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -23,6 +23,7 @@ uv-extract = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-platform = { workspace = true }
 uv-redacted = { workspace = true }
+uv-static = { workspace = true }
 
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }

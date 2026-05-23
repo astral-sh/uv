@@ -1,4 +1,5 @@
 use std::env;
+use std::fmt::{Display, Formatter};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
@@ -6,11 +7,188 @@ use itertools::Itertools;
 use reqwest::{Certificate, Identity};
 use rustls_native_certs::{CertificateResult, load_certs_from_paths};
 use rustls_pki_types::CertificateDer;
-use tracing::debug;
+use tracing::{debug, warn};
+use webpki::{Error as WebPkiError, anchor_from_trusted_cert};
+use x509_parser::prelude::{FromDer, X509Certificate};
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
+
+#[derive(Debug, Clone)]
+pub(crate) enum CertificateSource {
+    SslCertFile(PathBuf),
+    SslCertDir(PathBuf),
+}
+
+impl CertificateSource {
+    const fn env_var(&self) -> &'static str {
+        match self {
+            Self::SslCertFile(_) => EnvVars::SSL_CERT_FILE,
+            Self::SslCertDir(_) => EnvVars::SSL_CERT_DIR,
+        }
+    }
+
+    fn path(&self) -> &Path {
+        match self {
+            Self::SslCertFile(path) | Self::SslCertDir(path) => path,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct DiagnosticCertificate(CertificateDer<'static>);
+
+impl DiagnosticCertificate {
+    fn parse(&self) -> Option<X509Certificate<'_>> {
+        match X509Certificate::from_der(self.0.as_ref()) {
+            Ok((_, certificate)) => Some(certificate),
+            Err(err) => {
+                debug!("Failed to parse certificate for improved validation message: {err:?}");
+                None
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct InvalidCertificateWarning {
+    source: CertificateSource,
+    certificate: DiagnosticCertificate,
+    reason: InvalidCertificateReason,
+}
+
+#[derive(Debug)]
+pub(crate) enum InvalidCertificateReason {
+    UnsupportedCriticalExtension,
+    BadDer,
+    BadDerTime,
+    EmptyEkuExtension,
+    ExtensionValueInvalid,
+    MalformedExtensions,
+    TrailingData,
+    UnsupportedCertVersion,
+    Other(WebPkiError),
+}
+
+impl InvalidCertificateReason {
+    fn from_webpki_error(error: WebPkiError) -> Self {
+        match error {
+            WebPkiError::UnsupportedCriticalExtension => Self::UnsupportedCriticalExtension,
+            WebPkiError::BadDer => Self::BadDer,
+            WebPkiError::BadDerTime => Self::BadDerTime,
+            WebPkiError::EmptyEkuExtension => Self::EmptyEkuExtension,
+            WebPkiError::ExtensionValueInvalid => Self::ExtensionValueInvalid,
+            WebPkiError::MalformedExtensions => Self::MalformedExtensions,
+            WebPkiError::TrailingData(_) => Self::TrailingData,
+            WebPkiError::UnsupportedCertVersion => Self::UnsupportedCertVersion,
+            error => Self::Other(error),
+        }
+    }
+
+    fn message(&self) -> Option<&'static str> {
+        match self {
+            Self::UnsupportedCriticalExtension => None,
+            Self::BadDer => Some("malformed DER certificate"),
+            Self::BadDerTime => Some("malformed certificate time"),
+            Self::EmptyEkuExtension => Some("empty extended key usage extension"),
+            Self::ExtensionValueInvalid => Some("invalid certificate extension value"),
+            Self::MalformedExtensions => Some("malformed certificate extensions"),
+            Self::TrailingData => Some("trailing data in DER certificate"),
+            Self::UnsupportedCertVersion => Some("unsupported certificate version"),
+            Self::Other(_) => None,
+        }
+    }
+}
+
+impl InvalidCertificateWarning {
+    fn new(source: CertificateSource, cert: &CertificateDer<'_>, error: WebPkiError) -> Self {
+        Self {
+            source,
+            certificate: DiagnosticCertificate(cert.clone().into_owned()),
+            reason: InvalidCertificateReason::from_webpki_error(error),
+        }
+    }
+}
+
+fn format_invalid_certificate_detail(
+    reason: &InvalidCertificateReason,
+    certificate: Option<&X509Certificate<'_>>,
+) -> Option<String> {
+    match reason {
+        InvalidCertificateReason::UnsupportedCertVersion => certificate.map(|certificate| {
+            format!(
+                "unsupported certificate version `{}`",
+                certificate.version()
+            )
+        }),
+        InvalidCertificateReason::ExtensionValueInvalid => None,
+        _ => None,
+    }
+}
+
+impl Display for InvalidCertificateWarning {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "certificate in `{}` (from `{}`) ",
+            self.source.path().simplified_display(),
+            self.source.env_var()
+        )?;
+        match &self.reason {
+            InvalidCertificateReason::UnsupportedCriticalExtension => {
+                write!(f, "uses an unsupported critical extension")?;
+            }
+            _ => {
+                write!(f, "could not be used as a trust anchor")?;
+            }
+        }
+
+        let parsed_certificate = self.certificate.parse();
+        if let Some(certificate) = parsed_certificate.as_ref() {
+            let subject = certificate.subject();
+            if subject.iter_attributes().next().is_some() {
+                // Avoid rendering empty subject DNs.
+                write!(f, " on certificate `{subject}`")?;
+            }
+            if let InvalidCertificateReason::UnsupportedCriticalExtension = &self.reason {
+                let critical_extensions = certificate
+                    .iter_extensions()
+                    .filter(|extension| extension.critical)
+                    .map(|extension| extension.oid.to_owned())
+                    .collect::<Vec<_>>();
+                if let [critical_extension] = critical_extensions.as_slice() {
+                    write!(f, "; critical extension: `{critical_extension}`")?;
+                } else if !critical_extensions.is_empty() {
+                    write!(
+                        f,
+                        "; critical extensions: {}",
+                        critical_extensions
+                            .iter()
+                            .map(|oid| format!("`{oid}`"))
+                            .join(", ")
+                    )?;
+                }
+            }
+        }
+
+        let detailed_reason =
+            format_invalid_certificate_detail(&self.reason, parsed_certificate.as_ref())
+                .or_else(|| self.reason.message().map(str::to_owned))
+                .or_else(|| {
+                    if let InvalidCertificateReason::Other(error) = &self.reason {
+                        Some(format!("{error:?}"))
+                    } else {
+                        None
+                    }
+                });
+        if let Some(detailed_reason) = detailed_reason {
+            write!(f, ": {detailed_reason}")?;
+        }
+
+        Ok(())
+    }
+}
 
 /// A collection of TLS certificates in DER form.
 #[derive(Debug, Clone, Default)]
@@ -77,10 +255,11 @@ impl Certificates {
                         file.simplified_display().cyan()
                     );
                 }
-                let certs = Self::from(result);
+                let certs = Self::from(result)
+                    .filter_invalid(&CertificateSource::SslCertFile(file.clone()));
                 if certs.0.is_empty() {
                     warn_user_once!(
-                        "Ignoring `SSL_CERT_FILE`. No certificates found in: {}.",
+                        "Ignoring `SSL_CERT_FILE`. No valid certificates found in: {}.",
                         file.simplified_display().cyan()
                     );
                     return None;
@@ -168,17 +347,22 @@ impl Certificates {
                     dir.simplified_display().cyan()
                 );
             }
-            certs.merge(Self::from(result));
+            let dir_certs =
+                Self::from(result).filter_invalid(&CertificateSource::SslCertDir(dir.clone()));
+            if !dir_certs.0.is_empty() {
+                certs.merge(dir_certs);
+            }
         }
 
         if certs.0.is_empty() {
-            warn_user_once!(
-                "Ignoring `SSL_CERT_DIR`. No certificates found in: {}.",
+            // Unlike `SSL_CERT_FILE`, it's plausible for this to be intentionally set to an
+            // empty directory that a user _could_ put certificates in.
+            warn!(
+                "Ignoring `SSL_CERT_DIR`. No valid certificates found in: {}.",
                 existing
                     .iter()
                     .map(Simplified::simplified_display)
                     .join(", ")
-                    .cyan()
             );
             return None;
         }
@@ -189,6 +373,19 @@ impl Certificates {
     /// Load certificates from explicit file and directory paths.
     fn from_paths(file: Option<&Path>, dir: Option<&Path>) -> CertificateResult {
         load_certs_from_paths(file, dir)
+    }
+
+    fn filter_invalid(mut self, source: &CertificateSource) -> Self {
+        self.0.retain(|cert| {
+            if let Err(error) = anchor_from_trusted_cert(cert) {
+                let warning = InvalidCertificateWarning::new((*source).clone(), cert, error);
+                warn!("Ignoring invalid certificate: {warning}");
+                return false;
+            }
+
+            true
+        });
+        self
     }
 
     /// Remove duplicate certificates, sorting by DER bytes.

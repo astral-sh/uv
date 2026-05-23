@@ -22,11 +22,28 @@ use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRev
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct IndexEntry<'index> {
     /// The cached distribution.
-    pub dist: CachedRegistryDist,
+    pub(crate) dist: CachedRegistryDist,
     /// Whether the wheel was built from source (true), or downloaded from the registry directly (false).
-    pub built: bool,
+    pub(crate) built: bool,
     /// The index from which the wheel was downloaded.
-    pub index: &'index Index,
+    pub(crate) index: &'index Index,
+}
+
+impl<'index> IndexEntry<'index> {
+    /// Return the cached distribution.
+    pub fn dist(&self) -> &CachedRegistryDist {
+        &self.dist
+    }
+
+    /// Return whether the wheel was built from source.
+    pub fn is_built(&self) -> bool {
+        self.built
+    }
+
+    /// Return the index from which the wheel was downloaded.
+    pub fn index(&self) -> &'index Index {
+        self.index
+    }
 }
 
 /// A local index of distributions that originate from a registry, like `PyPI`.

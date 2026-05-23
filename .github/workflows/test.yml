@@ -43,17 +43,17 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.2"
+          version: "0.11.14"
 
       - name: "Install required Python versions"
         run: uv python install
 
       - name: "Install secret service"
         run: |
-          sudo apt update -y
-          sudo apt install -y gnome-keyring
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
+          sudo apt install -y --update gnome-keyring
 
       - name: "Start gnome-keyring"
         # run gnome-keyring with 'foobar' as password for the login keyring
@@ -63,7 +63,7 @@ jobs:
 
       - name: "Create btrfs filesystem"
         run: |
-          sudo apt-get install -y btrfs-progs
+          sudo apt install -y --update btrfs-progs
           truncate -s 1G /tmp/btrfs.img
           mkfs.btrfs /tmp/btrfs.img
           sudo mkdir /btrfs
@@ -85,7 +85,7 @@ jobs:
           sudo chown "$(id -u):$(id -g)" /minix
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@06203676c62f0d3c765be3f2fcfbebbcb02d09f5 # v2.69.6
+        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
         with:
           tool: cargo-nextest
 
@@ -110,7 +110,7 @@ jobs:
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pending-snapshots-linux
           path: pending-snapshots/
@@ -118,11 +118,20 @@ jobs:
           include-hidden-files: true
           retention-days: 14
 
+      - name: "Upload JUnit results"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: junit-results-linux
+          path: target/nextest/ci*/junit.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
   cargo-test-macos:
     timeout-minutes: 20
     # Only run macOS tests on main without opt-in
     if: ${{ inputs.test-macos == 'true' }}
-    runs-on: depot-macos-14
+    runs-on: depot-macos-15
     name: "cargo test on macos"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -142,15 +151,15 @@ jobs:
           hdiutil attach /tmp/noreflink.dmg
           echo "HFS_MOUNT=/Volumes/NoReflink" >> "$GITHUB_ENV"
 
-      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.2"
+          version: "0.11.14"
 
       - name: "Install required Python versions"
         run: uv python install
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@06203676c62f0d3c765be3f2fcfbebbcb02d09f5 # v2.69.6
+        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
         with:
           tool: cargo-nextest
 
@@ -177,12 +186,21 @@ jobs:
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pending-snapshots-macos
           path: pending-snapshots/
           if-no-files-found: ignore
           include-hidden-files: true
+          retention-days: 14
+
+      - name: "Upload JUnit results"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: junit-results-macos
+          path: target/nextest/ci*/junit.xml
+          if-no-files-found: ignore
           retention-days: 14
 
   cargo-test-windows:
@@ -206,9 +224,9 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
-      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.2"
+          version: "0.11.14"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -227,8 +245,13 @@ jobs:
       - name: "Create NTFS test directory (low hardlink limit)"
         run: New-Item -Path "C:\uv" -ItemType Directory -Force
 
+      - name: "Create SMB test share (alternative filesystem)"
+        run: |
+          New-Item -Path "C:\uv-smb" -ItemType Directory -Force
+          New-SmbShare -Name "uv-alt-fs" -Path "C:\uv-smb" -FullAccess "Everyone"
+
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@06203676c62f0d3c765be3f2fcfbebbcb02d09f5 # v2.69.6
+        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
         with:
           tool: cargo-nextest
 
@@ -241,6 +264,8 @@ jobs:
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy
           RUST_BACKTRACE: 1
+          UV_INTERNAL__TEST_ALT_FS: "\\\\localhost\\uv-alt-fs"
+          UV_INTERNAL__TEST_SMB_FS: "\\\\localhost\\uv-alt-fs"
           UV_INTERNAL__TEST_LOWLINKS_FS: "C:\\uv"
           # Write pending snapshots to a separate directory for artifact upload
           INSTA_UPDATE: new
@@ -250,17 +275,26 @@ jobs:
           cargo nextest run \
             --cargo-profile fast-build \
             --no-default-features \
-            --features test-python,test-pypi,test-python-managed,native-auth,windows-native \
+            --features test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native \
             --workspace \
             --profile ci-windows \
             --partition hash:${{ matrix.partition }}/3
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pending-snapshots-windows-${{ matrix.partition }}
           path: pending-snapshots/
           if-no-files-found: ignore
           include-hidden-files: true
+          retention-days: 14
+
+      - name: "Upload JUnit results"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: junit-results-windows-${{ matrix.partition }}
+          path: ${{ env.UV_WORKSPACE }}/target/nextest/ci*/junit.xml
+          if-no-files-found: ignore
           retention-days: 14

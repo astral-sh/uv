@@ -82,10 +82,11 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
     pub async fn resolve(
         self,
         env: &ResolverEnvironment,
-    ) -> Result<Vec<RequestedRequirements>, Error> {
+    ) -> Result<(Vec<RequestedRequirements>, HashStrategy), Error> {
         let mut results = Vec::new();
         let mut futures = FuturesUnordered::new();
         let mut seen = FxHashSet::default();
+        let mut hasher = self.hasher.clone();
 
         // Queue up the initial requirements.
         let mut queue: VecDeque<_> = self
@@ -99,13 +100,14 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             while let Some(requirement) = queue.pop_front() {
                 if !matches!(requirement.source, RequirementSource::Registry { .. }) {
                     if seen.insert(requirement.clone()) {
-                        futures.push(self.lookahead(requirement));
+                        futures.push(self.lookahead(requirement, hasher.clone()));
                     }
                 }
             }
 
             while let Some(result) = futures.next().await {
                 if let Some(lookahead) = result? {
+                    hasher = hasher.augment_with_requirements(lookahead.requirements().iter())?;
                     for requirement in self
                         .constraints
                         .apply(self.overrides.apply(lookahead.requirements()))
@@ -121,13 +123,14 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             }
         }
 
-        Ok(results)
+        Ok((results, hasher))
     }
 
     /// Infer the package name for a given "unnamed" requirement.
     async fn lookahead(
         &self,
         requirement: Requirement,
+        hasher: HashStrategy,
     ) -> Result<Option<RequestedRequirements>, Error> {
         trace!("Performing lookahead for {requirement}");
 
@@ -147,11 +150,16 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = dist.distribution_id();
-            if self.index.distributions().register(id.clone()) {
+            if let Some(response) = self.index.distributions().register_or_wait(&id).await {
+                let MetadataResponse::Found(archive) = &*response else {
+                    panic!("Failed to find metadata for: {requirement}");
+                };
+                archive.metadata.clone()
+            } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let archive = self
                     .database
-                    .get_or_build_wheel_metadata(&dist, self.hasher.get(&dist))
+                    .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
                     .await
                     .map_err(|err| Error::from_dist(dist, err))?;
 
@@ -163,17 +171,6 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .done(id, Arc::new(MetadataResponse::Found(archive)));
 
                 metadata
-            } else {
-                let response = self
-                    .index
-                    .distributions()
-                    .wait(&id)
-                    .await
-                    .expect("missing value for registered task");
-                let MetadataResponse::Found(archive) = &*response else {
-                    panic!("Failed to find metadata for: {requirement}");
-                };
-                archive.metadata.clone()
             }
         };
 

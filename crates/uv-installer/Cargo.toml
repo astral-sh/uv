@@ -1,6 +1,6 @@
 [package]
 name = "uv-installer"
-version = "0.0.35"
+version = "0.0.49"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -17,6 +17,7 @@ workspace = true
 
 [dependencies]
 uv-cache = { workspace = true }
+uv-errors = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-configuration = { workspace = true }

@@ -70,7 +70,9 @@ fn setup(manifest: Manifest, universal: bool) -> impl Fn() {
     let interpreter = PythonEnvironment::from_root("../../.venv", &cache)
         .unwrap()
         .into_interpreter();
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache.clone()).build();
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache.clone())
+        .build()
+        .expect("failed to build registry client");
 
     // Prime the cache: First run for performance the network operation, the second run primes
     // reading from the cache from the first run. If they are already primed, we only lose ~1s for
@@ -92,7 +94,8 @@ fn setup(manifest: Manifest, universal: bool) -> impl Fn() {
         BaseClientBuilder::default().connectivity(Connectivity::Offline),
         cache.clone(),
     )
-    .build();
+    .build()
+    .expect("failed to build registry client");
 
     move || {
         runtime
@@ -124,7 +127,7 @@ mod resolver {
     use uv_install_wheel::LinkMode;
     use uv_pep440::Version;
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
-    use uv_platform_tags::{Arch, Os, Platform, Tags};
+    use uv_platform_tags::{Arch, Os, Platform, Tags, TagsOptions};
     use uv_preview::Preview;
     use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
     use uv_python::Interpreter;
@@ -132,7 +135,9 @@ mod resolver {
         ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement,
         Resolver, ResolverEnvironment, ResolverOutput,
     };
-    use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
+    use uv_types::{
+        BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
+    };
     use uv_workspace::WorkspaceCache;
 
     static MARKERS: LazyLock<MarkerEnvironment> = LazyLock::new(|| {
@@ -160,7 +165,14 @@ mod resolver {
     );
 
     static TAGS: LazyLock<Tags> = LazyLock::new(|| {
-        Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false, false, false).unwrap()
+        Tags::from_env(
+            &PLATFORM,
+            (3, 11),
+            "cpython",
+            (3, 11),
+            TagsOptions::default(),
+        )
+        .unwrap()
     });
 
     pub(crate) async fn resolve(
@@ -228,6 +240,7 @@ mod resolver {
             &hashes,
             exclude_newer,
             sources,
+            SourceTreeEditablePolicy::Project,
             workspace_cache,
             concurrency.clone(),
             Preview::default(),

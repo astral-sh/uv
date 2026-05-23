@@ -42,7 +42,7 @@ pub(crate) async fn login(
 
         let client = client_builder
             .auth_integration(AuthIntegration::NoAuthMiddleware)
-            .build();
+            .build()?;
 
         let access_token = pyx_login_with_browser(&pyx_store, &client, &printer).await?;
         let jwt = PyxJwt::decode(&access_token)?;

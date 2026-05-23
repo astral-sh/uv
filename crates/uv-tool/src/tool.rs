@@ -9,13 +9,16 @@ use uv_fs::{PortablePath, Simplified};
 use uv_normalize::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonRequest;
-use uv_settings::ToolOptions;
+use uv_settings::{ToolOptions, ToolOptionsWire};
 
 /// A tool entry.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "ToolWire", into = "ToolWire")]
 pub struct Tool {
     /// The requirements requested by the user during installation.
+    ///
+    /// The first requirement is the tool target itself; any remaining requirements come from
+    /// `--with`.
     requirements: Vec<Requirement>,
     /// The constraints requested by the user during installation.
     constraints: Vec<Requirement>,
@@ -49,7 +52,7 @@ struct ToolWire {
     python: Option<PythonRequest>,
     entrypoints: Vec<ToolEntrypoint>,
     #[serde(default)]
-    options: ToolOptions,
+    options: ToolOptionsWire,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -76,7 +79,7 @@ impl From<Tool> for ToolWire {
             build_constraint_dependencies: tool.build_constraints,
             python: tool.python,
             entrypoints: tool.entrypoints,
-            options: tool.options,
+            options: tool.options.into(),
         }
     }
 }
@@ -100,7 +103,7 @@ impl TryFrom<ToolWire> for Tool {
             build_constraints: tool.build_constraint_dependencies,
             python: tool.python,
             entrypoints: tool.entrypoints,
-            options: tool.options,
+            options: tool.options.into(),
         })
     }
 }
@@ -333,8 +336,10 @@ impl Tool {
         });
 
         if self.options != ToolOptions::default() {
-            let serialized =
-                serde::Serialize::serialize(&self.options, toml_edit::ser::ValueSerializer::new())?;
+            let serialized = serde::Serialize::serialize(
+                &ToolOptionsWire::from(self.options.clone()),
+                toml_edit::ser::ValueSerializer::new(),
+            )?;
             let Value::InlineTable(serialized) = serialized else {
                 return Err(toml_edit::ser::Error::Custom(
                     "Expected an inline table".to_string(),

@@ -235,7 +235,7 @@ impl RequirementsSpecification {
 
     /// Read the requirements and constraints from a source, using a cache for file contents.
     #[instrument(skip_all, level = tracing::Level::DEBUG, fields(source = % source))]
-    pub async fn from_source_with_cache(
+    async fn from_source_with_cache(
         source: &RequirementsSource,
         client_builder: &BaseClientBuilder<'_>,
         cache: &mut SourceCache,
@@ -658,7 +658,7 @@ impl RequirementsSpecification {
                     }
                 }
             }
-            spec.excludes.extend(source.excludes.into_iter());
+            spec.excludes.extend(source.excludes);
         }
 
         Ok(spec)
@@ -677,57 +677,6 @@ impl RequirementsSpecification {
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
         Self::from_sources(requirements, &[], &[], &[], None, client_builder).await
-    }
-
-    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`].
-    pub fn from_requirements(requirements: Vec<Requirement>) -> Self {
-        Self {
-            requirements: requirements
-                .into_iter()
-                .map(UnresolvedRequirementSpecification::from)
-                .collect(),
-            ..Self::default()
-        }
-    }
-
-    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
-    /// constraints.
-    pub fn from_constraints(requirements: Vec<Requirement>, constraints: Vec<Requirement>) -> Self {
-        Self {
-            requirements: requirements
-                .into_iter()
-                .map(UnresolvedRequirementSpecification::from)
-                .collect(),
-            constraints: constraints
-                .into_iter()
-                .map(NameRequirementSpecification::from)
-                .collect(),
-            ..Self::default()
-        }
-    }
-
-    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
-    /// constraints and overrides.
-    pub fn from_overrides(
-        requirements: Vec<Requirement>,
-        constraints: Vec<Requirement>,
-        overrides: Vec<Requirement>,
-    ) -> Self {
-        Self {
-            requirements: requirements
-                .into_iter()
-                .map(UnresolvedRequirementSpecification::from)
-                .collect(),
-            constraints: constraints
-                .into_iter()
-                .map(NameRequirementSpecification::from)
-                .collect(),
-            overrides: overrides
-                .into_iter()
-                .map(UnresolvedRequirementSpecification::from)
-                .collect(),
-            ..Self::default()
-        }
     }
 
     /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
@@ -782,7 +731,7 @@ async fn read_file(path: &Path, client_builder: &BaseClientBuilder<'_>) -> Resul
         if !cfg!(unix) || matches!(path.try_exists(), Ok(false)) {
             let url = DisplaySafeUrl::parse(&path.to_string_lossy())?;
 
-            let client = client_builder.build();
+            let client = client_builder.build()?;
             let response = client
                 .for_host(&url)
                 .get(Url::from(url.clone()))

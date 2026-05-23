@@ -25,7 +25,7 @@ use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_platform::{Arch, Libc, Os};
-use uv_platform_tags::{Platform, Tags, TagsError};
+use uv_platform_tags::{Platform, Tags, TagsError, TagsOptions};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 
 use crate::implementation::LenientImplementationName;
@@ -49,11 +49,9 @@ pub struct Interpreter {
     virtualenv: Scheme,
     manylinux_compatible: bool,
     sys_prefix: PathBuf,
-    sys_base_exec_prefix: PathBuf,
     sys_base_prefix: PathBuf,
     sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
-    sys_path: Vec<PathBuf>,
     site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     standalone: bool,
@@ -84,14 +82,12 @@ impl Interpreter {
             virtualenv: info.virtualenv,
             manylinux_compatible: info.manylinux_compatible,
             sys_prefix: info.sys_prefix,
-            sys_base_exec_prefix: info.sys_base_exec_prefix,
             pointer_size: info.pointer_size,
             gil_disabled: info.gil_disabled,
             debug_enabled: info.debug_enabled,
             sys_base_prefix: info.sys_base_prefix,
             sys_base_executable: info.sys_base_executable,
             sys_executable: info.sys_executable,
-            sys_path: info.sys_path,
             site_packages: info.site_packages,
             stdlib: info.stdlib,
             standalone: info.standalone,
@@ -253,9 +249,12 @@ impl Interpreter {
                 self.python_tuple(),
                 self.implementation_name(),
                 self.implementation_tuple(),
-                self.manylinux_compatible,
-                self.gil_disabled,
-                false,
+                TagsOptions {
+                    manylinux_compatible: self.manylinux_compatible,
+                    gil_disabled: self.gil_disabled,
+                    debug_enabled: self.debug_enabled,
+                    is_cross: false,
+                },
             )?;
             self.tags.set(tags).expect("tags should not be set");
         }
@@ -271,12 +270,12 @@ impl Interpreter {
     }
 
     /// Returns `true` if the environment is a `--target` environment.
-    pub fn is_target(&self) -> bool {
+    fn is_target(&self) -> bool {
         self.target.is_some()
     }
 
     /// Returns `true` if the environment is a `--prefix` environment.
-    pub fn is_prefix(&self) -> bool {
+    fn is_prefix(&self) -> bool {
         self.prefix.is_some()
     }
 
@@ -389,7 +388,7 @@ impl Interpreter {
 
     /// Returns the Python version up to the patch component.
     #[inline]
-    pub fn python_patch_version(&self) -> Version {
+    pub(crate) fn python_patch_version(&self) -> Version {
         Version::new(self.python_version().release().iter().take(3).copied())
     }
 
@@ -406,7 +405,7 @@ impl Interpreter {
     }
 
     /// Return the patch version component of this Python version.
-    pub fn python_patch(&self) -> u8 {
+    pub(crate) fn python_patch(&self) -> u8 {
         let minor = self.markers.python_full_version().version.release()[2];
         u8::try_from(minor).expect("invalid patch version")
     }
@@ -417,13 +416,13 @@ impl Interpreter {
     }
 
     /// Return the major version of the implementation (e.g., `CPython` or `PyPy`).
-    pub fn implementation_major(&self) -> u8 {
+    fn implementation_major(&self) -> u8 {
         let major = self.markers.implementation_version().version.release()[0];
         u8::try_from(major).expect("invalid major version")
     }
 
     /// Return the minor version of the implementation (e.g., `CPython` or `PyPy`).
-    pub fn implementation_minor(&self) -> u8 {
+    fn implementation_minor(&self) -> u8 {
         let minor = self.markers.implementation_version().version.release()[1];
         u8::try_from(minor).expect("invalid minor version")
     }
@@ -438,11 +437,6 @@ impl Interpreter {
         self.markers.implementation_name()
     }
 
-    /// Return the `sys.base_exec_prefix` path for this Python interpreter.
-    pub fn sys_base_exec_prefix(&self) -> &Path {
-        &self.sys_base_exec_prefix
-    }
-
     /// Return the `sys.base_prefix` path for this Python interpreter.
     pub fn sys_base_prefix(&self) -> &Path {
         &self.sys_base_prefix
@@ -455,7 +449,7 @@ impl Interpreter {
 
     /// Return the `sys._base_executable` path for this Python interpreter. Some platforms do not
     /// have this attribute, so it may be `None`.
-    pub fn sys_base_executable(&self) -> Option<&Path> {
+    pub(crate) fn sys_base_executable(&self) -> Option<&Path> {
         self.sys_base_executable.as_deref()
     }
 
@@ -467,11 +461,6 @@ impl Interpreter {
     /// Return the "real" queried executable path for this Python interpreter.
     pub fn real_executable(&self) -> &Path {
         &self.real_executable
-    }
-
-    /// Return the `sys.path` for this Python interpreter.
-    pub fn sys_path(&self) -> &[PathBuf] {
-        &self.sys_path
     }
 
     /// Return the `site.getsitepackages` for this Python interpreter.
@@ -866,6 +855,15 @@ pub enum Error {
     Encode(#[from] rmp_serde::encode::Error),
 }
 
+impl uv_errors::Hint for Error {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::BrokenLink(err) => err.hints(),
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub struct BrokenLink {
     pub path: PathBuf,
@@ -883,24 +881,27 @@ impl Display for BrokenLink {
                 f,
                 "Broken symlink at `{}`, was the underlying Python interpreter removed?",
                 self.path.user_display()
-            )?;
+            )
         } else {
             write!(
                 f,
                 "Broken Python trampoline at `{}`, was the underlying Python interpreter removed?",
                 self.path.user_display()
-            )?;
+            )
         }
+    }
+}
+
+impl uv_errors::Hint for BrokenLink {
+    fn hints(&self) -> uv_errors::Hints<'_> {
         if self.venv {
-            write!(
-                f,
-                "\n\n{}{} Consider recreating the environment (e.g., with `{}`)",
-                "hint".bold().cyan(),
-                ":".bold(),
+            uv_errors::Hints::from(format!(
+                "Consider recreating the environment (e.g., with `{}`)",
                 "uv venv".green()
-            )?;
+            ))
+        } else {
+            uv_errors::Hints::none()
         }
-        Ok(())
     }
 }
 
@@ -1120,7 +1121,7 @@ impl InterpreterInfo {
     /// Running a Python script is (relatively) expensive, and the markers won't change
     /// unless the Python executable changes, so we use the executable's last modified
     /// time as a cache key.
-    pub(crate) fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
+    fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
         let absolute = std::path::absolute(executable)?;
 
         // Provide a better error message if the link is broken or the file does not exist. Since
@@ -1155,10 +1156,10 @@ impl InterpreterInfo {
             // invalidate the cache (e.g.) on OS upgrades.
             cache_digest(&(
                 ARCH,
-                uv_platform::host::OsType::from_env()
+                uv_platform::OsType::from_env()
                     .map(|os_type| os_type.to_string())
                     .unwrap_or_default(),
-                uv_platform::host::OsRelease::from_env()
+                uv_platform::OsRelease::from_env()
                     .map(|os_release| os_release.to_string())
                     .unwrap_or_default(),
             )),

@@ -1,6 +1,6 @@
 [package]
 name = "uv-extract"
-version = "0.0.35"
+version = "0.0.49"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -26,6 +26,7 @@ astral-tokio-tar = { workspace = true }
 async-compression = { workspace = true, features = ["bzip2", "gzip", "zstd", "xz"] }
 async_zip = { workspace = true }
 blake2 = { workspace = true }
+flate2 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 md-5 = { workspace = true }
@@ -34,14 +35,11 @@ regex = { workspace = true }
 reqwest = { workspace = true }
 rustc-hash = { workspace = true }
 sha2 = { workspace = true }
-tar = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 xz2 = { workspace = true }
-zip = { workspace = true }
-zstd = { workspace = true }
 
 [features]
 default = []
@@ -49,4 +47,7 @@ default = []
 static = ["xz2/static"]
 
 [package.metadata.cargo-shear]
-ignored = ["xz2"]
+# NOTE: `async-compression` owns the actual Deflate codec, but we need to
+# explicitly declare `flate2` here so the workspace's `zlib-rs` backend stays
+# selected after removing the synchronous `zip` dependency.
+ignored = ["flate2", "xz2"]

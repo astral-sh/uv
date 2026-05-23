@@ -1,6 +1,6 @@
 [package]
 name = "uv-keyring"
-version = "0.0.35"
+version = "0.0.49"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -40,7 +40,6 @@ windows = { workspace = true, features = ["Win32_Foundation", "Win32_Security_Cr
 zeroize = { workspace = true }
 
 [dev-dependencies]
-doc-comment = "0.3"
 env_logger = "0.11.5"
 fastrand = { workspace = true }
 

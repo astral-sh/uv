@@ -1,6 +1,6 @@
 [package]
 name = "uv-fs"
-version = "0.0.35"
+version = "0.0.49"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -43,6 +43,8 @@ rustix = { workspace = true }
 [target.'cfg(windows)'.dependencies]
 backon = { workspace = true }
 junction = { workspace = true }
+uv-windows = { workspace = true }
+self-replace = { workspace = true }
 windows = { workspace = true }
 
 [features]

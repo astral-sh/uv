@@ -9,13 +9,13 @@ use reqwest::Response;
 use serde::Deserialize;
 use tracing::warn;
 
-use uv_cache::Error as CacheError;
-use uv_distribution_filename::{WheelFilename, WheelFilenameError};
-use uv_normalize::PackageName;
-use uv_redacted::DisplaySafeUrl;
-
 use crate::middleware::OfflineError;
 use crate::{FlatIndexError, html};
+use uv_cache::Error as CacheError;
+use uv_distribution_filename::{WheelFilename, WheelFilenameError};
+use uv_distribution_types::IndexUrl;
+use uv_normalize::PackageName;
+use uv_redacted::DisplaySafeUrl;
 
 /// RFC 9457 Problem Details for HTTP APIs
 ///
@@ -70,7 +70,7 @@ impl ProblemDetails {
     /// Returns `None` if the content type is not `application/problem+json`
     /// or if parsing fails. Only consumes the response body if the content
     /// type matches.
-    pub async fn try_from_response(response: Response) -> Option<Self> {
+    pub(crate) async fn try_from_response(response: Response) -> Option<Self> {
         let is_problem = response
             .headers()
             .get(reqwest::header::CONTENT_TYPE)
@@ -242,7 +242,11 @@ impl Error {
     }
 
     /// Returns `true` if the error is due to the server not supporting HTTP range requests.
-    pub fn is_http_range_requests_unsupported(&self) -> bool {
+    pub(crate) fn is_http_range_requests_unsupported(
+        &self,
+        url: &DisplaySafeUrl,
+        index: Option<&IndexUrl>,
+    ) -> bool {
         match &*self.kind {
             // The server doesn't support range requests (as reported by the `HEAD` check).
             ErrorKind::AsyncHttpRangeReader(
@@ -258,6 +262,25 @@ impl Error {
                 AsyncHttpRangeReaderError::ContentLengthMissing
                 | AsyncHttpRangeReaderError::ContentRangeMissing,
             ) => {
+                return true;
+            }
+
+            // The server advertises range request support, but doesn't implement it correctly.
+            ErrorKind::AsyncHttpRangeReader(
+                _,
+                AsyncHttpRangeReaderError::RangeMismatch { .. }
+                | AsyncHttpRangeReaderError::ResponseTooShort { .. }
+                | AsyncHttpRangeReaderError::ResponseTooLong { .. },
+            ) => {
+                let url = if let Some(index) = index {
+                    index.url()
+                } else {
+                    url
+                };
+                warn!(
+                    "Invalid range request response from server that declares HTTP range request \
+                    support, falling back to streaming: {url}"
+                );
                 return true;
             }
 
@@ -295,14 +318,31 @@ impl Error {
             // The server doesn't support range requests, but we only discovered this while
             // unzipping due to erroneous server behavior.
             ErrorKind::Zip(_, ZipError::UpstreamReadError(err)) => {
-                if let Some(inner) = err.get_ref() {
-                    if let Some(inner) = inner.downcast_ref::<AsyncHttpRangeReaderError>() {
-                        if matches!(
-                            inner,
-                            AsyncHttpRangeReaderError::HttpRangeRequestUnsupported
-                        ) {
+                if let Some(inner) = err.get_ref()
+                    && let Some(range_reader_error) =
+                        inner.downcast_ref::<AsyncHttpRangeReaderError>()
+                {
+                    match range_reader_error {
+                        AsyncHttpRangeReaderError::HttpRangeRequestUnsupported
+                        | AsyncHttpRangeReaderError::ContentLengthMissing
+                        | AsyncHttpRangeReaderError::ContentRangeMissing => {
                             return true;
                         }
+                        AsyncHttpRangeReaderError::RangeMismatch { .. }
+                        | AsyncHttpRangeReaderError::ResponseTooShort { .. }
+                        | AsyncHttpRangeReaderError::ResponseTooLong { .. } => {
+                            let url = if let Some(index) = index {
+                                index.url()
+                            } else {
+                                url
+                            };
+                            warn!(
+                                "Invalid range request response from server that declares HTTP \
+                                range request support, falling back to streaming: {url}"
+                            );
+                            return true;
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -341,6 +381,9 @@ pub enum ErrorKind {
 
     #[error(transparent)]
     Flat(#[from] FlatIndexError),
+
+    #[error(transparent)]
+    Git(#[from] uv_git::GitResolverError),
 
     #[error("Expected a file URL, but received: {0}")]
     NonFileUrl(DisplaySafeUrl),

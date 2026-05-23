@@ -367,11 +367,6 @@ pub struct GitSet {
     tags: Option<bool>,
 }
 
-pub enum FilePattern {
-    Glob(String),
-    Path(PathBuf),
-}
-
 /// A timestamp used to measure changes to a directory.
 #[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(untagged, rename_all = "kebab-case", deny_unknown_fields)]

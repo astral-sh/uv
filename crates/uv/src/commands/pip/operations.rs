@@ -37,11 +37,11 @@ use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
 use uv_python::{PythonEnvironment, PythonInstallation};
 use uv_requirements::{
     GroupsSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTree, SourceTreeResolver,
+    RequirementsSpecification, SourceTree, SourceTreeResolution, SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput,
+    Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput, UpgradePackages,
 };
 use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
@@ -65,18 +65,10 @@ pub(crate) async fn read_requirements(
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
-        let hint = if requirements
+        let has_editable = requirements
             .iter()
-            .any(|source| matches!(source, RequirementsSource::Editable(_)))
-        {
-            "Use `<dir>[extra]` syntax or `-r <file>` instead."
-        } else {
-            "Use `package[extra]` syntax instead."
-        };
-        return Err(anyhow!(
-            "Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file. {hint}"
-        )
-        .into());
+            .any(|source| matches!(source, RequirementsSource::Editable(_)));
+        return Err(anyhow::Error::new(ExtrasWithoutSourceError { has_editable }).into());
     }
 
     // Read all requirements from the provided sources.
@@ -132,7 +124,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     options: Options,
     logger: Box<dyn ResolveLogger>,
     printer: Printer,
-) -> Result<ResolverOutput, Error> {
+) -> Result<(ResolverOutput, HashStrategy), Error> {
     let start = std::time::Instant::now();
 
     // Resolve the requirements from the provided sources.
@@ -187,7 +179,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             // If we resolved a single project, use it for the project name.
             project = project.or_else(|| {
                 if let [resolution] = &resolutions[..] {
-                    Some(resolution.project.clone())
+                    Some(resolution.project().clone())
                 } else {
                     None
                 }
@@ -199,7 +191,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 .filter(|extra| {
                     !resolutions
                         .iter()
-                        .any(|resolution| resolution.extras.contains(extra))
+                        .any(|resolution| resolution.extras().contains(extra))
                 })
                 .collect::<Vec<_>>();
             if !unused_extras.is_empty() {
@@ -217,7 +209,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             requirements.extend(
                 resolutions
                     .into_iter()
-                    .flat_map(|resolution| resolution.requirements),
+                    .flat_map(SourceTreeResolution::into_requirements),
             );
         }
 
@@ -265,6 +257,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         requirements
     };
 
+    // Incorporate hashes from requirements discovered while resolving source trees and groups.
+    let mut hasher = hasher
+        .clone()
+        .augment_with_requirements(requirements.iter())?;
+
     // Resolve the overrides from the provided sources.
     let overrides = {
         // Partition the overrides into named and unnamed requirements.
@@ -284,7 +281,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         if !unnamed.is_empty() {
             overrides.extend(
                 NamedRequirementsResolver::new(
-                    hasher,
+                    &hasher,
                     index,
                     DistributionDatabase::new(
                         client,
@@ -315,11 +312,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
         DependencyMode::Transitive => {
-            LookaheadResolver::new(
+            let (lookaheads, updated_hasher) = LookaheadResolver::new(
                 &requirements,
                 &constraints,
                 &overrides,
-                hasher,
+                &hasher,
                 index,
                 DistributionDatabase::new(
                     client,
@@ -329,13 +326,15 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(&resolver_env)
-            .await?
+            .await?;
+            hasher = updated_hasher;
+            lookaheads
         }
         DependencyMode::Direct => Vec::new(),
     };
 
     // TODO(zanieb): Consider consuming these instead of cloning
-    let exclusions = Exclusions::new(reinstall.clone(), upgrade.clone());
+    let exclusions = Exclusions::new(reinstall.clone(), UpgradePackages::for_non_project(upgrade));
 
     // Create a manifest of the requirements.
     let manifest = Manifest::new(
@@ -370,7 +369,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             tags,
             flat_index,
             index,
-            hasher,
+            &hasher,
             build_dispatch,
             installed_packages,
             DistributionDatabase::new(
@@ -386,7 +385,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
 
     logger.on_complete(resolution.len(), start, printer)?;
 
-    Ok(resolution)
+    Ok((resolution, hasher))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -406,7 +405,6 @@ pub(crate) enum Modifications {
 
 /// A distribution which was or would be modified
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[expect(clippy::large_enum_variant)]
 pub(crate) enum ChangedDist {
     Local(LocalDist),
     Remote(Arc<Dist>),
@@ -497,7 +495,7 @@ pub(crate) struct Changelog {
 
 impl Changelog {
     /// Create a [`Changelog`] from two iterators of [`ChangedDist`]s.
-    pub(crate) fn new<I, U>(installed: I, uninstalled: U) -> Self
+    fn new<I, U>(installed: I, uninstalled: U) -> Self
     where
         I: IntoIterator<Item = ChangedDist>,
         U: IntoIterator<Item = ChangedDist>,
@@ -519,7 +517,7 @@ impl Changelog {
     }
 
     /// Create a [`Changelog`] from a list of local distributions.
-    pub(crate) fn from_local(installed: Vec<CachedDist>, uninstalled: Vec<InstalledDist>) -> Self {
+    fn from_local(installed: Vec<CachedDist>, uninstalled: Vec<InstalledDist>) -> Self {
         Self::new(
             installed
                 .into_iter()
@@ -799,8 +797,9 @@ async fn execute_plan(
     if !uninstalls.is_empty() {
         let start = std::time::Instant::now();
 
+        let layout = venv.interpreter().layout();
         for dist_info in &uninstalls {
-            match uv_installer::uninstall(dist_info).await {
+            match uv_installer::uninstall(dist_info, &layout).await {
                 Ok(summary) => {
                     debug!(
                         "Uninstalled {} ({} file{}, {} director{})",
@@ -1038,7 +1037,7 @@ fn report_dry_run(
     logger.on_complete(&changelog, printer, dry_run)?;
 
     if matches!(dry_run, DryRun::Check) {
-        return Err(Error::OutdatedEnvironment);
+        return Err(Error::OutdatedEnvironment(Box::new(changelog)));
     }
 
     Ok(changelog)
@@ -1116,5 +1115,41 @@ pub(crate) enum Error {
     Anyhow(#[from] anyhow::Error),
 
     #[error("The environment is outdated; run `{}` to update the environment", "uv sync".cyan())]
-    OutdatedEnvironment,
+    OutdatedEnvironment(Box<Changelog>),
+}
+
+impl uv_errors::Hint for Error {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::Resolve(resolve_err) => resolve_err.hints(),
+            Self::Anyhow(err) => {
+                for cause in err.chain() {
+                    if let Some(extra_err) = cause.downcast_ref::<ExtrasWithoutSourceError>() {
+                        return uv_errors::Hint::hints(extra_err);
+                    }
+                }
+                uv_errors::Hints::none()
+            }
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
+/// Extras were requested but no valid source was provided.
+#[derive(Debug, thiserror::Error)]
+#[error(
+    "Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file"
+)]
+pub(crate) struct ExtrasWithoutSourceError {
+    pub(crate) has_editable: bool,
+}
+
+impl uv_errors::Hint for ExtrasWithoutSourceError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::from(if self.has_editable {
+            "Use `<dir>[extra]` syntax or `-r <file>` instead"
+        } else {
+            "Use `package[extra]` syntax instead"
+        })
+    }
 }

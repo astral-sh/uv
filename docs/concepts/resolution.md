@@ -680,9 +680,11 @@ with an unexpected error.
 
 ## Reproducible resolutions
 
-uv supports an `--exclude-newer` option to limit resolution to distributions published before a
+uv supports an `--exclude-newer` option to limit resolution to distributions uploaded before a
 specific date, allowing reproduction of installations regardless of new package releases. The date
-may be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp (e.g.,
+is compared against the upload time of each individual distribution artifact (i.e., when each file
+was uploaded to the package index), not the release date of the package version. The date may be
+specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp (e.g.,
 `2006-12-02T02:07:43Z`) or a local date in the same format (e.g., `2006-12-02`) in your system's
 configured time zone.
 
@@ -691,7 +693,9 @@ configured time zone.
     The package index must support the `upload-time` field as specified in
     [`PEP 700`](https://peps.python.org/pep-0700/). If the field is not present for a given
     distribution, the distribution will be treated as unavailable unless the package is opted out
-    via `--exclude-newer-package <package>=false`. PyPI provides `upload-time` for all packages.
+    via `--exclude-newer-package <package>=false`, or the index is configured with its own
+    `exclude-newer` value, or the index is opted out via `[[tool.uv.index]] exclude-newer = false`.
+    PyPI provides `upload-time` for all packages.
 
 To ensure reproducibility, messages for unsatisfiable resolutions will not mention that
 distributions were excluded due to the `--exclude-newer` flag — newer distributions will be treated
@@ -721,10 +725,42 @@ Values may also be specified for specific packages, e.g.,
 exclude-newer-package = { setuptools = "2006-12-02T02:07:43Z" }
 ```
 
-The same flag also accepts `<package>=false` to opt a package out of the `--exclude-newer`
-restriction, e.g., to allow resolving packages from an index that does not publish upload times.
+The package option also accepts `<package>=false` to opt a package out of the restriction, e.g.,
+`--exclude-newer-package setuptools=false`, or:
 
-Package-specific values will take precedence over global values.
+```pyproject.toml
+[tool.uv]
+exclude-newer-package = { setuptools = false }
+```
+
+This is useful to temporarily use a newer version of package or to allow resolving a package from an
+index that does not publish upload times.
+
+Package-specific values will take precedence over both global and index-specific values.
+
+Likewise, an individual index can override the global cutoff:
+
+```pyproject.toml
+[tool.uv]
+exclude-newer = "2006-12-02T02:07:43Z"
+
+[[tool.uv.index]]
+name = "internal"
+url = "https://internal.example.com/simple"
+exclude-newer = "7 days"
+```
+
+Or disable it entirely for that index:
+
+```pyproject.toml
+[[tool.uv.index]]
+name = "internal"
+url = "https://internal.example.com/simple"
+exclude-newer = false
+```
+
+This is useful for private indexes that don't publish `upload-time`, or for applying a different
+reproducibility window to a specific index while preserving the global behavior elsewhere.
 
 ## Dependency cooldowns
 

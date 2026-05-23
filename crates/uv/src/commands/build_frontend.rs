@@ -24,7 +24,7 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
-    PackageConfigSettings, Requirement, RequiresPython, SourceDist,
+    PackageConfigSettings, Requirement, SourceDist,
 };
 use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
@@ -33,13 +33,12 @@ use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
-    VersionRequest,
+    PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
-use uv_types::{AnyErrorBuild, BuildContext, BuildStack, HashStrategy};
+use uv_types::{AnyErrorBuild, BuildContext, BuildStack, HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
@@ -60,6 +59,8 @@ enum Error {
     HashStrategy(#[from] uv_types::HashStrategyError),
     #[error(transparent)]
     FlatIndex(#[from] uv_client::FlatIndexError),
+    #[error(transparent)]
+    ClientBuild(#[from] uv_client::ClientBuildError),
     #[error(transparent)]
     BuildPlan(anyhow::Error),
     #[error(transparent)]
@@ -95,6 +96,19 @@ enum Error {
     InvalidBuiltWheelFilename(#[source] uv_distribution_filename::WheelFilenameError),
     #[error("The source distribution declares version {0}, but the wheel declares version {1}")]
     VersionMismatch(Version, Version),
+}
+
+/// Collect hints from a build [`Error`] by inspecting its inner types.
+fn collect_build_hints(err: &Error) -> uv_errors::Hints<'_> {
+    use uv_errors::Hint;
+    match err {
+        Error::BuildBackend(err) => err.hints(),
+        Error::BuildFrontend(err) => err.hints(),
+        Error::BuildDispatch(err) => err.hints(),
+        Error::Project(err) => err.hints(),
+        Error::Operations(err) => err.hints(),
+        _ => uv_errors::Hints::none(),
+    }
 }
 
 /// Build source distributions and wheels.
@@ -381,7 +395,7 @@ async fn build_impl(
             preview,
         );
         async {
-            let result = future.await;
+            let result = Box::pin(future).await;
             (source, result)
         }
     }))
@@ -432,12 +446,17 @@ async fn build_impl(
                     None
                 };
 
+                let hints = collect_build_hints(&err).into_owned();
                 let report = miette::Report::new(Diagnostic {
                     source: source.to_string(),
                     cause: err.into(),
                     help,
                 });
                 anstream::eprint!("{report:?}");
+                anstream::eprint!("{hints}");
+                if !hints.is_empty() {
+                    anstream::eprintln!();
+                }
 
                 success = false;
             }
@@ -528,13 +547,7 @@ async fn build_package(
             let groups = DependencyGroupsWithDefaults::none();
             interpreter_request = find_requires_python(workspace, &groups)?
                 .as_ref()
-                .map(RequiresPython::specifiers)
-                .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(
-                        specifiers.clone(),
-                        PythonVariant::Default,
-                    ))
-                });
+                .and_then(PythonRequest::from_requires_python);
         }
     }
 
@@ -587,7 +600,7 @@ async fn build_package(
         .keyring(keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()?;
 
     // Determine whether to enable build isolation.
     let environment;
@@ -640,6 +653,7 @@ async fn build_package(
         &hasher,
         exclude_newer,
         sources.clone(),
+        SourceTreeEditablePolicy::Project,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,

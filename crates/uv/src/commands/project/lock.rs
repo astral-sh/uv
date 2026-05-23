@@ -1,4 +1,4 @@
-#![allow(clippy::single_match_else)]
+#![expect(clippy::single_match_else)]
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
@@ -28,23 +28,26 @@ use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
-use uv_requirements::ExtrasResolver;
-use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
+use uv_requirements::{ExtrasResolver, LockedRequirements, read_lock_requirements};
 use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, Package, PythonRequirement,
     ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
-use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
+use uv_types::{
+    BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
+};
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::{DiscoveryOptions, Editability, Workspace, WorkspaceCache, WorkspaceMember};
+use uv_workspace::{
+    DiscoveryOptions, Editability, VirtualProject, WorkspaceCache, WorkspaceMember,
+};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     MissingLockfileSource, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
-    init_script_python_requirement, script_extra_build_requires,
+    WorkspacePython, init_script_python_requirement, script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, pip};
@@ -128,8 +131,9 @@ pub(crate) async fn lock(
         LockTarget::Script(script)
     } else {
         workspace =
-            Workspace::discover(project_dir, &DiscoveryOptions::default(), workspace_cache).await?;
-        LockTarget::Workspace(&workspace)
+            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
+                .await?;
+        LockTarget::Workspace(workspace.workspace())
     };
 
     // Determine the lock mode.
@@ -138,25 +142,34 @@ pub(crate) async fn lock(
         LockMode::Frozen(frozen_source.into())
     } else {
         interpreter = match target {
-            LockTarget::Workspace(workspace) => ProjectInterpreter::discover(
-                workspace,
-                project_dir,
+            LockTarget::Workspace(workspace) => {
                 // Don't enable any groups' requires-python for interpreter discovery
-                &DependencyGroupsWithDefaults::none(),
-                python.as_deref().map(PythonRequest::parse),
-                &client_builder,
-                python_preference,
-                python_downloads,
-                &install_mirrors,
-                false,
-                no_config,
-                Some(false),
-                cache,
-                printer,
-                preview,
-            )
-            .await?
-            .into_interpreter(),
+                let groups = DependencyGroupsWithDefaults::none();
+                let workspace_python = WorkspacePython::from_request(
+                    python.as_deref().map(PythonRequest::parse),
+                    Some(workspace),
+                    &groups,
+                    project_dir,
+                    no_config,
+                )
+                .await?;
+                ProjectInterpreter::discover(
+                    workspace,
+                    &groups,
+                    workspace_python,
+                    &client_builder,
+                    python_preference,
+                    python_downloads,
+                    &install_mirrors,
+                    false,
+                    Some(false),
+                    cache,
+                    printer,
+                    preview,
+                )
+                .await?
+                .into_interpreter()
+            }
             LockTarget::Script(script) => ScriptInterpreter::discover(
                 script.into(),
                 python.as_deref().map(PythonRequest::parse),
@@ -216,7 +229,7 @@ pub(crate) async fn lock(
                     }
                     FrozenSource::Env | FrozenSource::Configuration => {
                         warn_user!(
-                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because {} was provided; use `--no-frozen` or `--check` instead",
+                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because {} was provided; use `--check` instead",
                             MissingLockfileSource::from(frozen_source)
                         );
                     }
@@ -348,10 +361,11 @@ impl<'env> LockOperation<'env> {
         match self.mode {
             LockMode::Frozen(source) => {
                 // Read the existing lockfile, but don't attempt to lock the project.
+                let lock_filename = target.lock_filename();
                 let existing = target
                     .read()
                     .await?
-                    .ok_or(ProjectError::MissingLockfile(source))?;
+                    .ok_or(ProjectError::MissingLockfile(source, lock_filename))?;
 
                 // Check if the discovered workspace members match the locked workspace members.
                 if let LockTarget::Workspace(workspace) = target {
@@ -368,10 +382,11 @@ impl<'env> LockOperation<'env> {
             }
             LockMode::Locked(interpreter, lock_source) => {
                 // Read the existing lockfile.
-                let existing = target
-                    .read()
-                    .await?
-                    .ok_or(ProjectError::MissingLockfile(lock_source.into()))?;
+                let lock_filename = target.lock_filename();
+                let existing = target.read().await?.ok_or(ProjectError::MissingLockfile(
+                    lock_source.into(),
+                    lock_filename,
+                ))?;
 
                 // Perform the lock operation, but don't write the lockfile to disk.
                 let result = Box::pin(do_lock(
@@ -541,7 +556,7 @@ async fn do_lock(
         .collect::<Result<BTreeMap<_, _>, ProjectError>>()?;
 
     // Collect the conflicts.
-    let mut conflicts = target.conflicts();
+    let mut conflicts = target.conflicts()?;
     if let LockTarget::Workspace(workspace) = target {
         if let Some(groups) = &workspace.pyproject_toml().dependency_groups {
             if let Some(project) = &workspace.pyproject_toml().project {
@@ -701,7 +716,7 @@ async fn do_lock(
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()?;
 
     // Determine whether to enable build isolation.
     let environment;
@@ -793,6 +808,7 @@ async fn do_lock(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        SourceTreeEditablePolicy::Project,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
@@ -836,9 +852,13 @@ async fn do_lock(
         .await
         {
             Ok(result) => Some(result),
-            Err(ProjectError::Lock(err)) if err.is_resolution() => {
+            Err(ProjectError::Lock(err)) if err.is_resolution() || err.is_no_build() => {
                 // Resolver errors are not recoverable, as such errors can leave the resolver in a
                 // broken state. Specifically, tasks that fail with an error can be left as pending.
+                //
+                // Disabled builds are user policy errors. Static local projects are validated
+                // before this point, so reaching this case means validation genuinely needs
+                // metadata that cannot be obtained under `--no-build`.
                 return Err(ProjectError::Lock(err));
             }
             Err(err) => {
@@ -913,7 +933,7 @@ async fn do_lock(
             );
 
             // Resolve the requirements.
-            let resolution = pip::operations::resolve(
+            let (resolution, _) = pip::operations::resolve(
                 ExtrasResolver::new(&hasher, state.index(), database)
                     .with_reporter(Arc::new(ResolverReporter::from(printer)))
                     .resolve(target.members_requirements())
@@ -1197,10 +1217,12 @@ impl ValidatedLock {
             return Ok(Self::Preferable(lock));
         }
 
-        // If the user specified `--upgrade-package`, then at best we can prefer some of
-        // the existing versions.
+        // If the user specified `--upgrade-package` or `--upgrade-group`, then at best we can
+        // prefer some of the existing versions.
         if !(upgrade.is_none() || upgrade.is_all()) {
-            debug!("Resolving despite existing lockfile due to `--upgrade-package`");
+            debug!(
+                "Resolving despite existing lockfile due to `--upgrade-package` or `--upgrade-group`"
+            );
             return Ok(Self::Preferable(lock));
         }
 
@@ -1240,6 +1262,7 @@ impl ValidatedLock {
                 indexes,
                 interpreter.tags()?,
                 interpreter.markers(),
+                &options.build_options,
                 hasher,
                 index,
                 database,

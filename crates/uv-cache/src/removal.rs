@@ -62,7 +62,9 @@ impl Removal {
         reporter: Option<&dyn CleanReporter>,
         skip_locked_file: bool,
     ) -> io::Result<()> {
-        let metadata = match fs_err::symlink_metadata(path) {
+        let path = uv_fs::verbatim_path(path);
+
+        let metadata = match fs_err::symlink_metadata(&path) {
             Ok(metadata) => metadata,
             Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
             Err(err) => return Err(err),
@@ -79,18 +81,18 @@ impl Removal {
                     use std::os::windows::fs::FileTypeExt;
 
                     if metadata.file_type().is_symlink_dir() {
-                        remove_dir(path)?;
+                        remove_dir(&path)?;
                     } else {
-                        remove_file(path)?;
+                        remove_file(&path)?;
                     }
                 }
 
                 #[cfg(not(windows))]
                 {
-                    remove_file(path)?;
+                    remove_file(&path)?;
                 }
             } else {
-                remove_file(path)?;
+                remove_file(&path)?;
             }
 
             reporter.map(CleanReporter::on_clean);
@@ -98,7 +100,7 @@ impl Removal {
             return Ok(());
         }
 
-        for entry in walkdir::WalkDir::new(path).contents_first(true) {
+        for entry in walkdir::WalkDir::new(&path).contents_first(true) {
             // If we hit a directory that lacks read permissions, try to make it readable.
             if let Err(ref err) = entry {
                 if err
@@ -109,7 +111,7 @@ impl Removal {
                         if set_readable(dir).unwrap_or(false) {
                             // Retry the operation; if we _just_ `self.rm_rf(dir)` and continue,
                             // `walkdir` may give us duplicate entries for the directory.
-                            return self.rm_rf(path, reporter, skip_locked_file);
+                            return self.rm_rf(&path, reporter, skip_locked_file);
                         }
                     }
                 }
@@ -122,7 +124,7 @@ impl Removal {
                 && entry.file_name() == ".lock"
                 && entry
                     .path()
-                    .strip_prefix(path)
+                    .strip_prefix(&path)
                     .is_ok_and(|suffix| suffix == Path::new(".lock"))
             {
                 continue;
@@ -143,7 +145,7 @@ impl Removal {
                 remove_dir(entry.path())?;
             } else if entry.file_type().is_dir() {
                 // Remove the directory with the exclusive lock last.
-                if skip_locked_file && entry.path() == path {
+                if skip_locked_file && entry.path() == path.as_ref() {
                     continue;
                 }
 

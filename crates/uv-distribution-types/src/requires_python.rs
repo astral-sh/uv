@@ -378,7 +378,7 @@ impl RequiresPython {
     /// sensitivity, we return `true` if the tags are unknown.
     pub fn matches_wheel_tag(&self, wheel: &WheelFilename) -> bool {
         wheel.abi_tags().iter().any(|abi_tag| {
-            if *abi_tag == AbiTag::Abi3 {
+            if abi_tag.is_stable_abi() {
                 // Universal tags are allowed.
                 true
             } else if *abi_tag == AbiTag::None {

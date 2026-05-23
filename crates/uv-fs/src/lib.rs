@@ -1,3 +1,4 @@
+use std::io;
 use std::path::{Path, PathBuf};
 
 #[cfg(feature = "tokio")]
@@ -6,7 +7,7 @@ use std::io::Read;
 #[cfg(feature = "tokio")]
 use encoding_rs_io::DecodeReaderBytes;
 use tempfile::NamedTempFile;
-use tracing::warn;
+use tracing::{debug, warn};
 
 pub use crate::locked_file::*;
 pub use crate::path::*;
@@ -78,31 +79,104 @@ pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result
     Ok(buf)
 }
 
-/// Create a symlink at `dst` pointing to `src`, replacing any existing symlink.
+/// Create a junction at `path` pointing to `target`.
 ///
-/// On Windows, this uses the `junction` crate to create a junction point. The
-/// operation is _not_ atomic, as we first delete the junction, then create a
-/// junction at the same path.
+/// Junctions can be silently broken when involving network paths or non-NTFS filesystems.
 ///
-/// Note that because junctions are used, the source must be a directory.
+/// If creation fails but leaves behind an empty directory, it is cleaned up and the original
+/// creation error is propagated.
+#[cfg(windows)]
+fn create_junction(target: &Path, path: &Path) -> std::io::Result<()> {
+    use windows::Win32::Foundation::{
+        ERROR_ALREADY_EXISTS, ERROR_INVALID_NAME, ERROR_INVALID_PARAMETER,
+        ERROR_INVALID_REPARSE_DATA, ERROR_NOT_A_REPARSE_POINT, WIN32_ERROR,
+    };
+
+    let create_result = junction::create(target, path);
+
+    match path.metadata() {
+        Ok(_) if create_result.is_ok() => Ok(()),
+        Ok(_) => {
+            // Creation failed but left behind an empty directory. Only clean
+            // it up if the directory wasn't already there before we tried.
+            if let Err(ref create_err) = create_result {
+                if !matches!(
+                    create_err
+                        .raw_os_error()
+                        .map(|err| WIN32_ERROR(err.cast_unsigned())),
+                    Some(ERROR_ALREADY_EXISTS)
+                ) {
+                    // Not a junction (metadata succeeded normally), just
+                    // an empty directory left behind by junction::create.
+                    let _ = fs_err::remove_dir(path);
+                }
+            }
+            create_result
+        }
+        Err(err)
+            if matches!(
+                err.raw_os_error()
+                    .map(|err| WIN32_ERROR(err.cast_unsigned())),
+                Some(
+                    ERROR_INVALID_PARAMETER
+                        | ERROR_INVALID_NAME
+                        | ERROR_NOT_A_REPARSE_POINT
+                        | ERROR_INVALID_REPARSE_DATA
+                )
+            ) =>
+        {
+            // Broken reparse point. Once junction::delete strips the reparse data, only an empty
+            // directory shell remains.
+            if junction::delete(path).is_ok() {
+                let _ = fs_err::remove_dir(path);
+            }
+            Err(create_result.err().unwrap_or(err))
+        }
+        Err(err) => Err(create_result.err().unwrap_or(err)),
+    }
+}
+
+/// Create a directory link at `dst` pointing to `src`, replacing any existing link.
+///
+/// On Windows, this normally creates an NTFS junction, since junctions don't
+/// require elevated privileges. When running under Wine, which doesn't implement
+/// the reparse-point ioctl that junction creation depends on, this transparently
+/// creates a Windows directory symbolic link instead via `CreateSymbolicLinkW`
+/// (Wine maps that to a Unix symlink, so it succeeds without privileges).
+///
+/// The operation is _not_ atomic: any existing entry at `dst` is removed first,
+/// then the new link is created at the same path.
+///
+/// Note that the source must be a directory.
 ///
 /// Changes to this function should be reflected in [`create_symlink`].
 #[cfg(windows)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
-    // If the source is a file, we can't create a junction
-    if src.as_ref().is_file() {
+    let src = src.as_ref();
+    let dst = dst.as_ref();
+
+    if src.is_file() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             format!(
-                "Cannot create a junction for {}: is not a directory",
-                src.as_ref().display()
+                "Cannot create a directory link for {}: is not a directory",
+                src.display()
             ),
         ));
     }
 
-    // Remove the existing symlink, if any.
-    match junction::delete(dunce::simplified(dst.as_ref())) {
-        Ok(()) => match fs_err::remove_dir_all(dst.as_ref()) {
+    if uv_windows::is_wine() {
+        replace_with_symlink_dir(src, dst)
+    } else {
+        replace_with_junction(src, dst)
+    }
+}
+
+#[cfg(windows)]
+fn replace_with_junction(src: &Path, dst: &Path) -> std::io::Result<()> {
+    // Remove the existing junction, if any.
+    match junction::delete(dunce::simplified(dst)) {
+        Ok(()) => match fs_err::remove_dir_all(dst) {
             Ok(()) => {}
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => return Err(err),
@@ -111,11 +185,45 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
         Err(err) => return Err(err),
     }
 
-    // Replace it with a new symlink.
-    junction::create(
-        dunce::simplified(src.as_ref()),
-        dunce::simplified(dst.as_ref()),
-    )
+    // Replace it with a new junction.
+    create_junction(src, dst)
+}
+
+#[cfg(windows)]
+fn replace_with_symlink_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
+    // Best-effort removal of any existing entry. The destination may be a
+    // directory, file, or symlink, so try the directory removal first and
+    // fall back to file removal if that fails.
+    match fs_err::remove_dir_all(dst) {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => match fs_err::remove_file(dst) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err),
+        },
+    }
+
+    fs_err::os::windows::fs::symlink_dir(dunce::simplified(src), dunce::simplified(dst))
+}
+
+/// Read the target of a directory link created by [`create_symlink`] or
+/// [`replace_symlink`].
+///
+/// On Windows, uv normally creates junctions for directory links, but creates
+/// directory symbolic links under Wine. This function reads the appropriate link
+/// type for the current environment. For junctions, this uses the `junction`
+/// crate, which handles the `\??\` prefix that Windows uses internally for
+/// junction targets.
+#[cfg(windows)]
+pub fn read_link(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
+    let path = path.as_ref();
+
+    if uv_windows::is_wine() {
+        fs_err::read_link(path)
+    } else {
+        junction::get_target(dunce::simplified(path))
+    }
 }
 
 /// Create a symlink at `dst` pointing to `src`, replacing any existing symlink if necessary.
@@ -141,30 +249,35 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
     }
 }
 
-/// Create a symlink at `dst` pointing to `src`.
+/// Create a directory link at `dst` pointing to `src`.
 ///
-/// On Windows, this uses the `junction` crate to create a junction point.
+/// On Windows, this normally creates an NTFS junction, falling back to a Windows
+/// directory symbolic link when running under Wine. See [`replace_symlink`] for
+/// the rationale.
 ///
-/// Note that because junctions are used, the source must be a directory.
+/// Note that the source must be a directory.
 ///
 /// Changes to this function should be reflected in [`replace_symlink`].
 #[cfg(windows)]
 pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
-    // If the source is a file, we can't create a junction
-    if src.as_ref().is_file() {
+    let src = src.as_ref();
+    let dst = dst.as_ref();
+
+    if src.is_file() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             format!(
-                "Cannot create a junction for {}: is not a directory",
-                src.as_ref().display()
+                "Cannot create a directory link for {}: is not a directory",
+                src.display()
             ),
         ));
     }
 
-    junction::create(
-        dunce::simplified(src.as_ref()),
-        dunce::simplified(dst.as_ref()),
-    )
+    if uv_windows::is_wine() {
+        fs_err::os::windows::fs::symlink_dir(dunce::simplified(src), dunce::simplified(dst))
+    } else {
+        create_junction(src, dst)
+    }
 }
 
 /// Create a symlink at `dst` pointing to `src`.
@@ -173,9 +286,42 @@ pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::
     fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref())
 }
 
-#[cfg(unix)]
-pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
-    fs_err::remove_file(path.as_ref())
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_link_reads_created_directory_link() -> std::io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let target = tempdir.path().join("target");
+        fs_err::create_dir(&target)?;
+        let link = tempdir.path().join("link");
+
+        create_symlink(&target, &link)?;
+
+        assert_eq!(read_link(&link)?, dunce::simplified(&target));
+        Ok(())
+    }
+
+    #[test]
+    fn create_junction_from_smb_failure_removes_directory() -> std::io::Result<()> {
+        #[expect(clippy::print_stderr)]
+        let Some(smb_fs) = std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_SMB_FS).ok() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_SMB_FS not set");
+            return Ok(());
+        };
+        fs_err::create_dir_all(&smb_fs)?;
+        let alt_tempdir = tempfile::tempdir_in(smb_fs)?;
+        let tempdir = tempfile::tempdir()?;
+        let link = tempdir.path().join("link");
+        let target = alt_tempdir.path().join("target");
+        fs_err::create_dir(&target)?;
+
+        let err = create_junction(&target, &link).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidFilename);
+        assert!(!link.exists());
+        Ok(())
+    }
 }
 
 /// Create a symlink at `dst` pointing to `src` on Unix or copy `src` to `dst` on Windows
@@ -197,19 +343,6 @@ pub fn symlink_or_copy_file(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std
     }
 
     Ok(())
-}
-
-#[cfg(windows)]
-pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
-    match junction::delete(dunce::simplified(path.as_ref())) {
-        Ok(()) => match fs_err::remove_dir_all(path.as_ref()) {
-            Ok(()) => Ok(()),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(err) => Err(err),
-        },
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(err) => Err(err),
-    }
 }
 
 /// Return a [`NamedTempFile`] in the specified directory.
@@ -376,7 +509,7 @@ enum PersistRetryError {
 /// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system
 /// errors.
 #[cfg(feature = "tokio")]
-pub async fn persist_with_retry(
+async fn persist_with_retry(
     from: NamedTempFile,
     to: impl AsRef<Path>,
 ) -> Result<(), std::io::Error> {
@@ -703,5 +836,57 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
             fs_err::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
         }
     }
+    Ok(())
+}
+
+/// Perform a safe removal of a virtual environment.
+pub fn remove_virtualenv(location: &Path) -> io::Result<()> {
+    // On Windows, if the current executable is in the directory, defer self-deletion since Windows
+    // won't let you unlink a running executable.
+    #[cfg(windows)]
+    if let Ok(itself) = std::env::current_exe() {
+        let target = std::path::absolute(location)?;
+        if itself.starts_with(&target) {
+            debug!("Detected self-delete of executable: {}", itself.display());
+            self_replace::self_delete_outside_path(location)?;
+        }
+    }
+
+    // We defer removal of the `pyvenv.cfg` until the end, so if we fail to remove the environment,
+    // uv can still identify it as a Python virtual environment that can be deleted.
+    for entry in fs_err::read_dir(location)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path == location.join("pyvenv.cfg") {
+            continue;
+        }
+        if path.is_dir() {
+            fs_err::remove_dir_all(&path)?;
+        } else {
+            fs_err::remove_file(&path)?;
+        }
+    }
+
+    match fs_err::remove_file(location.join("pyvenv.cfg")) {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err),
+    }
+
+    // Remove the virtual environment directory itself
+    match fs_err::remove_dir_all(location) {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        // If the virtual environment is a mounted file system, e.g., in a Docker container, we
+        // cannot delete it — but that doesn't need to be a fatal error
+        Err(err) if err.kind() == io::ErrorKind::ResourceBusy => {
+            debug!(
+                "Skipping removal of `{}` directory due to {err}",
+                location.display(),
+            );
+        }
+        Err(err) => return Err(err),
+    }
+
     Ok(())
 }

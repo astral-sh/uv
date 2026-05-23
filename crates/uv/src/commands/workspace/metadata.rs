@@ -17,7 +17,7 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
-use crate::commands::project::{ProjectError, ProjectInterpreter, UniversalState};
+use crate::commands::project::{ProjectError, ProjectInterpreter, UniversalState, WorkspacePython};
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
@@ -59,18 +59,25 @@ pub(crate) async fn metadata(
     let mode = if let Some(frozen_source) = frozen {
         LockMode::Frozen(frozen_source.into())
     } else {
+        // Don't enable any groups' requires-python for interpreter discovery
+        let groups = DependencyGroupsWithDefaults::none();
+        let workspace_python = WorkspacePython::from_request(
+            python.as_deref().map(PythonRequest::parse),
+            Some(virtual_project.workspace()),
+            &groups,
+            project_dir,
+            no_config,
+        )
+        .await?;
         interpreter = ProjectInterpreter::discover(
             virtual_project.workspace(),
-            project_dir,
-            // Don't enable any groups' requires-python for interpreter discovery
-            &DependencyGroupsWithDefaults::none(),
-            python.as_deref().map(PythonRequest::parse),
+            &groups,
+            workspace_python,
             &client_builder,
             python_preference,
             python_downloads,
             &install_mirrors,
             false,
-            no_config,
             Some(false),
             cache,
             printer,

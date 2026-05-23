@@ -53,7 +53,8 @@ impl ForkScope {
         let conflict = match &requirement.source {
             RequirementSource::Registry { conflict, .. } => conflict.clone(),
             RequirementSource::Url { .. }
-            | RequirementSource::Git { .. }
+            | RequirementSource::GitDirectory { .. }
+            | RequirementSource::GitPath { .. }
             | RequirementSource::Path { .. }
             | RequirementSource::Directory { .. } => None,
         };

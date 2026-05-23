@@ -328,7 +328,7 @@ fn python_install_automatic() {
         uv_snapshot!(context.filters(), context.run()
             .env_remove(EnvVars::VIRTUAL_ENV)
             // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-            .env(EnvVars::UV_TEST_PYTHON_PATH, context.bin_dir.as_os_str())
+            .env(EnvVars::UV_PYTHON_SEARCH_PATH, context.bin_dir.as_os_str())
             .arg("-p").arg("3.11")
             .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
         success: true
@@ -1214,6 +1214,148 @@ fn python_install_freethreaded() {
      - cpython-3.13.[LATEST]+freethreaded-[PLATFORM] (python3.13t)
      - cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
+}
+
+/// Test that installing both GIL and free-threaded variants of the same Python version
+/// doesn't cause managed installation entries to disappear from `uv python list`
+/// on Windows when registry discovery is enabled.
+///
+/// Regression test for <https://github.com/astral-sh/uv/issues/18795>.
+///
+/// IMPORTANT: this test writes to the shared `HKCU` registry. The trailing uninstall is
+/// best-effort cleanup; panics will leak entries. These registry tests still share global state,
+/// so adding more will probably require isolation.
+#[cfg(all(windows, feature = "test-windows-registry"))]
+#[test]
+fn python_install_freethreaded_and_gil_list() {
+    use assert_cmd::assert::OutputAssertExt;
+
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_latest_python_versions()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix()
+        .with_collapsed_whitespace();
+
+    // Install both the GIL and free-threaded versions, with registry enabled
+    context
+        .python_install()
+        .arg("3.13")
+        .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
+        .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1")
+        .assert()
+        .success();
+    context
+        .python_install()
+        .arg("--preview")
+        .arg("3.13t")
+        .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
+        .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1")
+        .assert()
+        .success();
+
+    // List installed versions with registry discovery enabled.
+    // We remove `UV_PYTHON_NO_REGISTRY` to opt back into registry discovery, and remove
+    // `UV_PYTHON_SEARCH_PATH` so the test can discover the installed bin trampolines.
+    //
+    // Both the GIL and freethreaded variants should show entries from:
+    // - The registry (patch-versioned managed directory path)
+    // - The search path (bin trampoline)
+    // - Managed discovery (minor-version junction path)
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.13")
+        .arg("--only-installed")
+        .arg("--managed-python")
+        .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
+        .env_remove(EnvVars::UV_PYTHON_SEARCH_PATH)
+        .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.13.[LATEST]-[PLATFORM] managed/cpython-3.13.[LATEST]-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.13.[LATEST]-[PLATFORM] [BIN]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.13.[LATEST]-[PLATFORM] managed/cpython-3.13-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.13t")
+        .arg("--only-installed")
+        .arg("--managed-python")
+        .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
+        .env_remove(EnvVars::UV_PYTHON_SEARCH_PATH)
+        .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.13.[LATEST]+freethreaded-[PLATFORM] managed/cpython-3.13.[LATEST]+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.13.[LATEST]+freethreaded-[PLATFORM] [BIN]/python3.13t
+    cpython-3.13.[LATEST]+freethreaded-[PLATFORM] managed/cpython-3.13+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+
+    // Clean up registry entries
+    context
+        .python_uninstall()
+        .arg("--all")
+        .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1")
+        .assert()
+        .success();
+}
+
+#[cfg(all(windows, feature = "test-windows-registry"))]
+#[test]
+fn python_install_registry_takes_precedence_over_no_registry() {
+    use assert_cmd::assert::OutputAssertExt;
+
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_latest_python_versions()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix()
+        .with_collapsed_whitespace();
+
+    context
+        .python_install()
+        .arg("3.13")
+        .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1")
+        .env(EnvVars::UV_PYTHON_NO_REGISTRY, "1")
+        .assert()
+        .success();
+
+    // `UV_PYTHON_INSTALL_REGISTRY` should take precedence over `UV_PYTHON_NO_REGISTRY`.
+    // When we re-enable registry discovery for this command and clear the search path, we should
+    // see both the registry entry and the managed installation entry.
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.13")
+        .arg("--only-installed")
+        .arg("--managed-python")
+        .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, "")
+        .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.13.[LATEST]-[PLATFORM] managed/cpython-3.13.[LATEST]-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.13.[LATEST]-[PLATFORM] managed/cpython-3.13-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+
+    context
+        .python_uninstall()
+        .arg("--all")
+        .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1")
+        .assert()
+        .success();
 }
 
 #[test]
@@ -2458,6 +2600,17 @@ fn python_install_prerelease() {
     Installed Python 3.15.0a2 in [TIME]
      + cpython-3.15.0a2-[PLATFORM]
     ");
+
+    // Install a release candidate for a non-zero patch version
+    uv_snapshot!(context.filters(), context.python_install().arg("3.14.5rc1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.5rc1 in [TIME]
+     + cpython-3.14.5rc1-[PLATFORM] (python3.14)
+    ");
 }
 
 #[test]
@@ -3501,6 +3654,178 @@ fn uninstall_last_patch() {
     );
 }
 
+/// After uninstalling the last patch for a minor version, the minor version link
+/// (symlink on Unix, junction on Windows) should be removed.
+///
+/// Regression test for <https://github.com/astral-sh/uv/issues/18793>.
+/// This now backstops the upgrade to `junction` >=2, which can read dangling junctions.
+#[test]
+fn uninstall_last_patch_removes_minor_version_link() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_python_install_bin();
+
+    let managed_dir = context.temp_dir.child("managed");
+    let platform_key = platform_key_from_env().unwrap();
+
+    let minor_version_link = managed_dir.child(format!("cpython-3.12-{platform_key}"));
+    let patch_dir = managed_dir.child(format!("cpython-3.12.8-{platform_key}"));
+
+    // Install a single patch version
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.8"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.8 in [TIME]
+     + cpython-3.12.8-[PLATFORM] (python3.12)
+    ");
+
+    // The patch directory and the minor version link should both exist
+    patch_dir.assert(predicate::path::exists());
+    minor_version_link.assert(predicate::path::exists());
+
+    // Uninstall the only patch version for this minor
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12.8"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.12.8
+    Uninstalled Python 3.12.8 in [TIME]
+     - cpython-3.12.8-[PLATFORM] (python3.12)
+    ");
+
+    // The patch directory should be removed
+    patch_dir.assert(predicate::path::missing());
+
+    // The minor version link (symlink/junction) itself should be fully removed,
+    // not just dangling. We use `symlink_metadata` because `Path::exists` follows
+    // symlinks/junctions and would return false for a dangling link, hiding the bug.
+    assert!(
+        minor_version_link.path().symlink_metadata().is_err(),
+        "minor version link should be removed after uninstalling the last patch, \
+         but it still exists at: {}",
+        minor_version_link.path().display()
+    );
+}
+
+/// After uninstalling the highest patch but with other patches remaining,
+/// the minor version link should be updated (not removed).
+#[test]
+fn uninstall_highest_patch_updates_minor_version_link() {
+    use uv_python::managed::platform_key_from_env;
+
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_python_install_bin();
+
+    let managed_dir = context.temp_dir.child("managed");
+    let platform_key = platform_key_from_env().unwrap();
+
+    let minor_version_link = managed_dir.child(format!("cpython-3.12-{platform_key}"));
+    let patch_dir_8 = managed_dir.child(format!("cpython-3.12.8-{platform_key}"));
+    let patch_dir_9 = managed_dir.child(format!("cpython-3.12.9-{platform_key}"));
+
+    // Install two patch versions
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.9").arg("3.12.8"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 2 versions in [TIME]
+     + cpython-3.12.8-[PLATFORM]
+     + cpython-3.12.9-[PLATFORM] (python3.12)
+    ");
+
+    // All directories should exist
+    patch_dir_8.assert(predicate::path::exists());
+    patch_dir_9.assert(predicate::path::exists());
+    minor_version_link.assert(predicate::path::exists());
+
+    // The minor version link should resolve to the highest patch (3.12.9).
+    // Use `dunce::canonicalize` directly because `canonicalize_link_path` goes
+    // through `launcher_path` on Windows, which only works for trampoline
+    // executables, not junction directories.
+    let link_target = dunce::canonicalize(minor_version_link.path())
+        .unwrap()
+        .simplified_display()
+        .to_string();
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        insta::assert_snapshot!(
+            link_target, @"[TEMP_DIR]/managed/cpython-3.12.9-[PLATFORM]"
+        );
+    });
+
+    // Uninstall the highest patch version
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12.9"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.12.9
+    Uninstalled Python 3.12.9 in [TIME]
+     - cpython-3.12.9-[PLATFORM] (python3.12)
+    ");
+
+    // The highest patch dir should be removed
+    patch_dir_9.assert(predicate::path::missing());
+
+    // The lower patch dir should still exist
+    patch_dir_8.assert(predicate::path::exists());
+
+    // The minor version link should still exist, now pointing to the remaining patch
+    minor_version_link.assert(predicate::path::exists());
+    let link_target = dunce::canonicalize(minor_version_link.path())
+        .unwrap()
+        .simplified_display()
+        .to_string();
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        insta::assert_snapshot!(
+            link_target, @"[TEMP_DIR]/managed/cpython-3.12.8-[PLATFORM]"
+        );
+    });
+
+    // Uninstall the last remaining patch
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12.8"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.12.8
+    Uninstalled Python 3.12.8 in [TIME]
+     - cpython-3.12.8-[PLATFORM]
+    ");
+
+    // The patch directory should be removed
+    patch_dir_8.assert(predicate::path::missing());
+
+    // The minor version link should be fully removed (see comment in
+    // `uninstall_last_patch_removes_minor_version_link` for why we use
+    // `symlink_metadata` instead of `predicate::path::missing`).
+    assert!(
+        minor_version_link.path().symlink_metadata().is_err(),
+        "minor version link should be removed after uninstalling the last patch, \
+         but it still exists at: {}",
+        minor_version_link.path().display()
+    );
+}
+
 #[cfg(unix)] // Pyodide cannot be used on Windows
 #[test]
 fn python_install_pyodide() {
@@ -4452,6 +4777,47 @@ fn python_uninstall_outdated_with_target() {
     Searching for Python versions matching: Python 3.12
     Uninstalled outdated version Python 3.12.1 in [TIME]
      - cpython-3.12.1-[PLATFORM]
+    ");
+}
+
+#[test]
+fn python_uninstall_outdated_with_exact_target() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.1"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.1 in [TIME]
+     + cpython-3.12.1-[PLATFORM] (python3.12)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.5"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.5 in [TIME]
+     + cpython-3.12.5-[PLATFORM] (python3.12)
+    ");
+
+    // --outdated is ignored for a specific patch target.
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12.5").arg("--outdated"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.12.5
+    Uninstalled Python 3.12.5 in [TIME]
+     - cpython-3.12.5-[PLATFORM] (python3.12)
     ");
 }
 

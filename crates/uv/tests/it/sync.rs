@@ -1,10 +1,15 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use assert_cmd::prelude::*;
 use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
+use serde_json::json;
+use std::process::Command;
 use tempfile::tempdir_in;
+use url::Url;
+use wiremock::matchers::{basic_auth, body_string_contains, method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -600,6 +605,76 @@ fn sync_json() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_json_check_outdated_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--check")
+        .arg("--output-format").arg("json"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "target": "project",
+      "project": {
+        "path": "[TEMP_DIR]/",
+        "workspace": {
+          "path": "[TEMP_DIR]/"
+        }
+      },
+      "sync": {
+        "environment": {
+          "path": "[VENV]/",
+          "python": {
+            "path": "[VENV]/[BIN]/[PYTHON]",
+            "version": "3.12.[X]",
+            "implementation": "cpython"
+          }
+        },
+        "action": "check",
+        "changes": [
+          {
+            "name": "iniconfig",
+            "version": "2.0.0",
+            "action": "installed"
+          }
+        ]
+      },
+      "lock": {
+        "path": "[TEMP_DIR]/uv.lock",
+        "action": "create"
+      },
+      "dry_run": true
+    }
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    The environment is outdated; run `uv sync` to update the environment
+    "#);
+
+    Ok(())
+}
+
 /// Test --dry json output
 #[test]
 fn sync_dry_json() -> Result<()> {
@@ -803,7 +878,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
 
     // Running `uv sync` should always fail, as now sphinx is involved
@@ -818,7 +893,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
 
     // Adding group requires python should fix it
@@ -947,7 +1022,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
 
     // Running `uv sync --group mygroup` should definitely fail, as now sphinx is involved
@@ -963,7 +1038,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
 
     // Adding group requires python should fix it
@@ -1260,6 +1335,87 @@ fn sync_non_project_frozen() -> Result<()> {
 }
 
 /// Sync dependency groups in a non-project workspace root.
+///
+/// Here instead of leaning on `tool.uv.workspace` we use the
+/// officially blessed "pyproject.toml with no `[project]` that
+/// declares `[dependency-groups]`".
+#[test]
+fn sync_non_project_group_standard() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [dependency-groups]
+        dev = ["anyio"]
+        bar = ["typing-extensions"]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("albatross")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.sync(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("bar"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("bar"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 4 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     - sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 4 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - typing-extensions==4.10.0
+    ");
+    Ok(())
+}
+
+/// Sync dependency groups in a non-project workspace root.
 #[test]
 fn sync_non_project_group() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1541,13 +1697,13 @@ fn sync_build_isolation_package() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+    hint: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
+    hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          [tool.uv.extra-build-dependencies]
-          source-distribution = ["hatchling"]
+    [tool.uv.extra-build-dependencies]
+    source-distribution = ["hatchling"]
 
-          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
-      help: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
+    or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
     "#);
 
     // Install `hatchling` for `source-distribution`.
@@ -1629,13 +1785,13 @@ fn sync_build_isolation_package_order() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+    hint: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
+    hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          [tool.uv.extra-build-dependencies]
-          source-distribution = ["hatchling"]
+    [tool.uv.extra-build-dependencies]
+    source-distribution = ["hatchling"]
 
-          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
-      help: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
+    or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
     "#);
 
     // Add `hatchling`.
@@ -1805,13 +1961,13 @@ fn sync_build_isolation_extra() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+    hint: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
+    hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          [tool.uv.extra-build-dependencies]
-          source-distribution = ["hatchling"]
+    [tool.uv.extra-build-dependencies]
+    source-distribution = ["hatchling"]
 
-          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
-      help: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
+    or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
     "#);
 
     // Running `uv sync` with `--all-extras` should succeed, because we install the build dependencies
@@ -1945,8 +2101,9 @@ fn sync_extra_build_dependencies() -> Result<()> {
           [stderr]
           Missing `anyio` module
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Adding `extra-build-dependencies` should solve the issue
@@ -2020,8 +2177,9 @@ fn sync_extra_build_dependencies() -> Result<()> {
           [stderr]
           Missing `anyio` module
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Write a test package that arbitrarily bans `anyio` at build time
@@ -2088,8 +2246,9 @@ fn sync_extra_build_dependencies() -> Result<()> {
           [stderr]
           Found `anyio` module
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `bad-child` was included because `parent` (v0.1.0) depends on `bad-child`
+
+    hint: `bad-child` was included because `parent` (v0.1.0) depends on `bad-child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // But `anyio` is not provided to `bad_child` if scoped to `child`
@@ -2182,7 +2341,8 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
           [stderr]
           Missing `anyio` module
 
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Adding `extra-build-dependencies` should solve the issue
@@ -2287,8 +2447,9 @@ fn sync_extra_build_dependencies_setuptools() -> Result<()> {
           [stderr]
           Missing `anyio` module
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Adding `extra-build-dependencies` should solve the issue
@@ -2476,8 +2637,9 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
           [stderr]
           Expected `anyio` version 3.0 but got 4.3.0
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Ensure that we're resolving to `4.3.0`, the "latest" on PyPI.
@@ -2530,8 +2692,9 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
           [stderr]
           Expected `anyio` version 4.3 but got 3.5.0
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     uv_snapshot!(context.filters(), context.sync()
@@ -2626,8 +2789,9 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
           [stderr]
           Found system anyio instead of local anyio
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `project` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `project` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     Ok(())
@@ -2694,13 +2858,13 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
               import anyio
           ModuleNotFoundError: No module named 'anyio'
 
-          hint: This error likely indicates that `child@0.1.0` depends on `anyio`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `anyio` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: This error likely indicates that `child@0.1.0` depends on `anyio`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `anyio` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          [tool.uv.extra-build-dependencies]
-          child = ["anyio"]
+    [tool.uv.extra-build-dependencies]
+    child = ["anyio"]
 
-          or `uv pip install anyio` into the environment and re-run with `--no-build-isolation`.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    or `uv pip install anyio` into the environment and re-run with `--no-build-isolation`.
     "#);
 
     // Adding `extra-build-dependencies` should solve the issue
@@ -2760,13 +2924,13 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
               import sklearn
           ModuleNotFoundError: No module named 'sklearn'
 
-          hint: This error likely indicates that `child@0.1.0` depends on `scikit-learn`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `scikit-learn` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: This error likely indicates that `child@0.1.0` depends on `scikit-learn`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `scikit-learn` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          [tool.uv.extra-build-dependencies]
-          child = ["scikit-learn"]
+    [tool.uv.extra-build-dependencies]
+    child = ["scikit-learn"]
 
-          or `uv pip install scikit-learn` into the environment and re-run with `--no-build-isolation`.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    or `uv pip install scikit-learn` into the environment and re-run with `--no-build-isolation`.
     "#);
 
     // Adding `extra-build-dependencies` should solve the issue
@@ -4964,6 +5128,80 @@ fn sync_group_self() -> Result<()> {
     Ok(())
 }
 
+/// Regression test for: <https://github.com/astral-sh/uv/issues/14645>
+#[test]
+fn sync_workspace_member_group_self_conflicting_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["member"]
+        "#,
+    )?;
+
+    let member = context.temp_dir.child("member");
+    member.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        cpu = ["idna>=3"]
+        gpu = []
+
+        [dependency-groups]
+        ci = ["member[cpu]"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv]
+        package = true
+        conflicts = [
+          [
+            { extra = "cpu" },
+            { extra = "gpu" },
+          ],
+        ]
+        "#,
+    )?;
+    member
+        .child("src")
+        .child("member")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .sync()
+            .arg("--package")
+            .arg("member")
+            .arg("--group")
+            .arg("ci"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + idna==3.6
+     + member==0.0.0 (from file://[TEMP_DIR]/member)
+    "
+    );
+
+    context.assert_command("import idna").success();
+
+    Ok(())
+}
+
 #[test]
 fn sync_non_existent_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5405,6 +5643,79 @@ fn read_metadata_statically_over_the_cache() -> Result<()> {
     Ok(())
 }
 
+/// Accept equivalent singular version intervals in static `requires-dist` metadata.
+///
+/// See: <https://github.com/astral-sh/uv/issues/17639>
+#[test]
+fn no_install_project_singular_interval_requires_dist() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dynamic = ["version"]
+        dependencies = ["iniconfig>=2.0.0,<=2.0.0"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/__about__.py" }]
+
+        [tool.hatch.version]
+        path = "src/__about__.py"
+        scheme = "standard"
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("__about__.py")
+        .write_str("__version__ = '0.1.0'")?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    context.lock().assert().success();
+
+    let lock_path = context.temp_dir.join("uv.lock");
+    let lock = fs_err::read_to_string(&lock_path)?;
+    let lock = lock.replacen(
+        r#"requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0,<=2.0.0" }]"#,
+        r#"requires-dist = [{ name = "iniconfig", specifier = "<=2.0.0,>=2.0.0" }]"#,
+        1,
+    );
+    assert!(
+        lock.contains(r#"requires-dist = [{ name = "iniconfig", specifier = "<=2.0.0,>=2.0.0" }]"#),
+        "expected to rewrite the dynamic package metadata in `uv.lock`"
+    );
+    fs_err::write(&lock_path, lock)?;
+
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    fs_err::remove_file(context.temp_dir.join("src").join("__about__.py"))?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--no-install-project"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
 /// Avoid syncing the project package when `--no-install-project` is provided.
 #[test]
 fn no_install_project() -> Result<()> {
@@ -5816,6 +6127,68 @@ fn no_install_project_no_build() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that lock validation respects `--no-build` when the project itself won't be installed.
+#[test]
+fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dynamic = ["dependencies"]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+
+    let build_backend = context.temp_dir.child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import pathlib
+
+        def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
+            pathlib.Path("validation-hook-called").write_text("called")
+            dist_info = pathlib.Path(metadata_directory, "project-0.1.0.dist-info")
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(
+                "Metadata-Version: 2.1\n"
+                "Name: project\n"
+                "Version: 0.1.0\n"
+                "Requires-Dist: anyio==3.7.0\n"
+            )
+            return dist_info.name
+    "#})?;
+
+    // Generate a lockfile, then remove the cached metadata so validation would need to invoke the
+    // build backend again if it ignored `--no-build`.
+    context.lock().assert().success();
+
+    let marker = context.temp_dir.child("validation-hook-called");
+    assert!(marker.exists());
+    fs_err::remove_file(marker.path())?;
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
+    ");
+
+    assert!(!marker.exists());
+
+    Ok(())
+}
+
 #[test]
 fn sync_extra_build_dependencies_script() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
@@ -5883,7 +6256,8 @@ fn sync_extra_build_dependencies_script() -> Result<()> {
           [stderr]
           Missing `anyio` module
 
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Add extra build dependencies to the script
@@ -7665,6 +8039,38 @@ fn no_binary() -> Result<()> {
     error: invalid value 'iniconfig' for '--no-binary': value was not a boolean
 
     For more information, try '--help'.
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn no_binary_package_empty_environment_variable() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_NO_BINARY_PACKAGE, ""), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     ");
 
     Ok(())
@@ -9977,8 +10383,9 @@ fn sync_derivation_chain() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
+
+    hint: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
     Ok(())
@@ -10040,8 +10447,9 @@ fn sync_derivation_chain_extra() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref`
+
+    hint: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref`
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
     Ok(())
@@ -10105,8 +10513,9 @@ fn sync_derivation_chain_group() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
+
+    hint: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
     Ok(())
@@ -10524,6 +10933,98 @@ fn sync_git_repeated_member_backwards_path() -> Result<()> {
     Ok(())
 }
 
+/// A Git repository that points to a pre-built archive within the repository.
+#[test]
+#[cfg(feature = "test-git")]
+fn sync_git_path_archive() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["archive-in-git-test"]
+
+        [tool.uv.sources]
+        archive-in-git-test = { git = "https://github.com/astral-sh/archive-in-git-test.git" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!(
+        {
+            filters => context.filters(),
+        },
+        {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            revision = 3
+            requires-python = ">=3.13"
+
+            [options]
+            exclude-newer = "2024-03-25T00:00:00Z"
+
+            [[package]]
+            name = "archive-in-git-test"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-sh/archive-in-git-test.git#bb7ce6abf9f90544767701de5b7b0c7802dc642b" }
+            dependencies = [
+                { name = "iniconfig" },
+            ]
+
+            [[package]]
+            name = "foo"
+            version = "0.1.0"
+            source = { virtual = "." }
+            dependencies = [
+                { name = "archive-in-git-test" },
+            ]
+
+            [package.metadata]
+            requires-dist = [{ name = "archive-in-git-test", git = "https://github.com/astral-sh/archive-in-git-test.git" }]
+
+            [[package]]
+            name = "iniconfig"
+            version = "2.0.0"
+            source = { git = "https://github.com/astral-sh/archive-in-git-test.git?path=archives%2Finiconfig-2.0.0-py3-none-any.whl#bb7ce6abf9f90544767701de5b7b0c7802dc642b" }
+            wheels = [
+                { filename = "iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
+            ]
+            "###
+            );
+        }
+    );
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + archive-in-git-test==0.1.0 (from git+https://github.com/astral-sh/archive-in-git-test.git@bb7ce6abf9f90544767701de5b7b0c7802dc642b)
+     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test.git@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl)
+    "###);
+
+    Ok(())
+}
+
 /// The project itself is marked as an editable dependency, but under the wrong name. The project
 /// is a package.
 #[test]
@@ -10553,7 +11054,8 @@ fn mismatched_name_self_editable() -> Result<()> {
     Resolved 2 packages in [TIME]
       × Failed to build `foo @ file://[TEMP_DIR]/`
       ╰─▶ Package metadata name `project` does not match given name `foo`
-      help: `foo` was included because `project` (v0.1.0) depends on `foo`
+
+    hint: `foo` was included because `project` (v0.1.0) depends on `foo`
     ");
 
     Ok(())
@@ -10698,6 +11200,153 @@ fn sync_git_path_dependency() -> Result<()> {
      + package1==0.1.0 (from git+https://github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package1)
      + package2==0.1.0 (from git+https://github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package2)
     ");
+
+    Ok(())
+}
+
+/// Lock a Git repository with Poetry metadata that depends on a package within the same repository
+/// via a `path` dependency.
+///
+/// See: <https://github.com/astral-sh/uv/issues/19152>
+#[test]
+#[cfg(feature = "test-git")]
+fn lock_git_poetry_path_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    let repository = context.temp_dir.child("repository");
+    repository.child("root/root").create_dir_all()?;
+    repository.child("root/root/__init__.py").touch()?;
+    repository
+        .child("root/pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.poetry]
+        name = "root"
+        version = "0.1.0"
+        description = ""
+        authors = []
+        packages = [{ include = "root" }]
+
+        [tool.poetry.dependencies]
+        python = ">=3.13"
+        child = { path = "../child" }
+
+        [build-system]
+        requires = ["poetry-core"]
+        build-backend = "poetry.core.masonry.api"
+    "#})?;
+
+    repository.child("child/child").create_dir_all()?;
+    repository.child("child/child/__init__.py").touch()?;
+    repository
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("add")
+        .arg(".")
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("-c")
+        .arg("user.name=Example")
+        .arg("-c")
+        .arg("user.email=example@example.com")
+        .arg("commit")
+        .arg("-m")
+        .arg("Initial commit")
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+
+    let repository_url = Url::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["root"]
+
+        [tool.uv.sources]
+        root = {{ git = "{repository_url}", subdirectory = "root" }}
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let mut filters = context.filters();
+    filters.push((r"#[0-9a-f]{40}", "#[COMMIT]"));
+
+    insta::with_settings!(
+        {
+            filters => filters,
+        },
+        {
+            assert_snapshot!(
+                lock, @r#"
+            version = 1
+            revision = 3
+            requires-python = ">=3.13"
+
+            [options]
+            exclude-newer = "2024-03-25T00:00:00Z"
+
+            [[package]]
+            name = "child"
+            version = "0.1.0"
+            source = { git = "file://[TEMP_DIR]/repository/?subdirectory=child#[COMMIT]" }
+
+            [[package]]
+            name = "project"
+            version = "0.1.0"
+            source = { virtual = "." }
+            dependencies = [
+                { name = "root" },
+            ]
+
+            [package.metadata]
+            requires-dist = [{ name = "root", git = "file://[TEMP_DIR]/repository/?subdirectory=root" }]
+
+            [[package]]
+            name = "root"
+            version = "0.1.0"
+            source = { git = "file://[TEMP_DIR]/repository/?subdirectory=root#[COMMIT]" }
+            dependencies = [
+                { name = "child" },
+            ]
+            "#
+            );
+        }
+    );
 
     Ok(())
 }
@@ -10885,7 +11534,8 @@ fn url_hash_mismatch() -> Result<()> {
 
           Computed:
             sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
-      help: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
+
+    hint: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
     ");
 
     Ok(())
@@ -10958,7 +11608,8 @@ fn path_hash_mismatch() -> Result<()> {
 
           Computed:
             sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
-      help: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
+
+    hint: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
     ");
 
     Ok(())
@@ -14058,8 +14709,9 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
           [stderr]
           Expected `anyio` version 3.0 but got 4.3.0
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Now constrain the `anyio` build dependency to match the runtime
@@ -14124,8 +14776,9 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
           [stderr]
           Expected `anyio` version 4.0 but got 3.7.1
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     uv_snapshot!(context.filters(), context.sync()
@@ -14185,7 +14838,8 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
       ├─▶ Failed to resolve requirements from `build-system.requires` and `extra-build-dependencies`
       ├─▶ No solution found when resolving: `hatchling`, `anyio>3.8, <4.2`, `anyio==3.7.1 (index: https://pypi.org/simple)`
       ╰─▶ Because you require anyio>3.8,<4.2 and anyio==3.7.1, we can conclude that your requirements are unsatisfiable.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
     ");
 
     // Adding a version specifier should also fail
@@ -14287,7 +14941,8 @@ fn sync_extra_build_variables() -> Result<()> {
           [stderr]
           Expected `anyio` version 3.0 but got 4.3.0
 
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Set the variable in TOML (to an incorrect value).
@@ -14320,7 +14975,8 @@ fn sync_extra_build_variables() -> Result<()> {
           [stderr]
           Expected `anyio` version 3.0 but got 4.3.0
 
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Set the variable in TOML (to a correct value).
@@ -14380,7 +15036,8 @@ fn reject_unmatched_runtime() -> Result<()> {
     ----- stderr -----
       × Failed to download and build `source-distribution==0.0.3`
       ╰─▶ Extra build requirement `iniconfig` was declared with `match-runtime = true`, but `source-distribution` does not declare static metadata, making runtime-matching impossible
-      help: `source-distribution` (v0.0.3) was included because `foo` (v0.1.0) depends on `source-distribution`
+
+    hint: `source-distribution` (v0.0.3) was included because `foo` (v0.1.0) depends on `source-distribution`
     ");
 
     Ok(())
@@ -14510,7 +15167,7 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
      + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
     ");
 
@@ -14619,7 +15276,7 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
      + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
     ");
 
@@ -14646,7 +15303,7 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
      + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
     ");
 
@@ -14678,7 +15335,7 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
      + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
     ");
 
@@ -14704,7 +15361,7 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
      + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
     ");
 
@@ -14768,7 +15425,7 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
      + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
     ");
 
@@ -15964,6 +16621,492 @@ fn sync_reinstalls_on_version_change() -> Result<()> {
     Installed 1 package in [TIME]
      - child==0.1.0 (from file://[TEMP_DIR]/packages/child)
      + child==0.1.1 (from file://[TEMP_DIR]/packages/child)
+    ");
+
+    Ok(())
+}
+
+/// Ensure that `uv sync` aborts when malware is detected in a dependency.
+#[tokio::test]
+async fn sync_malware_detected() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "MAL-2026-1234"}]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/MAL-2026-1234"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "MAL-2026-1234",
+            "modified": "2026-01-01T00:00:00Z",
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features").arg("malware-check")
+        .env(EnvVars::UV_MALWARE_CHECK, "1")
+        .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    warning: Malware detected in locked dependencies:
+      - `iniconfig==2.0.0`: MAL-2026-1234 (https://osv.dev/vulnerability/MAL-2026-1234)
+    error: Malware detected in one or more dependencies that would be installed; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check.
+    ");
+}
+
+/// Ensure that `uv sync` succeeds when no malware is found.
+#[tokio::test]
+async fn sync_malware_check_clean() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features").arg("malware-check")
+        .env(EnvVars::UV_MALWARE_CHECK, "1")
+        .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+}
+
+/// Ensure that malware checks can authenticate through the configured keyring provider.
+#[tokio::test]
+async fn sync_malware_check_keyring_auth() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Install our keyring plugin.
+    context
+        .pip_install()
+        .arg(
+            context
+                .workspace_root
+                .join("test")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})?;
+
+    context
+        .lock()
+        .env(EnvVars::UV_DEFAULT_INDEX, "https://pypi.org/simple")
+        .assert()
+        .success();
+
+    let server = MockServer::start().await;
+    let mut malware_check_url = Url::parse(&server.uri())?;
+    malware_check_url
+        .set_username("public")
+        .map_err(|()| anyhow!("failed to set malware check URL username"))?;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(basic_auth("public", "heron"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "MAL-2026-1234"}]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/MAL-2026-1234"))
+        .and(basic_auth("public", "heron"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "MAL-2026-1234",
+            "modified": "2026-01-01T00:00:00Z",
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features").arg("malware-check")
+        .arg("--keyring-provider").arg("subprocess")
+        .env(EnvVars::UV_MALWARE_CHECK, "1")
+        .env(EnvVars::UV_MALWARE_CHECK_URL, malware_check_url.as_str())
+        .env(EnvVars::UV_DEFAULT_INDEX, "https://pypi.org/simple")
+        .env(
+            EnvVars::KEYRING_TEST_CREDENTIALS,
+            format!(
+                r#"{{"{}/v1/querybatch": {{"public": "heron"}}}}"#,
+                server.uri()
+            )
+        )
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Keyring request for public@http://[LOCALHOST]/v1/querybatch
+    warning: Malware detected in locked dependencies:
+      - `iniconfig==2.0.0`: MAL-2026-1234 (https://osv.dev/vulnerability/MAL-2026-1234)
+    error: Malware detected in one or more dependencies that would be installed; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check.
+    ");
+
+    Ok(())
+}
+
+/// Ensure that the malware check only reports `MAL-` prefixed IDs and skips others.
+#[tokio::test]
+async fn sync_malware_check_skips_non_mal() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    // Return both a MAL- and a non-MAL vulnerability.
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [
+                {"id": "MAL-2026-5678"},
+                {"id": "GHSA-xxxx-yyyy"}
+            ]}]
+        })))
+        .mount(&server)
+        .await;
+
+    // Only the MAL- vuln should be fetched.
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/MAL-2026-5678"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "MAL-2026-5678",
+            "modified": "2026-01-01T00:00:00Z",
+        })))
+        .mount(&server)
+        .await;
+
+    // The error should only mention the MAL- advisory.
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features").arg("malware-check")
+        .env(EnvVars::UV_MALWARE_CHECK, "1")
+        .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    warning: Malware detected in locked dependencies:
+      - `iniconfig==2.0.0`: MAL-2026-5678 (https://osv.dev/vulnerability/MAL-2026-5678)
+    error: Malware detected in one or more dependencies that would be installed; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check.
+    ");
+}
+
+/// Ensure that `UV_MALWARE_CHECK=0` keeps the malware check disabled even when the preview
+/// feature is enabled.
+#[tokio::test]
+async fn sync_malware_check_disabled() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    // Even though the preview feature is enabled, the check is explicitly disabled via env
+    // var so no request should be made. (No mocks are mounted, so any request would fail.)
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features").arg("malware-check")
+        .env(EnvVars::UV_MALWARE_CHECK, "0")
+        .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+}
+
+/// Ensure that a network error during the malware check fails the sync.
+#[tokio::test]
+async fn sync_malware_check_network_error() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    // Return a 500 error to simulate a service failure.
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features").arg("malware-check")
+        .env(EnvVars::UV_MALWARE_CHECK, "1")
+        .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri())
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Malware check failed due to an error from OSV
+      Caused by: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/v1/querybatch)
+    ");
+}
+
+/// Ensure that a malformed `UV_MALWARE_CHECK_URL` produces a clear error.
+#[tokio::test]
+async fn sync_malware_check_url_invalid() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .env(EnvVars::UV_MALWARE_CHECK_URL, "not-a-url"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_MALWARE_CHECK_URL` with invalid value `not-a-url`: relative URL without a base
+    ");
+}
+
+/// Test that malware checks query all extras and groups, but only fail for the installed set.
+#[tokio::test]
+async fn sync_malware_check_skips_inactive_extras_and_groups() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        plus = ["typing-extensions==4.10.0"]
+
+        [dependency-groups]
+        lint = ["sortedcontainers==2.4.0"]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_string_contains("iniconfig"))
+        .and(body_string_contains("typing-extensions"))
+        .and(body_string_contains("sortedcontainers"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [
+                {"vulns": []},
+                {"vulns": [{"id": "MAL-INACTIVE-GROUP"}]},
+                {"vulns": [{"id": "MAL-INACTIVE-EXTRA"}]}
+            ]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features").arg("malware-check")
+        .env(EnvVars::UV_MALWARE_CHECK, "1")
+        .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    warning: Malware detected in locked dependencies:
+      - `sortedcontainers==2.4.0`: MAL-INACTIVE-GROUP (https://osv.dev/vulnerability/MAL-INACTIVE-GROUP)
+      - `typing-extensions==4.10.0`: MAL-INACTIVE-EXTRA (https://osv.dev/vulnerability/MAL-INACTIVE-EXTRA)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+}
+
+/// Regression test for #19419: `uv sync --frozen` must honor credentials
+/// declared in a workspace member's `[tool.uv.sources]`.
+#[test]
+#[cfg(feature = "test-git")]
+fn sync_frozen_workspace_member_git_credentials() -> Result<()> {
+    use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
+
+    let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc::indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["uv-private-pypackage"]
+
+        [tool.uv.workspace]
+        members = ["nested"]
+    "#})?;
+
+    let nested = context.temp_dir.child("nested");
+    nested.create_dir_all()?;
+    nested.child("pyproject.toml").write_str(&formatdoc! {
+        r#"
+        [project]
+        name = "nested"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["uv-private-pypackage"]
+
+        [tool.uv.sources]
+        uv-private-pypackage = {{ git = "https://{token}@github.com/astral-test/uv-private-pypackage" }}
+        "#,
+        token = token,
+    })?;
+
+    // `uv lock` reads the member's `[tool.uv.sources]` and resolves successfully.
+    uv_snapshot!(&context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // `uv sync --frozen` must propagate credentials from the member's
+    // `[tool.uv.sources]` to `GIT_STORE`. Use `--reinstall --no-cache` so the
+    // git fetch actually runs.
+    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
     ");
 
     Ok(())

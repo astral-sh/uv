@@ -158,7 +158,7 @@ impl RequirementSatisfaction {
                     }
                 }
             }
-            RequirementSource::Git {
+            RequirementSource::GitDirectory {
                 url: _,
                 git: requested_git,
                 subdirectory: requested_subdirectory,
@@ -178,6 +178,7 @@ impl RequirementSatisfaction {
                             git_lfs: installed_git_lfs,
                         },
                     subdirectory: installed_subdirectory,
+                    path: None,
                 } = direct_url.as_ref()
                 else {
                     return Self::Mismatch;
@@ -201,19 +202,86 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 }
 
-                if !RepositoryUrl::parse(installed_url).is_ok_and(|installed_url| {
-                    installed_url == RepositoryUrl::new(requested_git.repository())
-                }) {
+                if !RepositoryUrl::parse(installed_url)
+                    .is_ok_and(|installed_url| installed_url == *requested_git.repository())
+                {
                     debug!(
                         "Repository mismatch: {:?} vs. {:?}",
                         installed_url,
-                        requested_git.repository()
+                        requested_git.url()
                     );
                     return Self::Mismatch;
                 }
 
                 // TODO(charlie): It would be more consistent for us to compare the requested
                 // revisions here.
+                if installed_precise.as_deref()
+                    != requested_git.precise().as_ref().map(GitOid::as_str)
+                {
+                    debug!(
+                        "Precise mismatch: {:?} vs. {:?}",
+                        installed_precise,
+                        requested_git.precise()
+                    );
+                    return Self::OutOfDate;
+                }
+            }
+            RequirementSource::GitPath {
+                url: _,
+                git: requested_git,
+                install_path: requested_path,
+                ext: _,
+            } => {
+                let InstalledDistKind::Url(InstalledDirectUrlDist { direct_url, .. }) =
+                    &distribution.kind
+                else {
+                    return Self::Mismatch;
+                };
+                let DirectUrl::VcsUrl {
+                    url: installed_url,
+                    vcs_info:
+                        VcsInfo {
+                            vcs: VcsKind::Git,
+                            requested_revision: _,
+                            commit_id: installed_precise,
+                            git_lfs: installed_git_lfs,
+                        },
+                    subdirectory: None,
+                    path: Some(installed_path),
+                } = direct_url.as_ref()
+                else {
+                    return Self::Mismatch;
+                };
+
+                if requested_path != installed_path {
+                    debug!(
+                        "Path mismatch: {:?} vs. {:?}",
+                        installed_path, requested_path
+                    );
+                    return Self::Mismatch;
+                }
+
+                let requested_git_lfs = requested_git.lfs();
+                let installed_git_lfs = installed_git_lfs.map(GitLfs::from).unwrap_or_default();
+                if requested_git_lfs != installed_git_lfs {
+                    debug!(
+                        "Git LFS mismatch: {} (installed) vs. {} (requested)",
+                        installed_git_lfs, requested_git_lfs,
+                    );
+                    return Self::Mismatch;
+                }
+
+                if !RepositoryUrl::parse(installed_url)
+                    .is_ok_and(|installed_url| installed_url == *requested_git.repository())
+                {
+                    debug!(
+                        "Repository mismatch: {:?} vs. {:?}",
+                        installed_url,
+                        requested_git.url()
+                    );
+                    return Self::Mismatch;
+                }
+
                 if installed_precise.as_deref()
                     != requested_git.precise().as_ref().map(GitOid::as_str)
                 {

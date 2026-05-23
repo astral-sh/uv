@@ -6,7 +6,7 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{
     assert::PathAssert,
-    fixture::{FileTouch, FileWriteStr, PathChild},
+    fixture::{FileTouch, FileWriteStr, PathChild, PathCreateDir},
 };
 use indoc::indoc;
 use insta::assert_snapshot;
@@ -176,6 +176,43 @@ fn tool_install() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+}
+
+#[test]
+fn tool_install_relative_exclude_newer_receipt_preserves_span() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .arg("--exclude-newer")
+        .arg("3 weeks")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-05-01T00:00:00Z")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [{ name = "black", specifier = "==24.2.0" }]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-04-10T00:00:00Z"
+        exclude-newer-span = "P3W"
         "#);
     });
 }
@@ -543,6 +580,808 @@ fn tool_install_with_editable() -> Result<()> {
 }
 
 #[test]
+fn tool_install_workspace_members_do_not_override_explicit_with_requirements() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let with_editable_tool_dir = context.temp_dir.child("tools-with-editable");
+    let with_editable_bin_dir = context.temp_dir.child("bin-with-editable");
+    let with_tool_dir = context.temp_dir.child("tools-with");
+    let with_bin_dir = context.temp_dir.child("bin-with");
+
+    let root_pyproject = context.temp_dir.child("pyproject.toml");
+    root_pyproject.write_str(indoc! {
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        root_cli = "root:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#
+    })?;
+
+    let root_src = context.temp_dir.child("src").child("root");
+    root_src.create_dir_all()?;
+    root_src.child("__init__.py").write_str(indoc! {
+        r"
+        def main():
+            import child
+            print(child.MESSAGE)
+        "
+    })?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    let child_src = child.child("src").child("child");
+    child_src.create_dir_all()?;
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'OK'\n")?;
+
+    let status = context
+        .tool_install()
+        .arg("--with-editable")
+        .arg(child.path())
+        .arg(context.temp_dir.path())
+        .env(EnvVars::UV_TOOL_DIR, with_editable_tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, with_editable_bin_dir.as_os_str())
+        .env(EnvVars::PATH, with_editable_bin_dir.as_os_str())
+        .status()
+        .expect("failed to run uv tool install with --with-editable");
+    assert!(status.success());
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, with_editable_bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    OK
+
+    ----- stderr -----
+    ");
+
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'CHANGED'\n")?;
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, with_editable_bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    CHANGED
+
+    ----- stderr -----
+    ");
+
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'OK'\n")?;
+
+    let status = context
+        .tool_install()
+        .arg("--editable")
+        .arg("--with")
+        .arg(child.path())
+        .arg(context.temp_dir.path())
+        .env(EnvVars::UV_TOOL_DIR, with_tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, with_bin_dir.as_os_str())
+        .env(EnvVars::PATH, with_bin_dir.as_os_str())
+        .status()
+        .expect("failed to run uv tool install with --with");
+    assert!(status.success());
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, with_bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    OK
+
+    ----- stderr -----
+    ");
+
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'CHANGED'\n")?;
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, with_bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    OK
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_install_preserves_mixed_workspace_member_editability() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let tool_root = context.temp_dir.child("tool-root");
+    tool_root.create_dir_all()?;
+    tool_root.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "tool-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        root_cli = "tool_root:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let tool_root_src = tool_root.child("src").child("tool_root");
+    tool_root_src.create_dir_all()?;
+    tool_root_src.child("__init__.py").write_str(indoc! {
+        r#"
+        def main():
+            import importlib.metadata
+            import other_child
+
+            print(f"{importlib.metadata.version('tool-root')} {other_child.MESSAGE}")
+        "#
+    })?;
+
+    let other_workspace = context.temp_dir.child("other-workspace");
+    other_workspace.create_dir_all()?;
+    other_workspace
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "other-workspace"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["other-child"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.sources]
+        other-child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    let other_workspace_src = other_workspace.child("src").child("other_workspace");
+    other_workspace_src.create_dir_all()?;
+    other_workspace_src.child("__init__.py").touch()?;
+
+    let other_child = other_workspace.child("packages").child("other-child");
+    other_child.create_dir_all()?;
+    other_child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "other-child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let other_child_src = other_child.child("src").child("other_child");
+    other_child_src.create_dir_all()?;
+    other_child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'OK'\n")?;
+
+    let status = context
+        .tool_install()
+        .arg("--with-editable")
+        .arg(other_workspace.path())
+        .arg(tool_root.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .status()
+        .expect("failed to run uv tool install with mixed workspace editability");
+    assert!(status.success());
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.1.0 OK
+
+    ----- stderr -----
+    ");
+
+    other_child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'CHANGED'\n")?;
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.1.0 CHANGED
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_install_preserves_mixed_workspace_member_non_editability() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let tool_root = context.temp_dir.child("tool-root");
+    tool_root.create_dir_all()?;
+    tool_root.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "tool-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        root_cli = "tool_root:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let tool_root_src = tool_root.child("src").child("tool_root");
+    tool_root_src.create_dir_all()?;
+    tool_root_src.child("__init__.py").write_str(indoc! {
+        r#"
+        def main():
+            import importlib.metadata
+            import other_child
+
+            print(f"{importlib.metadata.version('tool-root')} {other_child.MESSAGE}")
+        "#
+    })?;
+
+    let other_workspace = context.temp_dir.child("other-workspace");
+    other_workspace.create_dir_all()?;
+    other_workspace
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "other-workspace"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["other-child"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.sources]
+        other-child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    let other_workspace_src = other_workspace.child("src").child("other_workspace");
+    other_workspace_src.create_dir_all()?;
+    other_workspace_src.child("__init__.py").touch()?;
+
+    let other_child = other_workspace.child("packages").child("other-child");
+    other_child.create_dir_all()?;
+    other_child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "other-child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let other_child_src = other_child.child("src").child("other_child");
+    other_child_src.create_dir_all()?;
+    other_child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'OK'\n")?;
+
+    let status = context
+        .tool_install()
+        .arg("--editable")
+        .arg("--with")
+        .arg(other_workspace.path())
+        .arg(tool_root.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .status()
+        .expect("failed to run uv tool install with mixed workspace editability");
+    assert!(status.success());
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.1.0 OK
+
+    ----- stderr -----
+    ");
+
+    other_child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'CHANGED'\n")?;
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.1.0 OK
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_install_reinstall_converts_workspace_members_to_non_editable() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let root_pyproject = context.temp_dir.child("pyproject.toml");
+    root_pyproject.write_str(indoc! {
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [project.scripts]
+        root_cli = "root:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#
+    })?;
+
+    let root_src = context.temp_dir.child("src").child("root");
+    root_src.create_dir_all()?;
+    root_src.child("__init__.py").write_str(indoc! {
+        r"
+        def main():
+            import child
+            print(child.MESSAGE)
+        "
+    })?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    let child_src = child.child("src").child("child");
+    child_src.create_dir_all()?;
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'OK'\n")?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--editable")
+        .arg(context.temp_dir.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + root==0.1.0 (from file://[TEMP_DIR]/)
+    Installed 1 executable: root_cli
+    ");
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    OK
+
+    ----- stderr -----
+    ");
+
+    let status = context
+        .tool_install()
+        .arg("--reinstall")
+        .arg(context.temp_dir.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .status()
+        .expect("failed to run uv tool install --reinstall");
+    assert!(status.success());
+
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'CHANGED'\n")?;
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    OK
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_install_workspace_members_are_non_editable_by_default() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let root_pyproject = context.temp_dir.child("pyproject.toml");
+    root_pyproject.write_str(indoc! {
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [project.scripts]
+        root_cli = "root:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#
+    })?;
+
+    let root_src = context.temp_dir.child("src").child("root");
+    root_src.create_dir_all()?;
+    root_src.child("__init__.py").write_str(indoc! {
+        r"
+        def main():
+            import child
+            print(child.MESSAGE)
+        "
+    })?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    let child_src = child.child("src").child("child");
+    child_src.create_dir_all()?;
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'OK'\n")?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(context.temp_dir.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + root==0.1.0 (from file://[TEMP_DIR]/)
+    Installed 1 executable: root_cli
+    ");
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    OK
+
+    ----- stderr -----
+    ");
+
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'CHANGED'\n")?;
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    OK
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_install_workspace_members_honor_editable_flag() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let root_pyproject = context.temp_dir.child("pyproject.toml");
+    root_pyproject.write_str(indoc! {
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [project.scripts]
+        root_cli = "root:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#
+    })?;
+
+    let root_src = context.temp_dir.child("src").child("root");
+    root_src.create_dir_all()?;
+    root_src.child("__init__.py").write_str(indoc! {
+        r"
+        def main():
+            import child
+            print(child.MESSAGE)
+        "
+    })?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    let child_src = child.child("src").child("child");
+    child_src.create_dir_all()?;
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'OK'\n")?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--editable")
+        .arg(context.temp_dir.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + root==0.1.0 (from file://[TEMP_DIR]/)
+    Installed 1 executable: root_cli
+    ");
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    OK
+
+    ----- stderr -----
+    ");
+
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'CHANGED'\n")?;
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    CHANGED
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_install_workspace_members_honor_source_editable_flag() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let root_pyproject = context.temp_dir.child("pyproject.toml");
+    root_pyproject.write_str(indoc! {
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [project.scripts]
+        root_cli = "root:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.sources]
+        child = { workspace = true, editable = true }
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#
+    })?;
+
+    let root_src = context.temp_dir.child("src").child("root");
+    root_src.create_dir_all()?;
+    root_src.child("__init__.py").write_str(indoc! {
+        r"
+        ROOT_MESSAGE = 'ROOT'
+
+        def main():
+            import child
+            print(f'{ROOT_MESSAGE} {child.MESSAGE}')
+        "
+    })?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    let child_src = child.child("src").child("child");
+    child_src.create_dir_all()?;
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'OK'\n")?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(context.temp_dir.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + root==0.1.0 (from file://[TEMP_DIR]/)
+    Installed 1 executable: root_cli
+    ");
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ROOT OK
+
+    ----- stderr -----
+    ");
+
+    root_src.child("__init__.py").write_str(indoc! {
+        r"
+        ROOT_MESSAGE = 'CHANGED'
+
+        def main():
+            import child
+            print(f'{ROOT_MESSAGE} {child.MESSAGE}')
+        "
+    })?;
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ROOT OK
+
+    ----- stderr -----
+    ");
+
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'CHANGED'\n")?;
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ROOT CHANGED
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn tool_install_with_compatible_build_constraints() -> Result<()> {
     let context = uv_test::test_context!("3.9")
         .with_exclude_newer("2024-05-04T00:00:00Z")
@@ -670,8 +1509,6 @@ fn tool_install_suggest_other_packages_with_executable() {
     exit_code: 2
     ----- stdout -----
     No executables are provided by package `fastapi`; removing tool
-    hint: An executable with the name `fastapi` is available via dependency `fastapi-cli`.
-          Did you mean `uv tool install fastapi-cli`?
 
     ----- stderr -----
     Resolved 35 packages in [TIME]
@@ -712,6 +1549,9 @@ fn tool_install_suggest_other_packages_with_executable() {
      + watchfiles==0.21.0
      + websockets==12.0
     error: Failed to install entrypoints for `fastapi`
+
+    hint: An executable with the name `fastapi` is available via dependency `fastapi-cli`.
+          Did you mean `uv tool install fastapi-cli`?
     ");
 }
 
@@ -1900,6 +2740,43 @@ fn tool_install_no_entrypoints() {
         .assert(predicate::path::missing());
 }
 
+#[test]
+fn tool_install_no_binary_package_env_var() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pytest")
+        .env(EnvVars::UV_NO_BINARY_PACKAGE, "iniconfig")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+    Installed 2 executables: py.test, pytest
+    ");
+
+    let receipt: toml::Value = toml::from_str(
+        &fs_err::read_to_string(tool_dir.join("pytest").join("uv-receipt.toml")).unwrap(),
+    )
+    .unwrap();
+    assert_snapshot!(
+        receipt["tool"]["options"]["no-binary-package"].to_string(),
+        @r#"["iniconfig"]"#
+    );
+}
+
 /// Test installing a package that can't be installed.
 #[test]
 fn tool_install_uninstallable() {
@@ -1951,7 +2828,8 @@ fn tool_install_uninstallable() {
           #
 
 
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Ensure the tool environment is not created.
@@ -4597,7 +5475,8 @@ fn tool_install_with_executables_from_no_entrypoints() {
     exit_code: 0
     ----- stdout -----
     No executables are provided by package `requests`
-    hint: Use `--with requests` to include `requests` as a dependency without installing its executables.
+
+    hint: Use `--with requests` to include `requests` as a dependency without installing its executables
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
@@ -4725,7 +5604,7 @@ fn tool_install_find_links() {
       ╰─▶ Because only basic-app==0.1 is available and basic-app==0.1 needs to be downloaded from a registry, we can conclude that all versions of basic-app cannot be used.
           And because you require basic-app, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
 }
 

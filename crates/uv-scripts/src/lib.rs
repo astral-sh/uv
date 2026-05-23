@@ -42,15 +42,6 @@ impl Pep723Item {
         }
     }
 
-    /// Consume the item and return the associated [`Pep723Metadata`].
-    pub fn into_metadata(self) -> Pep723Metadata {
-        match self {
-            Self::Script(script) => script.metadata,
-            Self::Stdin(metadata) => metadata,
-            Self::Remote(metadata, ..) => metadata,
-        }
-    }
-
     /// Return the path of the PEP 723 item, if any.
     pub fn path(&self) -> Option<&Path> {
         match self {
@@ -220,7 +211,7 @@ impl Pep723Script {
     /// Generates a default PEP 723 metadata table from the provided script contents.
     ///
     /// See: <https://peps.python.org/pep-0723/>
-    pub fn init_metadata(
+    fn init_metadata(
         contents: &[u8],
         requires_python: &VersionSpecifiers,
     ) -> Result<(String, Pep723Metadata, String), Pep723Error> {

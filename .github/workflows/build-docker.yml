@@ -137,7 +137,7 @@ jobs:
       attestations: write # for GHCR attestations
     environment:
       name: ${{ needs.docker-plan.outputs.push-version == 'true' && 'release' || (needs.docker-plan.outputs.push == 'true' && 'release-test' || '') }}
-      deployment: false
+      deployment: ${{ needs.docker-plan.outputs.push-version == 'true' }}
     outputs:
       image-tags: ${{ steps.meta.outputs.tags }}
       image-annotations: ${{ steps.meta.outputs.annotations }}
@@ -150,20 +150,20 @@ jobs:
           persist-credentials: false
 
       # Login to DockerHub (when not pushing, it's to avoid rate-limiting)
-      - uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         if: ${{ needs.docker-plan.outputs.login == 'true' }}
         with:
           username: ${{ needs.docker-plan.outputs.push == 'true' && 'astral' || 'astralshbot' }}
           password: ${{ needs.docker-plan.outputs.push == 'true' && secrets.DOCKERHUB_TOKEN_RW || secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         if: ${{ needs.docker-plan.outputs.push == 'true' }}
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: depot/setup-action@b0b1ea4f69e92ebf5dea3f8713a1b0c37b2126a5
+      - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1.7.1
 
       - name: Check tag consistency
         if: ${{ needs.docker-plan.outputs.push == 'true' }}
@@ -229,7 +229,7 @@ jobs:
     timeout-minutes: 5
     environment:
       name: ${{ needs.docker-plan.outputs.push-version == 'true' && 'release' || (needs.docker-plan.outputs.push == 'true' && 'release-test' || '') }}
-      deployment: false
+      deployment: ${{ needs.docker-plan.outputs.push-version == 'true' }}
     needs:
       - docker-plan
       - docker-publish-base
@@ -242,26 +242,26 @@ jobs:
       matrix: ${{ fromJson(needs.docker-plan.outputs.extra-images) }}
     steps:
       # Login to DockerHub (when not pushing, it's to avoid rate-limiting)
-      - uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         if: ${{ needs.docker-plan.outputs.login == 'true' }}
         with:
           username: ${{ needs.docker-plan.outputs.push == 'true' && 'astral' || 'astralshbot' }}
           password: ${{ needs.docker-plan.outputs.push == 'true' && secrets.DOCKERHUB_TOKEN_RW || secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         if: ${{ needs.docker-plan.outputs.login == 'true' }}
         with:
           registry: dhi.io
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: depot/setup-action@b0b1ea4f69e92ebf5dea3f8713a1b0c37b2126a5
+      - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1.7.1
 
       - name: Generate Dynamic Dockerfile Tags
         shell: bash
@@ -405,19 +405,19 @@ jobs:
       attestations: write # for GHCR attestations
     environment:
       name: ${{ needs.docker-plan.outputs.push-version == 'true' && 'release' || (needs.docker-plan.outputs.push == 'true' && 'release-test' || '') }}
-      deployment: false
+      deployment: ${{ needs.docker-plan.outputs.push-version == 'true' }}
     needs:
       - docker-plan
       - docker-publish-base
       - docker-publish-extra
     if: ${{ needs.docker-plan.outputs.push == 'true' }}
     steps:
-      - uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           username: astral
           password: ${{ secrets.DOCKERHUB_TOKEN_RW }}
 
-      - uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}

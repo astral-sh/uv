@@ -304,7 +304,7 @@ impl MarkerOperator {
     }
 
     /// Returns the marker operator and value whose union represents the given range.
-    pub fn from_bounds(
+    pub(crate) fn from_bounds(
         bounds: (&Bound<ArcStr>, &Bound<ArcStr>),
     ) -> impl Iterator<Item = (Self, ArcStr)> {
         let (b1, b2) = match bounds {
@@ -321,7 +321,7 @@ impl MarkerOperator {
     }
 
     /// Returns a value specifier representing the given lower bound.
-    pub fn from_lower_bound(bound: &Bound<ArcStr>) -> Option<(Self, ArcStr)> {
+    fn from_lower_bound(bound: &Bound<ArcStr>) -> Option<(Self, ArcStr)> {
         match bound {
             Bound::Included(value) => Some((Self::GreaterEqual, value.clone())),
             Bound::Excluded(value) => Some((Self::GreaterThan, value.clone())),
@@ -330,7 +330,7 @@ impl MarkerOperator {
     }
 
     /// Returns a value specifier representing the given upper bound.
-    pub fn from_upper_bound(bound: &Bound<ArcStr>) -> Option<(Self, ArcStr)> {
+    fn from_upper_bound(bound: &Bound<ArcStr>) -> Option<(Self, ArcStr)> {
         match bound {
             Bound::Included(value) => Some((Self::LessEqual, value.clone())),
             Bound::Excluded(value) => Some((Self::LessThan, value.clone())),
@@ -629,7 +629,7 @@ impl Display for ContainerOperator {
 
 impl MarkerExpression {
     /// Parse a [`MarkerExpression`] from a string with the given reporter.
-    pub fn parse_reporter(
+    pub(crate) fn parse_reporter(
         s: &str,
         reporter: &mut impl Reporter,
     ) -> Result<Option<Self>, Pep508Error> {
@@ -808,14 +808,6 @@ impl MarkerTree {
     /// Like [`FromStr::from_str`], but the caller chooses the return type generic.
     pub fn parse_str<T: Pep508Url>(markers: &str) -> Result<Self, Pep508Error<T>> {
         parse::parse_markers(markers, &mut TracingReporter)
-    }
-
-    /// Parse a [`MarkerTree`] from a string with the given reporter.
-    pub fn parse_reporter(
-        markers: &str,
-        reporter: &mut impl Reporter,
-    ) -> Result<Self, Pep508Error> {
-        parse::parse_markers(markers, reporter)
     }
 
     /// An empty marker that always evaluates to `true`.
@@ -1041,17 +1033,6 @@ impl MarkerTree {
         }
     }
 
-    /// Same as [`Self::evaluate`], but instead of using logging to warn, you can pass your own
-    /// handler for warnings
-    pub fn evaluate_reporter(
-        self,
-        env: &MarkerEnvironment,
-        extras: &[ExtraName],
-        reporter: &mut impl Reporter,
-    ) -> bool {
-        self.evaluate_reporter_impl(env, ExtrasEnvironment::from_extras(extras), reporter)
-    }
-
     fn evaluate_reporter_impl(
         self,
         env: &MarkerEnvironment,
@@ -1132,7 +1113,7 @@ impl MarkerTree {
     /// Checks if the requirement should be activated with the given set of active extras without evaluating
     /// the remaining environment markers, i.e. if there is potentially an environment that could activate this
     /// requirement.
-    pub fn evaluate_extras(self, extras: &[ExtraName]) -> bool {
+    fn evaluate_extras(self, extras: &[ExtraName]) -> bool {
         match self.kind() {
             MarkerTreeKind::True => true,
             MarkerTreeKind::False => false,
@@ -1303,21 +1284,6 @@ impl MarkerTree {
         self.simplify_extras_with(|name| extras.contains(name))
     }
 
-    /// Remove negated extras from a marker, returning `None` if the marker
-    /// tree evaluates to `true`.
-    ///
-    /// Any negated `extra` markers that are always `true` given the provided
-    /// extras will be removed. Any `extra` markers that are always `false`
-    /// given the provided extras will be left unchanged.
-    ///
-    /// For example, if `dev` is a provided extra, given `sys_platform
-    /// == 'linux' and extra != 'dev'`, the marker will be simplified to
-    /// `sys_platform == 'linux'`.
-    #[must_use]
-    pub fn simplify_not_extras(self, extras: &[ExtraName]) -> Self {
-        self.simplify_not_extras_with(|name| extras.contains(name))
-    }
-
     /// Remove the extras from a marker, returning `None` if the marker tree evaluates to `true`.
     ///
     /// Any `extra` markers that are always `true` given the provided predicate will be removed.
@@ -1335,6 +1301,21 @@ impl MarkerTree {
         // recursive type at codegen time, we just introduce the indirection
         // here, but keep the calling API ergonomic.
         self.simplify_extras_with_impl(&is_extra)
+    }
+
+    /// Remove negated extras from a marker, returning `None` if the marker
+    /// tree evaluates to `true`.
+    ///
+    /// Any negated `extra` markers that are always `true` given the provided
+    /// extras will be removed. Any `extra` markers that are always `false`
+    /// given the provided extras will be left unchanged.
+    ///
+    /// For example, if `dev` is a provided extra, given `sys_platform
+    /// == 'linux' and extra != 'dev'`, the marker will be simplified to
+    /// `sys_platform == 'linux'`.
+    #[must_use]
+    pub fn simplify_not_extras(self, extras: &[ExtraName]) -> Self {
+        self.simplify_not_extras_with(|name| extras.contains(name))
     }
 
     /// Remove negated extras from a marker, returning `None` if the marker tree evaluates to
@@ -1450,117 +1431,6 @@ impl fmt::Debug for MarkerTree {
     }
 }
 
-impl MarkerTree {
-    /// Formats a [`MarkerTree`] as a graph.
-    ///
-    /// This is useful for debugging when one wants to look at a
-    /// representation of a `MarkerTree` that is more faithful to its
-    /// internal representation.
-    pub fn debug_graph(&self) -> MarkerTreeDebugGraph<'_> {
-        MarkerTreeDebugGraph { marker: self }
-    }
-
-    /// Formats a [`MarkerTree`] in its "raw" representation.
-    ///
-    /// This is useful for debugging when one wants to look at a
-    /// representation of a `MarkerTree` that is precisely identical
-    /// to its internal representation.
-    pub fn debug_raw(&self) -> MarkerTreeDebugRaw<'_> {
-        MarkerTreeDebugRaw { marker: self }
-    }
-
-    fn fmt_graph(self, f: &mut Formatter<'_>, level: usize) -> fmt::Result {
-        match self.kind() {
-            MarkerTreeKind::True => return write!(f, "true"),
-            MarkerTreeKind::False => return write!(f, "false"),
-            MarkerTreeKind::Version(kind) => {
-                for (tree, range) in simplify::collect_edges(kind.edges()) {
-                    writeln!(f)?;
-                    for _ in 0..level {
-                        write!(f, "  ")?;
-                    }
-
-                    write!(f, "{key}{range} -> ", key = kind.key())?;
-                    tree.fmt_graph(f, level + 1)?;
-                }
-            }
-            MarkerTreeKind::String(kind) => {
-                for (tree, range) in simplify::collect_edges(kind.children()) {
-                    writeln!(f)?;
-                    for _ in 0..level {
-                        write!(f, "  ")?;
-                    }
-
-                    write!(f, "{key}{range} -> ", key = kind.key())?;
-                    tree.fmt_graph(f, level + 1)?;
-                }
-            }
-            MarkerTreeKind::In(kind) => {
-                writeln!(f)?;
-                for _ in 0..level {
-                    write!(f, "  ")?;
-                }
-                write!(f, "{} in {} -> ", kind.key(), kind.value())?;
-                kind.edge(true).fmt_graph(f, level + 1)?;
-
-                writeln!(f)?;
-                for _ in 0..level {
-                    write!(f, "  ")?;
-                }
-                write!(f, "{} not in {} -> ", kind.key(), kind.value())?;
-                kind.edge(false).fmt_graph(f, level + 1)?;
-            }
-            MarkerTreeKind::Contains(kind) => {
-                writeln!(f)?;
-                for _ in 0..level {
-                    write!(f, "  ")?;
-                }
-                write!(f, "{} in {} -> ", kind.value(), kind.key())?;
-                kind.edge(true).fmt_graph(f, level + 1)?;
-
-                writeln!(f)?;
-                for _ in 0..level {
-                    write!(f, "  ")?;
-                }
-                write!(f, "{} not in {} -> ", kind.value(), kind.key())?;
-                kind.edge(false).fmt_graph(f, level + 1)?;
-            }
-            MarkerTreeKind::List(kind) => {
-                writeln!(f)?;
-                for _ in 0..level {
-                    write!(f, "  ")?;
-                }
-                write!(f, "{} in {} -> ", kind.value(), kind.key())?;
-                kind.edge(true).fmt_graph(f, level + 1)?;
-
-                writeln!(f)?;
-                for _ in 0..level {
-                    write!(f, "  ")?;
-                }
-                write!(f, "{} not in {} -> ", kind.value(), kind.key())?;
-                kind.edge(false).fmt_graph(f, level + 1)?;
-            }
-            MarkerTreeKind::Extra(kind) => {
-                writeln!(f)?;
-                for _ in 0..level {
-                    write!(f, "  ")?;
-                }
-                write!(f, "extra == {} -> ", kind.name())?;
-                kind.edge(true).fmt_graph(f, level + 1)?;
-
-                writeln!(f)?;
-                for _ in 0..level {
-                    write!(f, "  ")?;
-                }
-                write!(f, "extra != {} -> ", kind.name())?;
-                kind.edge(false).fmt_graph(f, level + 1)?;
-            }
-        }
-
-        Ok(())
-    }
-}
-
 impl PartialOrd for MarkerTree {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -1570,38 +1440,6 @@ impl PartialOrd for MarkerTree {
 impl Ord for MarkerTree {
     fn cmp(&self, other: &Self) -> Ordering {
         self.kind().cmp(&other.kind())
-    }
-}
-
-/// Formats a [`MarkerTree`] as a graph.
-///
-/// This type is created by the [`MarkerTree::debug_graph`] routine.
-#[derive(Clone)]
-pub struct MarkerTreeDebugGraph<'a> {
-    marker: &'a MarkerTree,
-}
-
-impl fmt::Debug for MarkerTreeDebugGraph<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.marker.fmt_graph(f, 0)
-    }
-}
-
-/// Formats a [`MarkerTree`] using its raw internals.
-///
-/// This is very verbose and likely only useful if you're working
-/// on the internals of this crate.
-///
-/// This type is created by the [`MarkerTree::debug_raw`] routine.
-#[derive(Clone)]
-pub struct MarkerTreeDebugRaw<'a> {
-    marker: &'a MarkerTree,
-}
-
-impl fmt::Debug for MarkerTreeDebugRaw<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let node = INTERNER.shared.node(self.marker.0);
-        f.debug_tuple("MarkerTreeDebugRaw").field(node).finish()
     }
 }
 

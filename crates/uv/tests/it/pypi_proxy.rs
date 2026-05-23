@@ -19,6 +19,7 @@
 //! | `/basic-auth-heron/files/…`        | `public:heron` | 302 redirect → `files.pythonhosted.org`                |
 //! | `/basic-auth-eagle/simple/{pkg}/`   | `public:eagle` | Same, different password                               |
 //! | `/basic-auth-eagle/files/…`        | `public:eagle` | 302 redirect → `files.pythonhosted.org`                |
+//! | `/no-upload-time/simple/{pkg}/`     | No             | Simple API JSON without `upload-time`                  |
 
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
@@ -220,6 +221,61 @@ fn build_simple_api_response(
     })
 }
 
+/// Build the JSON Simple API response for a package, including a [PEP 792]
+/// `project-status` object.
+///
+/// [PEP 792]: https://peps.python.org/pep-0792/
+fn build_simple_api_response_with_project_status(
+    package_name: &str,
+    entries: &[PackageEntry],
+    file_url_prefix: &str,
+    status: &str,
+    reason: Option<&str>,
+) -> serde_json::Value {
+    let mut body = build_simple_api_response(package_name, entries, file_url_prefix);
+    let mut project_status = json!({ "status": status });
+    if let Some(reason) = reason {
+        project_status["reason"] = json!(reason);
+    }
+    body["project-status"] = project_status;
+    body
+}
+
+/// Build the JSON Simple API response for a package without `upload-time`.
+fn build_simple_api_response_without_upload_time(
+    package_name: &str,
+    entries: &[PackageEntry],
+    file_url_prefix: &str,
+) -> serde_json::Value {
+    let files: Vec<serde_json::Value> = entries
+        .iter()
+        .map(|entry| {
+            let rewritten_url = entry.url.replace(
+                "https://files.pythonhosted.org/",
+                &format!("{file_url_prefix}/"),
+            );
+            let mut file_obj = json!({
+                "filename": entry.filename,
+                "url": rewritten_url,
+                "hashes": {
+                    "sha256": entry.sha256
+                },
+                "size": entry.size,
+            });
+            if let Some(rp) = entry.requires_python {
+                file_obj["requires-python"] = json!(rp);
+            }
+            file_obj
+        })
+        .collect();
+
+    json!({
+        "meta": { "api-version": "1.1" },
+        "name": package_name,
+        "files": files,
+    })
+}
+
 /// Build the JSON Simple API response for a package with relative file URLs.
 ///
 /// File URLs are relative paths like `../../../files/packages/...`
@@ -312,6 +368,7 @@ impl PypiProxy {
 /// - `/basic-auth-eagle/simple/{pkg}/` — authenticated Simple API (public:eagle)
 /// - `/relative/simple/{pkg}/` — unauthenticated Simple API with relative file links
 /// - `/basic-auth/relative/simple/{pkg}/` — authenticated Simple API with relative file links
+/// - `/no-upload-time/simple/{pkg}/` — unauthenticated Simple API without `upload-time`
 /// - `/files/…` — unauthenticated file redirect to `files.pythonhosted.org`
 /// - `/basic-auth/files/…` — authenticated file redirect (public:heron)
 /// - `/basic-auth-heron/files/…` — authenticated file redirect (public:heron)
@@ -481,6 +538,17 @@ pub(crate) async fn start() -> PypiProxy {
                 return ResponseTemplate::new(404);
             }
 
+            // Route: /no-upload-time/simple/{pkg}/  (unauthenticated)
+            if let Some(pkg) = extract_package_name(path, "/no-upload-time/simple/") {
+                if let Some(entries) = db.get(pkg) {
+                    let file_prefix = "https://files.pythonhosted.org";
+                    let body =
+                        build_simple_api_response_without_upload_time(pkg, entries, file_prefix);
+                    return simple_api_response(&body);
+                }
+                return ResponseTemplate::new(404);
+            }
+
             // Route: /simple/{pkg}/  (unauthenticated)
             // Unlike authenticated routes, file URLs point directly to files.pythonhosted.org
             // (matching the behavior of the original fly.dev proxy).
@@ -493,12 +561,86 @@ pub(crate) async fn start() -> PypiProxy {
                 return ResponseTemplate::new(404);
             }
 
+            // Route: /status/{status}[/reason/{reason}]/simple/{pkg}/
+            //
+            // Serves a Simple API response with a PEP 792 `project-status`
+            // field. Files redirect via `/status/{status}[/reason/{reason}]/files/...`.
+            if let Some((status, reason, kind, suffix)) = parse_status_path(path) {
+                match kind {
+                    StatusRouteKind::Simple => {
+                        // `suffix` is `"{pkg}/"` (trailing slash from the URL);
+                        // strip it to get the package name.
+                        if let Some(pkg) = suffix.strip_suffix('/')
+                            && !pkg.contains('/')
+                            && let Some(entries) = db.get(pkg)
+                        {
+                            let file_prefix = format!(
+                                "{server_uri}{prefix}/files",
+                                prefix = status_route_prefix(status, reason),
+                            );
+                            let body = build_simple_api_response_with_project_status(
+                                pkg,
+                                entries,
+                                &file_prefix,
+                                status,
+                                reason,
+                            );
+                            return simple_api_response(&body);
+                        }
+                        return ResponseTemplate::new(404);
+                    }
+                    StatusRouteKind::Files => {
+                        let target = format!("https://files.pythonhosted.org/{suffix}");
+                        return ResponseTemplate::new(302).insert_header("Location", target);
+                    }
+                }
+            }
+
             ResponseTemplate::new(404)
         })
         .mount(&server)
         .await;
 
     PypiProxy { server }
+}
+
+enum StatusRouteKind {
+    Simple,
+    Files,
+}
+
+/// Parse a `/status/{status}[/reason/{reason}]/{simple|files}/...` path,
+/// returning the status, optional reason, which leaf route was requested,
+/// and the remaining suffix (e.g. `/simple/iniconfig/` or `/files/...`).
+fn parse_status_path(path: &str) -> Option<(&str, Option<&str>, StatusRouteKind, &str)> {
+    let after_status_prefix = path.strip_prefix("/status/")?;
+    let (status, rest) = after_status_prefix.split_once('/')?;
+    // If the next segment is "reason/...", capture the reason and advance past it.
+    let (reason, rest) = if let Some(after_reason_prefix) = rest.strip_prefix("reason/") {
+        let (reason, rest) = after_reason_prefix.split_once('/')?;
+        (Some(reason), rest)
+    } else {
+        (None, rest)
+    };
+    // `rest` is now e.g. `simple/iniconfig/` or `files/packages/...`; attach a
+    // leading slash so the caller can recognize the route.
+    if let Some(suffix) = rest.strip_prefix("simple/") {
+        Some((status, reason, StatusRouteKind::Simple, suffix))
+    } else if let Some(suffix) = rest.strip_prefix("files/") {
+        Some((status, reason, StatusRouteKind::Files, suffix))
+    } else {
+        None
+    }
+}
+
+/// Build the path prefix that matches [`parse_status_path`] for a given
+/// status + optional reason (used when constructing file URLs that round-trip
+/// through [`parse_status_path`]).
+fn status_route_prefix(status: &str, reason: Option<&str>) -> String {
+    match reason {
+        Some(reason) => format!("/status/{status}/reason/{reason}"),
+        None => format!("/status/{status}"),
+    }
 }
 
 /// Extract the package name from a path like `/prefix/{package}/`.

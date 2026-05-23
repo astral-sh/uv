@@ -11,7 +11,7 @@
 #![allow(unsafe_code)]
 // Usually we want fs_err over std::fs, but there's no advantage here, we don't
 // report errors encountered while reporting an exception.
-#![allow(clippy::disallowed_types)]
+#![expect(clippy::disallowed_types)]
 
 use std::fmt::Write;
 use std::fs::File;
@@ -304,8 +304,8 @@ unsafe extern "system" fn unhandled_exception_filter(
     EXCEPTION_CONTINUE_SEARCH
 }
 
-/// Set up our handler for unhandled exceptions.
-pub(crate) fn setup() {
+/// Install a handler for unhandled exceptions.
+pub fn install_unhandled_exception_handler() {
     // SAFETY: winapi call, argument is a mostly async-signal-safe function
     unsafe {
         SetUnhandledExceptionFilter(Some(unhandled_exception_filter));

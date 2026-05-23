@@ -29,7 +29,7 @@ pub(crate) async fn validate_zip(
             .connect_timeout(environment.http_connect_timeout),
         cache,
     )
-    .build();
+    .build()?;
 
     let ParsedUrl::Archive(archive) = ParsedUrl::try_from(args.url.to_url())? else {
         bail!("Only archive URLs are supported");

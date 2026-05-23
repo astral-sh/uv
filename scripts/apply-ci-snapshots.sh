@@ -4,6 +4,7 @@
 # Usage:
 #   scripts/apply-ci-snapshots.sh                  # auto-detect PR for current branch
 #   scripts/apply-ci-snapshots.sh <run-id>         # use a specific workflow run ID
+#   scripts/apply-ci-snapshots.sh review           # auto-detect and interactively review
 #   scripts/apply-ci-snapshots.sh <run-id> review  # interactively review instead of accepting
 #
 # Requires: gh (GitHub CLI), cargo-insta
@@ -25,17 +26,24 @@ cleanup() {
 }
 trap cleanup EXIT
 
-action="${2:-accept}"
+# If the first argument is an action keyword, treat it as the action and
+# auto-detect the run ID. Otherwise, the first argument is the run ID and the
+# second is the action.
+if [[ "${1:-}" == "accept" || "${1:-}" == "review" ]]; then
+    action="$1"
+    run_id=""
+else
+    run_id="${1:-}"
+    action="${2:-accept}"
+fi
+
 if [[ "$action" != "accept" && "$action" != "review" ]]; then
     echo "error: action must be 'accept' or 'review', got '$action'" >&2
     exit 1
 fi
 
-# Resolve the run ID
-if [[ "${1:-}" ]]; then
-    run_id="$1"
-else
-    # Auto-detect: find the latest CI run for the current branch's PR
+# Auto-detect the run ID from the current branch's PR if not provided.
+if [[ -z "$run_id" ]]; then
     branch="$(git branch --show-current)"
     if [[ -z "$branch" ]]; then
         echo "error: not on a branch and no run ID provided" >&2

@@ -14,7 +14,7 @@ use crate::wheel_tag::{WheelTag, WheelTagLarge, WheelTagSmall};
 /// The expanded wheel tags as stored in a `WHEEL` file.
 ///
 /// For example, if a wheel filename included `py2.py3-none-any`, the `WHEEL` file would include:
-/// ```
+/// ```text
 /// Tag: py2-none-any
 /// Tag: py3-none-any
 /// ```

@@ -82,11 +82,13 @@ mod cache_clean;
 mod cache_dir;
 mod cache_prune;
 mod cache_size;
-mod diagnostics;
+pub(crate) mod diagnostics;
+mod editable;
 mod help;
 pub(crate) mod pip;
 mod project;
 mod publish;
+mod pylock;
 mod python;
 pub(crate) mod reporters;
 #[cfg(feature = "self-update")]

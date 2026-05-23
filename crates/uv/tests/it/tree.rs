@@ -5,6 +5,7 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use url::Url;
 
+use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
 #[test]
@@ -265,6 +266,69 @@ fn outdated() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+/// Test that `uv tree --outdated` with a relative `exclude-newer` span recomputes the
+/// cutoff timestamp relative to the current time, not the time the lock was generated.
+///
+/// Uses idna which has releases at:
+/// - 3.6: 2023-11-25
+/// - 3.7: 2024-04-11
+#[test]
+fn outdated_exclude_newer_relative() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+    "#,
+    )?;
+
+    // Lock at 2024-05-01 with `--exclude-newer "3 weeks"`.
+    // Cutoff: 2024-04-10 → resolves idna 3.6 (released 2023-11-25, before cutoff).
+    // idna 3.7 (released 2024-04-11) is excluded.
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-05-01T00:00:00Z")
+        .arg("--exclude-newer")
+        .arg("3 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Run `--outdated` at a later time (2024-06-01) with the same span.
+    // The recomputed cutoff is 2024-05-11, which is after idna 3.7 (2024-04-11),
+    // so idna 3.7 should be reported as the latest version.
+    uv_snapshot!(context.filters(), context
+        .tree()
+        .arg("--outdated")
+        .arg("--universal")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-06-01T00:00:00Z")
+        .arg("--exclude-newer")
+        .arg("3 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── idna v3.6 (latest: v3.7)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
     "
     );
 
@@ -729,6 +793,240 @@ fn optional_dependencies_inverted() -> Result<()> {
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
+
+    Ok(())
+}
+
+/// Regression test for <https://github.com/astral-sh/uv/issues/19327>.
+///
+/// When a package is required both as a plain dep and as a dep with extras (e.g., from a
+/// dependency group), `uv tree` should not display extra-conditional dependencies for the plain
+/// occurrence.
+#[test]
+fn dep_and_group_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["flask"]
+
+        [dependency-groups]
+        dev = ["flask[dotenv]"]
+    "#,
+    )?;
+
+    // Plain `flask` should not show `python-dotenv` (which belongs to the `dotenv` extra),
+    // but the `flask[dotenv]` occurrence should still be expanded in its own extra context.
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── flask v3.0.2
+    │   ├── blinker v1.7.0
+    │   ├── click v8.1.7
+    │   │   └── colorama v0.4.6
+    │   ├── itsdangerous v2.1.2
+    │   ├── jinja2 v3.1.3
+    │   │   └── markupsafe v2.1.5
+    │   └── werkzeug v3.0.1
+    │       └── markupsafe v2.1.5
+    └── flask[dotenv] v3.0.2 (group: dev)
+        ├── blinker v1.7.0
+        ├── click v8.1.7 (*)
+        ├── itsdangerous v2.1.2
+        ├── jinja2 v3.1.3 (*)
+        ├── werkzeug v3.0.1 (*)
+        └── python-dotenv v1.0.1 (extra: dotenv)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    "
+    );
+
+    // With `--no-dedupe`, `flask[dotenv]` is expanded and shows `python-dotenv` as an extra dep,
+    // while plain `flask` still does not show it.
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--no-dedupe"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── flask v3.0.2
+    │   ├── blinker v1.7.0
+    │   ├── click v8.1.7
+    │   │   └── colorama v0.4.6
+    │   ├── itsdangerous v2.1.2
+    │   ├── jinja2 v3.1.3
+    │   │   └── markupsafe v2.1.5
+    │   └── werkzeug v3.0.1
+    │       └── markupsafe v2.1.5
+    └── flask[dotenv] v3.0.2 (group: dev)
+        ├── blinker v1.7.0
+        ├── click v8.1.7
+        │   └── colorama v0.4.6
+        ├── itsdangerous v2.1.2
+        ├── jinja2 v3.1.3
+        │   └── markupsafe v2.1.5
+        ├── werkzeug v3.0.1
+        │   └── markupsafe v2.1.5
+        └── python-dotenv v1.0.1 (extra: dotenv)
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn dep_and_group_extras_with_extra_only_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let leaf = context.temp_dir.child("leaf");
+    fs_err::create_dir_all(leaf.path())?;
+    leaf.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+    let leaf_url = Url::from_file_path(leaf.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert leaf path to URL"))?;
+
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir_all(child.path())?;
+    child.child("pyproject.toml").write_str(&formatdoc! {
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        extra = ["leaf @ {}"]
+        "#,
+        leaf_url,
+    })?;
+    let child_url = Url::from_file_path(child.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert child path to URL"))?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child @ {}"]
+
+        [dependency-groups]
+        dev = ["child[extra] @ {}"]
+        "#,
+        child_url,
+        child_url,
+    })?;
+
+    uv_snapshot!(context.filters(), context.tree(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── child v0.1.0
+    └── child[extra] v0.1.0 (group: dev)
+        └── leaf v0.1.0 (extra: extra)
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn dep_and_group_extras_with_different_extras_in_path() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let leaf = context.temp_dir.child("leaf");
+    fs_err::create_dir_all(leaf.path())?;
+    leaf.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+    let leaf_url = Url::from_file_path(leaf.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert leaf path to URL"))?;
+
+    let a = context.temp_dir.child("a");
+    fs_err::create_dir_all(a.path())?;
+    let b = context.temp_dir.child("b");
+    fs_err::create_dir_all(b.path())?;
+    let b_url = Url::from_file_path(b.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert b path to URL"))?;
+    a.child("pyproject.toml").write_str(&formatdoc! {
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["b[extra2] @ {}"]
+        "#,
+        b_url,
+    })?;
+    let a_url = Url::from_file_path(a.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert a path to URL"))?;
+
+    b.child("pyproject.toml").write_str(&formatdoc! {
+        r#"
+        [project]
+        name = "b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        extra1 = ["a @ {}"]
+        extra2 = ["leaf @ {}"]
+        "#,
+        a_url,
+        leaf_url,
+    })?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["b[extra1] @ {}"]
+        "#,
+        b_url,
+    })?;
+
+    uv_snapshot!(context.filters(), context.tree(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── b[extra1] v0.1.0
+        └── a v0.1.0 (extra: extra1)
+            └── b[extra2] v0.1.0
+                └── leaf v0.1.0 (extra: extra2)
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
 
     Ok(())
 }

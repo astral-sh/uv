@@ -35,10 +35,9 @@ use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersion, VersionRequest,
 };
-use uv_requirements::upgrade::{LockedRequirements, read_pylock_toml_requirements};
 use uv_requirements::{
-    GroupsSpecification, RequirementsSource, RequirementsSpecification, is_pylock_toml,
-    upgrade::read_requirements_txt,
+    GroupsSpecification, LockedRequirements, RequirementsSource, RequirementsSpecification,
+    is_pylock_toml, read_pylock_toml_requirements, read_requirements_txt,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
@@ -48,7 +47,7 @@ use uv_resolver::{
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{TorchMode, TorchSource, TorchStrategy};
-use uv_types::{EmptyInstalledPackages, HashStrategy};
+use uv_types::{EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
@@ -72,6 +71,7 @@ pub(crate) async fn pip_compile(
     excludes_from_workspace: Vec<uv_normalize::PackageName>,
     build_constraints_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
+    required_environments: SupportedEnvironments,
     extras: ExtrasSpecification,
     groups: GroupsSpecification,
     output_file: Option<&Path>,
@@ -385,7 +385,13 @@ pub(crate) async fn pip_compile(
     };
 
     let artifact_environments = if universal {
-        environments.clone()
+        SupportedEnvironments::from_markers(
+            environments
+                .iter()
+                .chain(required_environments.iter())
+                .copied()
+                .collect(),
+        )
     } else {
         SupportedEnvironments::default()
     };
@@ -463,7 +469,7 @@ pub(crate) async fn pip_compile(
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()?;
 
     // Read the lockfile, if present.
     let LockedRequirements { preferences, git } =
@@ -546,6 +552,7 @@ pub(crate) async fn pip_compile(
         &build_hashes,
         exclude_newer.clone(),
         sources,
+        SourceTreeEditablePolicy::Project,
         workspace_cache,
         concurrency.clone(),
         preview,
@@ -595,7 +602,7 @@ pub(crate) async fn pip_compile(
     )
     .await
     {
-        Ok(resolution) => resolution,
+        Ok((resolution, _)) => resolution,
         Err(err) => {
             return diagnostics::OperationDiagnostic::with_system_certs(
                 client_builder.system_certs(),

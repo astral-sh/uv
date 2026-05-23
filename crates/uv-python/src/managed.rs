@@ -244,9 +244,8 @@ impl ManagedPythonInstallations {
     }
 
     /// Iterate over Python installations that support the current platform.
-    pub fn find_matching_current_platform(
-        &self,
-    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
+    pub(crate) fn find_matching_current_platform()
+    -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
         let platform = Platform::from_env()?;
 
         let iter = Self::from_settings(None)?
@@ -273,8 +272,7 @@ impl ManagedPythonInstallations {
         version: &'a PythonVersion,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + 'a, Error> {
         let request = VersionRequest::from(version);
-        Ok(self
-            .find_matching_current_platform()?
+        Ok(Self::find_matching_current_platform()?
             .filter(move |installation| request.matches_installation_key(installation.key())))
     }
 
@@ -815,7 +813,7 @@ impl PythonMinorVersionLink {
         Self::from_executable(installation.executable(false).as_path(), installation.key())
     }
 
-    pub fn create_directory(&self) -> Result<(), Error> {
+    fn create_directory(&self) -> Result<(), Error> {
         match replace_symlink(
             self.target_directory.as_path(),
             self.symlink_directory.as_path(),
@@ -873,17 +871,16 @@ impl PythonMinorVersionLink {
 
     /// Read the target of the minor version link.
     ///
-    /// On Unix, this reads the symlink target. On Windows, this reads the junction target
-    /// using the `junction` crate which properly handles the `\??\` prefix that Windows
-    /// uses internally for junction targets.
-    pub fn read_target(&self) -> Option<PathBuf> {
+    /// On Unix, this reads the symlink target. On Windows, this reads the directory link
+    /// target, whether uv created it as a junction or as a directory symlink under Wine.
+    fn read_target(&self) -> Option<PathBuf> {
         #[cfg(unix)]
         {
             self.symlink_directory.read_link().ok()
         }
         #[cfg(windows)]
         {
-            junction::get_target(&self.symlink_directory).ok()
+            uv_fs::read_link(&self.symlink_directory).ok()
         }
     }
 }

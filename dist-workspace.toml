@@ -27,7 +27,6 @@ targets = [
     "armv7-unknown-linux-gnueabihf",
     "armv7-unknown-linux-musleabihf",
     "x86_64-apple-darwin",
-    "powerpc64-unknown-linux-gnu",
     "powerpc64le-unknown-linux-gnu",
     "riscv64gc-unknown-linux-gnu",
     "riscv64gc-unknown-linux-musl",
@@ -84,9 +83,9 @@ riscv64gc-unknown-linux-gnu = "2.31"
 "*" = "2.17"
 
 [dist.github-action-commits]
-"actions/checkout" = "11bd71901bbe5b1630ceea73d27597364c9af683" # v4
-"actions/upload-artifact" = "6027e3dd177782cd8ab9af838c04fd81a07f1d47" # v4.6.2
-"actions/download-artifact" = "d3f86a106a0bac45b974a628896c90dbdf5c8093" # v4.3.0
+"actions/checkout" = "de0fac2e4500dabe0009e67214ff5f5447ce83dd" # v6.0.2
+"actions/upload-artifact" = "bbbca2ddaa5d8feaa63e36b76fdaad77386f024f" # v7.0.0
+"actions/download-artifact" = "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c" # v8.0.1
 "actions/attest-build-provenance" = "00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8" # v3.1.0
 
 [dist.binaries]

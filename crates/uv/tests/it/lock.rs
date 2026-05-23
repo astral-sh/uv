@@ -3,7 +3,6 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
-use std::io::BufReader;
 use url::Url;
 
 use uv_fs::Simplified;
@@ -942,6 +941,246 @@ fn lock_sdist_git_short_rev() -> Result<()> {
     ----- stderr -----
     Checked 1 package in [TIME]
     ");
+
+    Ok(())
+}
+
+/// Lock a Git requirement that points to a pre-built source archive within a repository.
+#[test]
+#[cfg(feature = "test-git")]
+fn lock_sdist_git_archive() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        iniconfig = { git = "https://github.com/astral-sh/archive-in-git-test", path = "archives/iniconfig-2.0.0.tar.gz" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { git = "https://github.com/astral-sh/archive-in-git-test?path=archives%2Finiconfig-2.0.0.tar.gz#bb7ce6abf9f90544767701de5b7b0c7802dc642b" }
+        sdist = { hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", git = "https://github.com/astral-sh/archive-in-git-test?path=archives%2Finiconfig-2.0.0.tar.gz" }]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0.tar.gz)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    // Re-install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    "###);
+
+    // Clear the environment, and re-install.
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0.tar.gz)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    Ok(())
+}
+
+/// Lock a Git requirement that points to a pre-built wheel within a repository.
+#[test]
+#[cfg(feature = "test-git")]
+fn lock_wheel_git_archive() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        iniconfig = { git = "https://github.com/astral-sh/archive-in-git-test", path = "archives/iniconfig-2.0.0-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { git = "https://github.com/astral-sh/archive-in-git-test?path=archives%2Finiconfig-2.0.0-py3-none-any.whl#bb7ce6abf9f90544767701de5b7b0c7802dc642b" }
+        wheels = [
+            { filename = "iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", git = "https://github.com/astral-sh/archive-in-git-test?path=archives%2Finiconfig-2.0.0-py3-none-any.whl" }]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    // Re-install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    "###);
+
+    // Clear the environment, and re-install.
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
 
     Ok(())
 }
@@ -2161,7 +2400,8 @@ fn lock_project_with_build_constraints() -> Result<()> {
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-      help: `requests` (v1.2.0) was included because `project` (v0.1.0) depends on `requests==1.2`
+
+    hint: `requests` (v1.2.0) was included because `project` (v0.1.0) depends on `requests==1.2`
     ");
 
     Ok(())
@@ -4641,6 +4881,178 @@ fn lock_upgrade_dry_run_multi_version() -> Result<()> {
     Ok(())
 }
 
+/// `--check --refresh` should not report changes when the lockfile is already
+/// canonical for workspace conflicts.
+///
+/// Regression test for: <https://github.com/astral-sh/uv/issues/18553>
+#[test]
+fn lock_check_refresh_workspace_conflicts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "workspace-demo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-a"]
+
+        [project.optional-dependencies]
+        prod = ["package-a[prod]"]
+        non-prod = ["package-a[non-prod]"]
+
+        [tool.uv.workspace]
+        members = ["packages/package-a"]
+
+        [tool.uv.sources]
+        package-a = { workspace = true }
+
+        [tool.uv]
+        conflicts = [
+            [
+                { extra = "prod" },
+                { extra = "non-prod" },
+            ],
+        ]
+        "#,
+    )?;
+
+    let package_dir = context.temp_dir.child("packages").child("package-a");
+    package_dir.create_dir_all()?;
+    package_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        prod = ["sortedcontainers==2.3.0"]
+        non-prod = ["sortedcontainers==2.4.0"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                { extra = "prod" },
+                { extra = "non-prod" },
+            ],
+        ]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "package-a", extra = "non-prod" },
+            { package = "package-a", extra = "prod" },
+        ], [
+            { package = "workspace-demo", extra = "non-prod" },
+            { package = "workspace-demo", extra = "prod" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "package-a",
+            "workspace-demo",
+        ]
+
+        [[package]]
+        name = "package-a"
+        version = "0.1.0"
+        source = { editable = "packages/package-a" }
+
+        [package.optional-dependencies]
+        non-prod = [
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+        prod = [
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "sortedcontainers", marker = "extra == 'non-prod'", specifier = "==2.4.0" },
+            { name = "sortedcontainers", marker = "extra == 'prod'", specifier = "==2.3.0" },
+        ]
+        provides-extras = ["prod", "non-prod"]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509, upload-time = "2020-11-09T00:03:52.258Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479, upload-time = "2020-11-09T00:03:50.723Z" },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
+        ]
+
+        [[package]]
+        name = "workspace-demo"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "package-a" },
+        ]
+
+        [package.optional-dependencies]
+        non-prod = [
+            { name = "package-a", extra = ["non-prod"], marker = "(extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-14-workspace-demo-prod') or (extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-9-package-a-non-prod') or (extra == 'extra-9-package-a-non-prod' and extra == 'extra-9-package-a-prod')" },
+        ]
+        prod = [
+            { name = "package-a", extra = ["prod"], marker = "(extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-14-workspace-demo-prod') or (extra == 'extra-14-workspace-demo-prod' and extra == 'extra-9-package-a-prod') or (extra == 'extra-9-package-a-non-prod' and extra == 'extra-9-package-a-prod')" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", editable = "packages/package-a" },
+            { name = "package-a", extras = ["non-prod"], marker = "extra == 'non-prod'", editable = "packages/package-a" },
+            { name = "package-a", extras = ["prod"], marker = "extra == 'prod'", editable = "packages/package-a" },
+        ]
+        provides-extras = ["prod", "non-prod"]
+        "#
+        );
+    });
+
+    context.lock().arg("--refresh").assert().success();
+    assert_eq!(lock, context.read("uv.lock"));
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--refresh"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Respect the locked version in an existing lockfile.
 #[test]
 fn lock_preference() -> Result<()> {
@@ -5297,9 +5709,8 @@ fn lock_requires_python() -> Result<()> {
           And because we know from (1) that pygls>=1.1.0,<1.3.0 cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
           And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: While the active Python version is 3.12, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
-
-          hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
+    hint: While the active Python version is 3.12, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
+    hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
     ");
 
     // Require >=3.7, and allow locking to a version of `pygls` that is compatible (==1.0.1).
@@ -8631,7 +9042,8 @@ fn lock_invalid_hash() -> Result<()> {
 
           Computed:
             sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
-      help: `idna` (v3.6) was included because `project` (v0.1.0) depends on `anyio` (v3.7.0) which depends on `idna`
+
+    hint: `idna` (v3.6) was included because `project` (v0.1.0) depends on `anyio` (v3.7.0) which depends on `idna`
     ");
 
     Ok(())
@@ -9188,7 +9600,7 @@ fn lock_requires_python_no_wheels() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because dearpygui==1.9.1 has no wheels with a matching Python version tag (e.g., `cp312`) and your project depends on dearpygui==1.9.1, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: Wheels are available for `dearpygui` (v1.9.1) with the following Python ABI tags: `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
+    hint: Wheels are available for `dearpygui` (v1.9.1) with the following Python ABI tags: `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
     ");
 
     Ok(())
@@ -10249,7 +10661,8 @@ async fn lock_redact_http() -> Result<()> {
       × Failed to download `iniconfig==2.0.0`
       ├─▶ Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
       ╰─▶ HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-      help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
+
+    hint: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
     ");
 
     // Installing from the lockfile should fail without an index.
@@ -10262,7 +10675,8 @@ async fn lock_redact_http() -> Result<()> {
       × Failed to download `iniconfig==2.0.0`
       ├─▶ Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
       ╰─▶ HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-      help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
+
+    hint: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
     ");
 
     // Installing from the lockfile should succeed when credentials are included on the command-line.
@@ -10300,7 +10714,8 @@ async fn lock_redact_http() -> Result<()> {
       × Failed to download `iniconfig==2.0.0`
       ├─▶ Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
       ╰─▶ HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-      help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
+
+    hint: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
     ");
 
     // Installing with credentials from with `UV_INDEX_URL` should succeed.
@@ -10896,7 +11311,7 @@ async fn lock_env_credentials() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
     ");
 
     // Provide credentials via environment variables.
@@ -11795,6 +12210,232 @@ fn lock_upgrade_package() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+/// Upgrade all packages in a dependency group with `--upgrade-group`.
+#[test]
+fn lock_upgrade_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Constrain `anyio` and `idna` in both the main dependencies and a dev group.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna<=3"]
+
+        [dependency-groups]
+        dev = ["anyio<=2"]
+        "#,
+    )?;
+
+    // Lock the project.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Remove the constraints.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+
+        [dependency-groups]
+        dev = ["anyio"]
+        "#,
+    )?;
+
+    // Upgrade just the `dev` group; `idna` should remain pinned.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-group").arg("dev"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Updated anyio v2.0.0 -> v4.3.0
+    ");
+
+    Ok(())
+}
+
+/// `--upgrade-group` only upgrades direct dependencies of the group, not transitive dependencies.
+#[test]
+fn lock_upgrade_group_transitive() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Pin `anyio` in the dev group. `anyio` depends on `idna` and `sniffio` transitively.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["anyio<=2", "idna<=3"]
+        "#,
+    )?;
+
+    // Lock the project — `anyio` at 2.0.0, `idna` at 3.0, `sniffio` at 1.3.1.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Remove the version constraints.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["anyio", "idna"]
+        "#,
+    )?;
+
+    // Upgrade just `anyio` via `--upgrade-package`; `idna` should stay pinned at 3.0.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("anyio"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Updated anyio v2.0.0 -> v4.3.0
+    ");
+
+    // Reset back to the constrained versions.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["anyio<=2", "idna<=3"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Updated anyio v4.3.0 -> v2.0.0
+    ");
+
+    // Remove the version constraints again.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["anyio", "idna"]
+        "#,
+    )?;
+
+    // Upgrade the `dev` group. Both `anyio` and `idna` are direct dependencies of the group,
+    // so both should be upgraded.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-group").arg("dev"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Updated anyio v2.0.0 -> v4.3.0
+    Updated idna v3.0 -> v3.6
+    ");
+
+    Ok(())
+}
+
+/// `--upgrade-group` works for projects without a `[project]` table (e.g., virtual workspace
+/// roots), where dependency groups are stored in the lock manifest rather than on a package.
+#[test]
+fn lock_upgrade_group_no_project_table() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        dev = ["anyio<=2"]
+        "#,
+    )?;
+
+    // Lock the project.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Remove the constraint.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        dev = ["anyio"]
+        "#,
+    )?;
+
+    // Upgrade the `dev` group.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-group").arg("dev"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    Updated anyio v2.0.0 -> v4.3.0
+    ");
 
     Ok(())
 }
@@ -13248,8 +13889,7 @@ fn lock_sources_source_tree() -> Result<()> {
 
     // Unzip the file.
     let file = fs_err::File::open(&*workspace_archive)?;
-    let mut archive = zip::ZipArchive::new(BufReader::new(file))?;
-    archive.extract(&context.temp_dir)?;
+    uv_extract::unzip(file, &context.temp_dir)?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {
@@ -15372,7 +16012,7 @@ fn lock_add_member_with_build_system() -> Result<()> {
       ╰─▶ Because anyio was not found in the cache and leaf depends on anyio>3, we can conclude that leaf's requirements are unsatisfiable.
           And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
 
     // Re-run without `--locked`.
@@ -15580,7 +16220,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
       ╰─▶ Because anyio was not found in the cache and leaf depends on anyio>3, we can conclude that leaf's requirements are unsatisfiable.
           And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
 
     // Re-run without `--locked`.
@@ -17781,9 +18421,9 @@ fn lock_overlapping_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Supported environments must be disjoint, but the following markers overlap: `sys_platform != 'win32'` and `python_full_version >= '3.11'`.
+    error: Supported environments must be disjoint, but the following markers overlap: `sys_platform != 'win32'` and `python_full_version >= '3.11'`
 
-    hint: replace `python_full_version >= '3.11'` with `python_full_version >= '3.11' and sys_platform == 'win32'`.
+    hint: replace `python_full_version >= '3.11'` with `python_full_version >= '3.11' and sys_platform == 'win32'`
     ");
 
     Ok(())
@@ -18232,6 +18872,101 @@ fn lock_non_project_group() -> Result<()> {
     Ok(())
 }
 
+/// Lock a non-project workspace root with `dependency-groups`.
+///
+/// Here instead of leaning on `tool.uv.workspace` we use the
+/// officially blessed "pyproject.toml with no `[project]` that
+/// declares `[dependency-groups]`".
+#[test]
+fn lock_non_project_group_standard() -> Result<()> {
+    let context = uv_test::test_context!("3.10");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [dependency-groups]
+        lint = ["iniconfig"]
+        dev = ["typing-extensions"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.10"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+
+        [manifest.dependency-groups]
+        dev = [{ name = "typing-extensions" }]
+        lint = [{ name = "iniconfig" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z" },
+        ]
+        "#
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Re-run with `--offline`. We shouldn't need a network connection to validate an
+    // already-correct lockfile with immutable metadata.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Lock a non-project workspace root with `tool.uv.sources`.
 #[test]
 fn lock_non_project_sources() -> Result<()> {
@@ -18313,6 +19048,226 @@ fn lock_non_project_sources() -> Result<()> {
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 1 package in [TIME]
     ");
+
+    Ok(())
+}
+
+/// Lock a non-project workspace root with conflicts declared between members.
+#[test]
+fn lock_non_project_member_conflicts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["member-a", "member-b"]
+        "#,
+    )?;
+
+    let member_a = context.temp_dir.child("member-a");
+    member_a.create_dir_all()?;
+    member_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sortedcontainers==2.3.0"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    let member_b = context.temp_dir.child("member-b");
+    member_b.create_dir_all()?;
+    member_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because member-a depends on sortedcontainers==2.3.0 and member-b depends on sortedcontainers==2.4.0, we can conclude that member-a and member-b are incompatible.
+          And because your workspace requires member-a and member-b, we can conclude that your workspace's requirements are unsatisfiable.
+    ");
+
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["member-a", "member-b"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { package = "member-a" },
+            { package = "member-b" },
+          ],
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 4 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "member-a" },
+            { package = "member-b" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "member-a",
+            "member-b",
+        ]
+
+        [[package]]
+        name = "member-a"
+        version = "0.1.0"
+        source = { editable = "member-a" }
+        dependencies = [
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-8-member-a'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "sortedcontainers", specifier = "==2.3.0" }]
+
+        [[package]]
+        name = "member-b"
+        version = "0.1.0"
+        source = { editable = "member-b" }
+        dependencies = [
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-8-member-b'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "sortedcontainers", specifier = "==2.4.0" }]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509, upload-time = "2020-11-09T00:03:52.258Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479, upload-time = "2020-11-09T00:03:50.723Z" },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
+        ]
+        "#
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--all-packages"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `member-a` and package `member-b` are incompatible with the declared conflicts: {member-a, member-b}
+    ");
+
+    Ok(())
+}
+
+/// Locking a non-project workspace root should reject conflicts that omit
+/// `package = ...`, since there is no root project name to infer.
+#[test]
+fn lock_non_project_member_conflicts_missing_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["member-a"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "foo" },
+            { package = "member-a" },
+          ],
+        ]
+        "#,
+    )?;
+
+    let member_a = context.temp_dir.child("member-a");
+    member_a.create_dir_all()?;
+    member_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Expected `package` field in conflicting entry: { extra = "foo" }
+    "#);
 
     Ok(())
 }
@@ -19256,18 +20211,25 @@ fn lock_explicit_default_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Found workspace root: `[TEMP_DIR]/`
+    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    DEBUG Found workspace configuration at `[TEMP_DIR]/pyproject.toml`
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    DEBUG Found project root: `[TEMP_DIR]/`
+    DEBUG No workspace root found, using project root
     DEBUG No Python version file found in workspace: [TEMP_DIR]/
     DEBUG Using Python request `>=3.12` from `requires-python` metadata
     DEBUG Checking for Python environment at: `.venv`
     DEBUG The project environment's Python version satisfies the request: `Python >=3.12`
     DEBUG Using request connect timeout of [TIME] and read timeout of [TIME]
-    DEBUG Found static `pyproject.toml` for: project @ file://[TEMP_DIR]/
+    DEBUG Found static `requires-dist` for: [TEMP_DIR]/
     DEBUG No workspace root found, using project root
     DEBUG Resolving despite existing lockfile due to mismatched requirements for: `project==0.1.0`
       Requested: {Requirement { name: PackageName("anyio"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([]), index: None, conflict: None }, origin: None }}
       Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2.0.0" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: DisplaySafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None, expanded: false }), format: Simple }), conflict: None }, origin: None }}
+    DEBUG Found static `pyproject.toml` for: project @ file://[TEMP_DIR]/
+    DEBUG No workspace root found, using project root
     DEBUG Solving with installed Python version: 3.12.[X]
     DEBUG Solving with target Python version: >=3.12
     DEBUG Solving with exclude-newer: global: 2024-03-25T00:00:00Z
@@ -19756,7 +20718,7 @@ fn lock_named_index_config_file_hint() -> Result<()> {
       ├─▶ Failed to parse entry: `jinja2`
       ╰─▶ Package `jinja2` references an undeclared index: `pytorch`
 
-          hint: Index `pytorch` was found in a project-level `uv.toml`, but indexes referenced via `tool.uv.sources` must be defined in the project's `pyproject.toml`
+    hint: Index `pytorch` was found in a project-level `uv.toml`, but indexes referenced via `tool.uv.sources` must be defined in the project's `pyproject.toml`
     ");
 
     Ok(())
@@ -19812,7 +20774,7 @@ fn lock_named_index_user_config_file_hint() -> Result<()> {
       ├─▶ Failed to parse entry: `jinja2`
       ╰─▶ Package `jinja2` references an undeclared index: `pytorch`
 
-          hint: Index `pytorch` was found in a user-level `uv.toml`, but indexes referenced via `tool.uv.sources` must be defined in the project's `pyproject.toml`
+    hint: Index `pytorch` was found in a user-level `uv.toml`, but indexes referenced via `tool.uv.sources` must be defined in the project's `pyproject.toml`
     ");
 
     Ok(())
@@ -22671,6 +23633,7 @@ async fn lock_keyring_explicit_always() -> Result<()> {
                 .join("keyring_test_plugin"),
         )
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env_remove(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
         // (from `echo "keyring==v25.6.0" | uv pip compile - --no-annotate --no-header -q`)
         .arg("jaraco-classes==3.4.0")
         .arg("jaraco-context==6.0.1")
@@ -22720,7 +23683,7 @@ async fn lock_keyring_explicit_always() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
     ");
 
     // With valid credentials, we should succeed
@@ -22757,9 +23720,10 @@ async fn lock_keyring_credentials_always_authenticate_fetches_username() -> Resu
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
-        // We need a newer version of keyring that supports `--mode`, so unset `EXCLUDE_NEWER` and
-        // pin the dependencies
+        // We need a newer version of keyring that supports `--mode`, so unset the timestamp
+        // cutoffs and pin the dependencies.
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env_remove(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
         // (from `echo "keyring==v25.6.0" | uv pip compile - --no-annotate --no-header -q`)
         .arg("jaraco-classes==3.4.0")
         .arg("jaraco-context==6.0.1")
@@ -23032,13 +23996,10 @@ fn lock_multiple_sources_conflict() -> Result<()> {
 
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 9, column 21
-      |
-    9 |         iniconfig = [
-      |                     ^
-    Source markers must be disjoint, but the following markers overlap: `python_full_version == '3.12.*' and sys_platform == 'win32'` and `sys_platform == 'win32'`.
+      Caused by: Failed to parse `tool.uv.sources`
+      Caused by: Source markers must be disjoint, but the following markers overlap: `python_full_version == '3.12.*' and sys_platform == 'win32'` and `sys_platform == 'win32'`.
 
-    hint: replace `sys_platform == 'win32'` with `python_full_version != '3.12.*' and sys_platform == 'win32'`.
+    hint: replace `sys_platform == 'win32'` with `python_full_version != '3.12.*' and sys_platform == 'win32'`
     ");
 
     Ok(())
@@ -23072,11 +24033,8 @@ fn lock_multiple_sources_no_marker() -> Result<()> {
 
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 9, column 21
-      |
-    9 |         iniconfig = [
-      |                     ^
-    When multiple sources are provided, each source must include a platform marker (e.g., `marker = "sys_platform == 'linux'"`)
+      Caused by: Failed to parse `tool.uv.sources`
+      Caused by: When multiple sources are provided, each source must include a platform marker (e.g., `marker = "sys_platform == 'linux'"`)
     "#);
 
     Ok(())
@@ -27325,8 +28283,9 @@ fn lock_derivation_chain_prod() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref==0.1.2`
+
+    hint: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref==0.1.2`
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
     Ok(())
@@ -27382,8 +28341,9 @@ fn lock_derivation_chain_extra() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref>=0.1`
+
+    hint: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref>=0.1`
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
     Ok(())
@@ -27441,8 +28401,9 @@ fn lock_derivation_chain_group() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
+
+    hint: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
     Ok(())
@@ -27511,8 +28472,9 @@ fn lock_derivation_chain_extended() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `child` (v0.1.0) which depends on `wsgiref>=0.1, <0.2`
+
+    hint: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `child` (v0.1.0) which depends on `wsgiref>=0.1, <0.2`
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
     Ok(())
@@ -27548,7 +28510,8 @@ fn mismatched_name_self_editable() -> Result<()> {
     Resolved 2 packages in [TIME]
       × Failed to build `foo @ file://[TEMP_DIR]/`
       ╰─▶ Package metadata name `project` does not match given name `foo`
-      help: `foo` was included because `project` (v0.1.0) depends on `foo`
+
+    hint: `foo` was included because `project` (v0.1.0) depends on `foo`
     ");
 
     Ok(())
@@ -28151,7 +29114,7 @@ fn lock_self_incompatible() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because your project depends on itself at an incompatible version (project==0.2.0), we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
 
     Ok(())
@@ -28288,7 +29251,7 @@ fn lock_self_extra_to_same_extra_incompatible() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
 
     Ok(())
@@ -28322,7 +29285,7 @@ fn lock_self_extra_to_other_extra_incompatible() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
 
     Ok(())
@@ -28459,7 +29422,7 @@ fn lock_self_extra_incompatible() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
 
     Ok(())
@@ -28589,7 +29552,7 @@ fn lock_self_marker_incompatible() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because your project depends on itself at an incompatible version (project{sys_platform == 'win32'}>0.1), we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
 
     Ok(())
@@ -31938,7 +32901,7 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
       ╰─▶ Because pandas==1.5.3 depends on numpy{python_full_version >= '3.10'}>=1.21.0 and your project depends on numpy==1.20.3, we can conclude that your project and pandas==1.5.3 are incompatible.
           And because your project depends on pandas==1.5.3, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: While the active Python version is 3.9, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
+    hint: While the active Python version is 3.9, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
     ");
 
     // Check that the resolution passes on the restricted Python environment.
@@ -32159,7 +33122,7 @@ fn lock_conflict_for_disjoint_platform() -> Result<()> {
       × No solution found when resolving dependencies for split (markers: sys_platform == 'exotic'):
       ╰─▶ Because your project depends on numpy{sys_platform == 'exotic'}>=1.24,<1.26 and numpy>=1.26, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     ");
 
     // Check that the resolution passes on the restricted environment.
@@ -32860,11 +33823,11 @@ fn lock_exclude_newer_package_disable() -> Result<()> {
 
         [[package]]
         name = "idna"
-        version = "3.11"
+        version = "3.6"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/6f/6d/0703ccc57f3a7233505399edb88de3cbd678da106337b9fcde432b65ed60/idna-3.11.tar.gz", hash = "sha256:795dafcc9c04ed0c1fb032c2aa73654d8e8c5023a7df64a53f39190ada629902", size = 194582, upload-time = "2025-10-12T14:55:20.501Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/0e/61/66938bbb5fc52dbdf84594873d5b51fb1f7c7794e9c0f5bd885f30bc507b/idna-3.11-py3-none-any.whl", hash = "sha256:771a87f49d9defaf64091e6e6fe9c18d4833f140bd19464795bc32d966ca37ea", size = 71008, upload-time = "2025-10-12T14:55:18.883Z" },
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
         ]
 
         [[package]]
@@ -33070,7 +34033,268 @@ fn lock_exclude_newer_hint() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2000-01-01T00:00:00Z. Consider using `exclude-newer-package` to override the cutoff for this package.
+    hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2000-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0, published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    Ok(())
+}
+
+/// Test that `exclude-newer` can be disabled for a specific index.
+///
+/// Regression test for:
+/// - <https://github.com/astral-sh/uv/issues/16813>
+/// - <https://github.com/astral-sh/uv/issues/18799>
+#[tokio::test]
+async fn lock_exclude_newer_index_disable() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [tool.uv]
+        exclude-newer = "2025-01-01T00:00:00Z"
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "internal" }}
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/no-upload-time/simple"
+        explicit = true
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2024-03-25T00:00:00Z
+    warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2024-03-25T00:00:00Z
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2024-03-25T00:00:00Z. The latest version satisfying the requirement is v2.0.0. Consider using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [tool.uv]
+        exclude-newer = "2025-01-01T00:00:00Z"
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "internal" }}
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/no-upload-time/simple"
+        explicit = true
+        exclude-newer = false
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains(&format!(
+        "source = {{ registry = \"{}/no-upload-time/simple\" }}",
+        proxy.uri()
+    )));
+
+    Ok(())
+}
+
+/// Test that an index can set its own `exclude-newer` value, and package overrides still win.
+#[tokio::test]
+async fn lock_exclude_newer_index_value() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "internal" }}
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/no-upload-time/simple"
+        explicit = true
+        exclude-newer = "2025-01-01T00:00:00Z"
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
+    warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+    warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: `iniconfig` was filtered by the index-specific `exclude-newer` setting to only include packages uploaded before 2025-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0. Consider updating that index's cutoff, setting it to `false`, or using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("index-exclude-newer"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+    warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: `iniconfig` was filtered by the index-specific `exclude-newer` setting to only include packages uploaded before 2025-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0. Consider updating that index's cutoff, setting it to `false`, or using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [tool.uv]
+        exclude-newer-package = {{ iniconfig = false }}
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "internal" }}
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/no-upload-time/simple"
+        explicit = true
+        exclude-newer = "2025-01-01T00:00:00Z"
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that the resolver emits a hint when a pinned version is excluded by `--exclude-newer`,
+/// even though older versions of the same package are still available.
+///
+/// See: <https://github.com/astral-sh/uv/issues/18949>
+#[test]
+fn lock_exclude_newer_hint_pinned_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    // Use a cutoff that excludes `iniconfig 2.0.0` (2023-01-07) but not `1.1.1` (2020-10-18).
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2022-01-01T00:00:00Z"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of iniconfig==2.0.0 and your project depends on iniconfig==2.0.0, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2022-01-01T00:00:00Z. The requested version, v2.0.0, was published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    Ok(())
+}
+
+/// Test that `~=` requirements don't emit a misleading pre-release hint when the compatible
+/// release upper bound is excluded by `--exclude-newer`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/19266>
+#[test]
+fn lock_exclude_newer_hint_compatible_release() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig~=2.0"]
+        "#,
+    )?;
+
+    // Use a cutoff that excludes `iniconfig 2.0.0` (2023-01-07) but not `1.1.1` (2020-10-18).
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2022-01-01T00:00:00Z"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only iniconfig<=1.1.1 is available and your project depends on iniconfig>=2.0,<3.dev0, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2022-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0, published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
     ");
 
     Ok(())
@@ -34088,7 +35312,7 @@ fn collapsed_error_with_marker_packages() -> Result<()> {
       × No solution found when resolving dependencies for split (markers: python_full_version < '3.14' and sys_platform == 'other'):
       ╰─▶ Because your project depends on anyio{sys_platform == 'other'} and anyio{python_full_version < '3.14'}>=4.4.0, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     ");
 
     Ok(())
@@ -34177,7 +35401,7 @@ fn lock_unsupported_wheel_url_supported_platform() -> Result<()> {
         .into_iter()
         .chain([(
             // This hint is only shown when the current platform doesn't match the target.
-            r"\n\n\s+hint: The resolution failed for an environment that is not the current one[^\n]*",
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
             "",
         )])
         .collect();
@@ -34229,6 +35453,93 @@ fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
 }
 
 #[test]
+fn lock_required_environment_cycle_reports_resolution_error() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [tool.uv]
+            required-environments = ["platform_machine == 'arm64'"]
+
+            [tool.uv.sources]
+            pkg-a = {{ workspace = true }}
+            pkg-b = {{ workspace = true }}
+
+            [tool.uv.workspace]
+            members = ["pkg-a", "pkg-b"]
+
+            [[tool.uv.index]]
+            name = "packse"
+            url = "{}"
+            default = true
+            "#,
+            packse_index_url()
+        })?;
+
+    let pkg_a = context.temp_dir.child("pkg-a");
+    pkg_a.create_dir_all()?;
+    pkg_a.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "no-sdist-no-wheels-with-matching-platform-a",
+            "pkg-b",
+        ]
+
+        [build-system]
+        requires = ["uv_build>=0.10,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    let pkg_b = context.temp_dir.child("pkg-b");
+    pkg_b.create_dir_all()?;
+    pkg_b.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "pkg-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [build-system]
+        requires = ["uv_build>=0.10,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+
+    uv_snapshot!(
+        filters,
+        context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (markers: platform_machine == 'arm64'):
+      ╰─▶ Because no-sdist-no-wheels-with-matching-platform-a==1.0.0 has no `platform_machine == 'arm64'`-compatible wheels and only no-sdist-no-wheels-with-matching-platform-a==1.0.0 is available, we can conclude that all versions of no-sdist-no-wheels-with-matching-platform-a cannot be used.
+          And because pkg-a depends on no-sdist-no-wheels-with-matching-platform-a and your workspace requires pkg-a, we can conclude that your workspace's requirements are unsatisfiable.
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
 fn lock_supported_environment_wheel_only_package_requires_compatible_wheels() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
@@ -34251,7 +35562,7 @@ fn lock_supported_environment_wheel_only_package_requires_compatible_wheels() ->
         .into_iter()
         .chain([(
             // This hint is only shown when the current platform doesn't match the target.
-            r"\n\n\s+hint: The resolution failed for an environment that is not the current one[^\n]*",
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
             "",
         )])
         .collect();
@@ -34283,7 +35594,7 @@ fn lock_supported_environment_wheel_only_package_requires_compatible_wheels() ->
           and pywin32<=305 has no wheels with a matching Python version tag (e.g., `cp312`), we can conclude that pywin32<=305 cannot be used.
           And because pywin32>=306 has no Linux-compatible wheels and your project depends on pywin32, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: Wheels are available for `pywin32` (v305) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
+    hint: Wheels are available for `pywin32` (v305) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
     ");
 
     Ok(())
@@ -34533,7 +35844,7 @@ fn lock_frozen_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `UV_FROZEN=1` was provided; use `--no-frozen` or `--check` instead
+    warning: The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `UV_FROZEN=1` was provided; use `--check` instead
     ");
 
     Ok(())

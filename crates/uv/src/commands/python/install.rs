@@ -341,7 +341,7 @@ async fn perform_install(
     let retry_policy = client_builder.retry_policy();
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
-    let client = client_builder.retries(0).build();
+    let client = client_builder.retries(0).build()?;
     let download_list =
         ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
     // TODO(zanieb): We use this variable to special-case .python-version files, but it'd be nice to
@@ -448,11 +448,13 @@ async fn perform_install(
                 request.request.to_canonical_string()
             )?;
             if is_from_python_version_file {
-                writeln!(
+                // TODO(zanieb): Consider refactoring this to use an error type.
+                write!(
                     printer.stderr(),
-                    "\n{}{} The version request came from a `.python-version` file; change the patch version in the file to upgrade instead",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "{}",
+                    uv_errors::Hints::from(
+                        "The version request came from a `.python-version` file; change the patch version in the file to upgrade instead",
+                    ),
                 )?;
             }
             return Ok(ExitStatus::Failure);
@@ -1031,6 +1033,10 @@ async fn delete_old_patches_in_group(
 
     for installation in &to_delete {
         let path = installation.path().to_path_buf();
+        let bin_links = bin_dir
+            .as_ref()
+            .map(|bin| bin_links_for_installation(bin, installation))
+            .unwrap_or_default();
 
         if let Err(err) = fs_err::tokio::remove_dir_all(&path).await {
             warn!("Failed to remove {}: {err}", path.display());
@@ -1039,8 +1045,10 @@ async fn delete_old_patches_in_group(
 
         deleted.push((installation.key().version().to_string(), path));
 
-        if let Some(ref bin) = bin_dir {
-            remove_bin_links(bin, installation);
+        for bin_link in bin_links {
+            if let Err(err) = fs_err::remove_file(&bin_link) {
+                warn!("Failed to remove {}: {err}", bin_link.display());
+            }
         }
     }
 
@@ -1082,26 +1090,28 @@ async fn delete_old_patches_in_group(
     Ok(())
 }
 
-/// Remove bin executables that belong to a given [`ManagedPythonInstallation`].
-fn remove_bin_links(bin: &Path, installation: &ManagedPythonInstallation) {
+/// Return bin executables that belong to a given [`ManagedPythonInstallation`].
+fn bin_links_for_installation(
+    bin: &Path,
+    installation: &ManagedPythonInstallation,
+) -> Vec<PathBuf> {
     let Ok(entries) = bin.read_dir() else {
-        return;
+        return Vec::new();
     };
 
-    for entry in entries.flatten() {
-        let Ok(file_type) = entry.file_type() else {
-            continue;
-        };
-        if file_type.is_dir() {
-            continue;
-        }
-        let path = entry.path();
-        if installation.is_bin_link(&path) {
-            if let Err(err) = fs_err::remove_file(&path) {
-                warn!("Failed to remove {}: {err}", path.display());
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let Ok(file_type) = entry.file_type() else {
+                return None;
+            };
+            if file_type.is_dir() {
+                return None;
             }
-        }
-    }
+            let path = entry.path();
+            installation.is_bin_link(&path).then_some(path)
+        })
+        .collect()
 }
 
 /// Link the binaries of a managed Python installation to the bin directory.

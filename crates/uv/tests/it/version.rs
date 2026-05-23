@@ -2003,6 +2003,66 @@ fn version_get_dynamic() -> Result<()> {
     Ok(())
 }
 
+/// Existing sources should survive the in-memory project refresh before re-locking.
+#[test]
+fn version_preserves_existing_sources_during_staged_update() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "preserved-source-dependency",
+        ]
+
+        [tool.uv.sources]
+        preserved-source-dependency = { path = "preserved-source-dependency" }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("preserved-source-dependency")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "preserved-source-dependency"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+    context
+        .temp_dir
+        .child("preserved-source-dependency")
+        .child("src")
+        .child("preserved_source_dependency")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context
+        .version()
+        .arg("0.2.0")
+        .arg("--no-sync"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project 0.1.0 => 0.2.0
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 // Dynamic version should error on write
 #[test]
 fn version_set_dynamic() -> Result<()> {
@@ -2289,17 +2349,14 @@ fn self_version_short() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(
-            r"\d+\.\d+\.\d+(-alpha\.\d+)?(\+\d+)?( \(.*\))?",
-            r"[VERSION] ([COMMIT] DATE)",
-        )])
+        .chain([(r"\d+\.\d+\.\d+(-alpha\.\d+)?(\+\d+)?", r"[VERSION]")])
         .collect::<Vec<_>>();
     uv_snapshot!(filters, context.self_version()
         .arg("--short"), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    [VERSION] ([COMMIT] DATE)
+    [VERSION]
 
     ----- stderr -----
     ");

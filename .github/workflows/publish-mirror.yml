@@ -17,12 +17,11 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: release
-      deployment: false
     env:
       VERSION: ${{ fromJson(inputs.plan).announcement_tag }}
     steps:
       - name: "Download GitHub Artifacts"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: artifacts-*
           path: artifacts
@@ -44,3 +43,18 @@ jobs:
             --cache-control "public, max-age=31536000, immutable" \
             artifacts/ \
             s3://${R2_BUCKET}/github/$PROJECT/releases/download/$VERSION/
+      - name: "Upload latest installers to R2"
+        if: ${{ !fromJson(inputs.plan).announcement_is_prerelease }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.MIRROR_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MIRROR_R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL: https://${{ secrets.MIRROR_R2_CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          AWS_DEFAULT_REGION: auto
+          R2_BUCKET: ${{ secrets.MIRROR_R2_BUCKET_NAME }}
+        run: |
+          for installer in uv-installer.sh uv-installer.ps1; do
+            aws s3 cp --output table --color on \
+              --cache-control "public, max-age=300" \
+              "artifacts/${installer}" \
+              "s3://${R2_BUCKET}/installers/uv/latest/${installer}"
+          done

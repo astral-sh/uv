@@ -1,17 +1,18 @@
 use std::fmt::Write;
 use std::ops::Deref;
 use std::path::Path;
-use std::sync::Arc;
 
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 use serde::Serialize;
-use tracing::warn;
+use tracing::{trace, warn};
+use uv_audit::Dependency;
+use uv_audit::osv::{self, Filter};
 use uv_cache::Cache;
 use uv_cli::SyncFormat;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, CachedClient, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
     ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions,
@@ -19,24 +20,24 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::{
-    DirectorySourceDist, Dist, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist,
-};
+use uv_distribution_types::{Dist, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist};
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
+use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
 use uv_scripts::Pep723Script;
-use uv_settings::PythonInstallMirrors;
-use uv_types::{BuildIsolation, HashStrategy};
+use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
+use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
+use crate::commands::editable::apply_editable_mode;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::{ChangedDist, Changelog, Modifications};
 use crate::commands::pip::resolution_markers;
@@ -45,9 +46,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EnvironmentUpdate, PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment,
-    UniversalState, default_dependency_groups, detect_conflicts, script_extra_build_requires,
-    script_specification, update_environment,
+    EnvironmentUpdate, MalwareFindings, PlatformState, ProjectEnvironment, ProjectError,
+    ScriptEnvironment, UniversalState, default_dependency_groups, detect_conflicts,
+    script_extra_build_requires, script_specification, update_environment,
 };
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
@@ -86,6 +87,7 @@ pub(crate) async fn sync(
     printer: Printer,
     preview: Preview,
     output_format: SyncFormat,
+    malware_settings: MalwareCheckSettings,
 ) -> Result<ExitStatus> {
     if preview.is_enabled(PreviewFeature::JsonOutput) && matches!(output_format, SyncFormat::Json) {
         warn_user!(
@@ -103,7 +105,7 @@ pub(crate) async fn sync(
             VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions {
-                    members: MemberDiscovery::None,
+                    members: MemberDiscovery::Existing,
                     ..DiscoveryOptions::default()
                 },
                 workspace_cache,
@@ -267,6 +269,7 @@ pub(crate) async fn sync(
                 spec,
                 modifications,
                 python_platform.as_ref(),
+                SourceTreeEditablePolicy::Project,
                 build_constraints.unwrap_or_default(),
                 script_extra_build_requires,
                 &settings,
@@ -285,25 +288,33 @@ pub(crate) async fn sync(
             .await
             {
                 Ok(EnvironmentUpdate { changelog, .. }) => {
-                    // Generate a report for the script without a lockfile
-                    let report = Report {
-                        schema: SchemaReport::default(),
-                        target: TargetName::from(&target),
-                        project: None,
-                        script: Some(ScriptReport::from(script)),
-                        sync: SyncReport {
-                            changes: PackageChangesReport::from_changelog(&changelog),
-                            ..sync_report
-                        },
-                        lock: None,
-                        dry_run: dry_run.enabled(),
-                    };
-                    if let Some(output) = report.format(output_format) {
-                        writeln!(printer.stdout_important(), "{output}")?;
-                    }
+                    write_sync_report(
+                        &target,
+                        &environment,
+                        &changelog,
+                        None,
+                        dry_run,
+                        output_format,
+                        printer,
+                    )?;
                     return Ok(ExitStatus::Success);
                 }
-                // TODO(zanieb): We should respect `--output-format json` for the error case
+                Err(ProjectError::Operation(operations::Error::OutdatedEnvironment(changelog))) => {
+                    write_sync_report(
+                        &target,
+                        &environment,
+                        &changelog,
+                        None,
+                        dry_run,
+                        output_format,
+                        printer,
+                    )?;
+                    return diagnostics::OperationDiagnostic::with_system_certs(
+                        client_builder.system_certs(),
+                    )
+                    .report(operations::Error::OutdatedEnvironment(changelog))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                }
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::with_system_certs(
                         client_builder.system_certs(),
@@ -427,10 +438,27 @@ pub(crate) async fn sync(
         dry_run,
         printer,
         preview,
+        &malware_settings,
     )
     .await
     {
         Ok(changelog) => changelog,
+        Err(ProjectError::Operation(operations::Error::OutdatedEnvironment(changelog))) => {
+            write_sync_report(
+                &target,
+                &environment,
+                &changelog,
+                Some(lock_report),
+                dry_run,
+                output_format,
+                printer,
+            )?;
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(operations::Error::OutdatedEnvironment(changelog))
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+        }
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::with_system_certs(
                 client_builder.system_certs(),
@@ -441,22 +469,15 @@ pub(crate) async fn sync(
         Err(err) => return Err(err.into()),
     };
 
-    let report = Report {
-        schema: SchemaReport::default(),
-        target: TargetName::from(&target),
-        project: target.project().map(ProjectReport::from),
-        script: target.script().map(ScriptReport::from),
-        sync: SyncReport {
-            changes: PackageChangesReport::from_changelog(&changelog),
-            ..sync_report
-        },
-        lock: Some(lock_report),
-        dry_run: dry_run.enabled(),
-    };
-
-    if let Some(output) = report.format(output_format) {
-        writeln!(printer.stdout_important(), "{output}")?;
-    }
+    write_sync_report(
+        &target,
+        &environment,
+        &changelog,
+        Some(lock_report),
+        dry_run,
+        output_format,
+        printer,
+    )?;
 
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::Success),
@@ -632,6 +653,7 @@ pub(super) async fn do_sync(
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
+    malware_settings: &MalwareCheckSettings,
 ) -> Result<Changelog, ProjectError> {
     // Extract the project settings.
     let InstallerSettingsRef {
@@ -698,6 +720,9 @@ pub(super) async fn do_sync(
     .into_inner();
 
     let client_builder = client_builder.clone().keyring(keyring_provider);
+    // Save an authenticated builder for the malware check before moving the
+    // primary builder into the registry client below.
+    let malware_check_client_builder = client_builder.clone();
 
     // Validate that the Python version is supported by the lockfile.
     if !target
@@ -776,7 +801,7 @@ pub(super) async fn do_sync(
         .index_strategy(index_strategy)
         .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())
-        .build();
+        .build()?;
 
     // Determine whether to enable build isolation.
     let build_isolation = match build_isolation {
@@ -827,10 +852,30 @@ pub(super) async fn do_sync(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        SourceTreeEditablePolicy::Project,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
     );
+
+    // Run a malware check against OSV before installing.
+    if malware_settings.enabled {
+        if !preview.is_enabled(PreviewFeature::MalwareCheck) {
+            warn_user!(
+                "Malware checks are experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                PreviewFeature::MalwareCheck
+            );
+        }
+        check_malware(
+            &target,
+            &resolution,
+            &malware_check_client_builder,
+            concurrency,
+            malware_settings.malware_check_url.clone(),
+            cache,
+        )
+        .await?;
+    }
 
     let site_packages = SitePackages::from_environment(venv)?;
 
@@ -863,6 +908,95 @@ pub(super) async fn do_sync(
     Ok(changelog)
 }
 
+/// Run a malware check against OSV before installing dependencies.
+///
+/// This queries the OSV batch endpoint with [`Filter::Malware`] to detect only `MAL-`-prefixed
+/// advisories. All lockfile malware findings are emitted as warnings, but installation is only
+/// aborted if malware is found in a dependency that would actually be installed.
+async fn check_malware(
+    target: &InstallTarget<'_>,
+    resolution: &Resolution,
+    client_builder: &BaseClientBuilder<'_>,
+    concurrency: &Concurrency,
+    malware_check_url: Option<DisplaySafeUrl>,
+    cache: &Cache,
+) -> Result<(), ProjectError> {
+    let installed_dependencies: FxHashSet<_> = resolution
+        .distributions()
+        .filter_map(|dist| dist.version().map(|version| (dist.name(), version)))
+        .collect();
+
+    let all_extras = ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::All);
+    let all_groups =
+        DependencyGroups::from_args(false, false, false, vec![], vec![], false, vec![], true)
+            .with_defaults(DefaultGroups::All);
+
+    // NOTE: For now, we only check locked packages that indicate a source from
+    // PyPI. The rationale behind this is that private (i.e. non-PyPI) packages
+    // are almost certainly not going to be included in the OSV DB, and scanning
+    // for them against a remote service is both wasteful and arguably a small
+    // information leak (of potentially private package names).
+    // This effectively excludes public packages that are mirrored onto private
+    // indices, which is a tradeoff we'll need to reconsider.
+    let auditable = target.lock().auditable(
+        &all_extras,
+        &all_groups,
+        uv_resolver::Package::is_from_pypi_registry,
+    );
+    if auditable.is_empty() {
+        return Ok(());
+    }
+
+    let dependencies: Vec<Dependency> = auditable
+        .packages()
+        .map(|(name, version)| Dependency::new((*name).clone(), (*version).clone()))
+        .collect();
+
+    let osv_url = malware_check_url.unwrap_or_else(|| osv::API_BASE.clone());
+
+    let base_client = client_builder.build()?;
+    let client = CachedClient::new(base_client);
+    let service = osv::Osv::new(client, Some(osv_url), concurrency.clone(), cache.clone());
+
+    trace!(
+        "Running malware check for {} locked dependencies",
+        dependencies.len()
+    );
+
+    // NOTE: For now, we produce a hard failure if the OSV request fails.
+    // In the future we may want to relax this to a warning, but a hard failure
+    // seems fine while we're in preview since it'll help us shake out
+    // any reliability risks with OSV.
+    let identifiers = service
+        .query_identifiers(&dependencies, Filter::Malware)
+        .await?;
+
+    let malware_findings: Vec<_> = identifiers
+        .into_iter()
+        .filter(|(_, vuln_ids)| !vuln_ids.is_empty())
+        .map(|(dependency, vuln_ids)| (dependency.clone(), vuln_ids.into_iter().collect()))
+        .collect();
+
+    if malware_findings.is_empty() {
+        Ok(())
+    } else {
+        warn_user!(
+            "Malware detected in locked dependencies:\n{}",
+            MalwareFindings(malware_findings.clone())
+        );
+
+        let has_installed_malware = malware_findings.iter().any(|(dependency, _)| {
+            installed_dependencies.contains(&(dependency.name(), dependency.version()))
+        });
+
+        if has_installed_malware {
+            Err(ProjectError::MalwareFound)
+        } else {
+            Ok(())
+        }
+    }
+}
+
 /// Filter out any virtual workspace members.
 fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
     resolution.filter(|dist| {
@@ -880,70 +1014,6 @@ fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
 
         !dist.r#virtual.unwrap_or(false)
     })
-}
-
-/// If necessary, convert any editable requirements to non-editable.
-fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -> Resolution {
-    match editable {
-        // No modifications are necessary for editable mode; retain any editable distributions.
-        None => resolution,
-
-        // Filter out any non-editable distributions.
-        Some(EditableMode::Editable) => resolution.map(|dist| {
-            let ResolvedDist::Installable { dist, version } = dist else {
-                return None;
-            };
-            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                name,
-                install_path,
-                editable: None | Some(false),
-                r#virtual,
-                url,
-            })) = dist.as_ref()
-            else {
-                return None;
-            };
-
-            Some(ResolvedDist::Installable {
-                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                    name: name.clone(),
-                    install_path: install_path.clone(),
-                    editable: Some(true),
-                    r#virtual: *r#virtual,
-                    url: url.clone(),
-                }))),
-                version: version.clone(),
-            })
-        }),
-
-        // Filter out any editable distributions.
-        Some(EditableMode::NonEditable) => resolution.map(|dist| {
-            let ResolvedDist::Installable { dist, version } = dist else {
-                return None;
-            };
-            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                name,
-                install_path,
-                editable: None | Some(true),
-                r#virtual,
-                url,
-            })) = dist.as_ref()
-            else {
-                return None;
-            };
-
-            Some(ResolvedDist::Installable {
-                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                    name: name.clone(),
-                    install_path: install_path.clone(),
-                    editable: Some(false),
-                    r#virtual: *r#virtual,
-                    url: url.clone(),
-                }))),
-                version: version.clone(),
-            })
-        }),
-    }
 }
 
 /// Extract any credentials that are defined on the workspace dependencies themselves. While we
@@ -982,8 +1052,9 @@ fn store_credentials_from_target(target: InstallTarget<'_>, client_builder: &Bas
             continue;
         };
         match &url.parsed_url {
-            ParsedUrl::Git(ParsedGitUrl { url, .. }) => {
-                uv_git::store_credentials_from_url(url.repository());
+            ParsedUrl::GitDirectory(ParsedGitDirectoryUrl { url, .. })
+            | ParsedUrl::GitPath(ParsedGitPathUrl { url, .. }) => {
+                uv_git::store_credentials_from_url(url.url());
             }
             ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
                 client_builder.store_credentials_from_url(url);
@@ -1444,4 +1515,36 @@ impl Report {
             SyncFormat::Text => None,
         }
     }
+}
+
+fn write_sync_report(
+    target: &SyncTarget,
+    environment: &SyncEnvironment,
+    changelog: &Changelog,
+    lock: Option<LockReport>,
+    dry_run: DryRun,
+    output_format: SyncFormat,
+    printer: Printer,
+) -> Result<()> {
+    let report = Report {
+        schema: SchemaReport::default(),
+        target: TargetName::from(target),
+        project: target.project().map(ProjectReport::from),
+        script: target.script().map(ScriptReport::from),
+        sync: SyncReport {
+            environment: EnvironmentReport::from(environment),
+            action: SyncAction::from(environment),
+            changes: PackageChangesReport::from_changelog(changelog),
+            dry_run: dry_run.enabled(),
+            target: TargetName::from(target),
+        },
+        lock,
+        dry_run: dry_run.enabled(),
+    };
+
+    if let Some(output) = report.format(output_format) {
+        writeln!(printer.stdout_important(), "{output}")?;
+    }
+
+    Ok(())
 }

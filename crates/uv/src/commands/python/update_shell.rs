@@ -24,7 +24,7 @@ pub(crate) async fn update_shell(printer: Printer) -> Result<ExitStatus> {
 
     #[cfg(windows)]
     {
-        if uv_shell::windows::prepend_path(&executable_directory)? {
+        if uv_shell::prepend_path(&executable_directory)? {
             writeln!(
                 printer.stderr(),
                 "Updated PATH to include executable directory {}",

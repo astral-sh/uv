@@ -81,7 +81,7 @@ pub(crate) async fn list(
         PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any))
     };
 
-    let client = client_builder.build();
+    let client = client_builder.build()?;
     let download_list =
         ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
     let mut output = BTreeSet::new();

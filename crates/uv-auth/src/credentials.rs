@@ -8,16 +8,20 @@ use base64::prelude::BASE64_STANDARD;
 use base64::read::DecoderReader;
 use base64::write::EncoderWriter;
 use http::Uri;
-use netrc::Netrc;
 use reqsign::aws::DefaultSigner as AwsDefaultSigner;
+use reqsign::azure::DefaultSigner as AzureDefaultSigner;
 use reqsign::google::DefaultSigner as GcsDefaultSigner;
 use reqwest::Request;
-use reqwest::header::HeaderValue;
+use reqwest::header::{HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use url::Url;
 
+use uv_netrc::Netrc;
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
+
+const AZURE_STORAGE_VERSION: &str = "2023-11-03";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Credentials {
@@ -87,13 +91,8 @@ impl Password {
     }
 
     /// Return the [`Password`] as a string slice.
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         self.0.as_str()
-    }
-
-    /// Convert the [`Password`] into its underlying [`String`].
-    pub fn into_string(self) -> String {
-        self.0
     }
 }
 
@@ -108,22 +107,22 @@ impl fmt::Debug for Password {
 pub struct Token(Vec<u8>);
 
 impl Token {
-    pub fn new(token: Vec<u8>) -> Self {
+    pub(crate) fn new(token: Vec<u8>) -> Self {
         Self(token)
     }
 
     /// Return the [`Token`] as a byte slice.
-    pub fn as_slice(&self) -> &[u8] {
+    pub(crate) fn as_slice(&self) -> &[u8] {
         self.0.as_slice()
     }
 
     /// Convert the [`Token`] into its underlying [`Vec<u8>`].
-    pub fn into_bytes(self) -> Vec<u8> {
+    pub(crate) fn into_bytes(self) -> Vec<u8> {
         self.0
     }
 
     /// Return whether the [`Token`] is empty.
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 }
@@ -179,7 +178,7 @@ impl Credentials {
         }
     }
 
-    pub fn is_authenticated(&self) -> bool {
+    pub(crate) fn is_authenticated(&self) -> bool {
         match self {
             Self::Basic {
                 username: _,
@@ -289,7 +288,7 @@ impl Credentials {
     /// Panics if the authentication is not conformant to the HTTP Basic Authentication scheme:
     /// - The contents must be base64 encoded
     /// - There must be a `:` separator
-    pub(crate) fn from_header_value(header: &HeaderValue) -> Option<Self> {
+    fn from_header_value(header: &HeaderValue) -> Option<Self> {
         // Parse a `Basic` authentication header.
         if let Some(mut value) = header.as_bytes().strip_prefix(b"Basic ") {
             let mut decoder = DecoderReader::new(&mut value, &BASE64_STANDARD);
@@ -393,6 +392,29 @@ pub(crate) enum Authentication {
 
     /// Google Cloud signing.
     GcsSigner(GcsDefaultSigner),
+
+    /// Azure Storage signing.
+    AzureSigner(AzureDefaultSigner),
+}
+
+#[derive(Debug, Error)]
+pub(crate) enum AuthenticationError {
+    #[error("Failed to convert request URL to URI")]
+    InvalidUri(#[from] http::uri::InvalidUri),
+
+    #[error("Failed to build request for {provider} signing")]
+    BuildRequest {
+        provider: &'static str,
+        #[source]
+        source: http::Error,
+    },
+
+    #[error("Failed to sign request with {provider} credentials")]
+    Sign {
+        provider: &'static str,
+        #[source]
+        source: reqsign::Error,
+    },
 }
 
 impl PartialEq for Authentication {
@@ -401,6 +423,7 @@ impl PartialEq for Authentication {
             (Self::Credentials(a), Self::Credentials(b)) => a == b,
             (Self::AwsSigner(..), Self::AwsSigner(..)) => true,
             (Self::GcsSigner(..), Self::GcsSigner(..)) => true,
+            (Self::AzureSigner(..), Self::AzureSigner(..)) => true,
             _ => false,
         }
     }
@@ -426,12 +449,18 @@ impl From<GcsDefaultSigner> for Authentication {
     }
 }
 
+impl From<AzureDefaultSigner> for Authentication {
+    fn from(signer: AzureDefaultSigner) -> Self {
+        Self::AzureSigner(signer)
+    }
+}
+
 impl Authentication {
     /// Return the password used for authentication, if any.
     pub(crate) fn password(&self) -> Option<&str> {
         match self {
             Self::Credentials(credentials) => credentials.password(),
-            Self::AwsSigner(..) | Self::GcsSigner(..) => None,
+            Self::AwsSigner(..) | Self::GcsSigner(..) | Self::AzureSigner(..) => None,
         }
     }
 
@@ -439,7 +468,7 @@ impl Authentication {
     pub(crate) fn username(&self) -> Option<&str> {
         match self {
             Self::Credentials(credentials) => credentials.username(),
-            Self::AwsSigner(..) | Self::GcsSigner(..) => None,
+            Self::AwsSigner(..) | Self::GcsSigner(..) | Self::AzureSigner(..) => None,
         }
     }
 
@@ -447,7 +476,9 @@ impl Authentication {
     pub(crate) fn as_username(&self) -> Cow<'_, Username> {
         match self {
             Self::Credentials(credentials) => credentials.as_username(),
-            Self::AwsSigner(..) | Self::GcsSigner(..) => Cow::Owned(Username::none()),
+            Self::AwsSigner(..) | Self::GcsSigner(..) | Self::AzureSigner(..) => {
+                Cow::Owned(Username::none())
+            }
         }
     }
 
@@ -455,7 +486,7 @@ impl Authentication {
     pub(crate) fn to_username(&self) -> Username {
         match self {
             Self::Credentials(credentials) => credentials.to_username(),
-            Self::AwsSigner(..) | Self::GcsSigner(..) => Username::none(),
+            Self::AwsSigner(..) | Self::GcsSigner(..) | Self::AzureSigner(..) => Username::none(),
         }
     }
 
@@ -463,7 +494,7 @@ impl Authentication {
     pub(crate) fn is_authenticated(&self) -> bool {
         match self {
             Self::Credentials(credentials) => credentials.is_authenticated(),
-            Self::AwsSigner(..) | Self::GcsSigner(..) => true,
+            Self::AwsSigner(..) | Self::GcsSigner(..) | Self::AzureSigner(..) => true,
         }
     }
 
@@ -471,34 +502,40 @@ impl Authentication {
     pub(crate) fn is_empty(&self) -> bool {
         match self {
             Self::Credentials(credentials) => credentials.is_empty(),
-            Self::AwsSigner(..) | Self::GcsSigner(..) => false,
+            Self::AwsSigner(..) | Self::GcsSigner(..) | Self::AzureSigner(..) => false,
         }
     }
 
     /// Apply the authentication to the given request.
     ///
     /// Any existing credentials will be overridden.
-    #[must_use]
-    pub(crate) async fn authenticate(&self, mut request: Request) -> Request {
+    pub(crate) async fn authenticate(
+        &self,
+        mut request: Request,
+    ) -> Result<Request, AuthenticationError> {
         match self {
-            Self::Credentials(credentials) => credentials.authenticate(request),
+            Self::Credentials(credentials) => Ok(credentials.authenticate(request)),
             Self::AwsSigner(signer) => {
                 // Build an `http::Request` from the `reqwest::Request`.
-                // SAFETY: If we have a valid `reqwest::Request`, we expect (e.g.) the URL to be valid.
-                let uri = Uri::from_str(request.url().as_str()).unwrap();
+                let uri = Uri::from_str(request.url().as_str())?;
                 let mut http_req = http::Request::builder()
                     .method(request.method().clone())
                     .uri(uri)
                     .body(())
-                    .unwrap();
+                    .map_err(|source| AuthenticationError::BuildRequest {
+                        provider: "AWS",
+                        source,
+                    })?;
                 *http_req.headers_mut() = request.headers().clone();
 
                 // Sign the parts.
                 let (mut parts, ()) = http_req.into_parts();
-                signer
-                    .sign(&mut parts, None)
-                    .await
-                    .expect("AWS signing should succeed");
+                signer.sign(&mut parts, None).await.map_err(|source| {
+                    AuthenticationError::Sign {
+                        provider: "AWS",
+                        source,
+                    }
+                })?;
 
                 // Copy over the signed headers.
                 request.headers_mut().extend(parts.headers);
@@ -508,25 +545,29 @@ impl Authentication {
                     request.url_mut().set_path(path_and_query.path());
                     request.url_mut().set_query(path_and_query.query());
                 }
-                request
+                Ok(request)
             }
             Self::GcsSigner(signer) => {
                 // Build an `http::Request` from the `reqwest::Request`.
-                // SAFETY: If we have a valid `reqwest::Request`, we expect (e.g.) the URL to be valid.
-                let uri = Uri::from_str(request.url().as_str()).unwrap();
+                let uri = Uri::from_str(request.url().as_str())?;
                 let mut http_req = http::Request::builder()
                     .method(request.method().clone())
                     .uri(uri)
                     .body(())
-                    .unwrap();
+                    .map_err(|source| AuthenticationError::BuildRequest {
+                        provider: "GCS",
+                        source,
+                    })?;
                 *http_req.headers_mut() = request.headers().clone();
 
                 // Sign the parts.
                 let (mut parts, ()) = http_req.into_parts();
-                signer
-                    .sign(&mut parts, None)
-                    .await
-                    .expect("GCS signing should succeed");
+                signer.sign(&mut parts, None).await.map_err(|source| {
+                    AuthenticationError::Sign {
+                        provider: "GCS",
+                        source,
+                    }
+                })?;
 
                 // Copy over the signed headers.
                 request.headers_mut().extend(parts.headers);
@@ -536,7 +577,43 @@ impl Authentication {
                     request.url_mut().set_path(path_and_query.path());
                     request.url_mut().set_query(path_and_query.query());
                 }
-                request
+                Ok(request)
+            }
+            Self::AzureSigner(signer) => {
+                // Build an `http::Request` from the `reqwest::Request`.
+                let uri = Uri::from_str(request.url().as_str())?;
+                let mut http_req = http::Request::builder()
+                    .method(request.method().clone())
+                    .uri(uri)
+                    .body(())
+                    .map_err(|source| AuthenticationError::BuildRequest {
+                        provider: "Azure",
+                        source,
+                    })?;
+                *http_req.headers_mut() = request.headers().clone();
+                http_req
+                    .headers_mut()
+                    .entry(HeaderName::from_static("x-ms-version"))
+                    .or_insert(HeaderValue::from_static(AZURE_STORAGE_VERSION));
+
+                // Sign the parts.
+                let (mut parts, ()) = http_req.into_parts();
+                signer.sign(&mut parts, None).await.map_err(|source| {
+                    AuthenticationError::Sign {
+                        provider: "Azure",
+                        source,
+                    }
+                })?;
+
+                // Copy over the signed headers.
+                request.headers_mut().extend(parts.headers);
+
+                // Copy over the signed path and query, if any.
+                if let Some(path_and_query) = parts.uri.path_and_query() {
+                    request.url_mut().set_path(path_and_query.path());
+                    request.url_mut().set_query(path_and_query.query());
+                }
+                Ok(request)
             }
         }
     }
@@ -545,8 +622,39 @@ impl Authentication {
 #[cfg(test)]
 mod tests {
     use insta::assert_debug_snapshot;
+    use reqsign::aws::Credential as AwsCredential;
+    use reqsign::azure::Credential as AzureCredential;
+    use reqsign::{Context, ProvideCredential};
 
     use super::*;
+
+    #[derive(Debug)]
+    struct EmptyAwsCredentialProvider;
+
+    impl ProvideCredential for EmptyAwsCredentialProvider {
+        type Credential = AwsCredential;
+
+        async fn provide_credential(
+            &self,
+            _ctx: &Context,
+        ) -> reqsign::Result<Option<Self::Credential>> {
+            Ok(None)
+        }
+    }
+
+    #[derive(Debug)]
+    struct EmptyAzureCredentialProvider;
+
+    impl ProvideCredential for EmptyAzureCredentialProvider {
+        type Credential = AzureCredential;
+
+        async fn provide_credential(
+            &self,
+            _ctx: &Context,
+        ) -> reqsign::Result<Option<Self::Credential>> {
+            Ok(None)
+        }
+    }
 
     #[test]
     fn from_url_no_credentials() {
@@ -666,6 +774,72 @@ mod tests {
 
         assert_debug_snapshot!(header, @r#""Basic dXNlcjpwYXNzd29yZD09""#);
         assert_eq!(Credentials::from_header_value(&header), Some(credentials));
+    }
+
+    #[tokio::test]
+    async fn authenticated_request_with_azure_signer() {
+        let signer = reqsign::azure::default_signer().with_credential_provider(
+            reqsign::azure::StaticCredentialProvider::new_bearer_token("token"),
+        );
+        let authentication = Authentication::from(signer);
+
+        let request = Request::new(
+            reqwest::Method::GET,
+            Url::parse("https://account.blob.core.windows.net/container/blob.whl").unwrap(),
+        );
+        let request = authentication.authenticate(request).await.unwrap();
+
+        let authorization = request
+            .headers()
+            .get(reqwest::header::AUTHORIZATION)
+            .expect("Authorization header should be set");
+        assert_eq!(authorization.to_str().unwrap(), "Bearer token");
+        assert!(request.headers().contains_key("x-ms-date"));
+        assert_eq!(
+            request
+                .headers()
+                .get("x-ms-version")
+                .expect("x-ms-version header should be set")
+                .to_str()
+                .unwrap(),
+            AZURE_STORAGE_VERSION
+        );
+    }
+
+    #[tokio::test]
+    async fn authenticated_request_with_aws_signer_missing_credentials() {
+        let signer = reqsign::aws::default_signer("s3", "us-east-1")
+            .with_credential_provider(EmptyAwsCredentialProvider);
+        let authentication = Authentication::from(signer);
+
+        let request = Request::new(
+            reqwest::Method::GET,
+            Url::parse("https://s3.amazonaws.com/bucket/blob.whl").unwrap(),
+        );
+        let err = authentication.authenticate(request).await.unwrap_err();
+
+        insta::assert_snapshot!(
+            err.to_string(),
+            @"Failed to sign request with AWS credentials"
+        );
+    }
+
+    #[tokio::test]
+    async fn authenticated_request_with_azure_signer_missing_credentials() {
+        let signer =
+            reqsign::azure::default_signer().with_credential_provider(EmptyAzureCredentialProvider);
+        let authentication = Authentication::from(signer);
+
+        let request = Request::new(
+            reqwest::Method::GET,
+            Url::parse("https://account.blob.core.windows.net/container/blob.whl").unwrap(),
+        );
+        let err = authentication.authenticate(request).await.unwrap_err();
+
+        insta::assert_snapshot!(
+            err.to_string(),
+            @"Failed to sign request with Azure credentials"
+        );
     }
 
     /// Passwords should be redacted in debug output.

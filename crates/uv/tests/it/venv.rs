@@ -45,7 +45,9 @@ fn create_venv() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      Caused by: A virtual environment already exists at `[VENV]/`. Use `--clear` to replace it
+      Caused by: A virtual environment already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     "
     );
 
@@ -923,7 +925,7 @@ fn create_venv_unknown_python_minor() {
         .arg("--python")
         .arg("3.100")
         // Unset this variable to force what the user would see
-        .env_remove(EnvVars::UV_TEST_PYTHON_PATH);
+        .env_remove(EnvVars::UV_PYTHON_SEARCH_PATH);
 
     uv_snapshot!(context.filters(), &mut command, @"
     success: false
@@ -949,7 +951,7 @@ fn create_venv_unknown_python_patch() {
         .arg("--python")
         .arg("3.12.100")
         // Unset this variable to force what the user would see
-        .env_remove(EnvVars::UV_TEST_PYTHON_PATH);
+        .env_remove(EnvVars::UV_PYTHON_SEARCH_PATH);
 
     uv_snapshot!(context.filters(), &mut command, @"
     success: false
@@ -1211,7 +1213,7 @@ fn windows_shims() -> Result<()> {
     // Create a virtual environment at `.venv` with the shim
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
-        .env(EnvVars::UV_TEST_PYTHON_PATH, format!("{};{}", shim_path.display(), context.python_path().to_string_lossy())), @r###"
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, format!("{};{}", shim_path.display(), context.python_path().to_string_lossy())), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1328,6 +1330,27 @@ fn verify_pyvenv_cfg_relocatable_env_var() {
 
     // Relocatable flag is set.
     pyvenv_cfg.assert(predicates::str::contains("relocatable = true"));
+}
+
+/// `--no-relocatable` takes precedence over `UV_VENV_RELOCATABLE=1`.
+#[test]
+fn no_relocatable_overrides_relocatable_env_var() {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--clear")
+        .arg("--python")
+        .arg("3.12")
+        .arg("--no-relocatable")
+        .env(EnvVars::UV_VENV_RELOCATABLE, "1")
+        .assert()
+        .success();
+
+    let pyvenv_cfg = context.venv.child("pyvenv.cfg");
+    pyvenv_cfg.assert(predicates::path::is_file());
+    pyvenv_cfg.assert(predicates::str::contains("relocatable").not());
 }
 
 /// With `relocatable-envs-default` preview feature, venvs are relocatable by default.
@@ -1540,7 +1563,9 @@ fn venv_python_preference() {
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      Caused by: A virtual environment already exists at `.venv`. Use `--clear` to replace it
+      Caused by: A virtual environment already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     ");
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--no-managed-python"), @"
@@ -1563,7 +1588,9 @@ fn venv_python_preference() {
     Using CPython 3.12.[X]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      Caused by: A virtual environment already exists at `.venv`. Use `--clear` to replace it
+      Caused by: A virtual environment already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     ");
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--managed-python"), @"
@@ -1921,6 +1948,36 @@ fn no_clear_overrides_clear() {
         .arg("--no-clear")
         .arg("--python")
         .arg("3.12"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    error: Failed to create virtual environment
+      Caused by: A directory already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
+    "
+    );
+}
+
+#[test]
+fn no_clear_overrides_clear_env_var() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    // Create a non-empty directory at `.venv`
+    context.venv.create_dir_all().unwrap();
+    context.venv.child("file").touch().unwrap();
+
+    // --no-clear should override UV_VENV_CLEAR=1 and fail without prompting
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--no-clear")
+        .arg("--python")
+        .arg("3.12")
+        .env(EnvVars::UV_VENV_CLEAR, "1"), @"
     success: false
     exit_code: 2
     ----- stdout -----

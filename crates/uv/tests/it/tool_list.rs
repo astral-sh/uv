@@ -150,19 +150,19 @@ fn tool_list_outdated() {
         .success();
 
     // With `--outdated`, the installed (older) version should be listed with the latest version.
-    let result = context
-        .tool_list()
-        .arg("--outdated")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .assert()
-        .success();
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--outdated")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 [latest: 24.3.0]
+    - black
+    - blackd
 
-    let stdout = String::from_utf8(result.get_output().stdout.clone()).unwrap();
-    assert!(
-        stdout.contains("black v24.2.0") && stdout.contains("[latest:"),
-        "Expected outdated output with latest version, got: {stdout}"
-    );
+    ----- stderr -----
+    ");
 }
 
 #[test]
@@ -186,6 +186,74 @@ fn tool_list_outdated_respects_exclude_newer() {
     // `uv tool upgrade` would intentionally skip.
     uv_snapshot!(context.filters(), context.tool_list()
     .arg("--outdated")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn tool_list_outdated_recomputes_relative_exclude_newer() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black` with a relative `exclude-newer` cutoff that initially resolves to 2024-03-01.
+    context
+        .tool_install()
+        .arg("black")
+        .arg("--exclude-newer")
+        .arg("3 weeks")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-03-22T00:00:00Z")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Recompute the stored span at a later time so `black` is considered outdated.
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--outdated")
+    .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+    .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-04-15T00:00:00Z")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 [latest: 24.3.0]
+    - black
+    - blackd
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn tool_list_outdated_cli_exclude_newer() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install an older version of `black`.
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // `--exclude-newer` should filter out releases newer than the cutoff when determining the
+    // latest available tool version.
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--outdated")
+    .arg("--exclude-newer")
+    .arg("2024-03-01T00:00:00Z")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true

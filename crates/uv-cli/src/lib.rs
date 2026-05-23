@@ -11,7 +11,7 @@ use clap::error::ErrorKind;
 use clap::{Args, Parser, Subcommand};
 use clap::{ValueEnum, ValueHint};
 
-use uv_audit::service::VulnerabilityServiceFormat;
+use uv_audit::VulnerabilityServiceFormat;
 use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::{
@@ -61,6 +61,15 @@ pub enum PythonListFormat {
 
 #[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
 pub enum SyncFormat {
+    /// Display the result in a human-readable format.
+    #[default]
+    Text,
+    /// Display the result in JSON format.
+    Json,
+}
+
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum AuditOutputFormat {
     /// Display the result in a human-readable format.
     #[default]
     Text,
@@ -236,8 +245,8 @@ pub struct GlobalArgs {
     )]
     pub color: Option<ColorChoice>,
 
-    /// Whether to load TLS certificates from the platform's native certificate store [env:
-    /// UV_NATIVE_TLS=]
+    /// (Deprecated: use `--system-certs` instead.) Whether to load TLS certificates from the
+    /// platform's native certificate store [env: UV_NATIVE_TLS=]
     ///
     /// By default, uv uses bundled Mozilla root certificates. When enabled, this flag loads
     /// certificates from the platform's native certificate store instead.
@@ -532,8 +541,7 @@ pub enum Commands {
     /// Inspect uv workspaces.
     #[command(
         after_help = "Use `uv help workspace` for more details.",
-        after_long_help = "",
-        hide = true
+        after_long_help = ""
     )]
     Workspace(WorkspaceNamespace),
     /// The implementation of the build backend.
@@ -2111,6 +2119,10 @@ pub struct PipInstallArgs {
     #[arg(long, short, group = "sources")]
     pub editable: Vec<String>,
 
+    /// Install any editable dependencies as non-editable [env: UV_NO_EDITABLE=]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_editable: bool,
+
     /// Constrain versions using the given requirements files.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
@@ -2551,7 +2563,7 @@ pub struct PipUninstallArgs {
     pub dry_run: bool,
 
     #[command(flatten)]
-    pub compat_args: compat::PipGlobalCompatArgs,
+    pub compat_args: compat::PipUninstallCompatArgs,
 }
 
 #[derive(Args)]
@@ -3115,7 +3127,12 @@ pub struct VenvArgs {
     /// By default, uv searches for projects in the current directory or any parent directory to
     /// determine the default path of the virtual environment and check for Python version
     /// constraints, if any.
-    #[arg(long, alias = "no-workspace")]
+    #[arg(
+        long,
+        alias = "no-workspace",
+        env = EnvVars::UV_NO_PROJECT,
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
     pub no_project: bool,
 
     /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual
@@ -3231,6 +3248,10 @@ pub struct VenvArgs {
     pub keyring_provider: Option<KeyringProviderType>,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// The date is compared against the upload time of each individual distribution artifact
+    /// (i.e., when each file was uploaded to the package index), not the release date of the
+    /// package version.
     ///
     /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
     /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
@@ -3543,13 +3564,13 @@ pub struct RunArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_hint = ValueHint::Other)]
     pub group: Vec<GroupName>,
 
-    /// Disable the specified dependency group.
+    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
     ///
     /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -3747,7 +3768,13 @@ pub struct RunArgs {
     ///
     /// If a virtual environment is active or found in a current or parent directory, it will be
     /// used as if there was no project or workspace.
-    #[arg(long, alias = "no_workspace", conflicts_with = "package")]
+    #[arg(
+        long,
+        alias = "no_workspace",
+        env = EnvVars::UV_NO_PROJECT,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        conflicts_with = "package"
+    )]
     pub no_project: bool,
 
     /// The Python interpreter to use for the run environment.
@@ -3881,13 +3908,13 @@ pub struct SyncArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_hint = ValueHint::Other)]
     pub group: Vec<GroupName>,
 
-    /// Disable the specified dependency group.
+    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
     ///
     /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -4696,13 +4723,13 @@ pub struct TreeArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
     pub group: Vec<GroupName>,
 
-    /// Disable the specified dependency group.
+    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
     ///
     /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
+    #[arg(long, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -4872,13 +4899,13 @@ pub struct ExportArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
     pub group: Vec<GroupName>,
 
-    /// Disable the specified dependency group.
+    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
     ///
     /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
+    #[arg(long, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -5129,7 +5156,11 @@ pub struct FormatArgs {
     /// Instead of running the formatter in the context of the current project, run it in the
     /// context of the current directory. This is useful when the current directory is not a
     /// project.
-    #[arg(long)]
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_PROJECT,
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
     pub no_project: bool,
 
     /// Display the version of Ruff that will be used for formatting.
@@ -5157,10 +5188,10 @@ pub struct AuditArgs {
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
-    /// Don't audit the specified dependency group.
+    /// Don't audit the specified dependency group [env: `UV_NO_GROUP`=]
     ///
     /// May be provided multiple times.
-    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
     pub no_group: Vec<GroupName>,
 
     /// Don't audit the default dependency groups.
@@ -5196,6 +5227,10 @@ pub struct AuditArgs {
     #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = AuditOutputFormat::default())]
+    pub output_format: AuditOutputFormat,
+
     #[command(flatten)]
     pub build: BuildOptionsArgs,
 
@@ -5229,6 +5264,25 @@ pub struct AuditArgs {
     /// `aarch64-apple-darwin`.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
+
+    /// Ignore a vulnerability by ID.
+    ///
+    /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
+    /// the audit results.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub ignore: Vec<String>,
+
+    /// Ignore a vulnerability by ID, but only while no fix is available.
+    ///
+    /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
+    /// the audit results as long as they have no known fix versions. Once a fix version becomes
+    /// available, the vulnerability will be reported again.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub ignore_until_fixed: Vec<String>,
 
     /// The service format to use for vulnerability lookups.
     ///
@@ -5782,6 +5836,19 @@ pub struct ToolListArgs {
     #[arg(long, overrides_with("outdated"), hide = true)]
     pub no_outdated: bool,
 
+    /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
+    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
+    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
+    /// `P7D`, `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
+    pub exclude_newer: Option<ExcludeNewerValue>,
+
     // Hide unused global Python options.
     #[arg(long, hide = true)]
     pub python_preference: Option<PythonPreference>,
@@ -5867,8 +5934,9 @@ pub struct ToolUpgradeArgs {
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
-    // The following is equivalent to flattening `ResolverInstallerArgs`, with the `--upgrade`, and
-    // `--upgrade-package` options hidden, and the `--no-upgrade` option removed.
+    // The following is equivalent to flattening `ResolverInstallerArgs`, with the `--upgrade`,
+    // `--upgrade-package`, and `--upgrade-group` options hidden, and the `--no-upgrade` option
+    // removed.
     /// Allow package upgrades, ignoring pinned versions in any existing output file. Implies
     /// `--refresh`.
     #[arg(hide = true, long, short = 'U', help_heading = "Resolver options")]
@@ -5878,6 +5946,11 @@ pub struct ToolUpgradeArgs {
     /// file. Implies `--refresh-package`.
     #[arg(hide = true, long, short = 'P', help_heading = "Resolver options")]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
+
+    /// Allow upgrades for all packages in a dependency group, ignoring pinned versions in any
+    /// existing output file.
+    #[arg(hide = true, long, help_heading = "Resolver options")]
+    pub upgrade_group: Vec<GroupName>,
 
     #[command(flatten)]
     pub index_args: IndexArgs,
@@ -6024,6 +6097,10 @@ pub struct ToolUpgradeArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
+    /// The date is compared against the upload time of each individual distribution artifact
+    /// (i.e., when each file was uploaded to the package index), not the release date of the
+    /// package version.
+    ///
     /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
     /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
     /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
@@ -6109,8 +6186,8 @@ pub struct ToolUpgradeArgs {
     )]
     pub no_sources: bool,
 
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages.
-    #[arg(long, help_heading = "Resolver options", env = EnvVars::UV_NO_SOURCES_PACKAGE, value_delimiter = ' ')]
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
     pub no_sources_package: Vec<PackageName>,
 
     #[command(flatten)]
@@ -6568,7 +6645,12 @@ pub struct PythonFindArgs {
     ///
     /// Otherwise, when no request is provided, the Python requirement of a project in the current
     /// directory or parent directories will be used.
-    #[arg(long, alias = "no_workspace")]
+    #[arg(
+        long,
+        alias = "no_workspace",
+        env = EnvVars::UV_NO_PROJECT,
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
     pub no_project: bool,
 
     /// Only find system Python interpreters.
@@ -6646,7 +6728,12 @@ pub struct PythonPinArgs {
     /// By default, a project or workspace is discovered in the current directory or any parent
     /// directory. If a workspace is found, the Python pin is validated against the workspace's
     /// `requires-python` constraint.
-    #[arg(long, alias = "no-workspace")]
+    #[arg(
+        long,
+        alias = "no-workspace",
+        env = EnvVars::UV_NO_PROJECT,
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
     pub no_project: bool,
 
     /// Update the global Python version pin.
@@ -6662,6 +6749,10 @@ pub struct PythonPinArgs {
     /// Remove the Python version pin.
     #[arg(long, conflicts_with = "request", conflicts_with = "resolved")]
     pub rm: bool,
+
+    /// URL pointing to JSON of custom Python installations.
+    #[arg(long, value_hint = ValueHint::Other)]
+    pub python_downloads_json_url: Option<String>,
 }
 
 #[derive(Args)]
@@ -6956,11 +7047,10 @@ pub struct BuildOptionsArgs {
     )]
     pub build: bool,
 
-    /// Don't build source distributions for a specific package.
+    /// Don't build source distributions for a specific package [env: `UV_NO_BUILD_PACKAGE`=]
     #[arg(
         long,
         help_heading = "Build options",
-        env = EnvVars::UV_NO_BUILD_PACKAGE,
         value_delimiter = ' ',
         value_hint = ValueHint::Other,
     )]
@@ -6987,11 +7077,10 @@ pub struct BuildOptionsArgs {
     )]
     pub binary: bool,
 
-    /// Don't install pre-built wheels for a specific package.
+    /// Don't install pre-built wheels for a specific package [env: `UV_NO_BINARY_PACKAGE`=]
     #[arg(
         long,
         help_heading = "Build options",
-        env = EnvVars::UV_NO_BINARY_PACKAGE,
         value_delimiter = ' ',
         value_hint = ValueHint::Other,
     )]
@@ -7094,6 +7183,10 @@ pub struct InstallerArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
+    /// The date is compared against the upload time of each individual distribution artifact
+    /// (i.e., when each file was uploaded to the package index), not the release date of the
+    /// package version.
+    ///
     /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
     /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
     /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
@@ -7179,8 +7272,8 @@ pub struct InstallerArgs {
     )]
     pub no_sources: bool,
 
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages.
-    #[arg(long, help_heading = "Resolver options", env = EnvVars::UV_NO_SOURCES_PACKAGE, value_delimiter = ' ')]
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
     pub no_sources_package: Vec<PackageName>,
 }
 
@@ -7212,6 +7305,11 @@ pub struct ResolverArgs {
     /// file. Implies `--refresh-package`.
     #[arg(long, short = 'P', help_heading = "Resolver options")]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
+
+    /// Allow upgrades for all packages in a dependency group, ignoring pinned versions in any
+    /// existing output file.
+    #[arg(long, help_heading = "Resolver options")]
+    pub upgrade_group: Vec<GroupName>,
 
     /// The strategy to use when resolving against multiple index URLs.
     ///
@@ -7332,6 +7430,10 @@ pub struct ResolverArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
+    /// The date is compared against the upload time of each individual distribution artifact
+    /// (i.e., when each file was uploaded to the package index), not the release date of the
+    /// package version.
+    ///
     /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
     /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
     /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
@@ -7390,8 +7492,8 @@ pub struct ResolverArgs {
     )]
     pub no_sources: bool,
 
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages.
-    #[arg(long, help_heading = "Resolver options", env = EnvVars::UV_NO_SOURCES_PACKAGE, value_delimiter = ' ')]
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
     pub no_sources_package: Vec<PackageName>,
 }
 
@@ -7423,6 +7525,11 @@ pub struct ResolverInstallerArgs {
     /// Implies `--refresh-package`.
     #[arg(long, short = 'P', help_heading = "Resolver options", value_hint = ValueHint::Other)]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
+
+    /// Allow upgrades for all packages in a dependency group, ignoring pinned versions in any
+    /// existing output file.
+    #[arg(long, help_heading = "Resolver options")]
+    pub upgrade_group: Vec<GroupName>,
 
     /// Reinstall all packages, regardless of whether they're already installed. Implies
     /// `--refresh`.
@@ -7568,6 +7675,10 @@ pub struct ResolverInstallerArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
+    /// The date is compared against the upload time of each individual distribution artifact
+    /// (i.e., when each file was uploaded to the package index), not the release date of the
+    /// package version.
+    ///
     /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
     /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
     /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
@@ -7658,8 +7769,8 @@ pub struct ResolverInstallerArgs {
     )]
     pub no_sources: bool,
 
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages.
-    #[arg(long, help_heading = "Resolver options", env = EnvVars::UV_NO_SOURCES_PACKAGE, value_delimiter = ' ')]
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
     pub no_sources_package: Vec<PackageName>,
 }
 
@@ -7698,6 +7809,10 @@ pub struct FetchArgs {
     pub keyring_provider: Option<KeyringProviderType>,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// The date is compared against the upload time of each individual distribution artifact
+    /// (i.e., when each file was uploaded to the package index), not the release date of the
+    /// package version.
     ///
     /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
     /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
@@ -7910,7 +8025,6 @@ pub enum WorkspaceCommand {
     /// List the members of a workspace.
     ///
     /// Displays newline separated names of workspace members.
-    #[command(hide = true)]
     List(WorkspaceListArgs),
 }
 #[derive(Args)]

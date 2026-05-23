@@ -26,7 +26,7 @@ use uv_distribution_types::{
     RequirementSource, UnresolvedRequirement,
 };
 use uv_fs::{LockedFile, LockedFileError, Simplified};
-use uv_git::GIT_STORE;
+use uv_git::store_credentials;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::Preview;
@@ -35,10 +35,12 @@ use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
 use uv_scripts::{Pep723Metadata, Pep723Script};
-use uv_settings::PythonInstallMirrors;
-use uv_types::{BuildIsolation, HashStrategy};
+use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
+use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
-use uv_workspace::pyproject::{DependencyType, Source, SourceError, Sources, ToolUvSources};
+use uv_workspace::pyproject::{
+    DependencyType, PyProjectToml, Source, SourceError, Sources, ToolUvSources,
+};
 use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
@@ -51,7 +53,7 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     PlatformState, ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter,
-    UniversalState, default_dependency_groups, init_script_python_requirement,
+    UniversalState, WorkspacePython, default_dependency_groups, init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
@@ -102,6 +104,7 @@ pub(crate) async fn add(
     cache: &Cache,
     printer: Printer,
     preview: Preview,
+    malware_settings: &MalwareCheckSettings,
 ) -> Result<ExitStatus> {
     for source in &requirements {
         match source {
@@ -273,17 +276,23 @@ pub(crate) async fn add(
 
         if frozen.is_some() || no_sync {
             // Discover the interpreter.
+            let workspace_python = WorkspacePython::from_request(
+                python.as_deref().map(PythonRequest::parse),
+                Some(project.workspace()),
+                &defaulted_groups,
+                project_dir,
+                no_config,
+            )
+            .await?;
             let interpreter = ProjectInterpreter::discover(
                 project.workspace(),
-                project_dir,
                 &defaulted_groups,
-                python.as_deref().map(PythonRequest::parse),
+                workspace_python,
                 &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
                 false,
-                no_config,
                 active,
                 cache,
                 printer,
@@ -384,7 +393,7 @@ pub(crate) async fn add(
                 .index_strategy(settings.resolver.index_strategy)
                 .markers(target.interpreter().markers())
                 .platform(target.interpreter().platform())
-                .build();
+                .build()?;
 
             // Determine whether to enable build isolation.
             let environment;
@@ -454,6 +463,7 @@ pub(crate) async fn add(
                 &build_hasher,
                 settings.resolver.exclude_newer.clone(),
                 sources,
+                SourceTreeEditablePolicy::Project,
                 // No workspace caching since `uv add` changes the workspace definition.
                 WorkspaceCache::default(),
                 concurrency.clone(),
@@ -755,6 +765,7 @@ pub(crate) async fn add(
         cache,
         printer,
         preview,
+        malware_settings,
     ))
     .await
     {
@@ -764,7 +775,7 @@ pub(crate) async fn add(
                 let _ = snapshot.revert();
             }
             match err {
-                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs()).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
+                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs()).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing", "--frozen".green()))
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
                 err => Err(err.into()),
@@ -854,6 +865,7 @@ fn edits(
             Some(Source::Git {
                 mut git,
                 subdirectory,
+                path,
                 rev,
                 tag,
                 branch,
@@ -865,7 +877,7 @@ fn edits(
                 let credentials = uv_auth::Credentials::from_url(&git);
                 if let Some(credentials) = credentials {
                     debug!("Caching credentials for: {git}");
-                    GIT_STORE.insert(RepositoryUrl::new(&git), credentials);
+                    store_credentials(RepositoryUrl::new(&git), credentials);
 
                     // Redact the credentials.
                     git.remove_credentials();
@@ -873,6 +885,7 @@ fn edits(
                 Some(Source::Git {
                     git,
                     subdirectory,
+                    path,
                     rev,
                     tag,
                     branch,
@@ -997,6 +1010,7 @@ async fn lock_and_sync(
     cache: &Cache,
     printer: Printer,
     preview: Preview,
+    malware_settings: &MalwareCheckSettings,
 ) -> Result<(), ProjectError> {
     let mut lock = Box::pin(
         project::lock::LockOperation::new(
@@ -1201,6 +1215,7 @@ async fn lock_and_sync(
         DryRun::Disabled,
         printer,
         preview,
+        malware_settings,
     )
     .await?;
 
@@ -1344,9 +1359,11 @@ impl AddTarget {
                 Ok(Self::Script(script, interpreter))
             }
             Self::Project(project, venv) => {
+                let pyproject_path = project.root().join("pyproject.toml");
                 let project = project
                     .update_member(
-                        toml::from_str(content).map_err(ProjectError::PyprojectTomlParse)?,
+                        PyProjectToml::from_string(content.to_string(), &pyproject_path)
+                            .map_err(ProjectError::PyprojectTomlParse)?,
                     )?
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;
                 Ok(Self::Project(project, venv))

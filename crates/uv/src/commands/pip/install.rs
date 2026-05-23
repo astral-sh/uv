@@ -1,15 +1,18 @@
 use std::collections::BTreeSet;
+use std::path::PathBuf;
 
-use anyhow::Context;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::{Level, debug, enabled, info_span, warn};
+use thiserror::Error;
+use tracing::{Level, debug, enabled, warn};
+
+use uv_errors::{Hint, Hints};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
+    BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, EditableMode,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -31,23 +34,44 @@ use uv_python::{
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PylockToml,
-    PythonRequirement, ResolutionMode, ResolverEnvironment,
+    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PythonRequirement,
+    ResolutionMode, ResolverEnvironment,
 };
 use uv_settings::PythonInstallMirrors;
 use uv_torch::{TorchMode, TorchSource, TorchStrategy};
-use uv_types::HashStrategy;
+use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
+use crate::commands::editable::apply_editable_mode;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
+use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
+
+/// The interpreter is externally managed and cannot be modified.
+#[derive(Debug, Error)]
+#[error("{message}")]
+pub(crate) struct ExternallyManagedError {
+    message: String,
+    root: PathBuf,
+    system: bool,
+}
+
+impl Hint for ExternallyManagedError {
+    fn hints(&self) -> Hints<'_> {
+        if self.system {
+            Hints::from("Virtual environments were not considered due to the `--system` flag")
+        } else {
+            Hints::from("Consider creating a virtual environment, e.g., with `uv venv`")
+        }
+    }
+}
 
 /// Install packages into the current environment.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -61,6 +85,7 @@ pub(crate) async fn pip_install(
     overrides_from_workspace: Vec<Requirement>,
     excludes_from_workspace: Vec<uv_normalize::PackageName>,
     build_constraints_from_workspace: Vec<Requirement>,
+    editable: Option<EditableMode>,
     extras: &ExtrasSpecification,
     groups: &GroupsSpecification,
     resolution_mode: ResolutionMode,
@@ -259,25 +284,12 @@ pub(crate) async fn pip_install(
                 ),
             };
 
-            let error_message = if system {
-                // Add a hint about the `--system` flag
-                format!(
-                    "{}\n{}{} Virtual environments were not considered due to the `--system` flag",
-                    managed_message,
-                    "hint".bold().cyan(),
-                    ":".bold()
-                )
-            } else {
-                // Add a hint to create a virtual environment
-                format!(
-                    "{}\n{}{} Consider creating a virtual environment, e.g., with `uv venv`",
-                    managed_message,
-                    "hint".bold().cyan(),
-                    ":".bold()
-                )
-            };
-
-            return Err(anyhow::Error::msg(error_message));
+            return Err(ExternallyManagedError {
+                message: managed_message,
+                root: environment.root().to_path_buf(),
+                system,
+            }
+            .into());
         }
     }
 
@@ -419,7 +431,7 @@ pub(crate) async fn pip_install(
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()?;
 
     // Combine the `--no-binary` and `--no-build` flags from the requirements files.
     let build_options = build_options.combine(no_binary, no_build);
@@ -486,50 +498,14 @@ pub(crate) async fn pip_install(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        SourceTreeEditablePolicy::Project,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
     );
 
     let (resolution, hasher) = if let Some(pylock) = pylock {
-        // Read the `pylock.toml` from disk or URL, and deserialize it from TOML.
-        let (install_path, content) =
-            if pylock.starts_with("http://") || pylock.starts_with("https://") {
-                // Fetch the `pylock.toml` over HTTP(S).
-                let url = uv_redacted::DisplaySafeUrl::parse(&pylock.to_string_lossy())?;
-                let client = client_builder.build();
-                let response = client
-                    .for_host(&url)
-                    .get(url::Url::from(url.clone()))
-                    .send()
-                    .await?;
-                response.error_for_status_ref()?;
-                let content = response.text().await?;
-                // Use the current working directory as the install path for remote lock files.
-                let install_path = std::env::current_dir()?;
-                (install_path, content)
-            } else {
-                let install_path = std::path::absolute(&pylock)?;
-                let install_path = install_path.parent().unwrap().to_path_buf();
-                let content = fs_err::tokio::read_to_string(&pylock).await?;
-                (install_path, content)
-            };
-        let lock = info_span!("toml::from_str pip install", path = %pylock.display())
-            .in_scope(|| toml::from_str::<PylockToml>(&content))
-            .with_context(|| {
-                format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
-            })?;
-
-        // Verify that the Python version is compatible with the lock file.
-        if let Some(requires_python) = lock.requires_python.as_ref() {
-            if !requires_python.contains(interpreter.python_version()) {
-                return Err(anyhow::anyhow!(
-                    "The requested interpreter resolved to Python {}, which is incompatible with the `pylock.toml`'s Python requirement: `{}`",
-                    interpreter.python_version(),
-                    requires_python,
-                ));
-            }
-        }
+        let (install_path, lock) = read_pylock_toml(&pylock, &client_builder).await?;
 
         // Convert the extras and groups specifications into a concrete form.
         let extras = extras.with_defaults(DefaultExtras::default());
@@ -548,17 +524,17 @@ pub(crate) async fn pip_install(
             .cloned()
             .collect::<Vec<_>>();
 
-        let resolution = lock.to_resolution(
+        resolve_pylock_toml(
+            lock,
             &install_path,
-            marker_env.markers(),
+            interpreter,
+            python_version.as_ref(),
+            python_platform.as_ref(),
             &extras,
             &groups,
-            &tags,
             &build_options,
-        )?;
-        let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
-
-        (resolution, hasher)
+            hash_checking,
+        )?
     } else {
         // When resolving, don't take any external preferences into account.
         let preferences = Vec::default();
@@ -574,7 +550,7 @@ pub(crate) async fn pip_install(
             .build();
 
         // Resolve the requirements.
-        let resolution = match operations::resolve(
+        let (resolution, hasher) = match operations::resolve(
             requirements,
             constraints,
             overrides,
@@ -605,7 +581,7 @@ pub(crate) async fn pip_install(
         )
         .await
         {
-            Ok(graph) => Resolution::from(graph),
+            Ok((graph, hasher)) => (Resolution::from(graph), hasher),
             Err(err) => {
                 return diagnostics::OperationDiagnostic::with_system_certs(
                     client_builder.system_certs(),
@@ -617,6 +593,9 @@ pub(crate) async fn pip_install(
 
         (resolution, hasher)
     };
+
+    // If necessary, convert editable distributions to non-editable.
+    let resolution = apply_editable_mode(resolution, editable);
 
     // Constrain any build requirements marked as `match-runtime = true`.
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
@@ -642,6 +621,7 @@ pub(crate) async fn pip_install(
         &build_hasher,
         exclude_newer.clone(),
         sources,
+        SourceTreeEditablePolicy::Project,
         workspace_cache,
         concurrency.clone(),
         preview,

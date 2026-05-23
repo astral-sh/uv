@@ -9,13 +9,13 @@ use uv_normalize::PackageName;
 /// ```toml
 /// [[tool.uv.index]]
 /// name = "pytorch"
-/// url = "https://download.pytorch.org/whl/cu121"
+/// url = "https://download.pytorch.org/whl/cu130"
 ///
 /// [tool.uv.sources]
 /// torch = { index = "pytorch" }
 /// ```
 ///
-/// [`Indexes`] would contain a single entry mapping `torch` to `https://download.pytorch.org/whl/cu121`.
+/// [`Indexes`] would contain a single entry mapping `torch` to `https://download.pytorch.org/whl/cu130`.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct Indexes(ForkMap<IndexMetadata>);
 

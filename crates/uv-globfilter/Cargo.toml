@@ -1,6 +1,6 @@
 [package]
 name = "uv-globfilter"
-version = "0.0.35"
+version = "0.0.49"
 description = "This is an internal component crate of uv"
 readme = "README.md"
 edition = { workspace = true }
@@ -11,8 +11,8 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
+uv-errors = { workspace = true }
 globset = { workspace = true }
-owo-colors = { workspace = true }
 regex = { workspace = true }
 regex-automata = { workspace = true }
 thiserror = { workspace = true }

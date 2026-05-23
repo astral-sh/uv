@@ -18,7 +18,9 @@ uv-dispatch
 uv-distribution
 uv-distribution-filename
 uv-distribution-types
+uv-errors
 uv-extract
+uv-fastid
 uv-flags
 uv-fs
 uv-git
@@ -30,6 +32,7 @@ uv-keyring
 uv-logging
 uv-macros
 uv-metadata
+uv-netrc
 uv-normalize
 uv-once-map
 uv-options-metadata
@@ -53,6 +56,7 @@ uv-small-str
 uv-state
 uv-static
 uv-test
+uv-toml
 uv-tool
 uv-torch
 uv-trampoline-builder

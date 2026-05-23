@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::Result;
+use rcgen::CustomExtension;
 use temp_env::async_with_vars;
 use tempfile::{NamedTempFile, TempDir};
 use url::Url;
@@ -15,7 +16,8 @@ use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
 use crate::http_util::{
-    SelfSigned, generate_self_signed_certs_with_ca, start_https_mtls_user_agent_server,
+    SelfSigned, generate_self_signed_certs_with_ca,
+    generate_self_signed_certs_with_ca_custom_extensions, start_https_mtls_user_agent_server,
     start_https_user_agent_server, test_cert_dir,
 };
 
@@ -39,11 +41,27 @@ impl TestCertificate {
     /// Generate a fresh CA, server cert, and client cert, persisting the
     /// relevant PEM files to a temporary directory.
     fn new() -> Result<Self> {
+        let (ca, server, client) = generate_self_signed_certs_with_ca()?;
+        Self::persist(ca, server, &client)
+    }
+
+    /// Generate a fresh certificate set whose CA contains a duplicate
+    /// `basicConstraints` extension, which webpki rejects as an invalid trust
+    /// anchor.
+    fn new_with_duplicate_basic_constraints_ca_extension() -> Result<Self> {
+        let duplicate_basic_constraints =
+            CustomExtension::from_oid_content(&[2, 5, 29, 19], vec![0x30, 0x00]);
+
+        let (ca, server, client) = generate_self_signed_certs_with_ca_custom_extensions(vec![
+            duplicate_basic_constraints,
+        ])?;
+        Self::persist(ca, server, &client)
+    }
+
+    fn persist(ca: SelfSigned, server: SelfSigned, client: &SelfSigned) -> Result<Self> {
         let cert_dir = test_cert_dir();
         fs_err::create_dir_all(&cert_dir)?;
         let temp_dir = TempDir::new_in(cert_dir)?;
-
-        let (ca, server, client) = generate_self_signed_certs_with_ca()?;
 
         let trust_path = temp_dir.path().join("ca.pem");
         fs_err::write(&trust_path, ca.public.pem())?;
@@ -342,7 +360,9 @@ async fn send_request_to(
     let base = BaseClientBuilder::default()
         .no_retry_delay(true)
         .with_system_certs(system_certs);
-    let client = RegistryClientBuilder::new(base, cache).build();
+    let client = RegistryClientBuilder::new(base, cache)
+        .build()
+        .expect("failed to build registry client");
     client
         .cached_client()
         .uncached()
@@ -432,6 +452,18 @@ async fn test_ssl_cert_file_valid() -> Result<()> {
     Ok(())
 }
 
+/// If `SSL_CERT_FILE` contains only an invalid trust anchor, the invalid
+/// certificate is ignored and the client falls back to webpki roots.
+#[tokio::test]
+async fn test_ssl_cert_file_invalid_trust_anchor_falls_back() -> Result<()> {
+    let cert = TestCertificate::new_with_duplicate_basic_constraints_ca_extension()?;
+    client()
+        .ssl_cert_file(&cert.trust_path)
+        .expect_https_connect_fails(&cert)
+        .await;
+    Ok(())
+}
+
 /// A PEM bundle containing multiple certificates in `SSL_CERT_FILE` is loaded.
 #[tokio::test]
 async fn test_ssl_cert_file_bundle() -> Result<()> {
@@ -440,6 +472,28 @@ async fn test_ssl_cert_file_bundle() -> Result<()> {
     client()
         .ssl_cert_file(bundle.path())
         .expect_https_connect_succeeds(&cert)
+        .await;
+    Ok(())
+}
+
+/// Invalid certificates in `SSL_CERT_FILE` are ignored when valid
+/// certificates are also present, and the valid certificates remain trusted.
+#[tokio::test]
+async fn test_ssl_cert_file_bundle_ignores_invalid_trust_anchor() -> Result<()> {
+    let valid_cert = TestCertificate::new()?;
+    let invalid_cert = TestCertificate::new_with_duplicate_basic_constraints_ca_extension()?;
+
+    let mut bundle = NamedTempFile::new()?;
+    write!(
+        bundle,
+        "{}\n{}",
+        invalid_cert.ca.public.pem(),
+        valid_cert.ca.public.pem()
+    )?;
+
+    client()
+        .ssl_cert_file(bundle.path())
+        .expect_https_connect_succeeds(&valid_cert)
         .await;
     Ok(())
 }
@@ -467,6 +521,24 @@ async fn test_ssl_cert_dir_bundle_files() -> Result<()> {
     client()
         .ssl_cert_dir(dir.path())
         .expect_https_connect_succeeds(&cert)
+        .await;
+    Ok(())
+}
+
+/// Invalid certificates in `SSL_CERT_DIR` are ignored when valid
+/// certificates are also present, and the valid certificates remain trusted.
+#[tokio::test]
+async fn test_ssl_cert_dir_ignores_invalid_trust_anchor() -> Result<()> {
+    let valid_cert = TestCertificate::new()?;
+    let invalid_cert = TestCertificate::new_with_duplicate_basic_constraints_ca_extension()?;
+
+    let dir = TempDir::new()?;
+    fs_err::write(dir.path().join("valid.pem"), valid_cert.ca.public.pem())?;
+    fs_err::write(dir.path().join("invalid.pem"), invalid_cert.ca.public.pem())?;
+
+    client()
+        .ssl_cert_dir(dir.path())
+        .expect_https_connect_succeeds(&valid_cert)
         .await;
     Ok(())
 }

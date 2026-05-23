@@ -36,6 +36,7 @@ use uv_pep508::{
 };
 use uv_platform_tags::{IncompatibleTag, Tags};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
+use uv_static::EnvVars;
 use uv_torch::TorchStrategy;
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
@@ -61,7 +62,7 @@ pub(crate) use crate::resolver::availability::{
     UnavailableVersion,
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
-pub use crate::resolver::derivation::DerivationChainBuilder;
+use crate::resolver::derivation::DerivationChainBuilder;
 pub use crate::resolver::environment::ResolverEnvironment;
 use crate::resolver::environment::{
     ForkingPossibility, fork_version_by_marker, fork_version_by_python_requirement,
@@ -73,15 +74,12 @@ pub use crate::resolver::provider::{
     DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,
     VersionsResponse, WheelMetadataResult,
 };
-pub use crate::resolver::reporter::{BuildId, Reporter};
+pub use crate::resolver::reporter::Reporter;
 use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::yanks::AllowedYanks;
-use crate::{
-    DependencyMode, ExcludeNewer, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap,
-    marker,
-};
+use crate::{DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap, marker};
 pub(crate) use provider::MetadataUnavailable;
 
 mod availability;
@@ -185,11 +183,12 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             AllowedYanks::from_manifest(&manifest, &env, options.dependency_mode),
             hasher,
             options.exclude_newer.clone(),
+            build_context.locations(),
             build_context.build_options(),
             build_context.capabilities(),
         );
 
-        Self::new_custom_io(
+        Ok(Self::new_custom_io(
             manifest,
             options,
             hasher,
@@ -204,7 +203,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             build_context.locations(),
             provider,
             installed_packages,
-        )
+        ))
     }
 }
 
@@ -212,7 +211,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
     Resolver<Provider, InstalledPackages>
 {
     /// Initialize a new resolver using a user provided backend.
-    pub fn new_custom_io(
+    fn new_custom_io(
         manifest: Manifest,
         options: Options,
         hasher: &HashStrategy,
@@ -227,7 +226,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         locations: &IndexLocations,
         provider: Provider,
         installed_packages: InstalledPackages,
-    ) -> Result<Self, ResolveError> {
+    ) -> Self {
         let state = ResolverState {
             index: index.clone(),
             git: git.clone(),
@@ -257,7 +256,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             options,
             reporter: None,
         };
-        Ok(Self { state, provider })
+        Self { state, provider }
     }
 
     /// Set the [`Reporter`] to use for this installer.
@@ -372,7 +371,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     state.fork_indexes,
                                     state.env,
                                     self.current_environment.clone(),
-                                    Some(&self.options.exclude_newer),
                                     &visited,
                                 ));
                             }
@@ -1156,7 +1154,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             .index
             .distributions()
             .wait_blocking(&distribution_id)
-            .ok_or_else(|| ResolveError::UnregisteredTask(dist.to_string()))?;
+            .map_err(|_| ResolveError::UnregisteredTask(dist.to_string()))?;
 
         // If we failed to fetch the metadata for a URL, we can't proceed.
         let metadata = match &*response {
@@ -1191,6 +1189,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let filename = match &dist {
                 BuiltDist::Registry(dist) => &dist.best_wheel().filename,
                 BuiltDist::DirectUrl(dist) => &dist.filename,
+                BuiltDist::GitPath(dist) => &dist.filename,
                 BuiltDist::Path(dist) => &dist.filename,
             };
 
@@ -1272,12 +1271,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.index
                 .explicit()
                 .wait_blocking(&(name.clone(), index.clone()))
-                .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
+                .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))?
         } else {
             self.index
                 .implicit()
                 .wait_blocking(name)
-                .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
+                .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))?
         };
         visited.insert(name.clone());
 
@@ -1849,7 +1848,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .index
                     .distributions()
                     .wait_blocking(distribution_id)
-                    .ok_or_else(|| ResolveError::UnregisteredTask(format!("{name}=={version}")))?;
+                    .map_err(|_| ResolveError::UnregisteredTask(format!("{name}=={version}")))?;
 
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
@@ -2516,7 +2515,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .implicit()
                     .wait(&package_name)
                     .await
-                    .ok_or_else(|| ResolveError::UnregisteredTask(package_name.to_string()))?;
+                    .map_err(|_| ResolveError::UnregisteredTask(package_name.to_string()))?;
 
                 let version_map = match *versions_response {
                     VersionsResponse::Found(ref version_map) => version_map,
@@ -2693,7 +2692,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         fork_indexes: ForkIndexes,
         env: ResolverEnvironment,
         current_environment: MarkerEnvironment,
-        exclude_newer: Option<&ExcludeNewer>,
         visited: &FxHashSet<PackageName>,
     ) -> ResolveError {
         err = NoSolutionError::collapse_local_version_segments(NoSolutionError::collapse_proxies(
@@ -2725,14 +2723,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
 
         let mut available_indexes = FxHashMap::default();
+        let mut included_versions = FxHashMap::default();
         let mut available_versions = FxHashMap::default();
+
+        let available_version_cutoff: Option<jiff::Timestamp> =
+            std::env::var(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
+                .ok()
+                .and_then(|s| s.parse().ok());
+
         for package in err.packages() {
             let Some(name) = package.name() else { continue };
             if !visited.contains(name) {
-                // Avoid including available versions for packages that exist in the derivation
+                // Avoid including version data for packages that exist in the derivation
                 // tree, but were never visited during resolution. We _may_ have metadata for
                 // these packages, but it's non-deterministic, and omitting them ensures that
-                // we represent the self of the resolver at the time of failure.
+                // we represent the state of the resolver at the time of failure.
                 continue;
             }
             let versions_response = if let Some(index) = fork_indexes.get(name) {
@@ -2744,30 +2749,62 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             };
             if let Some(response) = versions_response {
                 if let VersionsResponse::Found(ref version_maps) = *response {
-                    // Track the available versions, across all indexes.
+                    // Track included and available versions, across all indexes.
                     for version_map in version_maps {
-                        let package_versions = available_versions
+                        let package_included_versions = included_versions
+                            .entry(name.clone())
+                            .or_insert_with(BTreeSet::new);
+                        let package_available_versions = available_versions
                             .entry(name.clone())
                             .or_insert_with(BTreeSet::new);
 
                         for (version, dists) in version_map.iter(&Ranges::full()) {
-                            // Don't show versions removed by excluded-newer in hints.
-                            if let Some(exclude_newer) =
-                                exclude_newer.and_then(|en| en.exclude_newer_package(name))
-                            {
-                                let Some(prioritized_dist) = dists.prioritized_dist() else {
-                                    continue;
+                            // Included versions are those that survive the effective
+                            // `exclude-newer` filter used during resolution. Files with
+                            // missing upload times are treated as excluded (matching
+                            // the resolution behavior in `version_map.rs`).
+                            let excluded_from_included = || {
+                                let Some(included_version_cutoff) =
+                                    version_map.included_version_cutoff()
+                                else {
+                                    return false;
                                 };
-                                if prioritized_dist.files().all(|file| {
+                                let Some(prioritized_dist) = dists.prioritized_dist() else {
+                                    return true;
+                                };
+                                prioritized_dist.files().all(|file| {
                                     file.upload_time_utc_ms.is_none_or(|upload_time| {
-                                        upload_time >= exclude_newer.timestamp_millis()
+                                        upload_time >= included_version_cutoff.as_millisecond()
                                     })
-                                }) {
-                                    continue;
-                                }
+                                })
+                            };
+
+                            if !excluded_from_included() {
+                                package_included_versions.insert(version.clone());
                             }
 
-                            package_versions.insert(version.clone());
+                            // Available versions are used in resolver error reporting,
+                            // and can be bounded by a test-only cutoff for deterministic
+                            // snapshots. Files with missing upload times are *not*
+                            // excluded, since we only filter versions we can confirm
+                            // were published after the cutoff.
+                            let excluded_from_available = || {
+                                let Some(ref exclude_newer) = available_version_cutoff else {
+                                    return false;
+                                };
+                                let Some(prioritized_dist) = dists.prioritized_dist() else {
+                                    return false;
+                                };
+                                prioritized_dist.files().all(|file| {
+                                    file.upload_time_utc_ms.is_some_and(|upload_time| {
+                                        upload_time >= exclude_newer.as_millisecond()
+                                    })
+                                })
+                            };
+
+                            if !excluded_from_available() {
+                                package_available_versions.insert(version.clone());
+                            }
                         }
                     }
 
@@ -2787,6 +2824,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         ResolveError::NoSolution(Box::new(NoSolutionError::new(
             err,
             self.index.clone(),
+            included_versions,
             available_versions,
             available_indexes,
             self.selector.clone(),
@@ -4142,26 +4180,75 @@ fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>
         return MarkerTree::TRUE;
     }
 
-    // Retrieve the incompatibilities for the current package.
-    let Some(incompatibilities) = state.incompatibilities.get(&id) else {
-        return MarkerTree::FALSE;
-    };
+    // First, collect the reverse-dependency closure for the package. We limit the propagation
+    // below to this subgraph so cycles in unrelated packages don't matter here.
+    let mut ancestors = FxHashSet::default();
+    let mut stack = vec![id];
+    let mut root = None;
+    ancestors.insert(id);
 
-    // Find all dependencies on the current package.
-    let mut marker = MarkerTree::FALSE;
-    for index in incompatibilities {
-        let incompat = &state.incompatibility_store[*index];
-        if let Kind::FromDependencyOf(id1, _, id2, _) = &incompat.kind {
-            if id == *id2 {
-                marker.or({
-                    let mut marker = package.marker();
-                    marker.and(find_environments(*id1, state));
-                    marker
-                });
+    while let Some(current) = stack.pop() {
+        let Some(incompatibilities) = state.incompatibilities.get(&current) else {
+            continue;
+        };
+
+        for index in incompatibilities {
+            let incompat = &state.incompatibility_store[*index];
+            if let Kind::FromDependencyOf(parent, _, child, _) = &incompat.kind {
+                if current != *child {
+                    continue;
+                }
+                if ancestors.insert(*parent) {
+                    if state.package_store[*parent].is_root() {
+                        root = Some(*parent);
+                    }
+                    stack.push(*parent);
+                }
             }
         }
     }
-    marker
+
+    let Some(root) = root else {
+        return MarkerTree::FALSE;
+    };
+
+    // Propagate markers forward from the root through the collected subgraph. This reaches a
+    // fixpoint even in the presence of cycles, unlike the recursive reverse walk above.
+    let mut environments = FxHashMap::default();
+    let mut queue = VecDeque::from([root]);
+    environments.insert(root, MarkerTree::TRUE);
+
+    while let Some(current) = queue.pop_front() {
+        let Some(current_environment) = environments.get(&current).copied() else {
+            continue;
+        };
+        let Some(incompatibilities) = state.incompatibilities.get(&current) else {
+            continue;
+        };
+
+        for index in incompatibilities {
+            let incompat = &state.incompatibility_store[*index];
+            let Kind::FromDependencyOf(parent, _, child, _) = &incompat.kind else {
+                continue;
+            };
+            if current != *parent || !ancestors.contains(child) {
+                continue;
+            }
+
+            let mut next_environment = state.package_store[*child].marker();
+            next_environment.and(current_environment);
+
+            let entry = environments.entry(*child).or_insert(MarkerTree::FALSE);
+            let mut combined = *entry;
+            combined.or(next_environment);
+            if combined != *entry {
+                *entry = combined;
+                queue.push_back(*child);
+            }
+        }
+    }
+
+    environments.remove(&id).unwrap_or(MarkerTree::FALSE)
 }
 
 #[derive(Debug, Default, Clone)]

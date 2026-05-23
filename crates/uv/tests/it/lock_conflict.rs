@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::Result;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
@@ -2255,6 +2257,69 @@ fn group_default() -> Result<()> {
      - sortedcontainers==2.3.0
      + sortedcontainers==2.4.0
     ");
+
+    Ok(())
+}
+
+/// This tests conflicting groups in a virtual pyproject.toml
+///
+/// (One with no `[project]` which is allowed for specifically dependency-groups).
+/// Currently this isn't supported, as we require a `PackageName` when representing
+/// Conflicts internally.
+#[test]
+fn group_virtual() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // First we test that resolving with two groups that have
+    // conflicting dependencies fails.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [dependency-groups]
+        group1 = ["sortedcontainers==2.3.0"]
+        group2 = ["sortedcontainers==2.4.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because you require sortedcontainers==2.3.0 and sortedcontainers==2.4.0, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    // And now with the same group configuration, we tell uv about
+    // the conflicting groups, which forces it to resolve each in
+    // their own fork.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv]
+        conflicts = [
+            [
+              { group = "group1" },
+              { group = "group2" },
+            ],
+        ]
+
+        [dependency-groups]
+        group1 = ["sortedcontainers==2.3.0"]
+        group2 = ["sortedcontainers==2.4.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Expected `package` field in conflicting entry: { group = "group1" }
+    "#);
 
     Ok(())
 }
@@ -7706,6 +7771,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
 ///
 /// Ref: <https://github.com/astral-sh/uv/issues/11133>
 #[test]
+#[ignore = "lightning is currently quarantined on PyPI"]
 fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-02-07T00:00Z");
 
@@ -10456,6 +10522,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
 ///
 /// Ref: <https://github.com/astral-sh/uv/issues/11479>
 #[test]
+#[ignore = "lightning is currently quarantined on PyPI"]
 fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-02-14T00:00Z");
 
@@ -16500,6 +16567,106 @@ fn project_level_conflict_with_group() -> Result<()> {
     warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
     Resolved 6 packages in [TIME]
     ");
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/16779>
+#[test]
+fn many_conflicts_with_requested_dependency_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
+    // 29 conflicts results in a reasonably short run-time after fixing, and a very long runtime
+    // without the fix. This is to attempt to ensure that this test won't fail sporadically on a
+    // slow machine, or succeed (while broken) on a super fast machine.
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = []
+
+        [project.optional-dependencies]
+        x00 = ["branch-package"]
+
+        [tool.uv.sources]
+        branch-package = { path = "branch-package" }
+
+        [tool.uv]
+        conflicts = [[
+            { extra = "x00" },
+            { extra = "x01" },
+            { extra = "x02" },
+            { extra = "x03" },
+            { extra = "x04" },
+            { extra = "x05" },
+            { extra = "x06" },
+            { extra = "x07" },
+            { extra = "x08" },
+            { extra = "x09" },
+            { extra = "x10" },
+            { extra = "x11" },
+            { extra = "x12" },
+            { extra = "x13" },
+            { extra = "x14" },
+            { extra = "x15" },
+            { extra = "x16" },
+            { extra = "x17" },
+            { extra = "x18" },
+            { extra = "x19" },
+            { extra = "x20" },
+            { extra = "x21" },
+            { extra = "x22" },
+            { extra = "x23" },
+            { extra = "x24" },
+            { extra = "x25" },
+            { extra = "x26" },
+            { extra = "x27" },
+            { extra = "x28" },
+        ]]
+        "#,
+    )?;
+
+    let branch_pyproject_toml = context
+        .temp_dir
+        .child("branch-package")
+        .child("pyproject.toml");
+    branch_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "branch-package"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["leaf-package[easy]"]
+
+        [tool.uv.sources]
+        leaf-package = { path = "../leaf-package" }
+        "#,
+    )?;
+
+    let leaf_pyproject_toml = context
+        .temp_dir
+        .child("leaf-package")
+        .child("pyproject.toml");
+    leaf_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "leaf-package"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        easy = []
+        "#,
+    )?;
+
+    assert_cmd::Command::from_std(context.lock())
+        .timeout(Duration::from_mins(1))
+        .assert()
+        .success();
 
     Ok(())
 }

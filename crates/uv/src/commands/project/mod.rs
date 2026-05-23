@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -7,9 +6,11 @@ use std::sync::Arc;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, trace, warn};
+use uv_audit::osv;
+use uv_audit::{Dependency, VulnerabilityID};
 use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket};
-use uv_cache_key::cache_digest;
+use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
@@ -27,15 +28,17 @@ use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::Preview;
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::{
     BrokenLink, EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads,
     PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonSource,
     PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
 };
-use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
-use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
+use uv_requirements::{
+    LockedRequirements, NamedRequirementsResolver, RequirementsSpecification,
+    read_lock_requirements,
+};
 use uv_resolver::{
     FlatIndex, Installable, Lock, OptionsBuilder, Preference, PythonRequirement,
     ResolverEnvironment, ResolverOutput,
@@ -44,8 +47,7 @@ use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{TorchSource, TorchStrategy};
-use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
-use uv_virtualenv::remove_virtualenv;
+use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
@@ -139,9 +141,9 @@ pub(crate) enum ProjectError {
     LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
 
     #[error(
-        "Unable to find lockfile at `uv.lock`, but {0} was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag."
+        "Unable to find lockfile at `{1}`, but {0} was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag."
     )]
-    MissingLockfile(MissingLockfileSource),
+    MissingLockfile(MissingLockfileSource, PathBuf),
 
     #[error(
         "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `{0}`. To update the lockfile, run `uv lock`."
@@ -236,7 +238,9 @@ pub(crate) enum ProjectError {
     #[error("PEP 723 scripts do not support optional dependencies, but extra `{0}` was specified")]
     MissingExtraScript(ExtraName),
 
-    #[error("Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
+    #[error(
+        "Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`"
+    )]
     OverlappingMarkers(String, String, String),
 
     #[error("Environment markers `{0}` don't overlap with Python requirement `{1}`")]
@@ -258,13 +262,21 @@ pub(crate) enum ProjectError {
     UvLockParse(#[source] toml::de::Error),
 
     #[error("Failed to parse `pyproject.toml`")]
-    PyprojectTomlParse(#[source] toml::de::Error),
+    PyprojectTomlParse(#[source] uv_workspace::pyproject::PyprojectTomlError),
 
     #[error("Failed to update `pyproject.toml`")]
     PyprojectTomlUpdate,
 
     #[error("Failed to parse PEP 723 script metadata")]
     Pep723ScriptTomlParse(#[source] toml::de::Error),
+
+    #[error(
+        "Malware detected in one or more dependencies that would be installed; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check."
+    )]
+    MalwareFound,
+
+    #[error("Malware check failed due to an error from OSV")]
+    Osv(#[from] osv::Error),
 
     #[error("Failed to find `site-packages` directory for environment")]
     NoSitePackages,
@@ -277,6 +289,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Client(#[from] uv_client::Error),
+
+    #[error(transparent)]
+    ClientBuild(#[from] uv_client::ClientBuildError),
 
     #[error(transparent)]
     Python(#[from] uv_python::Error),
@@ -343,6 +358,47 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+}
+
+/// Vulnerability identifiers grouped by dependency.
+#[derive(Debug)]
+pub(crate) struct MalwareFindings(pub(crate) Vec<(Dependency, Vec<VulnerabilityID>)>);
+
+impl std::fmt::Display for MalwareFindings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut first = true;
+        for (dependency, vuln_ids) in &self.0 {
+            for vuln_id in vuln_ids {
+                if !first {
+                    writeln!(f)?;
+                }
+                first = false;
+                write!(
+                    f,
+                    "  - `{}=={}`: {} (https://osv.dev/vulnerability/{})",
+                    dependency.name(),
+                    dependency.version(),
+                    vuln_id.as_str(),
+                    vuln_id.as_str(),
+                )?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl uv_errors::Hint for ProjectError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::OverlappingMarkers(_, rhs, replacement) => {
+                uv_errors::Hints::from(format!("replace `{rhs}` with `{replacement}`"))
+            }
+            Self::Lock(err) => err.hints(),
+            Self::Python(err) => err.hints(),
+            Self::Operation(err) => err.hints(),
+            _ => uv_errors::Hints::none(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -661,7 +717,7 @@ impl ScriptInterpreter {
                         .path
                         .file_stem()
                         .and_then(|name| name.to_str())
-                        .and_then(cache_name)
+                        .and_then(|name| cache_name(name, Some(100)))
                     {
                         format!("{file_name}-{digest}")
                     } else {
@@ -950,33 +1006,23 @@ impl ProjectInterpreter {
     /// Discover the interpreter to use in the current [`Workspace`].
     pub(crate) async fn discover(
         workspace: &Workspace,
-        project_dir: &Path,
         groups: &DependencyGroupsWithDefaults,
-        python_request: Option<PythonRequest>,
+        workspace_python: WorkspacePython,
         client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
         keep_incompatible: bool,
-        no_config: bool,
         active: Option<bool>,
         cache: &Cache,
         printer: Printer,
         preview: Preview,
     ) -> Result<Self, ProjectError> {
-        // Resolve the Python request and requirement for the workspace.
         let WorkspacePython {
             source,
             python_request,
             requires_python,
-        } = WorkspacePython::from_request(
-            python_request,
-            Some(workspace),
-            groups,
-            project_dir,
-            no_config,
-        )
-        .await?;
+        } = workspace_python;
 
         // Read from the virtual environment first.
         let root = workspace.venv(active);
@@ -1225,13 +1271,7 @@ impl WorkspacePython {
             // (3) `requires-python` in `pyproject.toml`
             let request = requires_python
                 .as_ref()
-                .map(RequiresPython::specifiers)
-                .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(
-                        specifiers.clone(),
-                        PythonVariant::Default,
-                    ))
-                });
+                .and_then(PythonRequest::from_requires_python);
             let source = PythonRequestSource::RequiresPython;
             (source, request)
         };
@@ -1325,7 +1365,7 @@ impl ScriptPython {
             )
         } else if let Some(specifiers) = script.metadata().requires_python.as_ref() {
             // (3) `requires-python` from script metadata
-            let request = PythonRequest::Version(VersionRequest::Range(
+            let request = PythonRequest::Version(VersionRequest::from_specifiers(
                 specifiers.clone(),
                 PythonVariant::Default,
             ));
@@ -1334,13 +1374,7 @@ impl ScriptPython {
             // (4) `requires-python` from workspace `pyproject.toml`
             let request = workspace_requires_python
                 .as_ref()
-                .map(RequiresPython::specifiers)
-                .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(
-                        specifiers.clone(),
-                        PythonVariant::Default,
-                    ))
-                });
+                .and_then(PythonRequest::from_requires_python);
             (PythonRequestSource::RequiresPython, request)
         };
 
@@ -1419,22 +1453,29 @@ impl ProjectEnvironment {
             })
             .ok();
 
-        let upgradeable = preview.is_enabled(PreviewFeature::PythonUpgrade)
-            && python
-                .as_ref()
-                .is_none_or(|request| !request.includes_patch());
+        let workspace_python = WorkspacePython::from_request(
+            python,
+            Some(workspace),
+            groups,
+            workspace.install_path().as_ref(),
+            no_config,
+        )
+        .await?;
+
+        let upgradeable = workspace_python
+            .python_request
+            .as_ref()
+            .is_none_or(|request| !request.includes_patch());
 
         match ProjectInterpreter::discover(
             workspace,
-            workspace.install_path().as_ref(),
             groups,
-            python,
+            workspace_python,
             client_builder,
             python_preference,
             python_downloads,
             install_mirrors,
             no_sync,
-            no_config,
             active,
             cache,
             printer,
@@ -1521,7 +1562,7 @@ impl ProjectEnvironment {
 
                 // Remove the existing virtual environment if it doesn't meet the requirements.
                 if replace {
-                    match remove_virtualenv(&root) {
+                    match uv_fs::remove_virtualenv(&root) {
                         Ok(()) => {
                             writeln!(
                                 printer.stderr(),
@@ -1529,9 +1570,8 @@ impl ProjectEnvironment {
                                 root.user_display().cyan()
                             )?;
                         }
-                        Err(uv_virtualenv::Error::Io(err))
-                            if err.kind() == std::io::ErrorKind::NotFound => {}
-                        Err(err) => return Err(err.into()),
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
                     }
                 }
 
@@ -1713,7 +1753,7 @@ impl ScriptEnvironment {
                 }
 
                 // Remove the existing virtual environment.
-                let replaced = match remove_virtualenv(&root) {
+                let replaced = match uv_fs::remove_virtualenv(&root) {
                     Ok(()) => {
                         debug!(
                             "Removed virtual environment at: {}",
@@ -1721,12 +1761,8 @@ impl ScriptEnvironment {
                         );
                         true
                     }
-                    Err(uv_virtualenv::Error::Io(err))
-                        if err.kind() == std::io::ErrorKind::NotFound =>
-                    {
-                        false
-                    }
-                    Err(err) => return Err(err.into()),
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
+                    Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
                 };
 
                 debug!(
@@ -1876,7 +1912,8 @@ pub(crate) async fn resolve_names(
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()
+        .map_err(std::io::Error::other)?;
 
     // Determine whether to enable build isolation.
     let environment;
@@ -1925,6 +1962,7 @@ pub(crate) async fn resolve_names(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        SourceTreeEditablePolicy::Project,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
@@ -1993,6 +2031,7 @@ pub(crate) async fn resolve_environment(
     spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
     python_platform: Option<&TargetTriple>,
+    source_tree_editable_policy: SourceTreeEditablePolicy,
     build_constraints: Constraints,
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
@@ -2074,7 +2113,7 @@ pub(crate) async fn resolve_environment(
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()?;
 
     // Determine whether to enable build isolation.
     let environment;
@@ -2164,6 +2203,7 @@ pub(crate) async fn resolve_environment(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        source_tree_editable_policy,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
@@ -2199,7 +2239,8 @@ pub(crate) async fn resolve_environment(
         logger,
         printer,
     )
-    .await?)
+    .await?
+    .0)
 }
 
 /// Sync a [`PythonEnvironment`] with a set of resolved requirements.
@@ -2250,7 +2291,7 @@ pub(crate) async fn sync_environment(
         .index_strategy(index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()?;
 
     // Determine whether to enable build isolation.
     let build_isolation = match build_isolation {
@@ -2303,6 +2344,7 @@ pub(crate) async fn sync_environment(
         &build_hasher,
         exclude_newer.clone(),
         sources,
+        SourceTreeEditablePolicy::Project,
         workspace_cache,
         concurrency.clone(),
         preview,
@@ -2362,6 +2404,7 @@ pub(crate) async fn update_environment(
     spec: RequirementsSpecification,
     modifications: Modifications,
     python_platform: Option<&TargetTriple>,
+    source_tree_editable_policy: SourceTreeEditablePolicy,
     build_constraints: Constraints,
     extra_build_requires: ExtraBuildRequires,
     settings: &ResolverInstallerSettings,
@@ -2498,7 +2541,7 @@ pub(crate) async fn update_environment(
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()?;
 
     // Determine whether to enable build isolation.
     let build_isolation = match build_isolation {
@@ -2559,13 +2602,14 @@ pub(crate) async fn update_environment(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        source_tree_editable_policy,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
     );
 
     // Resolve the requirements.
-    let resolution = match pip::operations::resolve(
+    let (resolution, hasher) = match pip::operations::resolve(
         requirements,
         constraints,
         overrides,
@@ -2596,10 +2640,9 @@ pub(crate) async fn update_environment(
     )
     .await
     {
-        Ok(resolution) => Resolution::from(resolution),
+        Ok((resolution, hasher)) => (Resolution::from(resolution), hasher),
         Err(err) => return Err(err.into()),
     };
-
     // Sync the environment.
     let changelog = pip::operations::install(
         &resolution,
@@ -2965,43 +3008,6 @@ fn warn_on_requirements_txt_setting(spec: &RequirementsSpecification, settings: 
     }
 }
 
-/// Normalize a filename for use in a cache entry.
-///
-/// Replaces non-alphanumeric characters with dashes, and lowercases the filename.
-fn cache_name(name: &str) -> Option<Cow<'_, str>> {
-    if name.bytes().all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f')) {
-        return if name.is_empty() {
-            None
-        } else {
-            Some(Cow::Borrowed(name))
-        };
-    }
-    let mut normalized = String::with_capacity(name.len());
-    let mut dash = false;
-    for char in name.bytes() {
-        match char {
-            b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' => {
-                dash = false;
-                normalized.push(char.to_ascii_lowercase() as char);
-            }
-            _ => {
-                if !dash {
-                    normalized.push('-');
-                    dash = true;
-                }
-            }
-        }
-    }
-    if normalized.ends_with('-') {
-        normalized.pop();
-    }
-    if normalized.is_empty() {
-        None
-    } else {
-        Some(Cow::Owned(normalized))
-    }
-}
-
 fn format_requires_python_sources(conflicts: &RequiresPythonSources) -> String {
     conflicts
         .iter()
@@ -3044,20 +3050,4 @@ fn format_optional_requires_python_sources(
     }
     // Otherwise don't elaborate
     String::new()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_cache_name() {
-        assert_eq!(cache_name("foo"), Some("foo".into()));
-        assert_eq!(cache_name("foo-bar"), Some("foo-bar".into()));
-        assert_eq!(cache_name("foo_bar"), Some("foo-bar".into()));
-        assert_eq!(cache_name("foo-bar_baz"), Some("foo-bar-baz".into()));
-        assert_eq!(cache_name("foo-bar_baz_"), Some("foo-bar-baz".into()));
-        assert_eq!(cache_name("foo-_bar_baz"), Some("foo-bar-baz".into()));
-        assert_eq!(cache_name("_+-_"), None);
-    }
 }

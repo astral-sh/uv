@@ -47,7 +47,7 @@ jobs:
           echo "${{ github.workspace }}/nu-${nu_tag}-x86_64-unknown-linux-gnu" >> "${GITHUB_PATH}"
 
       - name: Download binary
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -71,6 +71,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3.3.0
         with:
           miniconda-version: latest
@@ -78,7 +79,7 @@ jobs:
           python-version: "3.12"
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -103,6 +104,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3.3.0
         with:
           miniconda-version: latest
@@ -110,7 +112,7 @@ jobs:
           python-version: "3.12"
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-macos-x86_64-${{ inputs.sha }}
 
@@ -150,7 +152,7 @@ jobs:
           sudo apt-get install python3.9
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -188,15 +190,15 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-armv7-gnueabihf-${{ inputs.sha }}
 
       - name: "Install armhf runtime"
         run: |
           sudo dpkg --add-architecture armhf
-          sudo apt-get update
-          sudo apt-get install -y libc6:armhf libgcc-s1:armhf
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
+          sudo apt install -y --update libc6:armhf libgcc-s1:armhf
 
       - name: "Prepare binary"
         run: |
@@ -228,7 +230,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -272,7 +274,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-aarch64-${{ inputs.sha }}
 
@@ -316,7 +318,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-aarch64-${{ inputs.sha }}
 
@@ -360,7 +362,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -387,7 +389,7 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -404,7 +406,7 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -459,6 +461,40 @@ jobs:
         run: |
           ./uv pip install anyio
 
+  integration-test-python-install-wine:
+    name: "python install under wine"
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    env:
+      WINEARCH: win64
+      WINEDEBUG: -all
+      WINEPREFIX: /home/runner/uv-wine-prefix
+
+    steps:
+      - name: "Install Wine"
+        run: |
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends wine wine64
+
+      - name: "Download binary"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: uv-windows-x86_64-${{ inputs.sha }}
+
+      - name: "Initialize Wine"
+        run: |
+          wine --version
+          wineboot --init
+
+      - name: "Install Python"
+        # Regression test for https://github.com/astral-sh/uv/issues/19187.
+        run: |
+          mkdir -p "$RUNNER_TEMP/uv-cache" "$RUNNER_TEMP/uv-python"
+          export UV_CACHE_DIR="$(winepath -w "$RUNNER_TEMP/uv-cache")"
+          export UV_PYTHON_INSTALL_DIR="$(winepath -w "$RUNNER_TEMP/uv-python")"
+          wine ./uv.exe python install -v --no-registry --no-bin 3.12.13
+
   integration-test-pypy-windows-x86_64:
     name: "pypy on windows"
     timeout-minutes: 10
@@ -466,7 +502,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -528,7 +564,7 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -595,7 +631,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -652,7 +688,7 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -706,7 +742,7 @@ jobs:
       PYODIDE_XBUILDENV_PATH: D:\pyodide-xbuildenv
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -741,7 +777,7 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-musl-${{ inputs.sha }}
 
@@ -766,7 +802,7 @@ jobs:
           python-version: "3.12.7"
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -823,7 +859,7 @@ jobs:
           python-version: "3.13t"
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -862,12 +898,13 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-musl-${{ inputs.sha }}
 
+      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - name: "Setup WSL"
-        uses: Vampire/setup-wsl@6a8db447be7ed35f2f499c02c6e60ff77ef11278 # v6.0.0
+        uses: Vampire/setup-wsl@d1da7f2c0322a5ee4f24975344f67fc0f5baf364 # v7.0.0
         with:
           distribution: Ubuntu-22.04
 
@@ -923,7 +960,7 @@ jobs:
           python-version: "${{ env.PYTHON_VERSION }}"
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -931,7 +968,7 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Configure AWS credentials"
-        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        uses: aws-actions/configure-aws-credentials@d979d5b3a71173a29b74b5b88418bfda9437d885 # v6.1.1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -1026,7 +1063,7 @@ jobs:
           python-version: "${{ env.PYTHON_VERSION }}"
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -1072,10 +1109,10 @@ jobs:
 
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -1097,8 +1134,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.14"
+
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-macos-aarch64-${{ inputs.sha }}
 

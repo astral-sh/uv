@@ -1,4 +1,4 @@
-#![allow(clippy::disallowed_types)]
+#![expect(clippy::disallowed_types)]
 
 use std::env::current_dir;
 use std::fs;
@@ -8,8 +8,11 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use flate2::write::GzEncoder;
 use fs_err::File;
+use futures::executor::block_on;
+use futures::io::AllowStdIo;
 use http::StatusCode;
 use indoc::indoc;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -20,6 +23,27 @@ use uv_static::EnvVars;
 use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, download_to_disk, packse_index_url, uv_snapshot,
 };
+
+fn write_tar_gz(file: File, entries: &[(&str, &str)]) -> Result<()> {
+    let enc = GzEncoder::new(file, flate2::Compression::default());
+    let mut tar = tokio_tar::Builder::new_non_terminated(AllowStdIo::new(enc).compat_write());
+
+    for (path, contents) in entries {
+        let mut header = tokio_tar::Header::new_gnu();
+        header.set_size(contents.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        block_on(tar.append_data(
+            &mut header,
+            path,
+            AllowStdIo::new(Cursor::new(contents)).compat(),
+        ))?;
+    }
+
+    let writer = block_on(tar.into_inner())?;
+    writer.into_inner().into_inner().finish()?;
+    Ok(())
+}
 
 #[test]
 fn compile_requirements_in() -> Result<()> {
@@ -1908,7 +1932,7 @@ fn compile_fallback_interpreter_broken_in_path() -> Result<()> {
             .arg("--python-version")
             .arg("3.12")
             // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-            .env(EnvVars::UV_TEST_PYTHON_PATH, context.bin_dir.as_os_str()), @"
+            .env(EnvVars::UV_PYTHON_SEARCH_PATH, context.bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1996,7 +2020,7 @@ fn compile_python_37() -> Result<()> {
       ╰─▶ Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and black==23.10.1 depends on Python>=3.8, we can conclude that black==23.10.1 cannot be used.
           And because you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
 
-          hint: The `--python-version` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., black==23.10.1 only supports >=3.8). Consider using a higher `--python-version` value.
+    hint: The `--python-version` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., black==23.10.1 only supports >=3.8). Consider using a higher `--python-version` value.
     ");
 
     Ok(())
@@ -5921,6 +5945,28 @@ fn upgrade_package() -> Result<()> {
     Ok(())
 }
 
+/// `--upgrade-group` is not supported in pip commands.
+#[test]
+fn upgrade_group_not_supported() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("requirements.in")
+            .arg("--upgrade-group")
+            .arg("dev"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--upgrade-group` is not supported in `uv pip` commands
+    ");
+
+    Ok(())
+}
+
 /// Upgrade a package with a constraint on the allowed upgrade.
 #[test]
 fn upgrade_constraint() -> Result<()> {
@@ -6873,7 +6919,7 @@ fn no_index_requirements_txt() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because tqdm was not found in the provided package locations and you require tqdm, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
 
@@ -6982,7 +7028,7 @@ fn offline_registry() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because black was not found in the cache and you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
     );
 
@@ -7113,7 +7159,7 @@ fn offline_find_links() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
     );
 
@@ -7132,7 +7178,7 @@ fn offline_find_links() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
     );
 
@@ -7218,10 +7264,10 @@ fn invalid_metadata_requires_python() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because validation==2.0.0 has invalid metadata and you require validation==2.0.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: Metadata for `validation` (v2.0.0) could not be parsed:
-            Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==12`?:
-            12
-            ^^
+    hint: Metadata for `validation` (v2.0.0) could not be parsed:
+      Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==12`?:
+      12
+      ^^
     "
     );
 
@@ -7249,8 +7295,8 @@ fn invalid_metadata_multiple_dist_info() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because validation==3.0.0 has an invalid package format and you require validation==3.0.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of `validation` (v3.0.0) was invalid:
-            Multiple .dist-info directories found: validation-2.0.0, validation-3.0.0
+    hint: The structure of `validation` (v3.0.0) was invalid:
+      Multiple .dist-info directories found: validation-2.0.0, validation-3.0.0
     "
     );
 
@@ -11174,7 +11220,7 @@ requires-python = ">=3.13"
       ╰─▶ Because the requested Python version (>=3.11) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
 
-          hint: The `--python-version` value (>=3.11) includes Python versions that are not supported by your dependencies (e.g., example==0.0.0 only supports >=3.13). Consider using a higher `--python-version` value.
+    hint: The `--python-version` value (>=3.11) includes Python versions that are not supported by your dependencies (e.g., example==0.0.0 only supports >=3.13). Consider using a higher `--python-version` value.
     "
     );
 
@@ -12710,7 +12756,7 @@ fn compile_index_url_first_match_base() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of jinja2==3.1.0 and you require jinja2==3.1.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: `jinja2` was found on https://astral-sh.github.io/pytorch-mirror/whl/cpu, but not at the requested version (jinja2==3.1.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
+    hint: `jinja2` was found on https://astral-sh.github.io/pytorch-mirror/whl/cpu, but not at the requested version (jinja2==3.1.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
     "
     );
 
@@ -12744,7 +12790,7 @@ fn compile_index_url_first_match_marker() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of jinja2{sys_platform == 'linux'}==3.1.0 and you require jinja2{sys_platform == 'linux'}==3.1.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: `jinja2` was found on https://astral-sh.github.io/pytorch-mirror/whl/cpu, but not at the requested version (jinja2==3.1.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
+    hint: `jinja2` was found on https://astral-sh.github.io/pytorch-mirror/whl/cpu, but not at the requested version (jinja2==3.1.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
     "
     );
 
@@ -13798,7 +13844,7 @@ fn no_binary_only_binary() -> Result<()> {
       ╰─▶ Because only source-distribution>=0.0.1 is available and source-distribution==0.0.1 has no usable wheels, we can conclude that source-distribution<=0.0.1 cannot be used.
           And because you require source-distribution<=0.0.1, we can conclude that your requirements are unsatisfiable.
 
-          hint: Wheels are required for `source-distribution` because building from source is disabled for all packages (i.e., with `--no-build`)
+    hint: Wheels are required for `source-distribution` because building from source is disabled for all packages (i.e., with `--no-build`)
     "
     );
 
@@ -14347,6 +14393,59 @@ fn universal_constrained_environment() -> Result<()> {
     Ok(())
 }
 
+/// Resolve with `--universal`, requiring artifact coverage for user-provided environments.
+#[test]
+fn universal_required_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&indoc::formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["no-sdist-no-wheels-with-matching-platform-a"]
+
+        [tool.uv]
+        required-environments = ["platform_machine == 'arm64'"]
+
+        [[tool.uv.index]]
+        name = "packse"
+        url = "{}"
+        default = true
+        "#,
+        packse_index_url()
+    })?;
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+
+    uv_snapshot!(filters, context.pip_compile()
+        .arg("pyproject.toml")
+        .arg("--universal")
+        .arg("--exclude-newer-package")
+        .arg("no-sdist-no-wheels-with-matching-platform-a=false")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (markers: platform_machine == 'arm64'):
+      ╰─▶ Because only no-sdist-no-wheels-with-matching-platform-a==1.0.0 is available and no-sdist-no-wheels-with-matching-platform-a==1.0.0 has no `platform_machine == 'arm64'`-compatible wheels, we can conclude that all versions of no-sdist-no-wheels-with-matching-platform-a cannot be used.
+          And because project depends on no-sdist-no-wheels-with-matching-platform-a, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
 /// Resolve a package that has no versions that satisfy the current Python version.
 #[test]
 fn compile_enumerate_no_versions() -> Result<()> {
@@ -14812,9 +14911,8 @@ fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
       × No solution found when resolving dependencies for split (markers: python_full_version >= '3.10'):
       ╰─▶ Because source-distribution==0.0.3 requires Python >=3.10 and you require source-distribution{python_full_version >= '3.10'}==0.0.3, we can conclude that your requirements are unsatisfiable.
 
-          hint: While the active Python version is 3.8, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
-
-          hint: The source distribution for `source-distribution` (v0.0.3) does not include static metadata. Generating metadata for this package requires Python >=3.10, but Python 3.8.[X] is installed.
+    hint: While the active Python version is 3.8, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
+    hint: The source distribution for `source-distribution` (v0.0.3) does not include static metadata. Generating metadata for this package requires Python >=3.10, but Python 3.8.[X] is installed.
     ");
 
     Ok(())
@@ -15102,8 +15200,9 @@ fn compile_derivation_chain() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `wsgiref` (v0.1.2) was included because `child` (v0.1.0) depends on `wsgiref`
+
+    hint: `wsgiref` (v0.1.2) was included because `child` (v0.1.0) depends on `wsgiref`
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#
     );
 
@@ -15148,9 +15247,8 @@ fn invalid_platform() -> Result<()> {
           and open3d<=0.15.2 has no wheels with a matching Python ABI tag (e.g., `cp310`), we can conclude that open3d<=0.15.2 cannot be used.
           And because open3d>=0.16.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`) and you require open3d, we can conclude that your requirements are unsatisfiable.
 
-          hint: You require CPython 3.10 (`cp310`), but we only found wheels for `open3d` (v0.15.2) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`
-
-          hint: Wheels are available for `open3d` (v0.18.0) on the following platforms: `manylinux_2_27_aarch64`, `manylinux_2_27_x86_64`, `macosx_11_0_x86_64`, `macosx_13_0_arm64`, `win_amd64`
+    hint: You require CPython 3.10 (`cp310`), but we only found wheels for `open3d` (v0.15.2) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`
+    hint: Wheels are available for `open3d` (v0.18.0) on the following platforms: `manylinux_2_27_aarch64`, `manylinux_2_27_x86_64`, `macosx_11_0_x86_64`, `macosx_13_0_arm64`, `win_amd64`
     ");
 
     Ok(())
@@ -15369,20 +15467,13 @@ fn dynamic_version_source_dist() -> Result<()> {
     // Flush the file after we're done.
     {
         let file = File::create(source_dist.path())?;
-        let enc = GzEncoder::new(file, flate2::Compression::default());
-        let mut tar = tar::Builder::new(enc);
-
-        for (path, contents) in [
-            ("foo-1.2.3/pyproject.toml", pyproject_toml),
-            ("foo-1.2.3/setup.py", setup_py),
-        ] {
-            let mut header = tar::Header::new_gnu();
-            header.set_size(contents.len() as u64);
-            header.set_mode(0o644);
-            header.set_cksum();
-            tar.append_data(&mut header, path, Cursor::new(contents))?;
-        }
-        tar.finish()?;
+        write_tar_gz(
+            file,
+            &[
+                ("foo-1.2.3/pyproject.toml", pyproject_toml),
+                ("foo-1.2.3/setup.py", setup_py),
+            ],
+        )?;
     }
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -17826,8 +17917,8 @@ fn incompatible_cuda() -> Result<()> {
     let context = uv_test::test_context!("3.11");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
-        torch==2.6.0+cu126
-        torchvision==0.16.0+cu121
+        torch==2.2.1+cu121
+        torchvision==0.17.1+cu118
     "})?;
 
     uv_snapshot!(context
@@ -17847,8 +17938,8 @@ fn incompatible_cuda() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because torchvision==0.16.0+cu121 depends on system:cuda==12.1 and torch==2.6.0+cu126 depends on system:cuda==12.6, we can conclude that torch==2.6.0+cu126 and torchvision==0.16.0+cu121 are incompatible.
-          And because you require torch==2.6.0+cu126 and torchvision==0.16.0+cu121, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because torchvision==0.17.1+cu118 depends on system:cuda==11.8 and torch==2.2.1+cu121 depends on system:cuda==12.1, we can conclude that torch==2.2.1+cu121 and torchvision==0.17.1+cu118 are incompatible.
+          And because you require torch==2.2.1+cu121 and torchvision==0.17.1+cu118, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())

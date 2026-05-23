@@ -116,9 +116,23 @@ async fn do_uninstall(
         .map(|installation| installation.key().clone())
         .collect::<BTreeSet<_>>()
     });
+    let specific_patch_requests = download_requests
+        .iter()
+        .map(|request| {
+            request.version().is_some_and(|version| {
+                matches!(version, uv_python::VersionRequest::MajorMinorPatch(..))
+            })
+        })
+        .collect::<Vec<_>>();
+    let report_outdated = outdated && specific_patch_requests.iter().any(|specific| !specific);
 
     let mut matching_installations = BTreeSet::default();
-    for (request, download_request) in requests.iter().zip(download_requests) {
+    let mut missing_required = false;
+    for ((request, download_request), is_specific_patch) in requests
+        .iter()
+        .zip(download_requests)
+        .zip(specific_patch_requests.iter().copied())
+    {
         if matches!(requests.as_slice(), [PythonRequest::Default]) {
             writeln!(printer.stderr(), "Searching for Python installations")?;
         } else {
@@ -128,12 +142,8 @@ async fn do_uninstall(
                 request.cyan()
             )?;
         }
-        // Check if this is a specific patch version request
-        let is_specific_patch = download_request
-            .version()
-            .map(|v| matches!(v, uv_python::VersionRequest::MajorMinorPatch(..)))
-            .unwrap_or(false);
 
+        let outdated_filter = outdated && !is_specific_patch;
         let mut found = false;
         for installation in installed_installations
             .iter()
@@ -142,13 +152,13 @@ async fn do_uninstall(
                 // When doing an outdated check, don't consider the latest of each minor version
                 // as matching. However, if a specific patch version is requested, ignore the
                 // outdated filter and uninstall the exact version requested.
-                if is_specific_patch {
-                    true
-                } else {
+                if outdated_filter {
                     latest_minor_installations
                         .as_ref()
                         .map(|latest| !latest.contains(installation.key()))
                         .unwrap_or(true)
+                } else {
+                    true
                 }
             })
         {
@@ -164,9 +174,10 @@ async fn do_uninstall(
                 );
             }
 
-            if outdated {
+            if outdated_filter {
                 continue;
             }
+            missing_required = true;
 
             if matches!(requests.as_slice(), [PythonRequest::Default]) {
                 writeln!(printer.stderr(), "No Python installations found")?;
@@ -187,7 +198,7 @@ async fn do_uninstall(
         } else {
             " matching the requests"
         };
-        if outdated {
+        if report_outdated && !missing_required {
             writeln!(
                 printer.stderr(),
                 "No outdated Python installations found{matching}"
@@ -345,7 +356,11 @@ async fn do_uninstall(
                 "{}",
                 format!(
                     "Uninstalled {}{} {}",
-                    if outdated { "outdated version " } else { "" },
+                    if report_outdated {
+                        "outdated version "
+                    } else {
+                        ""
+                    },
                     format!("Python {}", first_uninstalled.version()).bold(),
                     format!("in {}", elapsed(start.elapsed())).dimmed()
                 )
@@ -361,7 +376,7 @@ async fn do_uninstall(
                     format!(
                         "{} {}versions",
                         uninstalled.len(),
-                        if outdated { "outdated " } else { "" }
+                        if report_outdated { "outdated " } else { "" }
                     )
                     .bold(),
                     format!("in {}", elapsed(start.elapsed())).dimmed()

@@ -26,7 +26,7 @@ pub(crate) async fn list_packages(
             .connect_timeout(environment.http_connect_timeout),
         cache,
     )
-    .build();
+    .build()?;
 
     let index_url = IndexUrl::parse(&args.url, None)?;
     let index = client.fetch_simple_index(&index_url).await?;

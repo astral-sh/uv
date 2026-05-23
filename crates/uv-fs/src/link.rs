@@ -106,7 +106,7 @@ impl CopyLocks {
     ///
     /// Acquires a lock on the parent directory before copying to prevent concurrent writes to the
     /// same directory from corrupting files.
-    pub fn synchronized_copy(&self, from: &Path, to: &Path) -> io::Result<()> {
+    fn synchronized_copy(&self, from: &Path, to: &Path) -> io::Result<()> {
         // Ensure we have a lock for the directory.
         // TODO(zanieb): This unwrap was copied from `uv-install-wheel`; consider propagating the
         // error instead of panicking if `to` has no parent.
@@ -905,7 +905,7 @@ fn create_symlink(original: &Path, link: &Path) -> io::Result<()> {
 }
 
 #[cfg(test)]
-#[allow(clippy::print_stderr)]
+#[expect(clippy::print_stderr)]
 mod tests {
     use super::*;
     use tempfile::TempDir;

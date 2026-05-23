@@ -4,9 +4,8 @@
 //! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.59/scenarios>
 //!
 #![cfg(all(feature = "test-python", feature = "test-pypi"))]
-#![allow(clippy::needless_raw_string_hashes)]
-#![allow(clippy::doc_markdown)]
-#![allow(clippy::doc_lazy_continuation)]
+#![expect(clippy::needless_raw_string_hashes)]
+#![expect(clippy::doc_markdown)]
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
@@ -786,7 +785,7 @@ fn conflict_in_fork() -> Result<()> {
               package-a{sys_platform == 'os2'}>=2
           and your project depends on package-a{sys_platform == 'os2'}<2, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     "
     );
 

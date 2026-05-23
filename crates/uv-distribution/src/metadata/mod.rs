@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use uv_auth::CredentialsCache;
 use uv_configuration::NoSources;
-use uv_distribution_types::{GitSourceUrl, IndexLocations, Requirement};
+use uv_distribution_types::{GitDirectorySourceUrl, IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{HashDigests, ResolutionMetadata};
@@ -53,6 +53,15 @@ pub enum MetadataError {
     IncompleteSourceGroup(PackageName, GroupName),
 }
 
+impl uv_errors::Hint for MetadataError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::LoweringError(_, err) | Self::GroupLoweringError(_, _, err) => err.hints(),
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Metadata {
     // Mandatory fields
@@ -91,6 +100,7 @@ impl Metadata {
         git_source: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: NoSources,
+        editable: bool,
         cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
@@ -113,6 +123,7 @@ impl Metadata {
             git_source,
             locations,
             sources,
+            editable,
             cache,
             credentials_cache,
         )
@@ -166,5 +177,5 @@ pub struct GitWorkspaceMember<'a> {
     /// The root of the checkout, which may be the root of the workspace or may be above the
     /// workspace root.
     pub fetch_root: &'a Path,
-    pub git_source: &'a GitSourceUrl<'a>,
+    pub git_source: &'a GitDirectorySourceUrl<'a>,
 }

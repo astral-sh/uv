@@ -27,7 +27,7 @@ pub(crate) async fn token(
         }
         let client = client_builder
             .auth_integration(AuthIntegration::NoAuthMiddleware)
-            .build();
+            .build()?;
 
         pyx_refresh(&pyx_store, &client, printer).await?;
         return Ok(ExitStatus::Success);

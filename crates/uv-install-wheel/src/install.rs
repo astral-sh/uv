@@ -14,7 +14,7 @@ use uv_pypi_types::{DirectUrl, Metadata10};
 use crate::linker::{InstallState, LinkMode, link_wheel_files};
 use crate::wheel::{
     LibKind, WheelFile, dist_info_metadata, find_dist_info, install_data, parse_scripts,
-    read_record_file, write_installer_metadata, write_script_entrypoints,
+    read_record, write_installer_metadata, write_record, write_script_entrypoints,
 };
 use crate::{Error, Layout};
 
@@ -69,13 +69,13 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
 
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
     // > 1.d Else unpack archive into platlib (site-packages).
-    trace!(?name, "Extracting file");
+    trace!(?name, "Extracting wheel files");
     let site_packages = match lib_kind {
         LibKind::Pure => &layout.scheme.purelib,
         LibKind::Plat => &layout.scheme.platlib,
     };
-    let num_unpacked = link_wheel_files(link_mode, site_packages, &wheel, state, filename)?;
-    trace!(?name, "Extracted {num_unpacked} files");
+    link_wheel_files(link_mode, site_packages, &wheel, state, filename)?;
+    trace!(?name, "Extracted wheel files");
 
     // Read the RECORD file.
     let mut record_file = File::open(
@@ -83,7 +83,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
             .as_ref()
             .join(format!("{dist_info_prefix}.dist-info/RECORD")),
     )?;
-    let mut record = read_record_file(&mut record_file)?;
+    let mut record = read_record(&mut record_file)?;
 
     let (console_scripts, gui_scripts) =
         parse_scripts(&wheel, &dist_info_prefix, None, layout.python_version.1)?;
@@ -149,14 +149,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     }
 
     trace!(?name, "Writing record");
-    let mut record_writer = csv::WriterBuilder::new()
-        .has_headers(false)
-        .escape(b'"')
-        .from_path(site_packages.join(format!("{dist_info_prefix}.dist-info/RECORD")))?;
-    record.sort();
-    for entry in record {
-        record_writer.serialize(entry)?;
-    }
+    write_record(site_packages, &dist_info_prefix, record)?;
 
     Ok(())
 }

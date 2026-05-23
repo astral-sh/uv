@@ -36,12 +36,12 @@ impl Dependency {
 /// within that bucket. For example, `CVE-2026-12345` or `PYSEC-2023-0001`.
 ///
 /// No assumptions should be made about the format of these identifiers.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct VulnerabilityID(SmallString);
 
 impl VulnerabilityID {
     /// Create a new vulnerability ID from a string.
-    pub(crate) fn new(id: impl Into<SmallString>) -> Self {
+    pub fn new(id: impl Into<SmallString>) -> Self {
         Self(id.into())
     }
 
@@ -66,6 +66,16 @@ pub enum AdverseStatus {
     Quarantined,
     /// The project is considered obsolete, and may have been superseded by another project.
     Deprecated,
+}
+
+impl std::fmt::Display for AdverseStatus {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Archived => "archived",
+            Self::Quarantined => "quarantined",
+            Self::Deprecated => "deprecated",
+        })
+    }
 }
 
 /// A vulnerability within a dependency.
@@ -120,12 +130,21 @@ impl Vulnerability {
         }
     }
 
+    /// Return an iterator over all identifiers for this vulnerability, including the primary ID and all aliases.
+    fn ids(&self) -> impl Iterator<Item = &VulnerabilityID> {
+        std::iter::once(&self.id).chain(self.aliases.iter())
+    }
+
+    /// Returns `true` if any of this vulnerability's identifiers (primary ID or aliases) match the given ID.
+    pub fn matches(&self, id: &VulnerabilityID) -> bool {
+        self.ids().any(|own_id| own_id == id)
+    }
+
     /// Pick the subjectively "best" identifier for this vulnerability.
     /// For our purposes we prefer PYSEC IDs, then GHSA, then CVE, then whatever
     /// primary ID the vulnerability came with.
     pub fn best_id(&self) -> &VulnerabilityID {
-        std::iter::once(&self.id)
-            .chain(self.aliases.iter())
+        self.ids()
             .find(|id| {
                 id.as_str().starts_with("PYSEC-")
                     || id.as_str().starts_with("GHSA-")
@@ -136,10 +155,13 @@ impl Vulnerability {
 }
 
 /// An adverse project status, such as an archived or deprecated project.
+///
+/// PEP 792 status markers are project-level, so this finding carries only the
+/// project name — not a specific version.
 #[derive(Debug)]
 pub struct ProjectStatus {
-    /// The dependency with the adverse status.
-    pub dependency: Dependency,
+    /// The name of the project with the adverse status.
+    pub name: PackageName,
     /// The adverse status of the project.
     pub status: AdverseStatus,
     /// An optional (index-supplied) reason for the adverse status.

@@ -165,7 +165,7 @@ impl SitePackages {
     }
 
     /// Remove the given packages from the index, returning all installed versions, if any.
-    pub fn remove_packages(&mut self, name: &PackageName) -> Vec<InstalledDist> {
+    pub(crate) fn remove_packages(&mut self, name: &PackageName) -> Vec<InstalledDist> {
         let Some(indexes) = self.by_name.get(name) else {
             return Vec::new();
         };

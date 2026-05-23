@@ -542,7 +542,7 @@ explicit = true
 
 [[tool.uv.index]]
 name = "torch-gpu"
-url = "https://download.pytorch.org/whl/cu124"
+url = "https://download.pytorch.org/whl/cu130"
 explicit = true
 ```
 
@@ -630,7 +630,7 @@ url = "https://download.pytorch.org/whl/cpu"
 
 [[tool.uv.index]]
 name = "torch-gpu"
-url = "https://download.pytorch.org/whl/cu124"
+url = "https://download.pytorch.org/whl/cu130"
 ```
 
 ## Development dependencies

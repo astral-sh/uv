@@ -11,14 +11,13 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_dirs::user_executable_directory;
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified};
-use uv_install_wheel::read_record_file;
+use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::Version;
 use uv_python::{BrokenLink, Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
-use uv_virtualenv::remove_virtualenv;
 
 pub use receipt::ToolReceipt;
 pub use tool::{Tool, ToolEntrypoint};
@@ -251,7 +250,7 @@ impl InstalledTools {
             environment_path.user_display()
         );
 
-        remove_virtualenv(environment_path.as_path())?;
+        uv_fs::remove_virtualenv(environment_path.as_path()).map_err(uv_virtualenv::Error::from)?;
 
         Ok(())
     }
@@ -324,15 +323,15 @@ impl InstalledTools {
         let environment_path = self.tool_dir(name);
 
         // Remove any existing environment.
-        match remove_virtualenv(&environment_path) {
+        match uv_fs::remove_virtualenv(&environment_path) {
             Ok(()) => {
                 debug!(
                     "Removed existing environment for tool `{name}`: {}",
                     environment_path.user_display()
                 );
             }
-            Err(uv_virtualenv::Error::Io(err)) if err.kind() == io::ErrorKind::NotFound => (),
-            Err(err) => return Err(err.into()),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+            Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
         }
 
         debug!(
@@ -391,36 +390,6 @@ impl InstalledTools {
     }
 }
 
-/// A uv-managed tool installed on the current system..
-#[derive(Debug, Clone)]
-pub struct InstalledTool {
-    /// The path to the top-level directory of the tools.
-    path: PathBuf,
-}
-
-impl InstalledTool {
-    pub fn new(path: PathBuf) -> Result<Self, Error> {
-        Ok(Self { path })
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl std::fmt::Display for InstalledTool {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.path
-                .file_name()
-                .unwrap_or(self.path.as_os_str())
-                .to_string_lossy()
-        )
-    }
-}
-
 /// Find the tool executable directory.
 pub fn tool_executable_dir() -> Result<PathBuf, Error> {
     user_executable_directory(Some(EnvVars::UV_TOOL_BIN_DIR)).ok_or(Error::NoExecutableDirectory)
@@ -459,7 +428,7 @@ pub fn entrypoint_paths(
     );
 
     // Read the RECORD file.
-    let record = read_record_file(&mut File::open(dist_info_path.join("RECORD"))?)?;
+    let record = read_record(File::open(dist_info_path.join("RECORD"))?)?;
 
     // The RECORD file uses relative paths, so we're looking for the relative path to be a prefix.
     let layout = site_packages.interpreter().layout();

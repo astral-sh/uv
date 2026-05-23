@@ -8,6 +8,8 @@ use fs_err as fs;
 use indoc::indoc;
 use predicates::Predicate;
 use url::Url;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_fs::{Simplified, copy_dir_all};
 use uv_static::EnvVars;
@@ -1053,7 +1055,7 @@ fn install_no_index() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
 
@@ -1102,7 +1104,7 @@ fn install_no_index_cached() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
 
@@ -1306,6 +1308,54 @@ fn install_local_wheel() -> Result<()> {
     Ok(())
 }
 
+/// Reject decoded path separators in an unnamed wheel URL before using the filename in cache paths.
+#[test]
+fn install_unnamed_wheel_url_rejects_path_traversal() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("https://example.com/packages/pkg-1.0-py3-none-..%2F..%2F..%2Ftarget.whl")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--strict"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The wheel filename \"pkg-1.0-py3-none-../../../target.whl\" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
+    "
+    );
+
+    Ok(())
+}
+
+/// Reject decoded stream separators in an unnamed wheel URL before using the filename in cache paths.
+#[test]
+fn install_unnamed_wheel_url_rejects_stream_separator() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("https://example.com/packages/pkg-1.0-py3-none-target%3Astream.whl")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--strict"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The wheel filename \"pkg-1.0-py3-none-target:stream.whl\" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
+    "
+    );
+
+    Ok(())
+}
+
 /// Install a wheel whose actual version doesn't match the version encoded in the filename.
 #[test]
 fn mismatched_version() -> Result<()> {
@@ -1386,8 +1436,8 @@ fn mismatched_name() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of `foo` was invalid
-            Caused by: The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
+    hint: The structure of `foo` was invalid
+      Caused by: The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
     "
     );
 
@@ -2724,9 +2774,9 @@ fn incompatible_wheel() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of `foo` was invalid
-            Caused by: Failed to read from zip file
-            Caused by: unable to locate the end of central directory record
+    hint: The structure of `foo` was invalid
+      Caused by: Failed to read from zip file
+      Caused by: unable to locate the end of central directory record
     "
     );
 
@@ -2877,7 +2927,7 @@ fn find_links_offline_no_match() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because numpy was not found in the cache and you require numpy, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
     );
 
@@ -3002,7 +3052,7 @@ fn offline() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because black was not found in the cache and you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
     );
 
@@ -4461,7 +4511,7 @@ fn require_hashes_repeated_dependency() -> Result<()> {
     Ok(())
 }
 
-/// If a dependency is repeated, use the last hash provided. pip seems to use the _first_ hash.
+/// Repeated direct URL requirements merge compatible hashes instead of overwriting them.
 #[test]
 fn require_hashes_repeated_hash() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4514,37 +4564,13 @@ fn require_hashes_repeated_hash() -> Result<()> {
     "
     );
 
-    // Use a different hash. The first hash is wrong, but that's fine, since we use the last hash.
+    // Use a different hash. The `sha512` is wrong, so validation should fail even though the
+    // `sha256` is still correct.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str(indoc::indoc! { r"
-            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
-            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=md5:420d85e19168705cdf0223621b18831a
-    " })?;
-
-    uv_snapshot!(context.pip_sync()
-        .arg("requirements.txt")
-        .arg("--require-hashes")
-        .arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
-     ~ anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
-    "
-    );
-
-    // Use a different hash. The second hash is wrong. This should fail, since we use the last hash.
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt
-        .write_str(indoc::indoc! { r"
-            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
-            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=md5:520d85e19168705cdf0223621b18831a
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
     " })?;
 
     uv_snapshot!(context.pip_sync()
@@ -4561,10 +4587,83 @@ fn require_hashes_repeated_hash() -> Result<()> {
       ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
           Expected:
-            md5:520d85e19168705cdf0223621b18831a
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
 
           Computed:
-            md5:420d85e19168705cdf0223621b18831a
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+    "
+    );
+
+    // Use different hashes, but both are wrong. This should fail because none of the merged
+    // hashes match.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str(indoc::indoc! { r"
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+    " })?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--require-hashes")
+        .arg("--reinstall"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+
+          Expected:
+            sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+            sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+    "
+    );
+
+    Ok(())
+}
+
+/// Repeated direct URL requirements merge hashes across nested requirements files.
+#[test]
+fn require_hashes_repeated_hash_multiple_files() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_a = context.temp_dir.child("requirements-a.txt");
+    requirements_a.write_str(indoc::indoc! { r"
+        anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+    " })?;
+
+    let requirements_b = context.temp_dir.child("requirements-b.txt");
+    requirements_b.write_str(indoc::indoc! { r"
+        anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+    " })?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc::indoc! { r"
+        -r requirements-a.txt
+        -r requirements-b.txt
+    " })?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
     "
     );
 
@@ -5220,32 +5319,27 @@ fn require_hashes_url_invalid() -> Result<()> {
     Ok(())
 }
 
-/// Ignore the (valid) hash on the fragment if (invalid) hashes are provided directly.
+/// Merge the hash on the fragment with hashes provided directly.
 #[test]
-fn require_hashes_url_ignore() -> Result<()> {
+fn require_hashes_url_merge() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
-        .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374 --hash sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
+        .write_str("anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha256=cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f --hash sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2")?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
-      ╰─▶ Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
-
-          Expected:
-            sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
-
-          Computed:
-            sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha256=cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f)
     "
     );
 
@@ -5931,6 +6025,118 @@ fn pep_751() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn pep_751_require_hashes_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("foo").child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("foo")
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
+
+    let pylock_toml = context.temp_dir.child("pylock.toml");
+    pylock_toml.write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        requires-python = ">=3.12"
+
+        [[packages]]
+        name = "foo"
+        version = "1.0.0"
+        directory = { path = "foo" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--require-hashes"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: foo
+    "
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn pep_751_remote() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/pylock.toml"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {r#"
+            lock-version = "1.0"
+            created-by = "uv"
+            requires-python = ">=3.12"
+
+            [[packages]]
+            name = "anyio"
+            version = "4.3.0"
+            sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", upload-time = 2024-02-19T08:36:28Z, size = 159642, hashes = { sha256 = "f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" } }
+            wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", upload-time = 2024-02-19T08:36:26Z, size = 85584, hashes = { sha256 = "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" } }]
+            dependencies = [
+                { name = "idna" },
+                { name = "sniffio" },
+            ]
+
+            [[packages]]
+            name = "idna"
+            version = "3.6"
+            sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", upload-time = 2023-11-25T15:40:54Z, size = 175426, hashes = { sha256 = "9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca" } }
+            wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", upload-time = 2023-11-25T15:40:52Z, size = 61567, hashes = { sha256 = "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f" } }]
+
+            [[packages]]
+            name = "sniffio"
+            version = "1.3.1"
+            sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
+            wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
+        "#}))
+        .mount(&server)
+        .await;
+
+    let pylock_url = format!("{}/pylock.toml", server.uri());
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg(&pylock_url), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    Ok(())
+}
+
 /// Avoid erroring for packages that only include wheels, and _don't_ include a wheel for the
 /// current platform, but are omitted by markers anyway.
 ///
@@ -6171,7 +6377,7 @@ fn pep_751_direct_url_tags() -> Result<()> {
 
     ----- stderr -----
     error: Failed to determine installation plan
-      Caused by: A URL dependency is incompatible with the current platform: https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl
+      Caused by: A URL (https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with macOS (`macosx_11_0_arm64`), but you're on Linux (`manylinux_2_28_x86_64`)
     "
@@ -6213,7 +6419,34 @@ fn incompatible_python_version_direct_url() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      Caused by: A URL dependency is incompatible with the current platform: https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl
+      Caused by: A URL (https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl) dependency is incompatible with the current platform
+
+    hint: The wheel is compatible with CPython 3.13 (`cp313`), but you're using CPython 3.12 (`cp312`)
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn incompatible_direct_url_redacts_credentials() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("numpy @ https://user:secret@files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl?X-Amz-Signature=signing-secret")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--python-platform")
+        .arg("windows"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to determine installation plan
+      Caused by: A URL (https://user:****@files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl?X-Amz-Signature=****) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with CPython 3.13 (`cp313`), but you're using CPython 3.12 (`cp312`)
     "
@@ -6240,7 +6473,7 @@ fn incompatible_platform_direct_url() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      Caused by: A URL dependency is incompatible with the current platform: https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl
+      Caused by: A URL (https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with Windows (`win32`), but you're on Linux (`manylinux_2_28_x86_64`)
     "

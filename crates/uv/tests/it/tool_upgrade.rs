@@ -1,5 +1,9 @@
+use std::process::Command;
+
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
+use indoc::indoc;
 use insta::assert_snapshot;
 
 use uv_static::EnvVars;
@@ -92,6 +96,425 @@ fn tool_upgrade_empty() {
 }
 
 #[test]
+fn tool_upgrade_preserves_workspace_member_editability() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let root_pyproject = context.temp_dir.child("pyproject.toml");
+    root_pyproject.write_str(indoc! {
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [project.scripts]
+        root_cli = "root:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#
+    })?;
+
+    let root_src = context.temp_dir.child("src").child("root");
+    root_src.create_dir_all()?;
+    root_src.child("__init__.py").write_str(indoc! {
+        r"
+        def main():
+            import child
+            print(child.MESSAGE)
+        "
+    })?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    let child_src = child.child("src").child("child");
+    child_src.create_dir_all()?;
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'OK'\n")?;
+
+    let status = context
+        .tool_install()
+        .arg(context.temp_dir.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .status()
+        .expect("failed to run uv tool install");
+    assert!(status.success());
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    OK
+
+    ----- stderr -----
+    ");
+
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'PRE-UPGRADE'\n")?;
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    OK
+
+    ----- stderr -----
+    ");
+
+    let status = context
+        .tool_upgrade()
+        .arg("root")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .status()
+        .expect("failed to run uv tool upgrade");
+    assert!(status.success());
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    OK
+
+    ----- stderr -----
+    ");
+
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'POST-UPGRADE'\n")?;
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    OK
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_upgrade_preserves_mixed_workspace_member_editability() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let tool_root = context.temp_dir.child("tool-root");
+    tool_root.create_dir_all()?;
+    tool_root.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "tool-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        root_cli = "tool_root:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let tool_root_src = tool_root.child("src").child("tool_root");
+    tool_root_src.create_dir_all()?;
+    tool_root_src.child("__init__.py").write_str(indoc! {
+        r#"
+        def main():
+            import importlib.metadata
+            import other_child
+
+            print(f"{importlib.metadata.version('tool-root')} {other_child.MESSAGE}")
+        "#
+    })?;
+
+    let other_workspace = context.temp_dir.child("other-workspace");
+    other_workspace.create_dir_all()?;
+    other_workspace
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "other-workspace"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["other-child"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.sources]
+        other-child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    let other_workspace_src = other_workspace.child("src").child("other_workspace");
+    other_workspace_src.create_dir_all()?;
+    other_workspace_src.child("__init__.py").touch()?;
+
+    let other_child = other_workspace.child("packages").child("other-child");
+    other_child.create_dir_all()?;
+    other_child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "other-child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let other_child_src = other_child.child("src").child("other_child");
+    other_child_src.create_dir_all()?;
+    other_child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'OK'\n")?;
+
+    let status = context
+        .tool_install()
+        .arg("--with-editable")
+        .arg(other_workspace.path())
+        .arg(tool_root.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .status()
+        .expect("failed to run uv tool install");
+    assert!(status.success());
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.1.0 OK
+
+    ----- stderr -----
+    ");
+
+    tool_root.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "tool-root"
+        version = "0.1.1"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        root_cli = "tool_root:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    let status = context
+        .tool_upgrade()
+        .arg("tool-root")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .status()
+        .expect("failed to run uv tool upgrade");
+    assert!(status.success());
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.1.1 OK
+
+    ----- stderr -----
+    ");
+
+    other_child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'POST-UPGRADE'\n")?;
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.1.1 POST-UPGRADE
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_upgrade_preserves_mixed_workspace_member_non_editability() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let tool_root = context.temp_dir.child("tool-root");
+    tool_root.create_dir_all()?;
+    tool_root.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "tool-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        root_cli = "tool_root:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let tool_root_src = tool_root.child("src").child("tool_root");
+    tool_root_src.create_dir_all()?;
+    tool_root_src.child("__init__.py").write_str(indoc! {
+        r#"
+        def main():
+            import importlib.metadata
+            import other_child
+
+            print(f"{importlib.metadata.version('tool-root')} {other_child.MESSAGE}")
+        "#
+    })?;
+
+    let other_workspace = context.temp_dir.child("other-workspace");
+    other_workspace.create_dir_all()?;
+    other_workspace
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "other-workspace"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["other-child"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.sources]
+        other-child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    let other_workspace_src = other_workspace.child("src").child("other_workspace");
+    other_workspace_src.create_dir_all()?;
+    other_workspace_src.child("__init__.py").touch()?;
+
+    let other_child = other_workspace.child("packages").child("other-child");
+    other_child.create_dir_all()?;
+    other_child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "other-child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let other_child_src = other_child.child("src").child("other_child");
+    other_child_src.create_dir_all()?;
+    other_child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'OK'\n")?;
+
+    let status = context
+        .tool_install()
+        .arg("--editable")
+        .arg("--with")
+        .arg(other_workspace.path())
+        .arg(tool_root.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .status()
+        .expect("failed to run uv tool install");
+    assert!(status.success());
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.1.0 OK
+
+    ----- stderr -----
+    ");
+
+    tool_root.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "tool-root"
+        version = "0.1.1"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        root_cli = "tool_root:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    let status = context
+        .tool_upgrade()
+        .arg("tool-root")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .status()
+        .expect("failed to run uv tool upgrade");
+    assert!(status.success());
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.1.1 OK
+
+    ----- stderr -----
+    ");
+
+    other_child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'POST-UPGRADE'\n")?;
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.1.1 OK
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn tool_upgrade_name() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -139,6 +562,63 @@ fn tool_upgrade_name() {
      - pytz==2018.5
     Installed 1 executable: pybabel
     ");
+}
+
+#[test]
+fn tool_upgrade_recomputes_relative_exclude_newer() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("black")
+        .arg("--exclude-newer")
+        .arg("3 weeks")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-03-22T00:00:00Z")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("black")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-04-15T00:00:00Z")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Updated black v24.2.0 -> v24.3.0
+     - black==24.2.0
+     + black==24.3.0
+     - packaging==23.2
+     + packaging==24.0
+    Installed 2 executables: black, blackd
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [{ name = "black" }]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        exclude-newer-span = "P3W"
+        "#);
+    });
 }
 
 #[test]
@@ -574,6 +1054,63 @@ fn tool_upgrade_settings() {
      + black==24.3.0
     Installed 2 executables: black, blackd
     ");
+}
+
+#[test]
+fn tool_upgrade_no_binary_package_env_var() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black>=23")
+        .arg("--resolution=lowest-direct")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + black==23.1.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("black")
+        .arg("--resolution=highest")
+        .env(EnvVars::UV_NO_BINARY_PACKAGE, "iniconfig")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Updated black v23.1.0 -> v24.3.0
+     - black==23.1.0
+     + black==24.3.0
+    Installed 2 executables: black, blackd
+    ");
+
+    let receipt: toml::Value = toml::from_str(
+        &fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(),
+    )
+    .unwrap();
+    assert_snapshot!(
+        receipt["tool"]["options"]["no-binary-package"].to_string(),
+        @r#"["iniconfig"]"#
+    );
 }
 
 #[test]

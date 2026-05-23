@@ -168,7 +168,7 @@ impl GitResolver {
         // Avoid races between different processes, too.
         let lock_dir = cache.join("locks");
         fs::create_dir_all(&lock_dir).await?;
-        let repository_url = RepositoryUrl::new(url.repository());
+        let repository_url = url.repository().clone();
         let _lock = LockedFile::acquire(
             lock_dir.join(cache_digest(&repository_url)),
             LockedFileMode::Exclusive,
@@ -272,7 +272,7 @@ pub struct RepositoryReference {
 impl From<&GitUrl> for RepositoryReference {
     fn from(git: &GitUrl) -> Self {
         Self {
-            url: RepositoryUrl::new(git.repository()),
+            url: git.repository().clone(),
             reference: git.reference().clone(),
         }
     }

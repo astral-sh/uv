@@ -1,4 +1,4 @@
-#![allow(clippy::disallowed_types)]
+#![expect(clippy::disallowed_types)]
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
@@ -6,10 +6,13 @@ use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::{prelude::predicate, str::contains};
+use serde_json::json;
 use std::path::Path;
 use uv_fs::copy_dir_all;
 use uv_python::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_test::{TestContext, uv_snapshot};
 
@@ -414,15 +417,25 @@ fn run_pep723_script() -> Result<()> {
     ----- stderr -----
     ");
 
-    // Running a script with `--locked` should warn.
+    // Running a script with `--locked` should error.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unable to find lockfile for Python script, but `--locked` was provided. To create a lockfile, run `uv lock --script`.
+    ");
+
+    // Running a script with `UV_LOCKED` should warn (not error).
+    uv_snapshot!(context.filters(), context.run().env("UV_LOCKED", "1").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Hello, world!
 
     ----- stderr -----
-    warning: No lockfile found for Python script (ignoring `--locked`); run `uv lock --script` to generate a lockfile
+    warning: No lockfile found for Python script (ignoring `UV_LOCKED=1`); run `uv lock --script` to generate a lockfile
     ");
 
     // If the script can't be resolved, we should reference the script.
@@ -492,6 +505,44 @@ fn run_pep723_script() -> Result<()> {
 
     ----- stderr -----
     error: An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`.
+    ");
+
+    Ok(())
+}
+
+/// A PEP 723 script with a long file name should still succeed at creating a script environment on
+/// Windows.
+#[test]
+fn run_pep723_script_long_filename() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // The cache environment entry path, which is derived from the script's name, would exceed many
+    // common path component length limits if it was not truncated first.
+    let script_name = format!("{}.py", "a".repeat(240));
+    let test_script = context.temp_dir.child(&script_name);
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg(&script_name), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     ");
 
     Ok(())
@@ -974,19 +1025,14 @@ fn run_pep723_script_lock() -> Result<()> {
        "#
     })?;
 
-    // Without a lockfile, running with `--locked` should warn.
+    // Without a lockfile, running with `--locked` should error.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    Hello, world!
 
     ----- stderr -----
-    warning: No lockfile found for Python script (ignoring `--locked`); run `uv lock --script` to generate a lockfile
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
+    error: Unable to find lockfile for Python script, but `--locked` was provided. To create a lockfile, run `uv lock --script`.
     ");
 
     // Explicitly lock the script.
@@ -1037,7 +1083,9 @@ fn run_pep723_script_lock() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Checked 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     ");
 
     // With a lockfile, running with `--locked` should not warn.
@@ -2407,6 +2455,47 @@ fn run_group() -> Result<()> {
 
     ----- stderr -----
     warning: `--dev` has no effect when used alongside `--no-project`
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn run_dev_overrides_uv_no_dev() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["iniconfig"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context
+        .run()
+        .arg("--dev")
+        .arg("python")
+        .arg("-c")
+        .arg("import iniconfig; print(iniconfig.__name__)")
+        .env(EnvVars::UV_NO_DEV, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    iniconfig
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     ");
 
     Ok(())
@@ -4792,6 +4881,64 @@ fn run_remote_pep723_script() {
     ");
 }
 
+#[test]
+fn run_remote_requirements_offline_redacts_credentials() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let script = context.temp_dir.child("main.py");
+    script.write_str("print('hello')")?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--offline")
+        .arg("--with-requirements")
+        .arg("http://username:password@example.com/requirements.txt")
+        .arg(script.as_os_str()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Network connectivity is disabled, but a remote requirements file was requested: http://username:****@example.com/requirements.txt
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((
+        r"(?m)^  Caused by: .*(Connection refused|No connection could be made).*$",
+        "  Caused by: [CONNECTION_REFUSED]",
+    ));
+
+    let script = context.temp_dir.child("main.py");
+    script.write_str("print('hello')")?;
+
+    let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?;
+    let port = listener.local_addr()?.port();
+    drop(listener);
+    let url = format!("http://username:password@127.0.0.1:{port}/requirements.py");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--with-requirements")
+        .arg(url)
+        .arg(script.as_os_str())
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Request failed after 3 retries
+      Caused by: error sending request for url (http://[LOCALHOST]/requirements.py)
+      Caused by: client error (Connect)
+      Caused by: tcp connect error
+      Caused by: [CONNECTION_REFUSED]
+    ");
+
+    Ok(())
+}
+
 #[cfg(unix)] // A URL could be a valid filepath on Unix but not on Windows
 #[test]
 fn run_url_like_with_local_file_priority() -> Result<()> {
@@ -5837,9 +5984,9 @@ fn detect_infinite_recursion() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: `uv run` was recursively invoked 6 times which exceeds the limit of 5.
+    error: `uv run` was recursively invoked 6 times which exceeds the limit of 5
 
-    hint: If you are running a script with `uv run` in the shebang, you may need to include the `--script` flag.
+    hint: If you are running a script with `uv run` in the shebang, you may need to include the `--script` flag
     ");
 
     Ok(())
@@ -6556,60 +6703,6 @@ fn run_target_workspace_discovery() -> Result<()> {
     Ok(())
 }
 
-/// Test that `--preview` enables target workspace discovery.
-#[test]
-fn run_target_workspace_discovery_preview_flag() -> Result<()> {
-    let context = setup_target_workspace_discovery_context()?;
-
-    context.temp_dir.child("uv.toml").write_str("bad")?;
-    context.temp_dir.child("pyproject.toml").write_str("bad")?;
-
-    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    success
-
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: project/.venv
-    Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/project)
-     + iniconfig==2.0.0
-    ");
-
-    Ok(())
-}
-
-/// Test that `UV_PREVIEW=1` enables target workspace discovery.
-#[test]
-fn run_target_workspace_discovery_uv_preview_env() -> Result<()> {
-    let context = setup_target_workspace_discovery_context()?;
-
-    context.temp_dir.child("uv.toml").write_str("bad")?;
-    context.temp_dir.child("pyproject.toml").write_str("bad")?;
-
-    uv_snapshot!(context.filters(), context.run().env("UV_PREVIEW", "1").arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    success
-
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: project/.venv
-    Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/project)
-     + iniconfig==2.0.0
-    ");
-
-    Ok(())
-}
-
 /// Test that `--preview-features target-workspace-discovery` works with a bare script
 /// filename (no directory component), which would otherwise cause `Path::parent()` to
 /// return an empty path.
@@ -6871,4 +6964,60 @@ fn run_project_file_no_ancestor_project() -> Result<()> {
     ");
 
     Ok(())
+}
+
+/// Ensure that `uv run` aborts when malware is detected in a dependency.
+#[tokio::test]
+async fn run_malware_detected() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "MAL-2026-1234"}]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/MAL-2026-1234"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "MAL-2026-1234",
+            "modified": "2026-01-01T00:00:00Z",
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .run()
+        .arg("--preview-features").arg("malware-check")
+        .arg("python")
+        .arg("--version")
+        .env(EnvVars::UV_MALWARE_CHECK, "1")
+        .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    warning: Malware detected in locked dependencies:
+      - `iniconfig==2.0.0`: MAL-2026-1234 (https://osv.dev/vulnerability/MAL-2026-1234)
+    error: Malware detected in one or more dependencies that would be installed; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check.
+    ");
 }

@@ -56,6 +56,13 @@ impl ProjectVersionInfo {
     }
 }
 
+impl SelfVersionInfo {
+    /// Returns just the version string (e.g., "0.5.1"), without commit info or target triple.
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+}
+
 impl fmt::Display for SelfVersionInfo {
     /// Formatted version information: "<version>[+<commits>] ([<commit> <date> ]<target>)"
     ///

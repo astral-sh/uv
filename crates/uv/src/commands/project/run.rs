@@ -38,9 +38,12 @@ use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{Installable, Lock, Preference};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
-use uv_settings::{EnvironmentOptions, FilesystemOptions, PythonInstallMirrors};
-use uv_shell::runnable::WindowsRunnable;
+use uv_settings::{
+    EnvironmentOptions, FilesystemOptions, MalwareCheckSettings, PythonInstallMirrors,
+};
+use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
+use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
@@ -74,7 +77,8 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{
-    FrozenSource, GlobalSettings, LockCheck, ResolverInstallerSettings, ResolverSettings,
+    FrozenSource, GlobalSettings, LockCheck, LockCheckSource, ResolverInstallerSettings,
+    ResolverSettings,
 };
 
 /// Run a command.
@@ -113,20 +117,18 @@ pub(crate) async fn run(
     env_file: EnvFile,
     preview: Preview,
     max_recursion_depth: u32,
+    malware_settings: MalwareCheckSettings,
 ) -> anyhow::Result<ExitStatus> {
     // Check if max recursion depth was exceeded. This most commonly happens
     // for scripts with a shebang line like `#!/usr/bin/env -S uv run`, so try
     // to provide guidance for that case.
     let recursion_depth = read_recursion_depth_from_environment_variable()?;
     if recursion_depth > max_recursion_depth {
-        bail!(
-            r"
-`uv run` was recursively invoked {recursion_depth} times which exceeds the limit of {max_recursion_depth}.
-
-hint: If you are running a script with `{}` in the shebang, you may need to include the `{}` flag.",
-            "uv run".green(),
-            "--script".green(),
-        );
+        return Err(RecursionLimitError {
+            depth: recursion_depth,
+            max: max_recursion_depth,
+        }
+        .into());
     }
 
     // These cases seem quite complex because (in theory) they should change the "current package".
@@ -143,10 +145,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             RequirementsSource::SetupCfg(_) => {
                 bail!("Adding requirements from a `setup.cfg` is not supported in `uv run`");
             }
-            RequirementsSource::Extensionless(path) => {
-                if path == Path::new("-") {
-                    requirements_from_stdin = true;
-                }
+            RequirementsSource::Extensionless(path) if path == Path::new("-") => {
+                requirements_from_stdin = true;
             }
             _ => {}
         }
@@ -338,6 +338,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 DryRun::Disabled,
                 printer,
                 preview,
+                &malware_settings,
             )
             .await
             {
@@ -359,18 +360,40 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
             Some(environment.into_interpreter())
         } else {
-            // If no lockfile is found, warn against `--locked` and `--frozen`.
+            // If no lockfile is found, error for `--locked` and `--frozen` when provided
+            // via CLI. For environment variables and configuration, warn instead to avoid
+            // breaking users who set `UV_LOCKED=1` globally.
             if let LockCheck::Enabled(lock_check) = lock_check {
-                warn_user!(
-                    "No lockfile found for Python script (ignoring `{lock_check}`); run `{}` to generate a lockfile",
-                    "uv lock --script".green(),
-                );
+                match lock_check {
+                    LockCheckSource::LockedCli | LockCheckSource::Check => {
+                        bail!(
+                            "Unable to find lockfile for Python script, but `{lock_check}` was provided. To create a lockfile, run `{}`.",
+                            "uv lock --script".green(),
+                        );
+                    }
+                    LockCheckSource::LockedEnv | LockCheckSource::LockedConfiguration => {
+                        warn_user!(
+                            "No lockfile found for Python script (ignoring `{lock_check}`); run `{}` to generate a lockfile",
+                            "uv lock --script".green(),
+                        );
+                    }
+                }
             }
-            if frozen.is_some() {
-                warn_user!(
-                    "No lockfile found for Python script (ignoring `--frozen`); run `{}` to generate a lockfile",
-                    "uv lock --script".green(),
-                );
+            if let Some(frozen_source) = frozen {
+                match frozen_source {
+                    FrozenSource::Cli => {
+                        bail!(
+                            "Unable to find lockfile for Python script, but `--frozen` was provided. To create a lockfile, run `{}`.",
+                            "uv lock --script".green(),
+                        );
+                    }
+                    FrozenSource::Env | FrozenSource::Configuration => {
+                        warn_user!(
+                            "No lockfile found for Python script (ignoring `--frozen`); run `{}` to generate a lockfile",
+                            "uv lock --script".green(),
+                        );
+                    }
+                }
             }
 
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
@@ -433,6 +456,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     spec,
                     modifications,
                     python_platform.as_ref(),
+                    SourceTreeEditablePolicy::Project,
                     build_constraints.unwrap_or_default(),
                     script_extra_build_requires,
                     &settings,
@@ -866,6 +890,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     DryRun::Disabled,
                     printer,
                     preview,
+                    &malware_settings,
                 )
                 .await
                 {
@@ -1280,20 +1305,14 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .as_ref()
             .map(PythonEnvironment::scripts)
             .into_iter()
-            .chain(
-                requirements_env
-                    .as_ref()
-                    .map(PythonEnvironment::scripts)
-                    .into_iter(),
-            )
+            .chain(requirements_env.as_ref().map(PythonEnvironment::scripts))
             .chain(std::iter::once(base_interpreter.scripts()))
             .chain(
                 // On Windows, non-virtual Python distributions put `python.exe` in the top-level
                 // directory, rather than in the `Scripts` subdirectory.
                 cfg!(windows)
                     .then(|| base_interpreter.sys_executable().parent())
-                    .flatten()
-                    .into_iter(),
+                    .flatten(),
             )
             .dedup()
             .map(PathBuf::from)
@@ -1620,7 +1639,7 @@ impl ParsedRunCommand {
         mut url: &DisplaySafeUrl,
         client_builder: &BaseClientBuilder<'_>,
     ) -> anyhow::Result<tempfile::NamedTempFile> {
-        let client = client_builder.build();
+        let client = client_builder.build()?;
         let mut response = client
             .for_host(url)
             .get(Url::from(url.clone()))
@@ -1944,7 +1963,7 @@ async fn resolve_gist_url(
     // Build the API URL.
     let api_url = format!("https://api.github.com/gists/{gist_id}");
 
-    let client = client_builder.build();
+    let client = client_builder.build()?;
 
     // Build the request with appropriate headers.
     let api_url_parsed = DisplaySafeUrl::parse(&api_url)?;
@@ -1988,9 +2007,26 @@ async fn resolve_gist_url(
 /// Returns `true` if the target is a ZIP archive containing a `__main__.py` file.
 fn is_python_zipapp(target: &Path) -> bool {
     if let Ok(file) = fs_err::File::open(target) {
-        if let Ok(mut archive) = zip::ZipArchive::new(file) {
-            return archive.by_name("__main__.py").is_ok_and(|f| f.is_file());
-        }
+        let reader = std::io::BufReader::new(file);
+        return futures::executor::block_on(async {
+            let archive = async_zip::base::read::seek::ZipFileReader::new(
+                futures::io::AllowStdIo::new(reader),
+            )
+            .await
+            .ok()?;
+            archive
+                .file()
+                .entries()
+                .iter()
+                .find(|entry| {
+                    entry
+                        .filename()
+                        .as_str()
+                        .is_ok_and(|name| name == "__main__.py")
+                })
+                .map(|entry| entry.dir().is_ok_and(|is_dir| !is_dir))
+        })
+        .unwrap_or(false);
     }
     false
 }
@@ -2152,4 +2188,22 @@ fn copy_entrypoint(
     trace!("Updated entrypoint at {}", target.user_display());
 
     Ok(())
+}
+
+/// `uv run` was invoked recursively too many times.
+#[derive(Debug, thiserror::Error)]
+#[error("`uv run` was recursively invoked {depth} times which exceeds the limit of {max}")]
+pub(crate) struct RecursionLimitError {
+    pub(crate) depth: u32,
+    pub(crate) max: u32,
+}
+
+impl uv_errors::Hint for RecursionLimitError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::from(format!(
+            "If you are running a script with `{}` in the shebang, you may need to include the `{}` flag",
+            "uv run".green(),
+            "--script".green(),
+        ))
+    }
 }

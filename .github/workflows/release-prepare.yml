@@ -1,0 +1,68 @@
+# Bump the uv version and create a pull request.
+name: "Prepare release"
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "The version bump type (auto-detected from PR labels if not specified)"
+        required: false
+        type: string
+      version:
+        description: "The exact version to set (overrides bump)"
+        required: false
+        type: string
+
+permissions: {}
+
+jobs:
+  release:
+    if: github.repository == 'astral-sh/uv'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          save-if: false
+
+      - name: "Configure Git"
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: "Bump version"
+        run: |
+          if [ -n "$INPUT_VERSION" ]; then
+            ./scripts/release.sh --version "$INPUT_VERSION"
+          elif [ -n "$INPUT_BUMP" ]; then
+            ./scripts/release.sh --bump "$INPUT_BUMP"
+          else
+            ./scripts/release.sh
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_BUMP: ${{ inputs.bump }}
+
+      - name: "Create Pull Request"
+        run: |
+          branch="$(git branch --show-current)"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:"$branch"
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --fill
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -57,6 +57,7 @@ fn workspace_metadata_simple() {
 
 /// Test metadata for a root workspace (workspace with a root package).
 #[test]
+#[cfg(feature = "test-pypi")]
 fn workspace_metadata_root_workspace() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -219,6 +220,7 @@ fn workspace_metadata_root_workspace() -> Result<()> {
 
 /// Test metadata for a virtual workspace (no root package).
 #[test]
+#[cfg(feature = "test-pypi")]
 fn workspace_metadata_virtual_workspace() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -448,6 +450,7 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
 
 /// Test metadata when run from a workspace member directory.
 #[test]
+#[cfg(feature = "test-pypi")]
 fn workspace_metadata_from_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -756,6 +759,7 @@ fn workspace_metadata_single_project() {
 
 /// Test metadata with excluded packages.
 #[test]
+#[cfg(feature = "test-pypi")]
 fn workspace_metadata_with_excluded() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -846,6 +850,7 @@ fn workspace_metadata_with_excluded() -> Result<()> {
 
 /// Test metadata with excluded packages.
 #[test]
+#[cfg(feature = "test-pypi")]
 fn workspace_metadata_group_only() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -934,6 +939,7 @@ fn workspace_metadata_no_project() {
 
 /// Test optional-dependencies, dependency-groups, and build-system
 #[test]
+#[cfg(feature = "test-pypi")]
 fn workspace_metadata_various_dependency_rainbow() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");

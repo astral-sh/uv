@@ -33,16 +33,16 @@ use uv_python::{
 };
 use uv_static::EnvVars;
 
-// Exclude any packages uploaded after this date.
-static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
+// Shared test timestamp for deterministic package availability and relative times.
+static TEST_TIMESTAMP: &str = "2024-03-25T00:00:00Z";
 
 pub const PACKSE_VERSION: &str = "0.3.59";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
-pub const LATEST_PYTHON_3_15: &str = "3.15.0a7";
-pub const LATEST_PYTHON_3_14: &str = "3.14.3";
-pub const LATEST_PYTHON_3_13: &str = "3.13.12";
+pub const LATEST_PYTHON_3_15: &str = "3.15.0b1";
+pub const LATEST_PYTHON_3_14: &str = "3.14.5";
+pub const LATEST_PYTHON_3_13: &str = "3.13.13";
 pub const LATEST_PYTHON_3_12: &str = "3.12.13";
 pub const LATEST_PYTHON_3_11: &str = "3.11.15";
 pub const LATEST_PYTHON_3_10: &str = "3.10.20";
@@ -138,7 +138,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
 ///
 /// * Set the current directory to a temporary directory (`temp_dir`).
 /// * Set the cache dir to a different temporary directory (`cache_dir`).
-/// * Set a cutoff for versions used in the resolution so the snapshots don't change after a new release.
+/// * Set a shared test timestamp so snapshots don't change after a new release.
 /// * Set the venv to a fresh `.venv` in `temp_dir`
 pub struct TestContext {
     pub root: ChildPath,
@@ -759,19 +759,6 @@ impl TestContext {
     }
 
     /// Use a working directory on the filesystem specified by
-    /// [`EnvVars::UV_INTERNAL__TEST_ALT_FS`].
-    ///
-    /// Returns `Ok(None)` if the environment variable is not set.
-    ///
-    /// Note a virtual environment is not created automatically.
-    pub fn with_working_dir_on_alt_fs(self) -> anyhow::Result<Option<Self>> {
-        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_ALT_FS).ok() else {
-            return Ok(None);
-        };
-        self.with_working_dir_on_fs(&dir, "ALT_FS").map(Some)
-    }
-
-    /// Use a working directory on the filesystem specified by
     /// [`EnvVars::UV_INTERNAL__TEST_NOCOW_FS`].
     ///
     /// Returns `Ok(None)` if the environment variable is not set.
@@ -1182,8 +1169,9 @@ impl TestContext {
     /// * Don't wrap text output based on the terminal we're in, the test output doesn't get printed
     ///   but snapshotted to a string.
     /// * Use a fake `HOME` to avoid accidentally changing the developer's machine.
+    /// * Ignore system configuration to avoid reading machine-specific settings.
     /// * Hide other Pythons with `UV_PYTHON_INSTALL_DIR` and installed interpreters with
-    ///   `UV_TEST_PYTHON_PATH` and an active venv (if applicable) by removing `VIRTUAL_ENV`.
+    ///   `UV_PYTHON_SEARCH_PATH` and an active venv (if applicable) by removing `VIRTUAL_ENV`.
     /// * Increase the stack size to avoid stack overflows on windows due to large async functions.
     pub fn add_shared_options(&self, command: &mut Command, activate_venv: bool) {
         self.add_shared_args(command);
@@ -1229,15 +1217,17 @@ impl TestContext {
                 EnvVars::XDG_DATA_HOME,
                 self.home_dir.join("data").as_os_str(),
             )
+            .env(EnvVars::UV_NO_SYSTEM_CONFIG, "1")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
             // Installations are not allowed by default; see `Self::with_managed_python_dirs`
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
-            .env(EnvVars::UV_TEST_PYTHON_PATH, self.python_path())
-            // Lock to a point in time view of the world
-            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
-            .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, EXCLUDE_NEWER)
-            // When installations are allowed, we don't want to write to global state, like the
-            // Windows registry
+            .env(EnvVars::UV_PYTHON_SEARCH_PATH, self.python_path())
+            .env(EnvVars::UV_EXCLUDE_NEWER, TEST_TIMESTAMP)
+            .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, TEST_TIMESTAMP)
+            .env(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF, TEST_TIMESTAMP)
+            // Keep Python discovery hermetic and avoid mutating global state, like the Windows
+            // registry, unless a test opts in explicitly.
+            .env(EnvVars::UV_PYTHON_NO_REGISTRY, "1")
             .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "0")
             // Since downloads, fetches and builds run in parallel, their message output order is
             // non-deterministic, so can't capture them in test output.
@@ -1852,7 +1842,6 @@ impl TestContext {
     }
 
     /// For when we add pypy to the test suite.
-    #[allow(clippy::unused_self)]
     pub fn python_kind(&self) -> &'static str {
         "python"
     }
@@ -2068,7 +2057,7 @@ pub fn create_venv_from_executable<P: AsRef<Path>>(
 
 /// Create a `PATH` with the requested Python versions available in order.
 ///
-/// Generally this should be used with `UV_TEST_PYTHON_PATH`.
+/// Generally this should be used with `UV_PYTHON_SEARCH_PATH`.
 pub fn python_path_with_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],
@@ -2083,7 +2072,7 @@ pub fn python_path_with_versions(
 
 /// Returns a list of Python executables for the given versions.
 ///
-/// Generally this should be used with `UV_TEST_PYTHON_PATH`.
+/// Generally this should be used with `UV_PYTHON_SEARCH_PATH`.
 pub fn python_installations_for_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],
@@ -2171,7 +2160,7 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
     // Support profiling test run commands with traces.
     if let Ok(root) = env::var(EnvVars::TRACING_DURATIONS_TEST_ROOT) {
         // We only want to fail if the variable is set at runtime.
-        #[allow(clippy::assertions_on_constants)]
+        #[expect(clippy::assertions_on_constants)]
         {
             assert!(
                 cfg!(feature = "tracing-durations-export"),
@@ -2359,7 +2348,8 @@ pub async fn download_to_disk(url: &str, path: &Path) {
 
     let client = uv_client::BaseClientBuilder::default()
         .allow_insecure_host(trusted_hosts)
-        .build();
+        .build()
+        .expect("failed to build base client");
     let url = url.parse().unwrap();
     let response = client
         .for_host(&url)

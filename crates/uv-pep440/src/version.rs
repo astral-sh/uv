@@ -513,7 +513,7 @@ impl Version {
     /// Set the epoch and return the updated version.
     #[inline]
     #[must_use]
-    pub fn with_epoch(mut self, value: u64) -> Self {
+    pub(crate) fn with_epoch(mut self, value: u64) -> Self {
         if let VersionInner::Small { small } = &mut self.inner {
             if small.set_epoch(value) {
                 return self;
@@ -552,7 +552,7 @@ impl Version {
     /// Set the dev-release component and return the updated version.
     #[inline]
     #[must_use]
-    pub fn with_dev(mut self, value: Option<u64>) -> Self {
+    pub(crate) fn with_dev(mut self, value: Option<u64>) -> Self {
         if let VersionInner::Small { small } = &mut self.inner {
             if small.set_dev(value) {
                 return self;
@@ -565,7 +565,7 @@ impl Version {
     /// Set the local segments and return the updated version.
     #[inline]
     #[must_use]
-    pub fn with_local_segments(mut self, value: Vec<LocalSegment>) -> Self {
+    pub(crate) fn with_local_segments(mut self, value: Vec<LocalSegment>) -> Self {
         if value.is_empty() {
             self.without_local()
         } else {
@@ -577,7 +577,7 @@ impl Version {
     /// Set the local version and return the updated version.
     #[inline]
     #[must_use]
-    pub fn with_local(mut self, value: LocalVersion) -> Self {
+    pub(crate) fn with_local(mut self, value: LocalVersion) -> Self {
         match value {
             LocalVersion::Segments(segments) => self.with_local_segments(segments),
             LocalVersion::Max => {
@@ -628,8 +628,16 @@ impl Version {
     #[must_use]
     pub fn only_release_trimmed(&self) -> Self {
         if let Some(last_non_zero) = self.release().iter().rposition(|segment| *segment != 0) {
-            if last_non_zero == self.release().len() {
-                // Already trimmed.
+            if last_non_zero + 1 == self.release().len()
+                && self.epoch() == 0
+                && self.pre().is_none()
+                && self.post().is_none()
+                && self.dev().is_none()
+                && self.local().is_empty()
+                && self.min().is_none()
+                && self.max().is_none()
+            {
+                // Already a trimmed release-only version.
                 self.clone()
             } else {
                 Self::new(self.release().iter().take(last_non_zero + 1).copied())
@@ -1616,7 +1624,7 @@ impl VersionPattern {
 
     /// Returns true if and only if this pattern contains a wildcard.
     #[inline]
-    pub fn is_wildcard(&self) -> bool {
+    pub(crate) fn is_wildcard(&self) -> bool {
         self.wildcard
     }
 }
@@ -4218,36 +4226,29 @@ mod tests {
         );
     }
 
-    /// Wraps a `Version` and provides a more "bloated" debug but standard
-    /// representation.
-    ///
-    /// We don't do this by default because it takes up a ton of space, and
-    /// just printing out the display version of the version is quite a bit
-    /// simpler.
-    ///
-    /// Nevertheless, when *testing* version parsing, you really want to
-    /// be able to peek at all of its constituent parts. So we use this in
-    /// assertion failure messages.
-    struct VersionBloatedDebug<'a>(&'a Version);
-
-    impl std::fmt::Debug for VersionBloatedDebug<'_> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("Version")
-                .field("epoch", &self.0.epoch())
-                .field("release", &&*self.0.release())
-                .field("pre", &self.0.pre())
-                .field("post", &self.0.post())
-                .field("dev", &self.0.dev())
-                .field("local", &self.0.local())
-                .field("min", &self.0.min())
-                .field("max", &self.0.max())
-                .finish()
-        }
-    }
-
     impl Version {
+        /// Returns a more "bloated" debug representation of this [`Version`].
+        ///
+        /// We don't do this by default because it takes up a ton of space, and
+        /// just printing out the display version of the version is quite a bit
+        /// simpler.
+        ///
+        /// Nevertheless, when *testing* version parsing, you really want to
+        /// be able to peek at all of its constituent parts. So we use this in
+        /// assertion failure messages.
         pub(crate) fn as_bloated_debug(&self) -> impl std::fmt::Debug + '_ {
-            VersionBloatedDebug(self)
+            std::fmt::from_fn(|f| {
+                f.debug_struct("Version")
+                    .field("epoch", &self.epoch())
+                    .field("release", &&*self.release())
+                    .field("pre", &self.pre())
+                    .field("post", &self.post())
+                    .field("dev", &self.dev())
+                    .field("local", &self.local())
+                    .field("min", &self.min())
+                    .field("max", &self.max())
+                    .finish()
+            })
         }
     }
 
@@ -4263,6 +4264,35 @@ mod tests {
         let v2: Version = "1.2".parse().unwrap();
         assert_eq!(&*v2.release(), &[1, 2]);
         assert_eq!(v2.to_string(), "1.2");
+    }
+
+    #[test]
+    fn only_release_trimmed_discards_non_release_segments() {
+        for version in ["1.2a1", "1.2.post1", "1!1.2", "1.2+local", "1.2.dev1"] {
+            let version = version.parse::<Version>().unwrap();
+            assert_eq!(version.only_release_trimmed(), Version::new([1, 2]));
+        }
+
+        assert_eq!(
+            Version::new([1, 2])
+                .with_min(Some(0))
+                .only_release_trimmed(),
+            Version::new([1, 2])
+        );
+        assert_eq!(
+            Version::new([1, 2])
+                .with_max(Some(0))
+                .only_release_trimmed(),
+            Version::new([1, 2])
+        );
+        assert_eq!(
+            Version::new([1, 2, 0]).only_release_trimmed(),
+            Version::new([1, 2])
+        );
+        assert_eq!(
+            Version::new([1, 2]).only_release_trimmed(),
+            Version::new([1, 2])
+        );
     }
 
     #[test]
