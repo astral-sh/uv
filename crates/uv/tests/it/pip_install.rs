@@ -7483,6 +7483,51 @@ fn find_links() {
     );
 }
 
+/// Install from a `--find-links` HTML page with uppercase tag and attribute names.
+#[tokio::test]
+async fn find_links_uppercase_html() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let wheel_filename = "tqdm-1000.0.0-py3-none-any.whl";
+    let wheel_url = Url::from_file_path(
+        context
+            .workspace_root
+            .join("test/links")
+            .join(wheel_filename),
+    )
+    .map_err(|()| anyhow!("Failed to convert wheel path to URL"))?;
+
+    Mock::given(method("GET"))
+        .and(path("/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                "<!DOCTYPE html><HTML><BODY><A HREF=\"{wheel_url}\">{wheel_filename}</A></BODY></HTML>"
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("tqdm")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    "
+    );
+
+    Ok(())
+}
+
 /// Sync using `--find-links` with a local directory, with wheels disabled.
 #[test]
 fn find_links_no_binary() {
