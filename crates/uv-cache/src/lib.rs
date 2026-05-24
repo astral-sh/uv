@@ -1444,7 +1444,7 @@ mod tests {
 
     use crate::ArchiveId;
 
-    use super::{Cache, CacheBucket, Link};
+    use super::Link;
 
     #[test]
     fn test_link_round_trip() {
@@ -1467,6 +1467,8 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn prune_does_not_follow_environment_symlinks() {
+        use super::{Cache, CacheBucket};
+
         let cache_root = tempfile::tempdir().unwrap();
         let victim_root = tempfile::tempdir().unwrap();
         let environments = cache_root.path().join(CacheBucket::Environments.to_str());
