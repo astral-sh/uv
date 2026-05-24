@@ -617,7 +617,7 @@ impl Cache {
             Ok(entries) => {
                 for entry in entries {
                     let entry = entry?;
-                    let path = fs_err::canonicalize(entry.path())?;
+                    let path = entry.path();
                     debug!("Removing dangling cache environment: {}", path.display());
                     summary += rm_rf(path)?;
                 }
@@ -633,7 +633,7 @@ impl Cache {
                 Ok(entries) => {
                     for entry in entries {
                         let entry = entry?;
-                        let path = fs_err::canonicalize(entry.path())?;
+                        let path = entry.path();
                         if path.is_dir() {
                             debug!("Removing unzipped wheel entry: {}", path.display());
                             summary += rm_rf(path)?;
@@ -690,8 +690,9 @@ impl Cache {
             Ok(entries) => {
                 for entry in entries {
                     let entry = entry?;
-                    let path = fs_err::canonicalize(entry.path())?;
-                    if !references.contains_key(&path) {
+                    let path = entry.path();
+                    let target = fs_err::canonicalize(&path)?;
+                    if !references.contains_key(&target) {
                         debug!("Removing dangling cache archive: {}", path.display());
                         summary += rm_rf(path)?;
                     }
@@ -1439,11 +1440,12 @@ impl Refresh {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::str::FromStr;
 
     use crate::ArchiveId;
 
-    use super::Link;
+    use super::{Cache, CacheBucket, Link};
 
     #[test]
     fn test_link_round_trip() {
@@ -1461,5 +1463,27 @@ mod tests {
         assert!(Link::from_str("archive/foo").is_err());
         assert!(Link::from_str("v1/foo").is_err());
         assert!(Link::from_str("archive-v0/").is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn prune_does_not_follow_environment_symlinks() {
+        let cache_root = tempfile::tempdir().unwrap();
+        let victim_root = tempfile::tempdir().unwrap();
+        let environments = cache_root.path().join(CacheBucket::Environments.to_str());
+        let victim_dir = victim_root.path().join("victim-dir");
+
+        fs_err::create_dir_all(&environments).unwrap();
+        fs_err::create_dir_all(&victim_dir).unwrap();
+        fs_err::write(victim_dir.join("payload.txt"), "payload").unwrap();
+        fs_err::os::unix::fs::symlink(&victim_dir, environments.join("escape")).unwrap();
+
+        let summary = Cache::from_path(cache_root.path()).prune(false).unwrap();
+
+        assert_eq!(summary.num_files, 1);
+        assert_eq!(summary.num_dirs, 0);
+        assert!(victim_dir.is_dir());
+        assert!(victim_dir.join("payload.txt").is_file());
+        assert!(fs::symlink_metadata(environments.join("escape")).is_err());
     }
 }
