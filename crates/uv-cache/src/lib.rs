@@ -1440,7 +1440,6 @@ impl Refresh {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
     use std::str::FromStr;
 
     use crate::ArchiveId;
@@ -1484,6 +1483,6 @@ mod tests {
         assert_eq!(summary.num_dirs, 0);
         assert!(victim_dir.is_dir());
         assert!(victim_dir.join("payload.txt").is_file());
-        assert!(fs::symlink_metadata(environments.join("escape")).is_err());
+        assert!(fs_err::symlink_metadata(environments.join("escape")).is_err());
     }
 }
