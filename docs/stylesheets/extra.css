@@ -242,6 +242,16 @@ h3 + p:has(> small.added-in) {
   color: var(--md-accent-fg-color) !important;
 }
 
+/* Prevent layout reflow from the benchmark images on the homepage.
+The images are loaded externally and have no intrinsic dimensions,
+so we reserve space with aspect-ratio to prevent CLS. */
+.md-content .mdpage-home p[align="center"] > img[alt*="benchmark"] {
+  width: 100%;
+  max-width: 720px;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+}
+
 /* Omit the first breadcrumb item, which is the "Introduction" */
 .md-path__list > .md-path__item:first-of-type {
   display: none;
