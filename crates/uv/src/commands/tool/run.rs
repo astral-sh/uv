@@ -90,6 +90,7 @@ impl Display for ToolRunCommand {
 fn read_env_files(
     env_file: &[PathBuf],
     no_env_file: bool,
+    env_file_override: bool,
 ) -> anyhow::Result<Vec<(String, String)>> {
     let mut environment = Vec::new();
 
@@ -132,7 +133,7 @@ fn read_env_files(
         for item in iter {
             match item {
                 Ok((key, value)) => {
-                    if std::env::var(&key).is_err() {
+                    if env_file_override || std::env::var(&key).is_err() {
                         environment.push((key, value));
                     }
                 }
@@ -218,6 +219,7 @@ pub(crate) async fn run(
     printer: Printer,
     env_file: Vec<PathBuf>,
     no_env_file: bool,
+    env_file_override: bool,
     preview: Preview,
 ) -> anyhow::Result<ExitStatus> {
     /// Whether or not a path looks like a Python script based on the file extension.
@@ -232,7 +234,7 @@ pub(crate) async fn run(
         );
     }
 
-    let env_file_environment = read_env_files(&env_file, no_env_file)?;
+    let env_file_environment = read_env_files(&env_file, no_env_file, env_file_override)?;
 
     let Some(command) = command else {
         // When a command isn't provided, we'll show a brief help including available tools

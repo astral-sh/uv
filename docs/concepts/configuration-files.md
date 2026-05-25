@@ -102,7 +102,19 @@ argument), set the `UV_NO_ENV_FILE` environment variable to `1`, or pass the`--n
 `uv run`.
 
 If the same variable is defined in the environment and in a `.env` file, the value from the
-environment will take precedence.
+environment will take precedence. To reverse this behavior and have `.env` file values override
+existing environment variables, pass the `--env-file-override` flag or set
+`UV_ENV_FILE_OVERRIDE=true`:
+
+```console
+$ export MY_VAR="from_env"
+$ echo "MY_VAR='from_file'" > .env
+$ uv run --env-file .env --env-file-override -- python -c 'import os; print(os.getenv("MY_VAR"))'
+from_file
+```
+
+This is useful when a parent process sets environment variables at startup, but the `.env` file
+contains more up-to-date values that should take precedence.
 
 ## Configuring the pip interface
 

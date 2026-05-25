@@ -1498,6 +1498,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 printer,
                 args.env_file,
                 args.no_env_file,
+                args.env_file_override,
                 globals.preview,
             ))
             .await
@@ -2215,6 +2216,7 @@ async fn run_project(
                 workspace_cache,
                 printer,
                 args.env_file,
+                args.env_file_override,
                 globals.preview,
                 args.max_recursion_depth,
                 args.malware_settings,

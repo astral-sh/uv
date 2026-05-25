@@ -1254,6 +1254,11 @@ impl EnvVars {
     #[attr_added_in("0.4.30")]
     pub const UV_NO_ENV_FILE: &'static str = "UV_NO_ENV_FILE";
 
+    /// Force `.env` file values to override existing environment variables when executing
+    /// `uv run` or `uv tool run` commands.
+    #[attr_added_in("0.11.17")]
+    pub const UV_ENV_FILE_OVERRIDE: &'static str = "UV_ENV_FILE_OVERRIDE";
+
     /// The URL from which to download uv using the standalone installer and `self update` feature,
     /// in lieu of the default GitHub URL.
     ///

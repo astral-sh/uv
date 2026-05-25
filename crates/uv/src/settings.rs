@@ -602,6 +602,7 @@ pub(crate) struct RunSettings {
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) env_file: EnvFile,
+    pub(crate) env_file_override: bool,
     pub(crate) max_recursion_depth: u32,
     pub(crate) malware_settings: MalwareCheckSettings,
 }
@@ -660,6 +661,7 @@ impl RunSettings {
             show_resolution,
             env_file,
             no_env_file,
+            env_file_override,
             max_recursion_depth,
         } = args;
 
@@ -759,6 +761,7 @@ impl RunSettings {
                 &environment,
             ),
             env_file: EnvFile::from_args(env_file, no_env_file),
+            env_file_override,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -790,6 +793,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) env_file: Vec<PathBuf>,
     pub(crate) no_env_file: bool,
+    pub(crate) env_file_override: bool,
 }
 
 impl ToolRunSettings {
@@ -812,6 +816,7 @@ impl ToolRunSettings {
             isolated,
             env_file,
             no_env_file,
+            env_file_override,
             show_resolution,
             installer,
             build,
@@ -917,6 +922,7 @@ impl ToolRunSettings {
                 .combine(filesystem_install_mirrors),
             env_file,
             no_env_file,
+            env_file_override,
         }
     }
 }
