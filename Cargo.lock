@@ -864,7 +864,7 @@ dependencies = [
  "getrandom 0.2.16",
  "glob",
  "libc",
- "nix 0.31.2",
+ "nix 0.31.3",
  "serde",
  "serde_json",
  "statrs",
@@ -1138,7 +1138,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0b1fab2ae45819af2d0731d60f2afe17227ebb1a1538a236da84c93e9a60162"
 dependencies = [
  "dispatch2",
- "nix 0.31.2",
+ "nix 0.31.3",
  "windows-sys 0.61.2",
 ]
 
@@ -2559,9 +2559,9 @@ checksum = "09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2"
 
 [[package]]
 name = "libc"
-version = "0.2.183"
+version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5b646652bf6661599e1da8901b3b9522896f01e736bad5f723fe7a3a27f899d"
+checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 
 [[package]]
 name = "libm"
@@ -2827,9 +2827,9 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.31.2"
+version = "0.31.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d6d0705320c1e6ba1d912b5e37cf18071b6c2e9b7fa8215a1e8a7651966f5d3"
+checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -5689,7 +5689,7 @@ dependencies = [
  "itertools 0.14.0",
  "jiff",
  "miette",
- "nix 0.31.2",
+ "nix 0.31.3",
  "open",
  "owo-colors",
  "petgraph",
@@ -7172,7 +7172,7 @@ version = "0.0.49"
 dependencies = [
  "anyhow",
  "fs-err",
- "nix 0.31.2",
+ "nix 0.31.3",
  "same-file",
  "temp-env",
  "tempfile",
@@ -7342,7 +7342,7 @@ dependencies = [
 name = "uv-unix"
 version = "0.0.49"
 dependencies = [
- "nix 0.31.2",
+ "nix 0.31.3",
  "thiserror",
 ]
 
