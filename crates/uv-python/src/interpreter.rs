@@ -1150,6 +1150,20 @@ impl InterpreterInfo {
 
         let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
 
+        // Virtual environment configuration changes the interpreter response independently of
+        // the executable. Include interpreter-affecting configuration in the cache key instead of
+        // relying on file metadata; a virtual environment can be recreated at the same path
+        // within one timestamp tick, while options like `relocatable` do not affect this data.
+        let pyvenv_cfg_interpreter_key = absolute
+            .parent()
+            .and_then(Path::parent)
+            .map(|venv_root| venv_root.join("pyvenv.cfg"))
+            .and_then(|pyvenv_cfg| PyVenvConfiguration::parse(pyvenv_cfg).ok())
+            .map(|pyvenv_cfg| {
+                let include_system_site_packages = pyvenv_cfg.include_system_site_packages();
+                (pyvenv_cfg.home, include_system_site_packages)
+            });
+
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
@@ -1170,7 +1184,10 @@ impl InterpreterInfo {
             // absolute path refers to different interpreters with matching ctimes, e.g., if you
             // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
             // modified at the same time.
-            format!("{}.msgpack", cache_digest(&(&absolute, &canonical))),
+            format!(
+                "{}.msgpack",
+                cache_digest(&(&absolute, &canonical, &pyvenv_cfg_interpreter_key))
+            ),
         );
 
         // We check the timestamp of the canonicalized executable to check if an underlying

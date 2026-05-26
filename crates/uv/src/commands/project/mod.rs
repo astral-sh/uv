@@ -1099,6 +1099,11 @@ impl ProjectInterpreter {
                     );
                 }
             }
+            Err(err) if matches!(root.join("pyvenv.cfg").try_exists(), Ok(false)) => {
+                // Defer to the replacement guard below, which reports that a directory without
+                // `pyvenv.cfg` must not be replaced.
+                debug!("Ignoring non-virtual project environment that could not be queried: {err}");
+            }
             Err(err) => return Err(err.into()),
         }
 
