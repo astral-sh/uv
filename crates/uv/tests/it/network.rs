@@ -1250,7 +1250,8 @@ async fn direct_url_range_resume() {
         .arg(format!("ok @ {wheel_url}"))
         .env(EnvVars::UV_HTTP_RETRIES, "0")
         .env(EnvVars::UV_HTTP_TIMEOUT, "1")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::RUST_LOG, "warn"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1278,7 +1279,8 @@ async fn direct_url_no_range_resume() {
         .arg(format!("ok @ {wheel_url}"))
         .env(EnvVars::UV_HTTP_RETRIES, "1")
         .env(EnvVars::UV_HTTP_TIMEOUT, "1")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::RUST_LOG, "warn"), @"
     success: true
     exit_code: 0
     ----- stdout -----
