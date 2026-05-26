@@ -13576,10 +13576,88 @@ async fn add_empty_ignore_error_codes() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-    hint: An index URL (http://[LOCALHOST]/) returned a 403 Forbidden error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.
+    hint: An index (http://[LOCALHOST]/) returned a 403 Forbidden error. Check that the index URL is correct and the credentials are valid.
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
+    Ok(())
+}
+
+/// If a package was available from an index that returned a 403, uv should suggest that the index
+/// might use 403s for packages that are not found.
+#[tokio::test]
+async fn lock_forbidden_index_with_available_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/anyio/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"
+            {
+                "name": "anyio",
+                "files": [{
+                    "filename": "anyio-4.3.0-py3-none-any.whl",
+                    "url": "/anyio-4.3.0-py3-none-any.whl",
+                    "hashes": {
+                        "sha256": "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8"
+                    },
+                    "core-metadata": true,
+                    "requires-python": ">=3.8",
+                    "upload-time": "2024-02-19T08:36:26Z"
+                }]
+            }
+            "#,
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/anyio-4.3.0-py3-none-any.whl.metadata"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
+            Metadata-Version: 2.3
+            Name: anyio
+            Version: 4.3.0
+            Requires-Dist: idna>=2.8
+        "}))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/idna/"))
+        .respond_with(ResponseTemplate::new(403))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = ["anyio"]
+
+        [[tool.uv.index]]
+        name = "my-index"
+        url = "{server_url}"
+        ignore-error-codes = []
+        default = true
+        "#,
+        server_url = server.uri(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because idna was not found in the package registry and anyio==4.3.0 depends on idna>=2.8, we can conclude that anyio==4.3.0 cannot be used.
+          And because only anyio==4.3.0 is available and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: An index (http://[LOCALHOST]/) returned a 403 Forbidden error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `[[tool.uv.index]]` entry to continue searching across indexes.
+    ");
     Ok(())
 }
 
