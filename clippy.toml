@@ -47,6 +47,18 @@ disallowed-types = [
 ]
 
 disallowed-methods = [
+  "dotenvy::dotenv",
+  "dotenvy::dotenv_override",
+  "dotenvy::from_filename",
+  "dotenvy::from_filename_override",
+  "dotenvy::from_path",
+  "dotenvy::from_path_override",
+  "dotenvy::from_read",
+  "dotenvy::from_read_override",
+  "dotenvy::var",
+  "dotenvy::vars",
+  "dotenvy::Iter::load",
+  "dotenvy::Iter::load_override",
   "std::fs::canonicalize",
   "std::fs::copy",
   "std::fs::create_dir",
