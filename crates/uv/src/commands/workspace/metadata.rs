@@ -10,7 +10,7 @@ use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolver::Metadata;
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
@@ -36,6 +36,7 @@ pub(crate) async fn metadata(
     sync: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
+    malware_settings: MalwareCheckSettings,
     settings: ResolverSettings,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
@@ -155,6 +156,7 @@ pub(crate) async fn metadata(
                     cache,
                     workspace_cache,
                     preview,
+                    &malware_settings,
                 )
                 .await
                 .context("Failed to collect module owners")?;

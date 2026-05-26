@@ -1928,6 +1928,7 @@ pub(crate) struct MetadataSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
+    pub(crate) malware_settings: MalwareCheckSettings,
 }
 
 impl MetadataSettings {
@@ -1960,6 +1961,8 @@ impl MetadataSettings {
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
 
+        let malware_settings = MalwareCheckSettings::from(&environment);
+
         Self {
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
@@ -1975,6 +1978,7 @@ impl MetadataSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
+            malware_settings,
         }
     }
 }

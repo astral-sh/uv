@@ -1957,6 +1957,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                     args.sync,
                     args.python,
                     args.install_mirrors,
+                    args.malware_settings,
                     args.settings,
                     client_builder.subcommand(vec!["workspace".to_owned(), "metadata".to_owned()]),
                     globals.python_preference,

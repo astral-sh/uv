@@ -14,6 +14,7 @@ use uv_preview::Preview;
 use uv_pypi_types::ModuleName;
 use uv_python::PythonEnvironment;
 use uv_resolver::{Installable, Lock, Metadata};
+use uv_settings::MalwareCheckSettings;
 use uv_workspace::{Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::DefaultInstallLogger;
@@ -36,6 +37,7 @@ pub(crate) async fn collect_module_owners(
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     preview: Preview,
+    malware_settings: &MalwareCheckSettings,
 ) -> Result<BTreeMap<ModuleName, Vec<String>>> {
     let target = InstallTarget::Workspace { workspace, lock };
     let marker_env = resolution_markers(None, None, venv.interpreter());
@@ -103,6 +105,7 @@ pub(crate) async fn collect_module_owners(
         DryRun::Disabled,
         Printer::Silent,
         preview,
+        malware_settings,
     )
     .await?;
 
