@@ -39,20 +39,13 @@ impl FlatIndex {
     ) -> Self {
         // Collect compatible distributions.
         let mut index = FxHashMap::<PackageName, FlatDistributions>::default();
-        for entry in entries.entries {
-            let distributions = index.entry(entry.filename.name().clone()).or_default();
-            distributions.add_file(
-                entry.file,
-                entry.filename,
-                tags,
-                hasher,
-                build_options,
-                entry.index,
-            );
-        }
+        let (entries, offline) = entries.into_parts();
 
-        // Collect offline entries.
-        let offline = entries.offline;
+        for entry in entries {
+            let (filename, file, index_url) = entry.into_parts();
+            let distributions = index.entry(filename.name().clone()).or_default();
+            distributions.add_file(file, filename, tags, hasher, build_options, index_url);
+        }
 
         Self { index, offline }
     }
@@ -85,14 +78,8 @@ impl FlatDistributions {
     ) -> Self {
         let mut distributions = Self::default();
         for entry in entries {
-            distributions.add_file(
-                entry.file,
-                entry.filename,
-                tags,
-                hasher,
-                build_options,
-                entry.index,
-            );
+            let (filename, file, index) = entry.into_parts();
+            distributions.add_file(file, filename, tags, hasher, build_options, index);
         }
         distributions
     }

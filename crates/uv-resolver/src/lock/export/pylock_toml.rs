@@ -23,7 +23,7 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, Edge,
-    FileLocation, GitSourceDist, IndexUrl, Name, Node, PathBuiltDist, PathSourceDist,
+    FileLocation, GitDirectorySourceDist, IndexUrl, Name, Node, PathBuiltDist, PathSourceDist,
     RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, RequiresPython,
     Resolution, ResolvedDist, SourceDist, ToUrlError, UrlString,
 };
@@ -34,7 +34,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
-use uv_pypi_types::{HashDigests, Hashes, ParsedGitUrl, VcsKind};
+use uv_pypi_types::{HashDigests, Hashes, ParsedGitDirectoryUrl, VcsKind};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
@@ -85,6 +85,8 @@ pub enum PylockTomlErrorKind {
         "Package `{0}` must include one of: `wheels`, `directory`, `archive`, `sdist`, or `vcs`"
     )]
     MissingSource(PackageName),
+    #[error("Package `{0}` uses a Git archive, which pylock.toml export does not support")]
+    GitArchiveUnsupported(PackageName),
     #[error("Package `{0}` does not include a compatible wheel for the current platform")]
     MissingWheel(PackageName),
     #[error("`packages.wheel` entry for `{0}` must have a `path` or `url`")]
@@ -161,11 +163,17 @@ impl std::error::Error for PylockTomlError {
 
 impl std::fmt::Display for PylockTomlError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.kind)?;
+        write!(f, "{}", self.kind)
+    }
+}
+
+impl uv_errors::Hint for PylockTomlError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
         if let Some(hint) = &self.hint {
-            write!(f, "\n\n{hint}")?;
+            uv_errors::Hints::from(hint.to_string())
+        } else {
+            uv_errors::Hints::none()
         }
-        Ok(())
     }
 }
 
@@ -427,6 +435,9 @@ impl<'lock> PylockToml {
                         hashes: Hashes::from(node.hashes.clone()),
                     });
                 }
+                Dist::Built(BuiltDist::GitPath(_)) => {
+                    return Err(PylockTomlErrorKind::GitArchiveUnsupported(package.name));
+                }
                 Dist::Built(BuiltDist::Registry(dist)) => {
                     package.wheels = Self::filter_and_convert_wheels(
                         resolution,
@@ -494,7 +505,7 @@ impl<'lock> PylockToml {
                         subdirectory: None,
                     });
                 }
-                Dist::Source(SourceDist::Git(dist)) => {
+                Dist::Source(SourceDist::GitDirectory(dist)) => {
                     package.vcs = Some(PylockTomlVcs {
                         r#type: VcsKind::Git,
                         url: Some(dist.git.url().clone()),
@@ -505,6 +516,9 @@ impl<'lock> PylockToml {
                         }),
                         subdirectory: dist.subdirectory.clone().map(PortablePathBuf::from),
                     });
+                }
+                Dist::Source(SourceDist::GitPath(_)) => {
+                    return Err(PylockTomlErrorKind::GitArchiveUnsupported(package.name));
                 }
                 Dist::Source(SourceDist::Path(dist)) => {
                     let path = try_relative_to_if(
@@ -792,7 +806,7 @@ impl<'lock> PylockToml {
 
             // Extract the `packages.vcs` field.
             let vcs = match &sdist {
-                Some(SourceDist::Git(sdist)) => Some(PylockTomlVcs {
+                Some(SourceDist::GitDirectory(sdist)) => Some(PylockTomlVcs {
                     r#type: VcsKind::Git,
                     url: Some(sdist.git.url().clone()),
                     path: None,
@@ -1144,7 +1158,7 @@ impl<'lock> PylockToml {
                 }
             } else if let Some(sdist) = package.vcs.as_ref().filter(|_| !no_build) {
                 let hashes = HashDigests::empty();
-                let sdist = Dist::Source(SourceDist::Git(
+                let sdist = Dist::Source(SourceDist::GitDirectory(
                     sdist.to_sdist(install_path, &package.name)?,
                 ));
                 let dist = ResolvedDist::Installable {
@@ -1454,12 +1468,12 @@ impl PylockTomlDirectory {
 }
 
 impl PylockTomlVcs {
-    /// Convert the sdist to a [`GitSourceDist`].
+    /// Convert the sdist to a [`GitDirectorySourceDist`].
     fn to_sdist(
         &self,
         install_path: &Path,
         name: &PackageName,
-    ) -> Result<GitSourceDist, PylockTomlErrorKind> {
+    ) -> Result<GitDirectorySourceDist, PylockTomlErrorKind> {
         let subdirectory = self.subdirectory.clone().map(Box::<Path>::from);
 
         // Reconstruct the `GitUrl` from the individual fields.
@@ -1489,12 +1503,12 @@ impl PylockTomlVcs {
         };
 
         // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-        let url = DisplaySafeUrl::from(ParsedGitUrl {
+        let url = DisplaySafeUrl::from(ParsedGitDirectoryUrl {
             url: git_url.clone(),
             subdirectory: subdirectory.clone(),
         });
 
-        Ok(GitSourceDist {
+        Ok(GitDirectorySourceDist {
             name: name.clone(),
             git: Box::new(git_url),
             subdirectory: self.subdirectory.clone().map(Box::<Path>::from),
@@ -1709,8 +1723,12 @@ where
         time: Some(toml_edit::Time {
             hour: u8::try_from(timestamp.hour()).map_err(serde::ser::Error::custom)?,
             minute: u8::try_from(timestamp.minute()).map_err(serde::ser::Error::custom)?,
-            second: u8::try_from(timestamp.second()).map_err(serde::ser::Error::custom)?,
-            nanosecond: u32::try_from(timestamp.nanosecond()).map_err(serde::ser::Error::custom)?,
+            second: Some(u8::try_from(timestamp.second()).map_err(serde::ser::Error::custom)?),
+            nanosecond: {
+                let nanos =
+                    u32::try_from(timestamp.nanosecond()).map_err(serde::ser::Error::custom)?;
+                if nanos == 0 { None } else { Some(nanos) }
+            },
         }),
         offset: Some(toml_edit::Offset::Z),
     };
@@ -1753,8 +1771,18 @@ where
     let time = if let Some(time) = datetime.time {
         let hour = i8::try_from(time.hour).map_err(serde::de::Error::custom)?;
         let minute = i8::try_from(time.minute).map_err(serde::de::Error::custom)?;
-        let second = i8::try_from(time.second).map_err(serde::de::Error::custom)?;
-        let nanosecond = i32::try_from(time.nanosecond).map_err(serde::de::Error::custom)?;
+        let second = time
+            .second
+            .map(i8::try_from)
+            .transpose()
+            .map_err(serde::de::Error::custom)?
+            .unwrap_or_default();
+        let nanosecond = time
+            .nanosecond
+            .map(i32::try_from)
+            .transpose()
+            .map_err(serde::de::Error::custom)?
+            .unwrap_or_default();
         Time::new(hour, minute, second, nanosecond).map_err(serde::de::Error::custom)?
     } else {
         Time::midnight()

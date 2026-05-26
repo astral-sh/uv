@@ -28,7 +28,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.7"
+          version: "0.11.16"
       - run: uvx ruff check .
 
   ty:
@@ -41,7 +41,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.7"
+          version: "0.11.16"
       - run: |
           uvx ty check python/uv
           uvx \
@@ -75,7 +75,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.7"
+          version: "0.11.16"
       - run: uvx --from 'validate-pyproject[all,store]' validate-pyproject pyproject.toml
 
   readme:
@@ -87,7 +87,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: 3.12
+          python-version: 3.14
       - run: python scripts/transform_readme.py --target pypi
 
   clippy-ubuntu:
@@ -103,7 +103,7 @@ jobs:
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Check uv_build dependencies"
-        uses: EmbarkStudios/cargo-deny-action@175dc7fd4fb85ec8f46948fb98f44db001149081 # v2.0.16
+        uses: EmbarkStudios/cargo-deny-action@91bf2b620e09e18d6eb78b92e7861937469acedb # v2.0.17
         with:
           command: check bans
           manifest-path: crates/uv-build/Cargo.toml
@@ -151,9 +151,9 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install cargo shear"
-        uses: taiki-e/install-action@85b24a67ef0c632dfefad70b9d5ce8fddb040754 # v2.75.10
+        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
         with:
-          tool: cargo-shear
+          tool: cargo-shear@1.12.4
       - run: cargo shear --deny-warnings
 
   typos:
@@ -162,4 +162,4 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - uses: crate-ci/typos@02ea592e44b3a53c302f697cddca7641cd051c3d # v1.45.0
+      - uses: crate-ci/typos@5374cbf686e897b15713110e233094e2874de7ef # v1.46.1

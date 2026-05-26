@@ -172,7 +172,7 @@ impl Conflicts {
                 graph
                     .node_weight_mut(neighbor_idx)
                     .expect("Graph node should have weight")
-                    .extend(neighbor_canonical_items.into_iter());
+                    .extend(neighbor_canonical_items);
             }
         }
 
@@ -197,7 +197,7 @@ impl Conflicts {
                     }
                 }
             }
-            conflict_sets.extend(new_conflict_sets.into_iter());
+            conflict_sets.extend(new_conflict_sets);
         }
 
         // Add all newly discovered conflict sets (excluding the originals already in self.0)
@@ -250,16 +250,12 @@ impl ConflictSet {
 
     /// Returns true if these conflicts contain any set that contains the given
     /// [`ConflictItem`].
-    pub fn contains_item(&self, conflict_item: &ConflictItem) -> bool {
+    fn contains_item(&self, conflict_item: &ConflictItem) -> bool {
         self.set.contains(conflict_item)
     }
 
     /// Replace an old [`ConflictItem`] with a new one.
-    pub fn replaced_item(
-        &self,
-        old: &ConflictItem,
-        new: ConflictItem,
-    ) -> Result<Self, ConflictError> {
+    fn replaced_item(&self, old: &ConflictItem, new: ConflictItem) -> Result<Self, ConflictError> {
         let mut new_set = self.set.clone();
         if !new_set.contains(old) {
             return Err(ConflictError::ReplaceMissingConflictItem);
@@ -666,7 +662,7 @@ impl SchemaConflicts {
 /// name.
 #[derive(Debug, Default, Clone, Eq, PartialEq, serde::Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct SchemaConflictSet(Vec<SchemaConflictItem>);
+struct SchemaConflictSet(Vec<SchemaConflictItem>);
 
 /// Like [`ConflictItem`], but for deserialization in `pyproject.toml`.
 ///
@@ -682,7 +678,7 @@ pub struct SchemaConflictSet(Vec<SchemaConflictItem>);
     try_from = "ConflictItemWire",
     into = "ConflictItemWire"
 )]
-pub struct SchemaConflictItem {
+struct SchemaConflictItem {
     package: Option<PackageName>,
     kind: ConflictKind,
 }

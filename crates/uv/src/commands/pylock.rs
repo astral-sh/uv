@@ -1,5 +1,5 @@
 //! Shared helpers for reading `pylock.toml` (PEP 751) files and deriving a [`Resolution`] and
-//! verifying [`HashStrategy`] from them, used by `uv pip install` and `uv pip sync`.
+//! [`HashStrategy`] from them, used by `uv pip install` and `uv pip sync`.
 
 use std::path::{Path, PathBuf};
 
@@ -55,8 +55,8 @@ pub(crate) async fn read_pylock_toml(
     Ok((install_path, lock))
 }
 
-/// Verify Python compatibility and convert a parsed [`PylockToml`] into a [`Resolution`] with a
-/// verifying [`HashStrategy`].
+/// Verify Python compatibility and convert a parsed [`PylockToml`] into a [`Resolution`] with its
+/// [`HashStrategy`].
 pub(crate) fn resolve_pylock_toml(
     lock: PylockToml,
     install_path: &Path,
@@ -66,6 +66,7 @@ pub(crate) fn resolve_pylock_toml(
     extras: &[ExtraName],
     groups: &[GroupName],
     build_options: &BuildOptions,
+    hash_checking: Option<HashCheckingMode>,
 ) -> anyhow::Result<(Resolution, HashStrategy)> {
     if let Some(requires_python) = lock.requires_python.as_ref() {
         if !requires_python.contains(interpreter.python_version()) {
@@ -88,7 +89,11 @@ pub(crate) fn resolve_pylock_toml(
         &tags,
         build_options,
     )?;
-    let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
+    let hasher = if let Some(hash_checking) = hash_checking {
+        HashStrategy::from_resolution(&resolution, hash_checking)?
+    } else {
+        HashStrategy::None
+    };
 
     Ok((resolution, hasher))
 }

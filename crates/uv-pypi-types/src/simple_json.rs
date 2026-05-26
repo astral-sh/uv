@@ -87,12 +87,10 @@ impl<'de> Deserialize<'de> for PypiFile {
 
                 while let Some(key) = access.next_key::<Cow<'_, str>>()? {
                     match &*key {
-                        "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata" => {
-                            if core_metadata.is_none() {
-                                core_metadata = access.next_value()?;
-                            } else {
-                                let _: serde::de::IgnoredAny = access.next_value()?;
-                            }
+                        "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata"
+                            if core_metadata.is_none() =>
+                        {
+                            core_metadata = access.next_value()?;
                         }
                         "filename" => filename = Some(access.next_value()?),
                         "hashes" => hashes = Some(access.next_value()?),
@@ -190,12 +188,10 @@ impl<'de> Deserialize<'de> for PyxFile {
 
                 while let Some(key) = access.next_key::<Cow<'_, str>>()? {
                     match &*key {
-                        "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata" => {
-                            if core_metadata.is_none() {
-                                core_metadata = access.next_value()?;
-                            } else {
-                                let _: serde::de::IgnoredAny = access.next_value()?;
-                            }
+                        "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata"
+                            if core_metadata.is_none() =>
+                        {
+                            core_metadata = access.next_value()?;
                         }
                         "filename" => filename = Some(access.next_value()?),
                         "hashes" => hashes = Some(access.next_value()?),
@@ -849,10 +845,8 @@ mod tests {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PypiSimpleIndex {
-    /// Metadata about the response.
-    pub meta: SimpleIndexMeta,
     /// The list of projects available in the index.
-    pub projects: Vec<ProjectEntry>,
+    projects: Vec<ProjectEntry>,
 }
 
 /// Response from the Pyx Simple API root endpoint listing all available projects,
@@ -860,23 +854,27 @@ pub struct PypiSimpleIndex {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PyxSimpleIndex {
-    /// Metadata about the response.
-    pub meta: SimpleIndexMeta,
     /// The list of projects available in the index.
-    pub projects: Vec<ProjectEntry>,
-}
-
-/// Metadata about a Simple API index response.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct SimpleIndexMeta {
-    /// The API version.
-    pub api_version: SmallString,
+    projects: Vec<ProjectEntry>,
 }
 
 /// A single project entry in the Simple API index.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ProjectEntry {
+struct ProjectEntry {
     /// The name of the project.
-    pub name: PackageName,
+    name: PackageName,
+}
+
+impl PypiSimpleIndex {
+    /// Return the project names in the index.
+    pub fn into_project_names(self) -> Vec<PackageName> {
+        self.projects.into_iter().map(|entry| entry.name).collect()
+    }
+}
+
+impl PyxSimpleIndex {
+    /// Return the project names in the index.
+    pub fn into_project_names(self) -> Vec<PackageName> {
+        self.projects.into_iter().map(|entry| entry.name).collect()
+    }
 }

@@ -47,7 +47,7 @@ jobs:
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           # Install a specific version of uv.
-          version: "0.11.7"
+          version: "0.11.16"
 ```
 
 ## Setting up Python
@@ -356,8 +356,8 @@ functional and we didn't miss any files. This step is recommended, but optional.
 
 First, add a release workflow to your project:
 
-```yaml title=".github/workflows/publish.yml"
-name: "Publish"
+```yaml title=".github/workflows/release.yml"
+name: "Publish release to PyPI"
 
 on:
   push:

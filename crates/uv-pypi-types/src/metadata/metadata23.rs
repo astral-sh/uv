@@ -61,7 +61,7 @@ pub struct Metadata23 {
     /// it should be omitted if it is identical to `author`.
     pub maintainer: Option<String>,
     /// A string containing the maintainer's e-mail address.
-    /// It can contain a name and e-mail address in the legal forms for a RFC-822 `From:` header.
+    /// It can contain a name and e-mail address in the legal forms for an RFC-822 `From:` header.
     ///
     /// Note that this field is intended for use when a project is being maintained by someone other
     /// than the original author: it should be omitted if it is identical to `author_email`.
@@ -307,7 +307,7 @@ impl Keywords {
     }
 
     /// Read the `METADATA` format.
-    pub fn from_metadata(keywords: &str) -> Self {
+    fn from_metadata(keywords: &str) -> Self {
         Self(keywords.split(',').map(ToString::to_string).collect())
     }
 
@@ -336,7 +336,7 @@ impl ProjectUrls {
     }
 
     /// Read the `METADATA` format.
-    pub fn from_iter_str(project_urls: impl IntoIterator<Item = String>) -> Self {
+    fn from_iter_str(project_urls: impl IntoIterator<Item = String>) -> Self {
         Self(
             project_urls
                 .into_iter()

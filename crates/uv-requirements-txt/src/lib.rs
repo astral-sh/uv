@@ -275,6 +275,15 @@ impl RequirementsTxt {
 
             #[cfg(feature = "http")]
             {
+                let url = requirements_txt.display().to_string();
+                let url = DisplaySafeUrl::parse(&url).map_err(|err| RequirementsTxtFileError {
+                    file: requirements_txt.to_path_buf(),
+                    error: RequirementsTxtParserError::InvalidUrl(
+                        requirements_txt.display().to_string(),
+                        err,
+                    ),
+                })?;
+
                 // Avoid constructing a client if network is disabled already
                 if client_builder.is_offline() {
                     return Err(RequirementsTxtFileError {
@@ -282,22 +291,11 @@ impl RequirementsTxt {
                         error: RequirementsTxtParserError::Io(io::Error::new(
                             io::ErrorKind::InvalidInput,
                             format!(
-                                "Network connectivity is disabled, but a remote requirements file was requested: {}",
-                                requirements_txt.display()
+                                "Network connectivity is disabled, but a remote requirements file was requested: {url}"
                             ),
                         )),
                     });
                 }
-
-                let url = DisplaySafeUrl::parse(&requirements_txt.display().to_string()).map_err(
-                    |err| RequirementsTxtFileError {
-                        file: requirements_txt.to_path_buf(),
-                        error: RequirementsTxtParserError::InvalidUrl(
-                            requirements_txt.display().to_string(),
-                            err,
-                        ),
-                    },
-                )?;
                 let client = client_builder
                     .build()
                     .map_err(|err| RequirementsTxtFileError {
@@ -585,7 +583,7 @@ impl RequirementsTxt {
     }
 
     /// Merge the data from a nested `requirements` file (`other`) into this one.
-    pub fn update_from(&mut self, other: Self) {
+    fn update_from(&mut self, other: Self) {
         let Self {
             requirements,
             constraints,

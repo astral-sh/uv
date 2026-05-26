@@ -8,6 +8,7 @@ use uv_platform::{Arch, Os};
 use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
 use uv_static::EnvVars;
 use uv_test::uv_snapshot;
+use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
 #[test]
 fn python_pin() {
@@ -201,6 +202,49 @@ fn python_pin_uses_python_downloads_json_url() {
     ----- stderr -----
     error: No interpreter found for Python 3.12 in [PYTHON SOURCES]
     ");
+}
+
+#[tokio::test]
+async fn python_pin_downloads_metadata_once_for_multiple_pins() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child(PYTHON_VERSION_FILENAME)
+        .write_str("3.11\n3.12\n")?;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw("{}", "application/json"))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .python_pin()
+        .arg("--python-downloads-json-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.11
+    3.12
+
+    ----- stderr -----
+    ");
+
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+
+    Ok(())
 }
 
 // If there is no project-level `.python-version` file, respect the global pin.

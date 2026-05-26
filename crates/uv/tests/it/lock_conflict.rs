@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::Result;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
@@ -7769,6 +7771,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
 ///
 /// Ref: <https://github.com/astral-sh/uv/issues/11133>
 #[test]
+#[ignore = "lightning is currently quarantined on PyPI"]
 fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-02-07T00:00Z");
 
@@ -10519,6 +10522,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
 ///
 /// Ref: <https://github.com/astral-sh/uv/issues/11479>
 #[test]
+#[ignore = "lightning is currently quarantined on PyPI"]
 fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-02-14T00:00Z");
 
@@ -16563,6 +16567,106 @@ fn project_level_conflict_with_group() -> Result<()> {
     warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
     Resolved 6 packages in [TIME]
     ");
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/16779>
+#[test]
+fn many_conflicts_with_requested_dependency_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
+    // 29 conflicts results in a reasonably short run-time after fixing, and a very long runtime
+    // without the fix. This is to attempt to ensure that this test won't fail sporadically on a
+    // slow machine, or succeed (while broken) on a super fast machine.
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = []
+
+        [project.optional-dependencies]
+        x00 = ["branch-package"]
+
+        [tool.uv.sources]
+        branch-package = { path = "branch-package" }
+
+        [tool.uv]
+        conflicts = [[
+            { extra = "x00" },
+            { extra = "x01" },
+            { extra = "x02" },
+            { extra = "x03" },
+            { extra = "x04" },
+            { extra = "x05" },
+            { extra = "x06" },
+            { extra = "x07" },
+            { extra = "x08" },
+            { extra = "x09" },
+            { extra = "x10" },
+            { extra = "x11" },
+            { extra = "x12" },
+            { extra = "x13" },
+            { extra = "x14" },
+            { extra = "x15" },
+            { extra = "x16" },
+            { extra = "x17" },
+            { extra = "x18" },
+            { extra = "x19" },
+            { extra = "x20" },
+            { extra = "x21" },
+            { extra = "x22" },
+            { extra = "x23" },
+            { extra = "x24" },
+            { extra = "x25" },
+            { extra = "x26" },
+            { extra = "x27" },
+            { extra = "x28" },
+        ]]
+        "#,
+    )?;
+
+    let branch_pyproject_toml = context
+        .temp_dir
+        .child("branch-package")
+        .child("pyproject.toml");
+    branch_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "branch-package"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["leaf-package[easy]"]
+
+        [tool.uv.sources]
+        leaf-package = { path = "../leaf-package" }
+        "#,
+    )?;
+
+    let leaf_pyproject_toml = context
+        .temp_dir
+        .child("leaf-package")
+        .child("pyproject.toml");
+    leaf_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "leaf-package"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        easy = []
+        "#,
+    )?;
+
+    assert_cmd::Command::from_std(context.lock())
+        .timeout(Duration::from_mins(1))
+        .assert()
+        .success();
 
     Ok(())
 }

@@ -3,7 +3,6 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
-use std::io::BufReader;
 use url::Url;
 
 use uv_fs::Simplified;
@@ -942,6 +941,246 @@ fn lock_sdist_git_short_rev() -> Result<()> {
     ----- stderr -----
     Checked 1 package in [TIME]
     ");
+
+    Ok(())
+}
+
+/// Lock a Git requirement that points to a pre-built source archive within a repository.
+#[test]
+#[cfg(feature = "test-git")]
+fn lock_sdist_git_archive() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        iniconfig = { git = "https://github.com/astral-sh/archive-in-git-test", path = "archives/iniconfig-2.0.0.tar.gz" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { git = "https://github.com/astral-sh/archive-in-git-test?path=archives%2Finiconfig-2.0.0.tar.gz#bb7ce6abf9f90544767701de5b7b0c7802dc642b" }
+        sdist = { hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", git = "https://github.com/astral-sh/archive-in-git-test?path=archives%2Finiconfig-2.0.0.tar.gz" }]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0.tar.gz)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    // Re-install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    "###);
+
+    // Clear the environment, and re-install.
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0.tar.gz)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    Ok(())
+}
+
+/// Lock a Git requirement that points to a pre-built wheel within a repository.
+#[test]
+#[cfg(feature = "test-git")]
+fn lock_wheel_git_archive() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        iniconfig = { git = "https://github.com/astral-sh/archive-in-git-test", path = "archives/iniconfig-2.0.0-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { git = "https://github.com/astral-sh/archive-in-git-test?path=archives%2Finiconfig-2.0.0-py3-none-any.whl#bb7ce6abf9f90544767701de5b7b0c7802dc642b" }
+        wheels = [
+            { filename = "iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", git = "https://github.com/astral-sh/archive-in-git-test?path=archives%2Finiconfig-2.0.0-py3-none-any.whl" }]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    // Re-install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    "###);
+
+    // Clear the environment, and re-install.
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
 
     Ok(())
 }
@@ -2161,7 +2400,8 @@ fn lock_project_with_build_constraints() -> Result<()> {
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-      help: `requests` (v1.2.0) was included because `project` (v0.1.0) depends on `requests==1.2`
+
+    hint: `requests` (v1.2.0) was included because `project` (v0.1.0) depends on `requests==1.2`
     ");
 
     Ok(())
@@ -5469,9 +5709,8 @@ fn lock_requires_python() -> Result<()> {
           And because we know from (1) that pygls>=1.1.0,<1.3.0 cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
           And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: While the active Python version is 3.12, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
-
-          hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
+    hint: While the active Python version is 3.12, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
+    hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
     ");
 
     // Require >=3.7, and allow locking to a version of `pygls` that is compatible (==1.0.1).
@@ -8803,7 +9042,8 @@ fn lock_invalid_hash() -> Result<()> {
 
           Computed:
             sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
-      help: `idna` (v3.6) was included because `project` (v0.1.0) depends on `anyio` (v3.7.0) which depends on `idna`
+
+    hint: `idna` (v3.6) was included because `project` (v0.1.0) depends on `anyio` (v3.7.0) which depends on `idna`
     ");
 
     Ok(())
@@ -9360,7 +9600,7 @@ fn lock_requires_python_no_wheels() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because dearpygui==1.9.1 has no wheels with a matching Python version tag (e.g., `cp312`) and your project depends on dearpygui==1.9.1, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: Wheels are available for `dearpygui` (v1.9.1) with the following Python ABI tags: `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
+    hint: Wheels are available for `dearpygui` (v1.9.1) with the following Python ABI tags: `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
     ");
 
     Ok(())
@@ -10421,7 +10661,8 @@ async fn lock_redact_http() -> Result<()> {
       × Failed to download `iniconfig==2.0.0`
       ├─▶ Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
       ╰─▶ HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-      help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
+
+    hint: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
     ");
 
     // Installing from the lockfile should fail without an index.
@@ -10434,7 +10675,8 @@ async fn lock_redact_http() -> Result<()> {
       × Failed to download `iniconfig==2.0.0`
       ├─▶ Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
       ╰─▶ HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-      help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
+
+    hint: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
     ");
 
     // Installing from the lockfile should succeed when credentials are included on the command-line.
@@ -10472,7 +10714,8 @@ async fn lock_redact_http() -> Result<()> {
       × Failed to download `iniconfig==2.0.0`
       ├─▶ Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
       ╰─▶ HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-      help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
+
+    hint: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
     ");
 
     // Installing with credentials from with `UV_INDEX_URL` should succeed.
@@ -11068,7 +11311,7 @@ async fn lock_env_credentials() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
     ");
 
     // Provide credentials via environment variables.
@@ -13646,8 +13889,7 @@ fn lock_sources_source_tree() -> Result<()> {
 
     // Unzip the file.
     let file = fs_err::File::open(&*workspace_archive)?;
-    let mut archive = zip::ZipArchive::new(BufReader::new(file))?;
-    archive.extract(&context.temp_dir)?;
+    uv_extract::unzip(file, &context.temp_dir)?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {
@@ -15770,7 +16012,7 @@ fn lock_add_member_with_build_system() -> Result<()> {
       ╰─▶ Because anyio was not found in the cache and leaf depends on anyio>3, we can conclude that leaf's requirements are unsatisfiable.
           And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
 
     // Re-run without `--locked`.
@@ -15978,7 +16220,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
       ╰─▶ Because anyio was not found in the cache and leaf depends on anyio>3, we can conclude that leaf's requirements are unsatisfiable.
           And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
 
     // Re-run without `--locked`.
@@ -18179,9 +18421,9 @@ fn lock_overlapping_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Supported environments must be disjoint, but the following markers overlap: `sys_platform != 'win32'` and `python_full_version >= '3.11'`.
+    error: Supported environments must be disjoint, but the following markers overlap: `sys_platform != 'win32'` and `python_full_version >= '3.11'`
 
-    hint: replace `python_full_version >= '3.11'` with `python_full_version >= '3.11' and sys_platform == 'win32'`.
+    hint: replace `python_full_version >= '3.11'` with `python_full_version >= '3.11' and sys_platform == 'win32'`
     ");
 
     Ok(())
@@ -19969,6 +20211,10 @@ fn lock_explicit_default_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    DEBUG Found workspace configuration at `[TEMP_DIR]/pyproject.toml`
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Found project root: `[TEMP_DIR]/`
     DEBUG No workspace root found, using project root
@@ -19977,11 +20223,13 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Checking for Python environment at: `.venv`
     DEBUG The project environment's Python version satisfies the request: `Python >=3.12`
     DEBUG Using request connect timeout of [TIME] and read timeout of [TIME]
-    DEBUG Found static `pyproject.toml` for: project @ file://[TEMP_DIR]/
+    DEBUG Found static `requires-dist` for: [TEMP_DIR]/
     DEBUG No workspace root found, using project root
     DEBUG Resolving despite existing lockfile due to mismatched requirements for: `project==0.1.0`
       Requested: {Requirement { name: PackageName("anyio"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([]), index: None, conflict: None }, origin: None }}
       Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2.0.0" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: DisplaySafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None, expanded: false }), format: Simple }), conflict: None }, origin: None }}
+    DEBUG Found static `pyproject.toml` for: project @ file://[TEMP_DIR]/
+    DEBUG No workspace root found, using project root
     DEBUG Solving with installed Python version: 3.12.[X]
     DEBUG Solving with target Python version: >=3.12
     DEBUG Solving with exclude-newer: global: 2024-03-25T00:00:00Z
@@ -20470,7 +20718,7 @@ fn lock_named_index_config_file_hint() -> Result<()> {
       ├─▶ Failed to parse entry: `jinja2`
       ╰─▶ Package `jinja2` references an undeclared index: `pytorch`
 
-          hint: Index `pytorch` was found in a project-level `uv.toml`, but indexes referenced via `tool.uv.sources` must be defined in the project's `pyproject.toml`
+    hint: Index `pytorch` was found in a project-level `uv.toml`, but indexes referenced via `tool.uv.sources` must be defined in the project's `pyproject.toml`
     ");
 
     Ok(())
@@ -20526,7 +20774,7 @@ fn lock_named_index_user_config_file_hint() -> Result<()> {
       ├─▶ Failed to parse entry: `jinja2`
       ╰─▶ Package `jinja2` references an undeclared index: `pytorch`
 
-          hint: Index `pytorch` was found in a user-level `uv.toml`, but indexes referenced via `tool.uv.sources` must be defined in the project's `pyproject.toml`
+    hint: Index `pytorch` was found in a user-level `uv.toml`, but indexes referenced via `tool.uv.sources` must be defined in the project's `pyproject.toml`
     ");
 
     Ok(())
@@ -23435,7 +23683,7 @@ async fn lock_keyring_explicit_always() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
     ");
 
     // With valid credentials, we should succeed
@@ -23748,13 +23996,10 @@ fn lock_multiple_sources_conflict() -> Result<()> {
 
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 9, column 21
-      |
-    9 |         iniconfig = [
-      |                     ^
-    Source markers must be disjoint, but the following markers overlap: `python_full_version == '3.12.*' and sys_platform == 'win32'` and `sys_platform == 'win32'`.
+      Caused by: Failed to parse `tool.uv.sources`
+      Caused by: Source markers must be disjoint, but the following markers overlap: `python_full_version == '3.12.*' and sys_platform == 'win32'` and `sys_platform == 'win32'`.
 
-    hint: replace `sys_platform == 'win32'` with `python_full_version != '3.12.*' and sys_platform == 'win32'`.
+    hint: replace `sys_platform == 'win32'` with `python_full_version != '3.12.*' and sys_platform == 'win32'`
     ");
 
     Ok(())
@@ -23788,11 +24033,8 @@ fn lock_multiple_sources_no_marker() -> Result<()> {
 
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 9, column 21
-      |
-    9 |         iniconfig = [
-      |                     ^
-    When multiple sources are provided, each source must include a platform marker (e.g., `marker = "sys_platform == 'linux'"`)
+      Caused by: Failed to parse `tool.uv.sources`
+      Caused by: When multiple sources are provided, each source must include a platform marker (e.g., `marker = "sys_platform == 'linux'"`)
     "#);
 
     Ok(())
@@ -28041,8 +28283,9 @@ fn lock_derivation_chain_prod() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref==0.1.2`
+
+    hint: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref==0.1.2`
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
     Ok(())
@@ -28098,8 +28341,9 @@ fn lock_derivation_chain_extra() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref>=0.1`
+
+    hint: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref>=0.1`
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
     Ok(())
@@ -28157,8 +28401,9 @@ fn lock_derivation_chain_group() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
+
+    hint: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
     Ok(())
@@ -28227,8 +28472,9 @@ fn lock_derivation_chain_extended() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `child` (v0.1.0) which depends on `wsgiref>=0.1, <0.2`
+
+    hint: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `child` (v0.1.0) which depends on `wsgiref>=0.1, <0.2`
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
     Ok(())
@@ -28264,7 +28510,8 @@ fn mismatched_name_self_editable() -> Result<()> {
     Resolved 2 packages in [TIME]
       × Failed to build `foo @ file://[TEMP_DIR]/`
       ╰─▶ Package metadata name `project` does not match given name `foo`
-      help: `foo` was included because `project` (v0.1.0) depends on `foo`
+
+    hint: `foo` was included because `project` (v0.1.0) depends on `foo`
     ");
 
     Ok(())
@@ -28867,7 +29114,7 @@ fn lock_self_incompatible() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because your project depends on itself at an incompatible version (project==0.2.0), we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
 
     Ok(())
@@ -29004,7 +29251,7 @@ fn lock_self_extra_to_same_extra_incompatible() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
 
     Ok(())
@@ -29038,7 +29285,7 @@ fn lock_self_extra_to_other_extra_incompatible() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
 
     Ok(())
@@ -29175,7 +29422,7 @@ fn lock_self_extra_incompatible() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
 
     Ok(())
@@ -29305,7 +29552,7 @@ fn lock_self_marker_incompatible() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because your project depends on itself at an incompatible version (project{sys_platform == 'win32'}>0.1), we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
 
     Ok(())
@@ -32654,7 +32901,7 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
       ╰─▶ Because pandas==1.5.3 depends on numpy{python_full_version >= '3.10'}>=1.21.0 and your project depends on numpy==1.20.3, we can conclude that your project and pandas==1.5.3 are incompatible.
           And because your project depends on pandas==1.5.3, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: While the active Python version is 3.9, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
+    hint: While the active Python version is 3.9, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
     ");
 
     // Check that the resolution passes on the restricted Python environment.
@@ -32875,7 +33122,7 @@ fn lock_conflict_for_disjoint_platform() -> Result<()> {
       × No solution found when resolving dependencies for split (markers: sys_platform == 'exotic'):
       ╰─▶ Because your project depends on numpy{sys_platform == 'exotic'}>=1.24,<1.26 and numpy>=1.26, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     ");
 
     // Check that the resolution passes on the restricted environment.
@@ -33786,7 +34033,7 @@ fn lock_exclude_newer_hint() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2000-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0, published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
+    hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2000-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0, published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
     ");
 
     Ok(())
@@ -33836,7 +34083,7 @@ async fn lock_exclude_newer_index_disable() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2024-03-25T00:00:00Z. The latest version satisfying the requirement is v2.0.0. Consider using `exclude-newer-package` to override the cutoff for this package.
+    hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2024-03-25T00:00:00Z. The latest version satisfying the requirement is v2.0.0. Consider using `exclude-newer-package` to override the cutoff for this package.
     ");
 
     pyproject_toml.write_str(&format!(
@@ -33920,7 +34167,7 @@ async fn lock_exclude_newer_index_value() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: `iniconfig` was filtered by the index-specific `exclude-newer` setting to only include packages uploaded before 2025-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0. Consider updating that index's cutoff, setting it to `false`, or using `exclude-newer-package` to override the cutoff for this package.
+    hint: `iniconfig` was filtered by the index-specific `exclude-newer` setting to only include packages uploaded before 2025-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0. Consider updating that index's cutoff, setting it to `false`, or using `exclude-newer-package` to override the cutoff for this package.
     ");
 
     uv_snapshot!(context.filters(), context
@@ -33937,7 +34184,7 @@ async fn lock_exclude_newer_index_value() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: `iniconfig` was filtered by the index-specific `exclude-newer` setting to only include packages uploaded before 2025-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0. Consider updating that index's cutoff, setting it to `false`, or using `exclude-newer-package` to override the cutoff for this package.
+    hint: `iniconfig` was filtered by the index-specific `exclude-newer` setting to only include packages uploaded before 2025-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0. Consider updating that index's cutoff, setting it to `false`, or using `exclude-newer-package` to override the cutoff for this package.
     ");
 
     pyproject_toml.write_str(&format!(
@@ -34008,7 +34255,46 @@ fn lock_exclude_newer_hint_pinned_version() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of iniconfig==2.0.0 and your project depends on iniconfig==2.0.0, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2022-01-01T00:00:00Z. The requested version, v2.0.0, was published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
+    hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2022-01-01T00:00:00Z. The requested version, v2.0.0, was published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    Ok(())
+}
+
+/// Test that `~=` requirements don't emit a misleading pre-release hint when the compatible
+/// release upper bound is excluded by `--exclude-newer`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/19266>
+#[test]
+fn lock_exclude_newer_hint_compatible_release() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig~=2.0"]
+        "#,
+    )?;
+
+    // Use a cutoff that excludes `iniconfig 2.0.0` (2023-01-07) but not `1.1.1` (2020-10-18).
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2022-01-01T00:00:00Z"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only iniconfig<=1.1.1 is available and your project depends on iniconfig>=2.0,<3.dev0, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2022-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0, published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
     ");
 
     Ok(())
@@ -35026,7 +35312,7 @@ fn collapsed_error_with_marker_packages() -> Result<()> {
       × No solution found when resolving dependencies for split (markers: python_full_version < '3.14' and sys_platform == 'other'):
       ╰─▶ Because your project depends on anyio{sys_platform == 'other'} and anyio{python_full_version < '3.14'}>=4.4.0, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     ");
 
     Ok(())
@@ -35115,7 +35401,7 @@ fn lock_unsupported_wheel_url_supported_platform() -> Result<()> {
         .into_iter()
         .chain([(
             // This hint is only shown when the current platform doesn't match the target.
-            r"\n\n\s+hint: The resolution failed for an environment that is not the current one[^\n]*",
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
             "",
         )])
         .collect();
@@ -35230,7 +35516,7 @@ fn lock_required_environment_cycle_reports_resolution_error() -> Result<()> {
         .into_iter()
         .chain([(
             // This hint is only shown when the current platform doesn't match the target.
-            r"\n\n\s+hint: The resolution failed for an environment that is not the current one[^\n]*",
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
             "",
         )])
         .collect();
@@ -35238,7 +35524,7 @@ fn lock_required_environment_cycle_reports_resolution_error() -> Result<()> {
     uv_snapshot!(
         filters,
         context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER),
-        @r"
+        @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -35276,7 +35562,7 @@ fn lock_supported_environment_wheel_only_package_requires_compatible_wheels() ->
         .into_iter()
         .chain([(
             // This hint is only shown when the current platform doesn't match the target.
-            r"\n\n\s+hint: The resolution failed for an environment that is not the current one[^\n]*",
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
             "",
         )])
         .collect();
@@ -35308,7 +35594,7 @@ fn lock_supported_environment_wheel_only_package_requires_compatible_wheels() ->
           and pywin32<=305 has no wheels with a matching Python version tag (e.g., `cp312`), we can conclude that pywin32<=305 cannot be used.
           And because pywin32>=306 has no Linux-compatible wheels and your project depends on pywin32, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: Wheels are available for `pywin32` (v305) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
+    hint: Wheels are available for `pywin32` (v305) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
     ");
 
     Ok(())
@@ -35558,7 +35844,7 @@ fn lock_frozen_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `UV_FROZEN=1` was provided; use `--no-frozen` or `--check` instead
+    warning: The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `UV_FROZEN=1` was provided; use `--check` instead
     ");
 
     Ok(())

@@ -24,6 +24,7 @@ use uv_distribution_types::{
     BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
     IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
 };
+use uv_git::{GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -44,8 +45,7 @@ use crate::html::SimpleDetailHTML;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{
-    BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, FlatIndexEntries,
-    RedirectClientWithMiddleware,
+    BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, RedirectClientWithMiddleware,
 };
 
 /// A builder for an [`RegistryClient`].
@@ -136,13 +136,13 @@ impl<'a> RegistryClientBuilder<'a> {
     /// leakage to untrusted domains.
     #[cfg(test)]
     #[must_use]
-    pub fn allow_cross_origin_credentials(mut self) -> Self {
+    pub(crate) fn allow_cross_origin_credentials(mut self) -> Self {
         self.base_client_builder = self.base_client_builder.allow_cross_origin_credentials();
         self
     }
 
     /// Add all authenticated sources to the cache.
-    pub fn cache_index_credentials(&mut self) {
+    fn cache_index_credentials(&mut self) {
         for index in self.index_locations.known_indexes() {
             if let Some(credentials) = index.credentials() {
                 trace!(
@@ -466,15 +466,18 @@ impl RegistryClient {
         let client = FlatIndexClient::new(self.cached_client(), self.connectivity, &self.cache);
 
         // Fetch the entries for the index.
-        let FlatIndexEntries { entries, .. } =
-            client.fetch_index(index).await.map_err(ErrorKind::Flat)?;
+        let (entries, _) = client
+            .fetch_index(index)
+            .await
+            .map_err(ErrorKind::Flat)?
+            .into_parts();
 
         // Index by package name.
         let mut entries_by_package: FxHashMap<PackageName, Vec<FlatIndexEntry>> =
             FxHashMap::default();
         for entry in entries {
             entries_by_package
-                .entry(entry.filename.name().clone())
+                .entry(entry.filename().name().clone())
                 .or_default()
                 .push(entry);
         }
@@ -907,7 +910,9 @@ impl RegistryClient {
     pub async fn wheel_metadata(
         &self,
         built_dist: &BuiltDist,
+        git: &GitResolver,
         capabilities: &IndexCapabilities,
+        reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<ResolutionMetadata, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheels) => {
@@ -968,6 +973,37 @@ impl RegistryClient {
             }
             BuiltDist::Path(wheel) => {
                 let file = fs_err::tokio::File::open(wheel.install_path.as_ref())
+                    .await
+                    .map_err(ErrorKind::Io)?;
+                let reader = tokio::io::BufReader::new(file);
+                let contents = read_metadata_async_seek(&wheel.filename, reader)
+                    .await
+                    .map_err(|err| {
+                        ErrorKind::Metadata(wheel.install_path.to_string_lossy().to_string(), err)
+                    })?;
+                ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
+                    ErrorKind::MetadataParseError(
+                        wheel.filename.clone(),
+                        built_dist.to_string(),
+                        Box::new(err),
+                    )
+                })?
+            }
+            BuiltDist::GitPath(wheel) => {
+                // Fetch the Git repository.
+                let fetch = git
+                    .fetch(
+                        &wheel.git,
+                        self.disable_ssl(wheel.git.url()),
+                        self.connectivity() == Connectivity::Offline,
+                        self.cache.bucket(CacheBucket::Git),
+                        reporter,
+                    )
+                    .await
+                    .map_err(ErrorKind::Git)?;
+
+                // Read the metadata.
+                let file = fs_err::tokio::File::open(fetch.path().join(&wheel.install_path))
                     .await
                     .map_err(ErrorKind::Io)?;
                 let reader = tokio::io::BufReader::new(file);
@@ -1357,14 +1393,14 @@ impl SimpleIndexMetadata {
     /// Create a [`SimpleIndexMetadata`] from a [`PypiSimpleIndex`].
     fn from_pypi_index(index: PypiSimpleIndex) -> Self {
         Self {
-            projects: index.projects.into_iter().map(|entry| entry.name).collect(),
+            projects: index.into_project_names(),
         }
     }
 
     /// Create a [`SimpleIndexMetadata`] from a [`PyxSimpleIndex`].
     fn from_pyx_index(index: PyxSimpleIndex) -> Self {
         Self {
-            projects: index.projects.into_iter().map(|entry| entry.name).collect(),
+            projects: index.into_project_names(),
         }
     }
 
@@ -1403,6 +1439,13 @@ pub struct SimpleDetailMetadatum {
 impl SimpleDetailMetadata {
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = &SimpleDetailMetadatum> {
         self.versions.iter()
+    }
+
+    /// Return the project-level [PEP 792] status marker for this package.
+    ///
+    /// [PEP 792]: https://peps.python.org/pep-0792/
+    pub fn project_status(&self) -> &ProjectStatus {
+        &self.project_status
     }
 
     fn from_pypi_files(
@@ -1559,6 +1602,13 @@ impl ArchivedSimpleDetailMetadata {
 
     pub fn datum(&self, i: usize) -> Option<&rkyv::Archived<SimpleDetailMetadatum>> {
         self.versions.get(i)
+    }
+
+    /// Return the project-level [PEP 792] status marker for this package.
+    ///
+    /// [PEP 792]: https://peps.python.org/pep-0792/
+    pub fn project_status(&self) -> &rkyv::Archived<ProjectStatus> {
+        &self.project_status
     }
 }
 

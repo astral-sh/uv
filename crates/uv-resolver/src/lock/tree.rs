@@ -16,7 +16,7 @@ use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ResolverMarkerEnvironment;
 
-use crate::lock::PackageId;
+use crate::lock::{Package, PackageId};
 use crate::{Lock, PackageMap};
 
 #[derive(Debug)]
@@ -31,6 +31,8 @@ pub struct TreeDisplay<'env> {
     depth: usize,
     /// Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
+    /// Whether the graph edges have been reversed (i.e., `--invert` mode).
+    invert: bool,
     /// Reference to the lock to look up additional metadata (e.g., wheel sizes).
     lock: &'env Lock,
     /// Whether to show sizes in the rendered output.
@@ -410,6 +412,7 @@ impl<'env> TreeDisplay<'env> {
             latest,
             depth,
             no_dedupe,
+            invert,
             lock,
             show_sizes,
         }
@@ -419,8 +422,8 @@ impl<'env> TreeDisplay<'env> {
     fn visit(
         &'env self,
         cursor: Cursor,
-        visited: &mut FxHashMap<&'env PackageId, Vec<&'env PackageId>>,
-        path: &mut Vec<&'env PackageId>,
+        visited: &mut FxHashMap<VisitedNode<'env>, Vec<&'env PackageId>>,
+        path: &mut Vec<VisitedNode<'env>>,
     ) -> Vec<String> {
         // Short-circuit if the current path is longer than the provided depth.
         if path.len() > self.depth {
@@ -431,6 +434,13 @@ impl<'env> TreeDisplay<'env> {
             return Vec::new();
         };
         let edge = cursor.edge().map(|edge_id| &self.graph[edge_id]);
+        let package = self.lock.find_by_id(package_id);
+
+        let expanded_extras = self.expanded_extras(package, edge);
+        let visited_node = VisitedNode {
+            package_id,
+            expanded_extras: expanded_extras.clone(),
+        };
 
         let line = {
             let mut line = format!("{}", package_id.name);
@@ -464,7 +474,6 @@ impl<'env> TreeDisplay<'env> {
             // Append compressed wheel size, if available in the lockfile.
             // Keep it simple: use the first wheel entry that includes a size.
             if self.show_sizes {
-                let package = self.lock.find_by_id(package_id);
                 if let Some(size_bytes) = package.wheels.iter().find_map(|wheel| wheel.size) {
                     let (bytes, unit) = human_readable_bytes(size_bytes);
                     line.push(' ');
@@ -478,14 +487,17 @@ impl<'env> TreeDisplay<'env> {
         // Skip the traversal if:
         // 1. The package is in the current traversal path (i.e., a dependency cycle).
         // 2. The package has been visited and de-duplication is enabled (default).
-        if let Some(requirements) = visited.get(package_id) {
-            if !self.no_dedupe || path.contains(&package_id) {
-                return if requirements.is_empty() {
-                    vec![line]
-                } else {
-                    vec![format!("{line} (*)")]
-                };
-            }
+        if path.contains(&visited_node) {
+            return vec![format!("{line} (*)")];
+        }
+        if !self.no_dedupe
+            && let Some(requirements) = visited.get(&visited_node)
+        {
+            return if requirements.is_empty() {
+                vec![line]
+            } else {
+                vec![format!("{line} (*)")]
+            };
         }
 
         // Incorporate the latest version of the package, if known.
@@ -500,7 +512,18 @@ impl<'env> TreeDisplay<'env> {
             .edges_directed(cursor.node(), Direction::Outgoing)
             .filter_map(|edge| match self.graph[edge.target()] {
                 Node::Root => None,
-                Node::Package(_) => Some(Cursor::new(edge.target(), edge.id())),
+                Node::Package(_) => {
+                    // Only include extra-conditional dependencies if the activating extra is
+                    // enabled in the current context.
+                    if !self.invert
+                        && let Edge::Optional(required_extra, _) = &self.graph[edge.id()]
+                    {
+                        if !expanded_extras.contains(required_extra) {
+                            return None;
+                        }
+                    }
+                    Some(Cursor::new(edge.target(), edge.id()))
+                }
             })
             .collect::<Vec<_>>();
         dependencies.sort_by_key(|cursor| {
@@ -518,7 +541,7 @@ impl<'env> TreeDisplay<'env> {
         // Only mark as visited if we're going to expand children (not at depth limit).
         if path.len() < self.depth {
             visited.insert(
-                package_id,
+                visited_node.clone(),
                 dependencies
                     .iter()
                     .filter_map(|node| match self.graph[node.node()] {
@@ -528,7 +551,7 @@ impl<'env> TreeDisplay<'env> {
                     .collect(),
             );
         }
-        path.push(package_id);
+        path.push(visited_node);
 
         for (index, dep) in dependencies.iter().enumerate() {
             // For sub-visited packages, add the prefix to make the tree display user-friendly.
@@ -600,6 +623,36 @@ impl<'env> TreeDisplay<'env> {
 
         lines
     }
+
+    /// Return the extras that can change this package's rendered child list.
+    fn expanded_extras(
+        &self,
+        package: &'env Package,
+        edge: Option<&Edge<'env>>,
+    ) -> BTreeSet<&'env ExtraName> {
+        if self.invert {
+            // In inverted mode, optional edges are reverse "required by extra" relationships.
+            // They do not select this package's outgoing dependencies, so de-dupe stays
+            // package-only.
+            return BTreeSet::default();
+        }
+
+        let Some(requested_extras) = edge.and_then(Edge::extras) else {
+            // Roots are rendered with all optional dependency groups expanded.
+            return package.optional_dependencies.keys().collect();
+        };
+
+        requested_extras
+            .iter()
+            .filter(|extra| package.optional_dependencies.contains_key(*extra))
+            .collect()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct VisitedNode<'env> {
+    package_id: &'env PackageId,
+    expanded_extras: BTreeSet<&'env ExtraName>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]

@@ -34,6 +34,7 @@ fn prune_no_op() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
@@ -73,6 +74,7 @@ fn prune_stale_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache bucket: [CACHE_DIR]/simple-v4
@@ -133,6 +135,7 @@ fn prune_cached_env() {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache environment: [CACHE_DIR]/environments-v2/[ENTRY]
@@ -178,6 +181,7 @@ fn prune_stale_symlink() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
@@ -208,6 +212,7 @@ async fn prune_force() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
@@ -227,6 +232,7 @@ async fn prune_force() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Lock is busy for `[CACHE_DIR]/`
     DEBUG Cache is currently in use, proceeding due to `--force`
@@ -309,9 +315,8 @@ fn prune_unzipped() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of iniconfig need to be downloaded from a registry and you require iniconfig, we can conclude that your requirements are unsatisfiable.
 
-          hint: Pre-releases are available for `iniconfig` in the requested range (e.g., 0.2.dev0), but pre-releases weren't enabled (try: `--prerelease=allow`)
-
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Pre-releases are available for `iniconfig` in the requested range (e.g., 0.2.dev0), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
 
     Ok(())
@@ -401,6 +406,10 @@ fn prune_stale_revision() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    DEBUG Skipping `pyproject.toml` in `[TEMP_DIR]/` (no `[tool]` section)
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]

@@ -49,11 +49,28 @@ impl SourceTree {
 #[derive(Debug, Clone)]
 pub struct SourceTreeResolution {
     /// The requirements sourced from the source trees.
-    pub requirements: Box<[Requirement]>,
+    requirements: Box<[Requirement]>,
     /// The names of the projects that were resolved.
-    pub project: PackageName,
+    project: PackageName,
     /// The extras used when resolving the requirements.
-    pub extras: Box<[ExtraName]>,
+    extras: Box<[ExtraName]>,
+}
+
+impl SourceTreeResolution {
+    /// Return the name of the project that was resolved.
+    pub fn project(&self) -> &PackageName {
+        &self.project
+    }
+
+    /// Return the extras used when resolving the requirements.
+    pub fn extras(&self) -> &[ExtraName] {
+        &self.extras
+    }
+
+    /// Return the requirements sourced from the source tree.
+    pub fn into_requirements(self) -> Box<[Requirement]> {
+        self.requirements
+    }
 }
 
 /// A resolver for requirements specified via source trees.
@@ -203,7 +220,12 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = source.distribution_id();
-            if self.index.distributions().register(id.clone()) {
+            if let Some(response) = self.index.distributions().register_or_wait(&id).await {
+                let MetadataResponse::Found(archive) = &*response else {
+                    panic!("Failed to find metadata for: {}", path.user_display());
+                };
+                archive.metadata.clone()
+            } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
                 let archive = self.database.build_wheel_metadata(&source, hashes).await?;
@@ -216,17 +238,6 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
                     .done(id, Arc::new(MetadataResponse::Found(archive)));
 
                 metadata
-            } else {
-                let response = self
-                    .index
-                    .distributions()
-                    .wait(&id)
-                    .await
-                    .expect("missing value for registered task");
-                let MetadataResponse::Found(archive) = &*response else {
-                    panic!("Failed to find metadata for: {}", path.user_display());
-                };
-                archive.metadata.clone()
             }
         };
 

@@ -17,7 +17,7 @@ use uv_warnings::warn_user;
 
 use crate::{ExcludeNewerOverride, Index, IndexStatusCodeStrategy, Verbatim};
 
-static PYPI_URL: LazyLock<DisplaySafeUrl> =
+pub static PYPI_URL: LazyLock<DisplaySafeUrl> =
     LazyLock::new(|| DisplaySafeUrl::parse("https://pypi.org/simple").unwrap());
 
 static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
@@ -674,7 +674,7 @@ impl IndexCapabilities {
     }
 
     /// Mark an [`IndexUrl`] as returning a `401 Unauthorized` status code.
-    pub fn set_unauthorized(&self, index_url: IndexUrl) {
+    pub(crate) fn set_unauthorized(&self, index_url: IndexUrl) {
         self.0
             .write()
             .unwrap()
@@ -693,7 +693,7 @@ impl IndexCapabilities {
     }
 
     /// Mark an [`IndexUrl`] as returning a `403 Forbidden` status code.
-    pub fn set_forbidden(&self, index_url: IndexUrl) {
+    pub(crate) fn set_forbidden(&self, index_url: IndexUrl) {
         self.0
             .write()
             .unwrap()

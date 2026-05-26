@@ -35,10 +35,9 @@ use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersion, VersionRequest,
 };
-use uv_requirements::upgrade::{LockedRequirements, read_pylock_toml_requirements};
 use uv_requirements::{
-    GroupsSpecification, RequirementsSource, RequirementsSpecification, is_pylock_toml,
-    upgrade::read_requirements_txt,
+    GroupsSpecification, LockedRequirements, RequirementsSource, RequirementsSpecification,
+    is_pylock_toml, read_pylock_toml_requirements, read_requirements_txt,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
@@ -72,6 +71,7 @@ pub(crate) async fn pip_compile(
     excludes_from_workspace: Vec<uv_normalize::PackageName>,
     build_constraints_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
+    required_environments: SupportedEnvironments,
     extras: ExtrasSpecification,
     groups: GroupsSpecification,
     output_file: Option<&Path>,
@@ -385,7 +385,13 @@ pub(crate) async fn pip_compile(
     };
 
     let artifact_environments = if universal {
-        environments.clone()
+        SupportedEnvironments::from_markers(
+            environments
+                .iter()
+                .chain(required_environments.iter())
+                .copied()
+                .collect(),
+        )
     } else {
         SupportedEnvironments::default()
     };

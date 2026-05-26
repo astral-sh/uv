@@ -1,14 +1,18 @@
 use std::collections::BTreeSet;
+use std::path::PathBuf;
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use thiserror::Error;
 use tracing::{Level, debug, enabled, warn};
+
+use uv_errors::{Hint, Hints};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
+    BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, EditableMode,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -40,6 +44,7 @@ use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
+use crate::commands::editable::apply_editable_mode;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
@@ -48,6 +53,25 @@ use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
+
+/// The interpreter is externally managed and cannot be modified.
+#[derive(Debug, Error)]
+#[error("{message}")]
+pub(crate) struct ExternallyManagedError {
+    message: String,
+    root: PathBuf,
+    system: bool,
+}
+
+impl Hint for ExternallyManagedError {
+    fn hints(&self) -> Hints<'_> {
+        if self.system {
+            Hints::from("Virtual environments were not considered due to the `--system` flag")
+        } else {
+            Hints::from("Consider creating a virtual environment, e.g., with `uv venv`")
+        }
+    }
+}
 
 /// Install packages into the current environment.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -61,6 +85,7 @@ pub(crate) async fn pip_install(
     overrides_from_workspace: Vec<Requirement>,
     excludes_from_workspace: Vec<uv_normalize::PackageName>,
     build_constraints_from_workspace: Vec<Requirement>,
+    editable: Option<EditableMode>,
     extras: &ExtrasSpecification,
     groups: &GroupsSpecification,
     resolution_mode: ResolutionMode,
@@ -259,25 +284,12 @@ pub(crate) async fn pip_install(
                 ),
             };
 
-            let error_message = if system {
-                // Add a hint about the `--system` flag
-                format!(
-                    "{}\n{}{} Virtual environments were not considered due to the `--system` flag",
-                    managed_message,
-                    "hint".bold().cyan(),
-                    ":".bold()
-                )
-            } else {
-                // Add a hint to create a virtual environment
-                format!(
-                    "{}\n{}{} Consider creating a virtual environment, e.g., with `uv venv`",
-                    managed_message,
-                    "hint".bold().cyan(),
-                    ":".bold()
-                )
-            };
-
-            return Err(anyhow::Error::msg(error_message));
+            return Err(ExternallyManagedError {
+                message: managed_message,
+                root: environment.root().to_path_buf(),
+                system,
+            }
+            .into());
         }
     }
 
@@ -521,6 +533,7 @@ pub(crate) async fn pip_install(
             &extras,
             &groups,
             &build_options,
+            hash_checking,
         )?
     } else {
         // When resolving, don't take any external preferences into account.
@@ -580,6 +593,9 @@ pub(crate) async fn pip_install(
 
         (resolution, hasher)
     };
+
+    // If necessary, convert editable distributions to non-editable.
+    let resolution = apply_editable_mode(resolution, editable);
 
     // Constrain any build requirements marked as `match-runtime = true`.
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;

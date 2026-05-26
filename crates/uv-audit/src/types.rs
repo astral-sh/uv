@@ -68,6 +68,16 @@ pub enum AdverseStatus {
     Deprecated,
 }
 
+impl std::fmt::Display for AdverseStatus {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Archived => "archived",
+            Self::Quarantined => "quarantined",
+            Self::Deprecated => "deprecated",
+        })
+    }
+}
+
 /// A vulnerability within a dependency.
 #[derive(Debug)]
 pub struct Vulnerability {
@@ -145,10 +155,13 @@ impl Vulnerability {
 }
 
 /// An adverse project status, such as an archived or deprecated project.
+///
+/// PEP 792 status markers are project-level, so this finding carries only the
+/// project name — not a specific version.
 #[derive(Debug)]
 pub struct ProjectStatus {
-    /// The dependency with the adverse status.
-    pub dependency: Dependency,
+    /// The name of the project with the adverse status.
+    pub name: PackageName,
     /// The adverse status of the project.
     pub status: AdverseStatus,
     /// An optional (index-supplied) reason for the adverse status.

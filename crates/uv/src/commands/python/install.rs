@@ -445,11 +445,13 @@ async fn perform_install(
                 request.request.to_canonical_string()
             )?;
             if is_from_python_version_file {
-                writeln!(
+                // TODO(zanieb): Consider refactoring this to use an error type.
+                write!(
                     printer.stderr(),
-                    "\n{}{} The version request came from a `.python-version` file; change the patch version in the file to upgrade instead",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "{}",
+                    uv_errors::Hints::from(
+                        "The version request came from a `.python-version` file; change the patch version in the file to upgrade instead",
+                    ),
                 )?;
             }
             return Ok(ExitStatus::Failure);

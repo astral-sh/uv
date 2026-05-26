@@ -673,7 +673,7 @@ impl WheelCompatibility {
     }
 
     /// Return `true` if the distribution is excluded.
-    pub fn is_excluded(&self) -> bool {
+    fn is_excluded(&self) -> bool {
         matches!(self, Self::Incompatible(IncompatibleWheel::ExcludeNewer(_)))
     }
 
@@ -681,7 +681,7 @@ impl WheelCompatibility {
     ///
     /// Compatible wheels are always higher more compatible than incompatible wheels.
     /// Compatible wheel ordering is determined by tag priority.
-    pub fn is_more_compatible(&self, other: &Self) -> bool {
+    fn is_more_compatible(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Compatible(_, _, _), Self::Incompatible(_)) => true,
             (
@@ -705,7 +705,7 @@ impl SourceDistCompatibility {
     }
 
     /// Return `true` if the distribution is excluded.
-    pub fn is_excluded(&self) -> bool {
+    fn is_excluded(&self) -> bool {
         matches!(
             self,
             Self::Incompatible(IncompatibleSource::ExcludeNewer(_))
@@ -717,7 +717,7 @@ impl SourceDistCompatibility {
     /// Compatible source distributions are always higher priority than incompatible source distributions.
     /// Compatible source distribution priority is arbitrary.
     /// Incompatible source distribution priority selects a source distribution that was "closest" to being usable.
-    pub fn is_more_compatible(&self, other: &Self) -> bool {
+    fn is_more_compatible(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Compatible(_), Self::Incompatible(_)) => true,
             (Self::Compatible(compatibility), Self::Compatible(other_compatibility)) => {

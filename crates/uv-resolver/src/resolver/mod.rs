@@ -62,7 +62,7 @@ pub(crate) use crate::resolver::availability::{
     UnavailableVersion,
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
-pub use crate::resolver::derivation::DerivationChainBuilder;
+use crate::resolver::derivation::DerivationChainBuilder;
 pub use crate::resolver::environment::ResolverEnvironment;
 use crate::resolver::environment::{
     ForkingPossibility, fork_version_by_marker, fork_version_by_python_requirement,
@@ -74,7 +74,7 @@ pub use crate::resolver::provider::{
     DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,
     VersionsResponse, WheelMetadataResult,
 };
-pub use crate::resolver::reporter::{BuildId, Reporter};
+pub use crate::resolver::reporter::Reporter;
 use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
@@ -188,7 +188,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             build_context.capabilities(),
         );
 
-        Self::new_custom_io(
+        Ok(Self::new_custom_io(
             manifest,
             options,
             hasher,
@@ -203,7 +203,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             build_context.locations(),
             provider,
             installed_packages,
-        )
+        ))
     }
 }
 
@@ -211,7 +211,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
     Resolver<Provider, InstalledPackages>
 {
     /// Initialize a new resolver using a user provided backend.
-    pub fn new_custom_io(
+    fn new_custom_io(
         manifest: Manifest,
         options: Options,
         hasher: &HashStrategy,
@@ -226,7 +226,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         locations: &IndexLocations,
         provider: Provider,
         installed_packages: InstalledPackages,
-    ) -> Result<Self, ResolveError> {
+    ) -> Self {
         let state = ResolverState {
             index: index.clone(),
             git: git.clone(),
@@ -256,7 +256,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             options,
             reporter: None,
         };
-        Ok(Self { state, provider })
+        Self { state, provider }
     }
 
     /// Set the [`Reporter`] to use for this installer.
@@ -1154,7 +1154,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             .index
             .distributions()
             .wait_blocking(&distribution_id)
-            .ok_or_else(|| ResolveError::UnregisteredTask(dist.to_string()))?;
+            .map_err(|_| ResolveError::UnregisteredTask(dist.to_string()))?;
 
         // If we failed to fetch the metadata for a URL, we can't proceed.
         let metadata = match &*response {
@@ -1189,6 +1189,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let filename = match &dist {
                 BuiltDist::Registry(dist) => &dist.best_wheel().filename,
                 BuiltDist::DirectUrl(dist) => &dist.filename,
+                BuiltDist::GitPath(dist) => &dist.filename,
                 BuiltDist::Path(dist) => &dist.filename,
             };
 
@@ -1270,12 +1271,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.index
                 .explicit()
                 .wait_blocking(&(name.clone(), index.clone()))
-                .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
+                .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))?
         } else {
             self.index
                 .implicit()
                 .wait_blocking(name)
-                .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
+                .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))?
         };
         visited.insert(name.clone());
 
@@ -1847,7 +1848,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .index
                     .distributions()
                     .wait_blocking(distribution_id)
-                    .ok_or_else(|| ResolveError::UnregisteredTask(format!("{name}=={version}")))?;
+                    .map_err(|_| ResolveError::UnregisteredTask(format!("{name}=={version}")))?;
 
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
@@ -2514,7 +2515,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .implicit()
                     .wait(&package_name)
                     .await
-                    .ok_or_else(|| ResolveError::UnregisteredTask(package_name.to_string()))?;
+                    .map_err(|_| ResolveError::UnregisteredTask(package_name.to_string()))?;
 
                 let version_map = match *versions_response {
                     VersionsResponse::Found(ref version_map) => version_map,

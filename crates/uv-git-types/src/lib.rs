@@ -4,6 +4,7 @@ pub use crate::reference::GitReference;
 use std::cmp::Ordering;
 use std::sync::LazyLock;
 
+use percent_encoding::percent_decode_str;
 use thiserror::Error;
 use uv_cache_key::RepositoryUrl;
 use uv_redacted::DisplaySafeUrl;
@@ -14,7 +15,7 @@ mod oid;
 mod reference;
 
 /// Initialize [`GitLfs`] mode from `UV_GIT_LFS` environment.
-pub static UV_GIT_LFS: LazyLock<GitLfs> = LazyLock::new(|| {
+static UV_GIT_LFS: LazyLock<GitLfs> = LazyLock::new(|| {
     // TODO(konsti): Parse this in `EnvironmentOptions`.
     if std::env::var_os(EnvVars::UV_GIT_LFS)
         .and_then(|v| v.to_str().map(str::to_lowercase))
@@ -79,6 +80,10 @@ pub enum GitUrlParseError {
         "Unsupported Git URL scheme `{0}:` in `{1}` (expected one of `https:`, `ssh:`, or `file:`)"
     )]
     UnsupportedGitScheme(String, DisplaySafeUrl),
+    #[error(
+        "Ambiguous Git URL `{0}`: the path contains multiple `@` characters. If the Git revision contains `@`, percent-encode it as `%40`"
+    )]
+    AmbiguousRevision(DisplaySafeUrl),
 }
 
 /// A URL reference to a Git repository.
@@ -99,7 +104,7 @@ pub struct GitUrl {
 
 impl GitUrl {
     /// Create a new [`GitUrl`] from a repository URL and a reference.
-    pub fn from_reference(
+    fn from_reference(
         url: DisplaySafeUrl,
         reference: GitReference,
         lfs: GitLfs,
@@ -234,6 +239,10 @@ impl TryFrom<DisplaySafeUrl> for GitUrl {
         url.set_fragment(None);
         url.set_query(None);
 
+        if url.path().matches('@').nth(1).is_some() {
+            return Err(GitUrlParseError::AmbiguousRevision(url));
+        }
+
         // If the URL ends with a reference, like `https://git.example.com/MyProject.git@v1.0`,
         // extract it.
         let mut reference = GitReference::DefaultBranch;
@@ -242,6 +251,7 @@ impl TryFrom<DisplaySafeUrl> for GitUrl {
             .rsplit_once('@')
             .map(|(prefix, suffix)| (prefix.to_string(), suffix.to_string()))
         {
+            let suffix = percent_decode_str(&suffix).decode_utf8_lossy().into_owned();
             reference = GitReference::from_rev(suffix);
             url.set_path(&prefix);
         }
@@ -267,6 +277,7 @@ impl From<GitUrl> for DisplaySafeUrl {
                 | GitReference::BranchOrTag(rev)
                 | GitReference::NamedRef(rev)
                 | GitReference::BranchOrTagOrCommit(rev) => {
+                    let rev = GitReference::encode_rev(&rev);
                     let path = format!("{}@{}", url.path(), rev);
                     url.set_path(&path);
                 }
@@ -281,5 +292,69 @@ impl From<GitUrl> for DisplaySafeUrl {
 impl std::fmt::Display for GitUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", &self.url)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_percent_encoded_reference() -> Result<(), Box<dyn std::error::Error>> {
+        let url = DisplaySafeUrl::parse("https://example.com/pkg.git@dev%401%232")?;
+        let git = GitUrl::try_from(url)?;
+
+        assert_eq!(git.url().as_str(), "https://example.com/pkg.git");
+        assert_eq!(git.reference().as_str(), Some("dev@1#2"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_ssh_url_with_username_and_percent_encoded_reference()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let url = DisplaySafeUrl::parse("ssh://git@github.com/example/example.git@abc%401.2.3")?;
+        let git = GitUrl::try_from(url)?;
+
+        assert_eq!(
+            git.url().as_str(),
+            "ssh://git@github.com/example/example.git"
+        );
+        assert_eq!(git.reference().as_str(), Some("abc@1.2.3"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn reject_ambiguous_reference() -> Result<(), Box<dyn std::error::Error>> {
+        let url = DisplaySafeUrl::parse("https://example.com/pkg.git@dev@1.2.3")?;
+        let err = GitUrl::try_from(url).unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "Ambiguous Git URL `https://example.com/pkg.git@dev@1.2.3`: the path contains multiple `@` characters. If the Git revision contains `@`, percent-encode it as `%40`"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn display_percent_encodes_reference() -> Result<(), Box<dyn std::error::Error>> {
+        let git = GitUrl::from_reference(
+            DisplaySafeUrl::parse("https://example.com/pkg.git")?,
+            GitReference::from_rev("refs/pull/493/head@1#2%".to_string()),
+            GitLfs::Disabled,
+        )?;
+        let url = DisplaySafeUrl::from(git);
+
+        assert_eq!(
+            url.as_str(),
+            "https://example.com/pkg.git@refs/pull/493/head%401%232%25"
+        );
+
+        let git = GitUrl::try_from(url)?;
+        assert_eq!(git.reference().as_str(), Some("refs/pull/493/head@1#2%"));
+
+        Ok(())
     }
 }

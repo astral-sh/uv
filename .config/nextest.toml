@@ -12,6 +12,9 @@ final-status-level = "slow"
 failure-output = "immediate-final"
 fail-fast = false
 
+[profile.ci.junit]
+path = "junit.xml"
+
 [profile.ci-linux]
 inherits = "ci"
 

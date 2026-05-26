@@ -45,7 +45,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.7"
+          version: "0.11.16"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -85,7 +85,7 @@ jobs:
           sudo chown "$(id -u):$(id -g)" /minix
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@85b24a67ef0c632dfefad70b9d5ce8fddb040754 # v2.75.10
+        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
         with:
           tool: cargo-nextest
 
@@ -118,11 +118,20 @@ jobs:
           include-hidden-files: true
           retention-days: 14
 
+      - name: "Upload JUnit results"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: junit-results-linux
+          path: target/nextest/ci*/junit.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
   cargo-test-macos:
     timeout-minutes: 20
     # Only run macOS tests on main without opt-in
     if: ${{ inputs.test-macos == 'true' }}
-    runs-on: depot-macos-14
+    runs-on: depot-macos-15
     name: "cargo test on macos"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -144,13 +153,13 @@ jobs:
 
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.7"
+          version: "0.11.16"
 
       - name: "Install required Python versions"
         run: uv python install
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@85b24a67ef0c632dfefad70b9d5ce8fddb040754 # v2.75.10
+        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
         with:
           tool: cargo-nextest
 
@@ -185,6 +194,15 @@ jobs:
           include-hidden-files: true
           retention-days: 14
 
+      - name: "Upload JUnit results"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: junit-results-macos
+          path: target/nextest/ci*/junit.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
   cargo-test-windows:
     timeout-minutes: 15
     runs-on: github-windows-2025-x86_64-16
@@ -208,7 +226,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.7"
+          version: "0.11.16"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -227,8 +245,13 @@ jobs:
       - name: "Create NTFS test directory (low hardlink limit)"
         run: New-Item -Path "C:\uv" -ItemType Directory -Force
 
+      - name: "Create SMB test share (alternative filesystem)"
+        run: |
+          New-Item -Path "C:\uv-smb" -ItemType Directory -Force
+          New-SmbShare -Name "uv-alt-fs" -Path "C:\uv-smb" -FullAccess "Everyone"
+
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@85b24a67ef0c632dfefad70b9d5ce8fddb040754 # v2.75.10
+        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
         with:
           tool: cargo-nextest
 
@@ -241,6 +264,8 @@ jobs:
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy
           RUST_BACKTRACE: 1
+          UV_INTERNAL__TEST_ALT_FS: "\\\\localhost\\uv-alt-fs"
+          UV_INTERNAL__TEST_SMB_FS: "\\\\localhost\\uv-alt-fs"
           UV_INTERNAL__TEST_LOWLINKS_FS: "C:\\uv"
           # Write pending snapshots to a separate directory for artifact upload
           INSTA_UPDATE: new
@@ -263,4 +288,13 @@ jobs:
           path: pending-snapshots/
           if-no-files-found: ignore
           include-hidden-files: true
+          retention-days: 14
+
+      - name: "Upload JUnit results"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: junit-results-windows-${{ matrix.partition }}
+          path: ${{ env.UV_WORKSPACE }}/target/nextest/ci*/junit.xml
+          if-no-files-found: ignore
           retention-days: 14

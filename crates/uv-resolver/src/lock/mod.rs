@@ -23,18 +23,21 @@ use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults,
     InstallTarget,
 };
-use uv_distribution::{DistributionDatabase, FlatRequiresDist};
+use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, FileLocation, GitSourceDist, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name,
-    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
-    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
+    Dist, FileLocation, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist, Identifier,
+    IndexLocations, IndexMetadata, IndexUrl, Name, PYPI_URL, PathBuiltDist, PathSourceDist,
+    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement,
+    RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata,
+    ToUrlError, UrlString,
 };
-use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
+use uv_fs::{
+    PortablePath, PortablePathBuf, Simplified, normalize_path, relative_to, try_relative_to_if,
+};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -47,7 +50,7 @@ use uv_platform_tags::{
 };
 use uv_pypi_types::{
     ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
-    ParsedGitUrl, PyProjectToml,
+    ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
@@ -57,7 +60,9 @@ use uv_workspace::{Editability, WorkspaceMember};
 use crate::fork_strategy::ForkStrategy;
 pub(crate) use crate::lock::export::PylockTomlPackage;
 pub use crate::lock::export::RequirementsTxtExport;
-pub use crate::lock::export::{Metadata, PylockToml, PylockTomlErrorKind, cyclonedx_json};
+pub use crate::lock::export::{
+    Metadata, PylockToml, PylockTomlError, PylockTomlErrorKind, cyclonedx_json,
+};
 pub use crate::lock::installable::Installable;
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::TreeDisplay;
@@ -68,7 +73,7 @@ use crate::{
     InMemoryIndex, MetadataResponse, PrereleaseMode, ResolutionMode, ResolverOutput,
 };
 
-mod export;
+pub(crate) mod export;
 mod installable;
 mod map;
 mod tree;
@@ -668,25 +673,6 @@ impl Lock {
         self
     }
 
-    /// Record the supported environments that were used to generate this lock.
-    #[must_use]
-    pub fn with_supported_environments(mut self, supported_environments: Vec<MarkerTree>) -> Self {
-        // We "complexify" the markers given, since the supported
-        // environments given might be coming directly from what's written in
-        // `pyproject.toml`, and those are assumed to be simplified (i.e.,
-        // they assume `requires-python` is true). But a `Lock` always uses
-        // non-simplified markers internally, so we need to re-complexify them
-        // here.
-        //
-        // The nice thing about complexifying is that it's a no-op if the
-        // markers given have already been complexified.
-        self.supported_environments = supported_environments
-            .into_iter()
-            .map(|marker| self.requires_python.complexify_markers(marker))
-            .collect();
-        self
-    }
-
     /// Record the required platforms that were used to generate this lock.
     #[must_use]
     pub fn with_required_environments(mut self, required_environments: Vec<MarkerTree>) -> Self {
@@ -704,7 +690,7 @@ impl Lock {
     }
 
     /// Returns `true` if this [`Lock`] includes entries for empty `dependency-group` metadata.
-    pub fn includes_empty_groups(&self) -> bool {
+    fn includes_empty_groups(&self) -> bool {
         // Empty dependency groups are included as of https://github.com/astral-sh/uv/pull/8598,
         // but Version 1 Revision 1 is the first revision published after that change.
         (self.version(), self.revision()) >= (1, 1)
@@ -803,17 +789,53 @@ impl Lock {
         )
     }
 
-    /// Returns the set of packages that should be audited, respecting the given
-    /// extras and dependency groups filters.
+    /// Return the set of packages that should be audited, respecting the
+    /// given extras and dependency group filters.
     ///
-    /// Workspace members and packages without version information are excluded
-    /// unconditionally, since neither can be meaningfully looked up in a
-    /// vulnerability database.
-    pub fn packages_for_audit<'lock>(
+    /// Workspace members and packages without version information are
+    /// excluded unconditionally, since neither can be meaningfully looked up
+    /// in an external audit source.
+    pub fn auditable<'lock>(
         &'lock self,
         extras: &'lock ExtrasSpecificationWithDefaults,
         groups: &'lock DependencyGroupsWithDefaults,
-    ) -> Vec<(&'lock PackageName, &'lock Version)> {
+        collect_filter: impl Fn(&Package) -> bool,
+    ) -> Auditable<'lock> {
+        // Dedupe and sort by `(name, version)` during the walk itself. Keep
+        // the first `Package` reference we see for each key so that
+        // downstream views (e.g. index lookup) have access to the lockfile
+        // package.
+        let mut by_name_version: BTreeMap<(&PackageName, &Version), &Package> = BTreeMap::default();
+        self.walk_auditable(extras, groups, collect_filter, |package, version| {
+            by_name_version
+                .entry((package.name(), version))
+                .or_insert(package);
+        });
+        let packages = by_name_version
+            .into_iter()
+            .map(|((_, version), package)| (package, version))
+            .collect();
+        Auditable { packages }
+    }
+
+    /// Walk the auditable dependency graph, invoking `visit` once per
+    /// non-workspace package with version information.
+    ///
+    /// The traversal is seeded from workspace members, lock-level requirements
+    /// (e.g. PEP 723 scripts), and lock-level dependency groups, then follows
+    /// each reachable dependency exactly once per `(package, extra)` pair,
+    /// respecting the provided extras and dependency-group filters. The same
+    /// package may be visited more than once if it is reached through multiple
+    /// extras — callers should deduplicate as appropriate.
+    fn walk_auditable<'lock, F>(
+        &'lock self,
+        extras: &'lock ExtrasSpecificationWithDefaults,
+        groups: &'lock DependencyGroupsWithDefaults,
+        collect_filter: impl Fn(&Package) -> bool,
+        mut visit: F,
+    ) where
+        F: FnMut(&'lock Package, &'lock Version),
+    {
         // Enqueue a dependency for auditability checks: base package (no extra) first, then each activated extra.
         fn enqueue_dep<'lock>(
             lock: &'lock Lock,
@@ -905,15 +927,14 @@ impl Lock {
             }
         }
 
-        let mut auditable: BTreeSet<(&PackageName, &Version)> = BTreeSet::default();
-
         while let Some((package, extra)) = queue.pop_front() {
             let is_member = workspace_member_ids.contains(&package.id);
 
-            // Collect non-workspace packages that have version information.
-            if !is_member {
+            // Collect non-workspace packages that have version information
+            // and pass the caller's filter.
+            if !is_member && collect_filter(package) {
                 if let Some(version) = package.version() {
-                    auditable.insert((package.name(), version));
+                    visit(package, version);
                 } else {
                     trace!(
                         "Skipping audit for `{}` because it has no version information",
@@ -950,8 +971,6 @@ impl Lock {
                 enqueue_dep(self, &mut seen, &mut queue, dep);
             }
         }
-
-        auditable.into_iter().collect()
     }
 
     /// Return the workspace root used to generate this lock.
@@ -1597,6 +1616,7 @@ impl Lock {
         indexes: Option<&IndexLocations>,
         tags: &Tags,
         markers: &MarkerEnvironment,
+        build_options: &BuildOptions,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
@@ -1956,84 +1976,135 @@ impl Lock {
             }
 
             if let Some(version) = package.id.version.as_ref() {
-                // For a non-dynamic package, fetch the metadata from the distribution database.
-                let HashedDist { dist, .. } = package.to_dist(
-                    root,
-                    TagPolicy::Preferred(tags),
-                    &BuildOptions::default(),
-                    markers,
-                )?;
-
-                let metadata = {
-                    let id = dist.distribution_id();
-                    if let Some(archive) =
-                        index
-                            .distributions()
-                            .get(&id)
-                            .as_deref()
-                            .and_then(|response| {
-                                if let MetadataResponse::Found(archive, ..) = response {
-                                    Some(archive)
-                                } else {
-                                    None
-                                }
-                            })
-                    {
-                        // If the metadata is already in the index, return it.
-                        archive.metadata.clone()
-                    } else {
-                        // Run the PEP 517 build process to extract metadata from the source distribution.
-                        let archive = database
-                            .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
-                            .await
-                            .map_err(|err| LockErrorKind::Resolution {
-                                id: package.id.clone(),
-                                err,
-                            })?;
-
-                        let metadata = archive.metadata.clone();
-
-                        // Insert the metadata into the index.
-                        index
-                            .distributions()
-                            .done(id, Arc::new(MetadataResponse::Found(archive)));
-
-                        metadata
-                    }
-                };
-
-                // If this is a local package, validate that it hasn't become dynamic (in which
-                // case, we'd expect the version to be omitted).
-                if package.id.source.is_source_tree() {
+                // If the distribution is a source tree, attempt to validate it from statically
+                // available `pyproject.toml` metadata before converting it to an installable
+                // distribution. This avoids requiring build permission for static local packages.
+                let statically_satisfied = if let Some(source_tree) =
+                    package.id.source.as_source_tree()
+                    && let Some(SourceTreeRequiresDist {
+                        version: static_version,
+                        metadata,
+                    }) = Self::source_tree_requires_dist(source_tree, root, package, database)
+                        .await?
+                {
+                    // If this local package has become dynamic, the locked package should
+                    // no longer contain a version.
                     if metadata.dynamic {
                         return Ok(SatisfiesResult::MismatchedDynamic(&package.id.name, false));
                     }
-                }
 
-                // Validate the `version` metadata.
-                if metadata.version != *version {
-                    return Ok(SatisfiesResult::MismatchedVersion(
-                        &package.id.name,
-                        version.clone(),
-                        Some(metadata.version.clone()),
-                    ));
-                }
+                    if let Some(static_version) = static_version {
+                        // Validate the static `version` metadata.
+                        if static_version != *version {
+                            return Ok(SatisfiesResult::MismatchedVersion(
+                                &package.id.name,
+                                version.clone(),
+                                Some(static_version),
+                            ));
+                        }
 
-                // Validate the `provides-extras` metadata.
-                match self.satisfies_provides_extra(metadata.provides_extra, package) {
-                    SatisfiesResult::Satisfied => {}
-                    result => return Ok(result),
-                }
+                        // Validate the static `provides-extras` metadata.
+                        match self.satisfies_provides_extra(metadata.provides_extra, package) {
+                            SatisfiesResult::Satisfied => {}
+                            result => return Ok(result),
+                        }
 
-                // Validate that the requirements are unchanged.
-                match self.satisfies_requires_dist(
-                    metadata.requires_dist,
-                    metadata.dependency_groups,
-                    package,
-                    root,
-                )? {
-                    SatisfiesResult::Satisfied => {}
-                    result => return Ok(result),
+                        // Validate that the static requirements are unchanged.
+                        match self.satisfies_requires_dist(
+                            metadata.requires_dist,
+                            metadata.dependency_groups,
+                            package,
+                            root,
+                        )? {
+                            SatisfiesResult::Satisfied => true,
+                            result => return Ok(result),
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+
+                if !statically_satisfied {
+                    // For a non-dynamic package without usable static metadata, fetch the metadata
+                    // from the distribution database.
+                    let HashedDist { dist, .. } = package.to_dist(
+                        root,
+                        TagPolicy::Preferred(tags),
+                        build_options,
+                        markers,
+                    )?;
+
+                    let metadata = {
+                        let id = dist.distribution_id();
+                        if let Some(archive) =
+                            index
+                                .distributions()
+                                .get(&id)
+                                .as_deref()
+                                .and_then(|response| {
+                                    if let MetadataResponse::Found(archive, ..) = response {
+                                        Some(archive)
+                                    } else {
+                                        None
+                                    }
+                                })
+                        {
+                            // If the metadata is already in the index, return it.
+                            archive.metadata.clone()
+                        } else {
+                            // Run the PEP 517 build process to extract metadata from the source distribution.
+                            let archive = database
+                                .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+                                .await
+                                .map_err(|err| LockErrorKind::Resolution {
+                                    id: package.id.clone(),
+                                    err,
+                                })?;
+
+                            let metadata = archive.metadata.clone();
+
+                            // Insert the metadata into the index.
+                            index
+                                .distributions()
+                                .done(id, Arc::new(MetadataResponse::Found(archive)));
+
+                            metadata
+                        }
+                    };
+
+                    // If this is a local package, validate that it hasn't become dynamic (in which
+                    // case, we'd expect the version to be omitted).
+                    if package.id.source.is_source_tree() && metadata.dynamic {
+                        return Ok(SatisfiesResult::MismatchedDynamic(&package.id.name, false));
+                    }
+
+                    // Validate the `version` metadata.
+                    if metadata.version != *version {
+                        return Ok(SatisfiesResult::MismatchedVersion(
+                            &package.id.name,
+                            version.clone(),
+                            Some(metadata.version.clone()),
+                        ));
+                    }
+
+                    // Validate the `provides-extras` metadata.
+                    match self.satisfies_provides_extra(metadata.provides_extra, package) {
+                        SatisfiesResult::Satisfied => {}
+                        result => return Ok(result),
+                    }
+
+                    // Validate that the requirements are unchanged.
+                    match self.satisfies_requires_dist(
+                        metadata.requires_dist,
+                        metadata.dependency_groups,
+                        package,
+                        root,
+                    )? {
+                        SatisfiesResult::Satisfied => {}
+                        result => return Ok(result),
+                    }
                 }
             } else if let Some(source_tree) = package.id.source.as_source_tree() {
                 // For dynamic packages, we don't need the version. We only need to know that the
@@ -2045,30 +2116,10 @@ impl Lock {
                 // even if the version is dynamic, we can still extract the requirements without
                 // performing a build, unlike in the database where we typically construct a "complete"
                 // metadata object.
-                let parent = root.join(source_tree);
-                let path = parent.join("pyproject.toml");
-                let metadata = match fs_err::tokio::read_to_string(&path).await {
-                    Ok(contents) => {
-                        let pyproject_toml =
-                            PyProjectToml::from_toml(&contents, path.user_display()).map_err(
-                                |err| LockErrorKind::InvalidPyprojectToml {
-                                    path: path.clone(),
-                                    err,
-                                },
-                            )?;
-                        database
-                            .requires_dist(&parent, &pyproject_toml)
-                            .await
-                            .map_err(|err| LockErrorKind::Resolution {
-                                id: package.id.clone(),
-                                err,
-                            })?
-                    }
-                    Err(err) if err.kind() == io::ErrorKind::NotFound => None,
-                    Err(err) => {
-                        return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
-                    }
-                };
+                let metadata =
+                    Self::source_tree_requires_dist(source_tree, root, package, database)
+                        .await?
+                        .map(|metadata| metadata.metadata);
 
                 let satisfied = metadata.is_some_and(|metadata| {
                     // Validate that the package is still dynamic.
@@ -2112,7 +2163,7 @@ impl Lock {
                     let HashedDist { dist, .. } = package.to_dist(
                         root,
                         TagPolicy::Preferred(tags),
-                        &BuildOptions::default(),
+                        build_options,
                         markers,
                     )?;
 
@@ -2243,6 +2294,92 @@ impl Lock {
         }
 
         Ok(SatisfiesResult::Satisfied)
+    }
+
+    async fn source_tree_requires_dist<Context: BuildContext>(
+        source_tree: &Path,
+        root: &Path,
+        package: &Package,
+        database: &DistributionDatabase<'_, Context>,
+    ) -> Result<Option<SourceTreeRequiresDist>, LockError> {
+        let parent = root.join(source_tree);
+        let path = parent.join("pyproject.toml");
+        match fs_err::tokio::read_to_string(&path).await {
+            Ok(contents) => {
+                let pyproject_toml = PyProjectToml::from_toml(&contents, path.user_display())
+                    .map_err(|err| LockErrorKind::InvalidPyprojectToml {
+                        path: path.clone(),
+                        err,
+                    })?;
+                let version = pyproject_toml
+                    .project
+                    .as_ref()
+                    .and_then(|project| project.version.clone());
+                let metadata = database
+                    .requires_dist(&parent, &pyproject_toml)
+                    .await
+                    .map_err(|err| LockErrorKind::Resolution {
+                        id: package.id.clone(),
+                        err,
+                    })?;
+                Ok(metadata.map(|metadata| SourceTreeRequiresDist { version, metadata }))
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into()),
+        }
+    }
+}
+
+/// The set of lockfile packages that should be audited, materialized from a
+/// single traversal of the dependency graph.
+///
+/// Created via [`Lock::auditable`]. Exposes multiple views so that different
+/// audit sources (e.g. per-version vulnerability databases and per-project
+/// status markers) can share one walk rather than each re-traversing the
+/// lockfile.
+#[derive(Debug)]
+pub struct Auditable<'lock> {
+    /// Packages deduplicated by `(name, version)` and sorted by the same key.
+    packages: Vec<(&'lock Package, &'lock Version)>,
+}
+
+struct SourceTreeRequiresDist {
+    version: Option<Version>,
+    metadata: RequiresDist,
+}
+
+impl<'lock> Auditable<'lock> {
+    /// Return the number of distinct `(name, version)` pairs to audit.
+    pub fn len(&self) -> usize {
+        self.packages.len()
+    }
+
+    /// Return `true` if there are no packages to audit.
+    pub fn is_empty(&self) -> bool {
+        self.packages.is_empty()
+    }
+
+    /// Iterate over the distinct `(name, version)` pairs to audit, sorted by that key.
+    pub fn packages(&self) -> impl Iterator<Item = (&'lock PackageName, &'lock Version)> + '_ {
+        self.packages
+            .iter()
+            .map(|(package, version)| (package.name(), *version))
+    }
+
+    /// Return the distinct registry-hosted projects among the auditable
+    /// packages, deduplicated by `(name, index URL)`. Non-registry sources
+    /// (Git, direct URL, path, editable) are excluded.
+    pub fn projects(&self, root: &Path) -> Result<Vec<(&'lock PackageName, IndexUrl)>, LockError> {
+        let mut seen: FxHashSet<(&PackageName, String)> = FxHashSet::default();
+        let mut projects: Vec<(&PackageName, IndexUrl)> = Vec::with_capacity(self.packages.len());
+        for (package, _version) in &self.packages {
+            if let Some(index) = package.index(root)?
+                && seen.insert((package.name(), index.url().to_string()))
+            {
+                projects.push((package.name(), index));
+            }
+        }
+        Ok(projects)
     }
 }
 
@@ -2622,6 +2759,10 @@ pub struct Package {
 }
 
 impl Package {
+    pub fn is_from_pypi_registry(&self) -> bool {
+        self.id.source.is_pypi_registry()
+    }
+
     fn from_annotated_dist(
         annotated_dist: &AnnotatedDist,
         fork_markers: Vec<UniversalMarker>,
@@ -2854,12 +2995,47 @@ impl Package {
                         let built_dist = BuiltDist::DirectUrl(direct_dist);
                         Dist::Built(built_dist)
                     }
-                    Source::Git(_, _) => {
-                        return Err(LockErrorKind::InvalidWheelSource {
-                            id: self.id.clone(),
-                            source_type: "Git",
-                        }
-                        .into());
+                    Source::Git(url, git) => {
+                        let Some(install_path) = git.path.as_ref() else {
+                            return Err(LockErrorKind::InvalidWheelSource {
+                                id: self.id.clone(),
+                                source_type: "Git",
+                            }
+                            .into());
+                        };
+
+                        // Remove the fragment and query from the URL; they're already present in the
+                        // `GitSource`.
+                        let mut url = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
+                        url.set_fragment(None);
+                        url.set_query(None);
+
+                        // Reconstruct the `GitUrl` from the `GitSource`.
+                        let git_url = GitUrl::from_commit(
+                            url,
+                            GitReference::from(git.kind.clone()),
+                            git.precise,
+                            git.lfs,
+                        )?;
+
+                        // Reconstruct the PEP 508-compatible URL from the `GitSource`.
+                        let url = DisplaySafeUrl::from(ParsedGitPathUrl {
+                            url: git_url.clone(),
+                            install_path: install_path.clone(),
+                            ext: DistExtension::Wheel,
+                        });
+
+                        let filename: WheelFilename =
+                            self.wheels[best_wheel_index].filename.clone();
+
+                        let git_dist = GitPathBuiltDist {
+                            filename,
+                            git: Box::new(git_url),
+                            install_path: install_path.clone(),
+                            url: VerbatimUrl::from_url(url),
+                        };
+                        let built_dist = BuiltDist::GitPath(git_dist);
+                        Dist::Built(built_dist)
                     }
                     Source::Directory(_) => {
                         return Err(LockErrorKind::InvalidWheelSource {
@@ -3032,7 +3208,6 @@ impl Package {
                 url.set_fragment(None);
                 url.set_query(None);
 
-                // Reconstruct the `GitUrl` from the `GitSource`.
                 let git_url = GitUrl::from_commit(
                     url,
                     GitReference::from(git.kind.clone()),
@@ -3040,19 +3215,47 @@ impl Package {
                     git.lfs,
                 )?;
 
-                // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-                let url = DisplaySafeUrl::from(ParsedGitUrl {
-                    url: git_url.clone(),
-                    subdirectory: git.subdirectory.clone(),
-                });
+                if let Some(install_path) = git.path.as_ref() {
+                    // A direct path source can also be a wheel, so validate the extension.
+                    let DistExtension::Source(ext) = DistExtension::from_path(install_path)
+                        .map_err(|err| LockErrorKind::MissingExtension {
+                            id: self.id.clone(),
+                            err,
+                        })?
+                    else {
+                        return Ok(None);
+                    };
 
-                let git_dist = GitSourceDist {
-                    name: self.id.name.clone(),
-                    url: VerbatimUrl::from_url(url),
-                    git: Box::new(git_url),
-                    subdirectory: git.subdirectory.clone(),
-                };
-                uv_distribution_types::SourceDist::Git(git_dist)
+                    // Reconstruct the PEP 508-compatible URL from the `GitSource`.
+                    let url = DisplaySafeUrl::from(ParsedGitPathUrl {
+                        url: git_url.clone(),
+                        install_path: install_path.clone(),
+                        ext: DistExtension::Source(ext),
+                    });
+
+                    let git_dist = GitPathSourceDist {
+                        name: self.id.name.clone(),
+                        url: VerbatimUrl::from_url(url),
+                        git: Box::new(git_url),
+                        install_path: install_path.clone(),
+                        ext,
+                    };
+                    uv_distribution_types::SourceDist::GitPath(git_dist)
+                } else {
+                    // Reconstruct the PEP 508-compatible URL from the `GitSource`.
+                    let url = DisplaySafeUrl::from(ParsedGitDirectoryUrl {
+                        url: git_url.clone(),
+                        subdirectory: git.subdirectory.clone(),
+                    });
+
+                    let git_dist = GitDirectorySourceDist {
+                        name: self.id.name.clone(),
+                        url: VerbatimUrl::from_url(url),
+                        git: Box::new(git_url),
+                        subdirectory: git.subdirectory.clone(),
+                    };
+                    uv_distribution_types::SourceDist::GitDirectory(git_dist)
+                }
             }
             Source::Direct(url, direct) => {
                 // A direct URL source can also be a wheel, so validate the extension.
@@ -3503,7 +3706,7 @@ impl Package {
     }
 
     /// Returns an [`InstallTarget`] view for filtering decisions.
-    pub fn as_install_target(&self) -> InstallTarget<'_> {
+    pub(crate) fn as_install_target(&self) -> InstallTarget<'_> {
         InstallTarget {
             name: self.name(),
             is_local: self.id.source.is_local(),
@@ -3784,6 +3987,7 @@ impl Source {
             BuiltDist::Registry(ref reg_dist) => Self::from_registry_built_dist(reg_dist, root),
             BuiltDist::DirectUrl(ref direct_dist) => Ok(Self::from_direct_built_dist(direct_dist)),
             BuiltDist::Path(ref path_dist) => Self::from_path_built_dist(path_dist, root),
+            BuiltDist::GitPath(ref git_dist) => Self::from_git_path_built_dist(git_dist, root),
         }
     }
 
@@ -3798,8 +4002,11 @@ impl Source {
             uv_distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
                 Ok(Self::from_direct_source_dist(direct_dist))
             }
-            uv_distribution_types::SourceDist::Git(ref git_dist) => {
-                Ok(Self::from_git_dist(git_dist))
+            uv_distribution_types::SourceDist::GitDirectory(ref git_dist) => {
+                Ok(Self::from_git_directory_source_dist(git_dist))
+            }
+            uv_distribution_types::SourceDist::GitPath(ref git_dist) => {
+                Self::from_git_path_source_dist(git_dist, root)
             }
             uv_distribution_types::SourceDist::Path(ref path_dist) => {
                 Self::from_path_source_dist(path_dist, root)
@@ -3899,17 +4106,80 @@ impl Source {
         }
     }
 
-    fn from_git_dist(git_dist: &GitSourceDist) -> Self {
+    fn from_git_path_built_dist(
+        git_dist: &GitPathBuiltDist,
+        root: &Path,
+    ) -> Result<Self, LockError> {
+        let path = relative_to(&git_dist.install_path, root)
+            .or_else(|_| std::path::absolute(&git_dist.install_path))
+            .map_err(LockErrorKind::DistributionRelativePath)?;
+        Ok(Self::Git(
+            UrlString::from(locked_git_url(
+                &git_dist.git,
+                None,
+                Some(git_dist.install_path.as_path()),
+            )),
+            GitSource {
+                kind: GitSourceKind::from(git_dist.git.reference().clone()),
+                precise: git_dist.git.precise().unwrap_or_else(|| {
+                    panic!("Git distribution is missing a precise hash: {git_dist}")
+                }),
+                subdirectory: None,
+                path: Some(path),
+                lfs: git_dist.git.lfs(),
+            },
+        ))
+    }
+
+    fn from_git_path_source_dist(
+        git_dist: &GitPathSourceDist,
+        root: &Path,
+    ) -> Result<Self, LockError> {
+        let path = relative_to(&git_dist.install_path, root)
+            .or_else(|_| std::path::absolute(&git_dist.install_path))
+            .map_err(LockErrorKind::DistributionRelativePath)?;
+        Ok(Self::Git(
+            UrlString::from(locked_git_url(
+                &git_dist.git,
+                None,
+                Some(git_dist.install_path.as_path()),
+            )),
+            GitSource {
+                kind: GitSourceKind::from(git_dist.git.reference().clone()),
+                precise: git_dist.git.precise().unwrap_or_else(|| {
+                    panic!("Git distribution is missing a precise hash: {git_dist}")
+                }),
+                subdirectory: None,
+                path: Some(path),
+                lfs: git_dist.git.lfs(),
+            },
+        ))
+    }
+
+    fn from_git_directory_source_dist(git_dist: &GitDirectorySourceDist) -> Self {
         Self::Git(
-            UrlString::from(locked_git_url(git_dist)),
+            UrlString::from(locked_git_url(
+                &git_dist.git,
+                git_dist.subdirectory.as_deref(),
+                None,
+            )),
             GitSource {
                 kind: GitSourceKind::from(git_dist.git.reference().clone()),
                 precise: git_dist.git.precise().unwrap_or_else(|| {
                     panic!("Git distribution is missing a precise hash: {git_dist}")
                 }),
                 subdirectory: git_dist.subdirectory.clone(),
+                path: None,
                 lfs: git_dist.git.lfs(),
             },
+        )
+    }
+
+    /// Returns `true` if the source is a registry entry pointing at PyPI (`https://pypi.org/simple`).
+    fn is_pypi_registry(&self) -> bool {
+        matches!(
+            self,
+            Self::Registry(RegistrySource::Url(url)) if url.as_ref() == PYPI_URL.as_str()
         )
     }
 
@@ -4060,9 +4330,8 @@ impl Source {
         match self {
             Self::Registry(..) => None,
             Self::Direct(..) | Self::Path(..) => Some(true),
-            Self::Git(..) | Self::Directory(..) | Self::Editable(..) | Self::Virtual(..) => {
-                Some(false)
-            }
+            Self::Git(.., GitSource { path, .. }) => Some(path.is_some()),
+            Self::Directory(..) | Self::Editable(..) | Self::Virtual(..) => Some(false),
         }
     }
 }
@@ -4222,6 +4491,7 @@ struct DirectSource {
 struct GitSource {
     precise: GitOid,
     subdirectory: Option<Box<Path>>,
+    path: Option<PathBuf>,
     kind: GitSourceKind,
     lfs: GitLfs,
 }
@@ -4240,6 +4510,7 @@ impl GitSource {
         let mut kind = GitSourceKind::DefaultBranch;
         let mut subdirectory = None;
         let mut lfs = GitLfs::Disabled;
+        let mut path = None;
         for (key, val) in url.query_pairs() {
             match &*key {
                 "tag" => kind = GitSourceKind::Tag(val.into_owned()),
@@ -4247,6 +4518,11 @@ impl GitSource {
                 "rev" => kind = GitSourceKind::Rev(val.into_owned()),
                 "subdirectory" => subdirectory = Some(PortablePathBuf::from(val.as_ref()).into()),
                 "lfs" => lfs = GitLfs::from(val.eq_ignore_ascii_case("true")),
+                "path" => {
+                    path = Some(PathBuf::from(Box::<Path>::from(PortablePathBuf::from(
+                        val.as_ref(),
+                    ))));
+                }
                 _ => {}
             }
         }
@@ -4257,6 +4533,7 @@ impl GitSource {
         Ok(Self {
             precise,
             subdirectory,
+            path,
             kind,
             lfs,
         })
@@ -4403,10 +4680,10 @@ impl SourceDist {
             uv_distribution_types::SourceDist::Path(_) => {
                 Self::from_path_dist(id, hashes).map(Some)
             }
-            // An actual sdist entry in the lockfile is only required when
-            // it's from a registry or a direct URL. Otherwise, it's strictly
-            // redundant with the information in all other kinds of `source`.
-            uv_distribution_types::SourceDist::Git(_)
+            uv_distribution_types::SourceDist::GitPath(_) => {
+                Self::from_git_path_dist(id, hashes).map(Some)
+            }
+            uv_distribution_types::SourceDist::GitDirectory(_)
             | uv_distribution_types::SourceDist::Directory(_) => Ok(None),
         }
     }
@@ -4537,6 +4814,24 @@ impl SourceDist {
             },
         })
     }
+
+    fn from_git_path_dist(id: &PackageId, hashes: &[HashDigest]) -> Result<Self, LockError> {
+        let Some(hash) = hashes.iter().max().cloned().map(Hash::from) else {
+            let kind = LockErrorKind::Hash {
+                id: id.clone(),
+                artifact_type: "Git archive source distribution",
+                expected: true,
+            };
+            return Err(kind.into());
+        };
+        Ok(Self::Metadata {
+            metadata: SourceDistMetadata {
+                hash: Some(hash),
+                size: None,
+                upload_time: None,
+            },
+        })
+    }
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -4624,9 +4919,13 @@ impl From<GitSourceKind> for GitReference {
     }
 }
 
-/// Construct the lockfile-compatible [`DisplaySafeUrl`] for a [`GitSourceDist`].
-fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
-    let mut url = git_dist.git.url().clone();
+/// Construct the lockfile-compatible [`DisplaySafeUrl`] for a [`GitUrl`].
+fn locked_git_url(
+    git: &GitUrl,
+    subdirectory: Option<&Path>,
+    path: Option<&Path>,
+) -> DisplaySafeUrl {
+    let mut url = git.url().clone();
 
     // Remove the credentials.
     url.remove_credentials();
@@ -4636,9 +4935,7 @@ fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
     url.set_query(None);
 
     // Put the subdirectory in the query.
-    if let Some(subdirectory) = git_dist
-        .subdirectory
-        .as_deref()
+    if let Some(subdirectory) = subdirectory
         .map(PortablePath::from)
         .as_ref()
         .map(PortablePath::to_string)
@@ -4647,13 +4944,22 @@ fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
             .append_pair("subdirectory", &subdirectory);
     }
 
+    // Put the path in the query.
+    if let Some(path) = path
+        .map(PortablePath::from)
+        .as_ref()
+        .map(PortablePath::to_string)
+    {
+        url.query_pairs_mut().append_pair("path", &path);
+    }
+
     // Put lfs=true in the package source git url only when explicitly enabled.
-    if git_dist.git.lfs().enabled() {
+    if git.lfs().enabled() {
         url.query_pairs_mut().append_pair("lfs", "true");
     }
 
     // Put the requested reference in the query.
-    match git_dist.git.reference() {
+    match git.reference() {
         GitReference::Branch(branch) => {
             url.query_pairs_mut().append_pair("branch", branch.as_str());
         }
@@ -4669,14 +4975,7 @@ fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
     }
 
     // Put the precise commit in the fragment.
-    url.set_fragment(
-        git_dist
-            .git
-            .precise()
-            .as_ref()
-            .map(GitOid::to_string)
-            .as_deref(),
-    );
+    url.set_fragment(git.precise().as_ref().map(GitOid::to_string).as_deref());
 
     url
 }
@@ -4768,6 +5067,9 @@ impl Wheel {
                 Ok(vec![Self::from_direct_dist(direct_dist, hashes)])
             }
             BuiltDist::Path(ref path_dist) => Ok(vec![Self::from_path_dist(path_dist, hashes)]),
+            BuiltDist::GitPath(ref git_dist) => {
+                Ok(vec![Self::from_git_path_dist(git_dist, hashes)])
+            }
         }
     }
 
@@ -4855,6 +5157,19 @@ impl Wheel {
     }
 
     fn from_path_dist(path_dist: &PathBuiltDist, hashes: &[HashDigest]) -> Self {
+        Self {
+            url: WheelWireSource::Filename {
+                filename: path_dist.filename.clone(),
+            },
+            hash: hashes.iter().max().cloned().map(Hash::from),
+            size: None,
+            upload_time: None,
+            filename: path_dist.filename.clone(),
+            zstd: None,
+        }
+    }
+
+    fn from_git_path_dist(path_dist: &GitPathBuiltDist, hashes: &[HashDigest]) -> Self {
         Self {
             url: WheelWireSource::Filename {
                 filename: path_dist.filename.clone(),
@@ -5386,7 +5701,7 @@ fn normalize_requirement(
 
     // Normalize the requirement source.
     match requirement.source {
-        RequirementSource::Git {
+        RequirementSource::GitDirectory {
             git,
             subdirectory,
             url: _,
@@ -5411,7 +5726,7 @@ fn normalize_requirement(
             };
 
             // Reconstruct the PEP 508 URL from the underlying data.
-            let url = DisplaySafeUrl::from(ParsedGitUrl {
+            let url = DisplaySafeUrl::from(ParsedGitDirectoryUrl {
                 url: git.clone(),
                 subdirectory: subdirectory.clone(),
             });
@@ -5421,9 +5736,55 @@ fn normalize_requirement(
                 extras: requirement.extras,
                 groups: requirement.groups,
                 marker: requires_python.simplify_markers(requirement.marker),
-                source: RequirementSource::Git {
+                source: RequirementSource::GitDirectory {
                     git,
                     subdirectory,
+                    url: VerbatimUrl::from_url(url),
+                },
+                origin: None,
+            })
+        }
+        RequirementSource::GitPath {
+            git,
+            install_path,
+            ext,
+            url: _,
+        } => {
+            // Reconstruct the Git URL.
+            let git = {
+                let mut repository = git.url().clone();
+
+                // Remove the credentials.
+                repository.remove_credentials();
+
+                // Remove the fragment and query from the URL; they're already present in the source.
+                repository.set_fragment(None);
+                repository.set_query(None);
+
+                GitUrl::from_fields(
+                    repository,
+                    git.reference().clone(),
+                    git.precise(),
+                    git.lfs(),
+                )?
+            };
+
+            // Reconstruct the PEP 508 URL from the underlying data.
+            let url = DisplaySafeUrl::from(ParsedGitPathUrl {
+                url: git.clone(),
+                install_path: install_path.clone(),
+                ext,
+            });
+
+            Ok(Requirement {
+                name: requirement.name,
+                extras: requirement.extras,
+                groups: requirement.groups,
+                marker: requires_python.simplify_markers(requirement.marker),
+                source: RequirementSource::GitPath {
+                    git,
+                    install_path,
+                    ext,
                     url: VerbatimUrl::from_url(url),
                 },
                 origin: None,
@@ -5551,13 +5912,19 @@ impl std::error::Error for LockError {
     }
 }
 
+impl uv_errors::Hint for LockError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        if let Some(hint) = &self.hint {
+            uv_errors::Hints::from(hint.to_string())
+        } else {
+            uv_errors::Hints::none()
+        }
+    }
+}
+
 impl std::fmt::Display for LockError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.kind)?;
-        if let Some(hint) = &self.hint {
-            write!(f, "\n\n{hint}")?;
-        }
-        Ok(())
+        write!(f, "{}", self.kind)
     }
 }
 
@@ -5565,6 +5932,14 @@ impl LockError {
     /// Returns true if the [`LockError`] is a resolver error.
     pub fn is_resolution(&self) -> bool {
         matches!(&*self.kind, LockErrorKind::Resolution { .. })
+    }
+
+    /// Returns true if the [`LockError`] is caused by disabled builds.
+    pub fn is_no_build(&self) -> bool {
+        matches!(
+            &*self.kind,
+            LockErrorKind::NoBuild { .. } | LockErrorKind::NoBinaryNoBuild { .. }
+        )
     }
 }
 
@@ -5755,9 +6130,7 @@ impl std::fmt::Display for WheelTagHint {
                     if let Some(version) = version {
                         write!(
                             f,
-                            "{}{} You're using {}, but `{}` ({}) only has wheels with the following Python implementation tag{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "You're using {}, but `{}` ({}) only has wheels with the following Python implementation tag{s}: {}",
                             best,
                             package.cyan(),
                             format!("v{version}").cyan(),
@@ -5768,9 +6141,7 @@ impl std::fmt::Display for WheelTagHint {
                     } else {
                         write!(
                             f,
-                            "{}{} You're using {}, but `{}` only has wheels with the following Python implementation tag{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "You're using {}, but `{}` only has wheels with the following Python implementation tag{s}: {}",
                             best,
                             package.cyan(),
                             tags.iter()
@@ -5783,9 +6154,7 @@ impl std::fmt::Display for WheelTagHint {
                     if let Some(version) = version {
                         write!(
                             f,
-                            "{}{} Wheels are available for `{}` ({}) with the following Python implementation tag{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "Wheels are available for `{}` ({}) with the following Python implementation tag{s}: {}",
                             package.cyan(),
                             format!("v{version}").cyan(),
                             tags.iter()
@@ -5795,9 +6164,7 @@ impl std::fmt::Display for WheelTagHint {
                     } else {
                         write!(
                             f,
-                            "{}{} Wheels are available for `{}` with the following Python implementation tag{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "Wheels are available for `{}` with the following Python implementation tag{s}: {}",
                             package.cyan(),
                             tags.iter()
                                 .map(|tag| format!("`{}`", tag.cyan()))
@@ -5822,9 +6189,7 @@ impl std::fmt::Display for WheelTagHint {
                     if let Some(version) = version {
                         write!(
                             f,
-                            "{}{} You're using {}, but `{}` ({}) only has wheels with the following Python ABI tag{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "You're using {}, but `{}` ({}) only has wheels with the following Python ABI tag{s}: {}",
                             best,
                             package.cyan(),
                             format!("v{version}").cyan(),
@@ -5835,9 +6200,7 @@ impl std::fmt::Display for WheelTagHint {
                     } else {
                         write!(
                             f,
-                            "{}{} You're using {}, but `{}` only has wheels with the following Python ABI tag{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "You're using {}, but `{}` only has wheels with the following Python ABI tag{s}: {}",
                             best,
                             package.cyan(),
                             tags.iter()
@@ -5850,9 +6213,7 @@ impl std::fmt::Display for WheelTagHint {
                     if let Some(version) = version {
                         write!(
                             f,
-                            "{}{} Wheels are available for `{}` ({}) with the following Python ABI tag{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "Wheels are available for `{}` ({}) with the following Python ABI tag{s}: {}",
                             package.cyan(),
                             format!("v{version}").cyan(),
                             tags.iter()
@@ -5862,9 +6223,7 @@ impl std::fmt::Display for WheelTagHint {
                     } else {
                         write!(
                             f,
-                            "{}{} Wheels are available for `{}` with the following Python ABI tag{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "Wheels are available for `{}` with the following Python ABI tag{s}: {}",
                             package.cyan(),
                             tags.iter()
                                 .map(|tag| format!("`{}`", tag.cyan()))
@@ -5895,9 +6254,7 @@ impl std::fmt::Display for WheelTagHint {
                     };
                     write!(
                         f,
-                        "{}{} You're on {}, but {} only has wheels for the following platform{s}: {}; consider adding {} to `{}` to ensure uv resolves to a version with compatible wheels",
-                        "hint".bold().cyan(),
-                        ":".bold(),
+                        "You're on {}, but {} only has wheels for the following platform{s}: {}; consider adding {} to `{}` to ensure uv resolves to a version with compatible wheels",
                         best,
                         package_ref,
                         tags.iter()
@@ -5910,9 +6267,7 @@ impl std::fmt::Display for WheelTagHint {
                     if let Some(version) = version {
                         write!(
                             f,
-                            "{}{} Wheels are available for `{}` ({}) on the following platform{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "Wheels are available for `{}` ({}) on the following platform{s}: {}",
                             package.cyan(),
                             format!("v{version}").cyan(),
                             tags.iter()
@@ -5922,9 +6277,7 @@ impl std::fmt::Display for WheelTagHint {
                     } else {
                         write!(
                             f,
-                            "{}{} Wheels are available for `{}` on the following platform{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "Wheels are available for `{}` on the following platform{s}: {}",
                             package.cyan(),
                             tags.iter()
                                 .map(|tag| format!("`{}`", tag.cyan()))
@@ -6041,7 +6394,7 @@ enum LockErrorKind {
         /// The specific type of artifact, e.g., "source package"
         /// or "wheel".
         artifact_type: &'static str,
-        /// When true, a hash is expected to be present.
+        /// Whether a hash was expected.
         expected: bool,
     },
     /// An error that occurs when a package is included with an extra name,

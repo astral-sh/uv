@@ -28,6 +28,7 @@ fn clean_all() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
     Removed [N] files ([SIZE])
@@ -60,6 +61,7 @@ fn clear_all_alias() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
     Removed [N] files ([SIZE])
@@ -89,6 +91,7 @@ async fn clean_force() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
     Removed [N] files ([SIZE])
@@ -111,6 +114,7 @@ async fn clean_force() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Lock is busy for `[CACHE_DIR]/`
     DEBUG Cache is currently in use, proceeding due to `--force`
@@ -167,6 +171,7 @@ fn clean_package_pypi() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
@@ -185,6 +190,7 @@ fn clean_package_pypi() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
@@ -242,6 +248,7 @@ fn clean_package_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
@@ -313,6 +320,7 @@ fn clean_handles_verbatim_paths() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
     Removed 2 files

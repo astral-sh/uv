@@ -1,10 +1,22 @@
 use std::borrow::Borrow;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::hash::{BuildHasher, Hash, RandomState};
 use std::sync::Arc;
 
-use dashmap::DashMap;
+use dashmap::{DashMap, Entry};
 use tokio::sync::Notify;
+
+/// The caller tried to wait for a task that was never registered.
+#[derive(Debug)]
+pub struct UnregisteredTask<K>(K);
+
+impl<K: Display> Display for UnregisteredTask<K> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Attempted to wait on an unregistered task: {}", self.0)
+    }
+}
+
+impl<K: Debug + Display> std::error::Error for UnregisteredTask<K> {}
 
 /// Run tasks only once and store the results in a parallel hash map.
 ///
@@ -25,21 +37,7 @@ impl<K: Eq + Hash + Debug, V: Debug, S: BuildHasher + Clone> Debug for OnceMap<K
     }
 }
 
-impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
-    /// Create a [`OnceMap`] with the specified hasher.
-    pub fn with_hasher(hasher: H) -> Self {
-        Self {
-            items: DashMap::with_hasher(hasher),
-        }
-    }
-
-    /// Create a [`OnceMap`] with the specified capacity and hasher.
-    pub fn with_capacity_and_hasher(capacity: usize, hasher: H) -> Self {
-        Self {
-            items: DashMap::with_capacity_and_hasher(capacity, hasher),
-        }
-    }
-
+impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     /// Register that you want to start a job.
     ///
     /// If this method returns `true`, you need to start a job and call [`OnceMap::done`] eventually
@@ -48,30 +46,47 @@ impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     pub fn register(&self, key: K) -> bool {
         let entry = self.items.entry(key);
         match entry {
-            dashmap::mapref::entry::Entry::Occupied(_) => false,
-            dashmap::mapref::entry::Entry::Vacant(entry) => {
+            Entry::Occupied(_) => false,
+            Entry::Vacant(entry) => {
                 entry.insert(Value::Waiting(Arc::new(Notify::new())));
                 true
             }
         }
     }
 
-    /// Submit the result of a job you registered.
-    pub fn done(&self, key: K, value: V) {
-        if let Some(Value::Waiting(notify)) = self.items.insert(key, Value::Filled(value)) {
-            notify.notify_waiters();
-        }
-    }
-
-    /// Wait for the result of a job that is running.
+    /// Register that you want to start a job, unless it was already started, then wait for its
+    /// result.
     ///
-    /// Will hang if [`OnceMap::done`] isn't called for this key.
-    pub async fn wait(&self, key: &K) -> Option<V> {
+    /// Use this method for once-only operations.
+    ///
+    /// Returns `None` if the job needs to be started, otherwise returns the result of the job.
+    ///
+    ///  # Example
+    ///
+    /// ```rust,no-build
+    /// if let Some(response) = cache.register_or_wait(&id).await {
+    ///     response
+    /// } else {
+    ///     let response = fetch(&id).await;
+    ///     cache.done(id, response.clone());
+    ///     response
+    /// }
+    /// ```
+    pub async fn register_or_wait(&self, key: &K) -> Option<V> {
         let notify = {
-            let entry = self.items.get(key)?;
-            match entry.value() {
-                Value::Filled(value) => return Some(value.clone()),
-                Value::Waiting(notify) => notify.clone(),
+            let entry = self.items.entry(key.clone());
+            match entry {
+                Entry::Occupied(value) => match value.get() {
+                    Value::Filled(value) => return Some(value.clone()),
+                    Value::Waiting(notify) => notify.clone(),
+                },
+                Entry::Vacant(entry) => {
+                    // We insert the notify even if the caller is `wait`. Calling `wait` without
+                    // a previous `register` is a fatal error, so the state of the map doesn't
+                    // matter.
+                    entry.insert(Value::Waiting(Arc::new(Notify::new())));
+                    return None;
+                }
             }
         };
 
@@ -93,11 +108,30 @@ impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
         }
     }
 
+    /// Submit the result of a job you registered.
+    pub fn done(&self, key: K, value: V) {
+        if let Some(Value::Waiting(notify)) = self.items.insert(key, Value::Filled(value)) {
+            notify.notify_waiters();
+        }
+    }
+
+    /// Wait for the result of a job that is running.
+    ///
+    /// Will hang if [`OnceMap::done`] isn't called for this key, or if `UnregisteredTask` is a
+    /// non-fatal error and [`OnceMap::done`] isn't called for this key.
+    pub async fn wait(&self, key: &K) -> Result<V, UnregisteredTask<K>> {
+        self.register_or_wait(key)
+            .await
+            .ok_or_else(|| UnregisteredTask(key.clone()))
+    }
+
     /// Wait for the result of a job that is running, in a blocking context.
     ///
-    /// Will hang if [`OnceMap::done`] isn't called for this key.
-    pub fn wait_blocking(&self, key: &K) -> Option<V> {
-        futures::executor::block_on(self.wait(key))
+    /// Will hang if [`OnceMap::done`] isn't called for this key, or if `UnregisteredTask` is a
+    /// non-fatal error and [`OnceMap::done`] isn't called for this key.
+    pub fn wait_blocking(&self, key: &K) -> Result<V, UnregisteredTask<K>> {
+        futures::executor::block_on(self.register_or_wait(key))
+            .ok_or_else(|| UnregisteredTask(key.clone()))
     }
 
     /// Return the result of a previous job, if any.

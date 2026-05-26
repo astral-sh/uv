@@ -1,6 +1,6 @@
 [package]
 name = "uv-torch"
-version = "0.0.40"
+version = "0.0.49"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -26,7 +26,7 @@ tracing = { workspace = true }
 url = { workspace = true }
 
 [target.'cfg(all(target_os = "windows"))'.dependencies]
-wmi = { workspace = true }
+windows = { workspace = true }
 
 [lints]
 workspace = true

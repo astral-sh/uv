@@ -181,11 +181,6 @@ impl DependencyGroupsInner {
         !self.exclude.contains(group) && self.include.contains(group)
     }
 
-    /// Iterate over all groups that we think should exist.
-    pub fn desugarred_names(&self) -> impl Iterator<Item = &GroupName> {
-        self.include.names().chain(&self.exclude)
-    }
-
     /// Returns an iterator over all groups that are included in the specification,
     /// assuming `all_names` is an iterator over all groups.
     pub fn group_names<'a, Names>(
@@ -341,7 +336,7 @@ pub enum DevMode {
 
 impl DevMode {
     /// Returns the flag that was used to request development dependencies.
-    pub fn as_flag(&self) -> &'static str {
+    fn as_flag(self) -> &'static str {
         match self {
             Self::Exclude => "--no-dev",
             Self::Include => "--dev",

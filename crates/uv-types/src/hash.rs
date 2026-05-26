@@ -379,9 +379,12 @@ impl HashStrategy {
                 subdirectory,
                 ..
             } => Some(VersionId::from_archive(location, subdirectory.as_deref())),
-            RequirementSource::Git {
+            RequirementSource::GitDirectory {
                 git, subdirectory, ..
             } => Some(VersionId::from_git(git, subdirectory.as_deref())),
+            RequirementSource::GitPath {
+                git, install_path, ..
+            } => Some(VersionId::from_git(git, Some(install_path))),
             RequirementSource::Path { install_path, .. } => {
                 Some(VersionId::from_path(install_path))
             }

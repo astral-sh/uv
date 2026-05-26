@@ -13,6 +13,7 @@ use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 
 use crate::credentials::{Password, Token, Username};
+use crate::index::is_path_prefix;
 use crate::realm::Realm;
 use crate::service::Service;
 use crate::{Credentials, KeyringProvider};
@@ -366,8 +367,8 @@ impl TextCredentialStore {
                 continue;
             }
 
-            // Service path must be a prefix of request path
-            if !url.path().starts_with(service.url().path()) {
+            // Service path must be a prefix of the request path.
+            if !is_path_prefix(service.url().path(), url.path()) {
                 continue;
             }
 
@@ -551,6 +552,8 @@ password = "pass2"
         let non_matching_urls = [
             "https://example.com/different",
             "https://example.com/ap", // Not a complete path segment match
+            "https://example.com/apiary", // Not a complete path segment match
+            "https://example.com/api-v2", // Not a complete path segment match
             "https://example.com",    // Shorter than the stored prefix
         ];
 

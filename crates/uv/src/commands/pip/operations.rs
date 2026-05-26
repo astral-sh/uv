@@ -37,7 +37,7 @@ use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
 use uv_python::{PythonEnvironment, PythonInstallation};
 use uv_requirements::{
     GroupsSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTree, SourceTreeResolver,
+    RequirementsSpecification, SourceTree, SourceTreeResolution, SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
@@ -65,18 +65,10 @@ pub(crate) async fn read_requirements(
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
-        let hint = if requirements
+        let has_editable = requirements
             .iter()
-            .any(|source| matches!(source, RequirementsSource::Editable(_)))
-        {
-            "Use `<dir>[extra]` syntax or `-r <file>` instead."
-        } else {
-            "Use `package[extra]` syntax instead."
-        };
-        return Err(anyhow!(
-            "Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file. {hint}"
-        )
-        .into());
+            .any(|source| matches!(source, RequirementsSource::Editable(_)));
+        return Err(anyhow::Error::new(ExtrasWithoutSourceError { has_editable }).into());
     }
 
     // Read all requirements from the provided sources.
@@ -187,7 +179,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             // If we resolved a single project, use it for the project name.
             project = project.or_else(|| {
                 if let [resolution] = &resolutions[..] {
-                    Some(resolution.project.clone())
+                    Some(resolution.project().clone())
                 } else {
                     None
                 }
@@ -199,7 +191,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 .filter(|extra| {
                     !resolutions
                         .iter()
-                        .any(|resolution| resolution.extras.contains(extra))
+                        .any(|resolution| resolution.extras().contains(extra))
                 })
                 .collect::<Vec<_>>();
             if !unused_extras.is_empty() {
@@ -217,7 +209,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             requirements.extend(
                 resolutions
                     .into_iter()
-                    .flat_map(|resolution| resolution.requirements),
+                    .flat_map(SourceTreeResolution::into_requirements),
             );
         }
 
@@ -413,7 +405,6 @@ pub(crate) enum Modifications {
 
 /// A distribution which was or would be modified
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[expect(clippy::large_enum_variant)]
 pub(crate) enum ChangedDist {
     Local(LocalDist),
     Remote(Arc<Dist>),
@@ -504,7 +495,7 @@ pub(crate) struct Changelog {
 
 impl Changelog {
     /// Create a [`Changelog`] from two iterators of [`ChangedDist`]s.
-    pub(crate) fn new<I, U>(installed: I, uninstalled: U) -> Self
+    fn new<I, U>(installed: I, uninstalled: U) -> Self
     where
         I: IntoIterator<Item = ChangedDist>,
         U: IntoIterator<Item = ChangedDist>,
@@ -526,7 +517,7 @@ impl Changelog {
     }
 
     /// Create a [`Changelog`] from a list of local distributions.
-    pub(crate) fn from_local(installed: Vec<CachedDist>, uninstalled: Vec<InstalledDist>) -> Self {
+    fn from_local(installed: Vec<CachedDist>, uninstalled: Vec<InstalledDist>) -> Self {
         Self::new(
             installed
                 .into_iter()
@@ -1125,4 +1116,40 @@ pub(crate) enum Error {
 
     #[error("The environment is outdated; run `{}` to update the environment", "uv sync".cyan())]
     OutdatedEnvironment(Box<Changelog>),
+}
+
+impl uv_errors::Hint for Error {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::Resolve(resolve_err) => resolve_err.hints(),
+            Self::Anyhow(err) => {
+                for cause in err.chain() {
+                    if let Some(extra_err) = cause.downcast_ref::<ExtrasWithoutSourceError>() {
+                        return uv_errors::Hint::hints(extra_err);
+                    }
+                }
+                uv_errors::Hints::none()
+            }
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
+/// Extras were requested but no valid source was provided.
+#[derive(Debug, thiserror::Error)]
+#[error(
+    "Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file"
+)]
+pub(crate) struct ExtrasWithoutSourceError {
+    pub(crate) has_editable: bool,
+}
+
+impl uv_errors::Hint for ExtrasWithoutSourceError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::from(if self.has_editable {
+            "Use `<dir>[extra]` syntax or `-r <file>` instead"
+        } else {
+            "Use `package[extra]` syntax instead"
+        })
+    }
 }

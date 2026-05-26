@@ -3,12 +3,14 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileTouch, FileWriteBin, FileWriteStr, PathChild, PathCreateDir};
 use flate2::bufread::GzDecoder;
 use fs_err::File;
+use futures::io::AllowStdIo;
 use indoc::{formatdoc, indoc};
 use insta::{assert_json_snapshot, assert_snapshot};
 use std::io::BufReader;
 use std::path::Path;
 use std::process::Command;
 use tempfile::TempDir;
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 use uv_static::EnvVars;
 use uv_test::{uv_snapshot, venv_bin_path};
 
@@ -19,6 +21,17 @@ const BUILT_BY_UV_TEST_SCRIPT: &str = indoc! {r#"
     print(greet())
     print(f"Area of a circle with r=2: {area(2)}")
 "#};
+
+fn unpack_tar_gz(source_dist_path: &Path, target: &Path) -> Result<()> {
+    let sdist_reader = BufReader::new(File::open(source_dist_path)?);
+    let mut source_dist =
+        tokio_tar::Archive::new(AllowStdIo::new(GzDecoder::new(sdist_reader)).compat());
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(source_dist.unpack(target))?;
+    Ok(())
+}
 
 /// Test that build backend works if we invoke it directly.
 ///
@@ -102,10 +115,10 @@ fn built_by_uv_direct() -> Result<()> {
 
     let sdist_tree = TempDir::new()?;
 
-    let sdist_reader = BufReader::new(File::open(
-        sdist_dir.path().join("built_by_uv-0.1.0.tar.gz"),
-    )?);
-    tar::Archive::new(GzDecoder::new(sdist_reader)).unpack(sdist_tree.path())?;
+    unpack_tar_gz(
+        &sdist_dir.path().join("built_by_uv-0.1.0.tar.gz"),
+        sdist_tree.path(),
+    )?;
 
     drop(sdist_dir);
 
@@ -1593,6 +1606,58 @@ fn warn_on_license_classifier() -> Result<()> {
     ----- stderr -----
     Building source distribution (uv build backend)...
     warning: Found license classifier `License :: OSI Approved :: MIT License`. License classifiers are ambiguous and deprecated per PEP 639; projects should use `project.license` and `project.license-files` instead.
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/foo-1.0.0.tar.gz
+    Successfully built dist/foo-1.0.0-py3-none-any.whl
+    ");
+
+    Ok(())
+}
+
+/// Auto-detect TOML 1.1 features in `pyproject.toml` and warn the user.
+#[test]
+fn warn_on_toml_1_1_auto_detected() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        # TOML 1.1 feature: trailing comma in inline table
+        authors = [{ name = "Ferris", email = "ferris@example.com", }]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/foo/__init__.py").touch()?;
+
+    // Without the preview flag: auto-detection fires and a warning is shown.
+    uv_snapshot!(context.filters(), context.build(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    warning: `pyproject.toml` uses TOML 1.1 features; rewriting to TOML 1.0 for compatibility with older build tools. Use `--preview-feature toml-backwards-compatibility` to suppress this warning.
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/foo-1.0.0.tar.gz
+    Successfully built dist/foo-1.0.0-py3-none-any.whl
+    ");
+
+    // With the preview flag set explicitly: rewrite still happens, but no warning.
+    uv_snapshot!(context.filters(), context.build().arg("--preview-feature").arg("toml-backwards-compatibility"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
     Building wheel from source distribution (uv build backend)...
     Successfully built dist/foo-1.0.0.tar.gz
     Successfully built dist/foo-1.0.0-py3-none-any.whl

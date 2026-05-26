@@ -10,7 +10,7 @@ use crate::pubgrub::PubGrubPackage;
 /// Build a [`DerivationChain`] from the pubgrub state, which is available in `uv-resolver`, but not
 /// in `uv-distribution-types`.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct DerivationChainBuilder;
+pub(crate) struct DerivationChainBuilder;
 
 impl DerivationChainBuilder {
     /// Compute a [`DerivationChain`] from the current PubGrub state.

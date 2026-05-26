@@ -185,9 +185,7 @@ impl CredentialsCache {
 
         // If we only have a username, add a new entry or replace an existing entry if it doesn't have a password
         let existing = realms.get(&key);
-        if existing.is_none()
-            || existing.is_some_and(|credentials| credentials.password().is_none())
-        {
+        if existing.is_none_or(|credentials| credentials.password().is_none()) {
             return realms.insert(key, credentials.clone());
         }
 

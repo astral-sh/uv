@@ -212,3 +212,52 @@ pub trait Reporter: Send + Sync {
     /// Callback to invoke when the resolution is complete.
     fn on_install_complete(&self);
 }
+
+#[cfg(test)]
+mod tests {
+    use uv_cache::Cache;
+    use uv_preview::Preview;
+    use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
+
+    use super::Installer;
+
+    fn environment() -> PythonEnvironment {
+        let cache = Cache::temp().expect("cache should be available");
+        PythonEnvironment::find(
+            &PythonRequest::Any,
+            EnvironmentPreference::Any,
+            PythonPreference::System,
+            &cache,
+            Preview::default(),
+        )
+        .expect("Python environment should be available")
+    }
+
+    #[test]
+    fn default_installer_name() {
+        let environment = environment();
+
+        let installer = Installer::new(&environment, Preview::default());
+
+        assert_eq!(installer.name.as_deref(), Some("uv"));
+    }
+
+    #[test]
+    fn custom_installer_name() {
+        let environment = environment();
+
+        let installer = Installer::new(&environment, Preview::default())
+            .with_installer_name(Some("client".to_string()));
+
+        assert_eq!(installer.name.as_deref(), Some("client"));
+    }
+
+    #[test]
+    fn disabled_installer_name() {
+        let environment = environment();
+
+        let installer = Installer::new(&environment, Preview::default()).with_installer_name(None);
+
+        assert_eq!(installer.name, None);
+    }
+}

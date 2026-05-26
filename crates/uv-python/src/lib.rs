@@ -1,5 +1,4 @@
 //! Find requested Python interpreters and query interpreters for information.
-use owo_colors::OwoColorize;
 use thiserror::Error;
 
 #[cfg(test)]
@@ -94,8 +93,8 @@ pub enum Error {
     #[error(transparent)]
     KeyError(#[from] installation::PythonInstallationKeyError),
 
-    #[error("{}{}", .0, if let Some(hint) = .1 { format!("\n\n{}{} {hint}", "hint".bold().cyan(), ":".bold()) } else { String::new() })]
-    MissingPython(PythonNotFound, Option<String>),
+    #[error("{}", .0)]
+    MissingPython(PythonNotFound, Option<Box<MissingPythonHint>>),
 
     #[error(transparent)]
     MissingEnvironment(#[from] environment::EnvironmentNotFound),
@@ -107,10 +106,86 @@ pub enum Error {
     RetryParsing(#[from] uv_client::RetryParsingError),
 }
 
-impl Error {
-    pub(crate) fn with_missing_python_hint(self, hint: String) -> Self {
+/// The reason a managed Python download could not be used.
+#[derive(Debug)]
+pub enum MissingPythonHint {
+    /// uv's embedded download metadata may be stale.
+    RequiresUpdate,
+    /// Downloads are set to `manual`.
+    DownloadsManual(PythonRequest),
+    /// Downloads are set to `never`.
+    DownloadsNever(PythonRequest),
+    /// Python preference is set to `only-system`.
+    PreferenceOnlySystem(PythonRequest),
+    /// uv is in offline mode.
+    Offline(PythonRequest),
+}
+
+impl MissingPythonHint {
+    fn for_request(request: &PythonRequest) -> String {
+        match request {
+            PythonRequest::Default | PythonRequest::Any => String::new(),
+            _ => format!(" for {request}"),
+        }
+    }
+}
+
+impl std::fmt::Display for MissingPythonHint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::MissingPython(err, _) => Self::MissingPython(err, Some(hint)),
+            Self::RequiresUpdate => {
+                write!(
+                    f,
+                    "uv embeds available Python downloads and may require an update to install new versions. Consider retrying on a newer version of uv."
+                )
+            }
+            Self::DownloadsManual(request) => {
+                write!(
+                    f,
+                    "A managed Python download is available{}, but Python downloads are set to 'manual', use `uv python install {}` to install the required version",
+                    Self::for_request(request),
+                    request.to_canonical_string(),
+                )
+            }
+            Self::DownloadsNever(request) => {
+                write!(
+                    f,
+                    "A managed Python download is available{}, but Python downloads are set to 'never'",
+                    Self::for_request(request),
+                )
+            }
+            Self::PreferenceOnlySystem(request) => {
+                write!(
+                    f,
+                    "A managed Python download is available{}, but the Python preference is set to 'only system'",
+                    Self::for_request(request),
+                )
+            }
+            Self::Offline(request) => {
+                write!(
+                    f,
+                    "A managed Python download is available{}, but uv is set to offline mode",
+                    Self::for_request(request),
+                )
+            }
+        }
+    }
+}
+
+impl uv_errors::Hint for Error {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::MissingPython(_, Some(hint)) => uv_errors::Hints::from(hint.to_string()),
+            Self::Discovery(err) => err.hints(),
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
+impl Error {
+    pub(crate) fn with_hint(self, hint: MissingPythonHint) -> Self {
+        match self {
+            Self::MissingPython(err, _) => Self::MissingPython(err, Some(Box::new(hint))),
             _ => self,
         }
     }
@@ -145,10 +220,9 @@ mod tests {
     use uv_cache::Cache;
 
     use crate::{
-        PythonNotFound, PythonRequest, PythonSource, PythonVersion,
-        downloads::ManagedPythonDownloadList, implementation::ImplementationName,
-        installation::PythonInstallation, managed::ManagedPythonInstallations,
-        virtualenv::virtualenv_python_executable,
+        PythonDownloads, PythonNotFound, PythonRequest, PythonSource, PythonVersion,
+        implementation::ImplementationName, installation::PythonInstallation,
+        managed::ManagedPythonInstallations, virtualenv::virtualenv_python_executable,
     };
     use crate::{
         PythonPreference,
@@ -318,7 +392,10 @@ mod tests {
                     path.to_str().expect("Path can be represented as string"),
                 )
                 .replace("{FULL_VERSION}", &version.to_string())
-                .replace("{VERSION}", &version.without_patch().to_string())
+                .replace(
+                    "{VERSION}",
+                    &format!("{}.{}", version.major(), version.minor()),
+                )
                 .replace("{FREE_THREADED}", &free_threaded.to_string())
                 .replace("{IMPLEMENTATION}", (&implementation).into());
 
@@ -404,7 +481,10 @@ mod tests {
                     path.to_str().expect("Path can be represented as string"),
                 )
                 .replace("{FULL_VERSION}", &version.to_string())
-                .replace("{VERSION}", &version.without_patch().to_string());
+                .replace(
+                    "{VERSION}",
+                    &format!("{}.{}", version.major(), version.minor()),
+                );
 
             fs_err::create_dir_all(path.parent().unwrap())?;
             fs_err::write(
@@ -618,7 +698,7 @@ mod tests {
         });
         assert!(
             matches!(result, Ok(Err(PythonNotFound { .. }))),
-            "With an non-executable Python, no Python installation should be detected; got {result:?}"
+            "With a non-executable Python, no Python installation should be detected; got {result:?}"
         );
 
         Ok(())
@@ -647,6 +727,54 @@ mod tests {
                 }
             ),
             "We should find the valid executable; got {interpreter:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_or_download_skips_download_metadata_when_python_is_found() -> Result<()> {
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.12.1"])?;
+        // Pass a missing metadata file to assert that an already-installed Python can
+        // be returned without reading the download list.
+        let missing_downloads = context.tempdir.child("missing-downloads.json");
+
+        let interpreter = context.run(|| {
+            let client_builder = BaseClientBuilder::default();
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("Failed to build runtime")
+                .block_on(PythonInstallation::find_or_download(
+                    None,
+                    EnvironmentPreference::OnlySystem,
+                    PythonPreference::OnlySystem,
+                    PythonDownloads::Never,
+                    &client_builder,
+                    &context.cache,
+                    None,
+                    None,
+                    None,
+                    missing_downloads.path().to_str(),
+                    Preview::default(),
+                ))
+        })?;
+
+        assert!(
+            matches!(
+                interpreter,
+                PythonInstallation {
+                    source: PythonSource::SearchPathFirst,
+                    interpreter: _
+                }
+            ),
+            "We should find the local Python without reading download metadata; got {interpreter:?}"
+        );
+        assert_eq!(
+            &interpreter.interpreter().python_full_version().to_string(),
+            "3.12.1",
+            "We should find the local interpreter"
         );
 
         Ok(())
@@ -1004,12 +1132,6 @@ mod tests {
         preview: Preview,
     ) -> Result<PythonInstallation, crate::Error> {
         let client_builder = BaseClientBuilder::default();
-        let download_list = ManagedPythonDownloadList::new_only_embedded()?;
-        let client = client_builder
-            .clone()
-            .retries(0)
-            .build()
-            .expect("failed to build base client");
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -1019,10 +1141,9 @@ mod tests {
                 environments,
                 preference,
                 false,
-                &download_list,
-                &client,
-                &client_builder.retry_policy(),
+                &client_builder,
                 cache,
+                None,
                 None,
                 None,
                 None,

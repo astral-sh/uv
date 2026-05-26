@@ -360,6 +360,40 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 }
             }
 
+            BuiltDist::GitPath(wheel) => {
+                // Fetch the Git repository.
+                let fetch = self
+                    .build_context
+                    .git()
+                    .fetch(
+                        &wheel.git,
+                        self.client.unmanaged.disable_ssl(wheel.git.url()),
+                        self.client.unmanaged.connectivity() == Connectivity::Offline,
+                        self.build_context.cache().bucket(CacheBucket::Git),
+                        self.reporter.clone().map(<dyn Reporter>::into_git_reporter),
+                    )
+                    .await?;
+
+                let git_sha = fetch.git().precise().expect("Exact commit after checkout");
+                let cache_entry = self.build_context.cache().entry(
+                    CacheBucket::Wheels,
+                    WheelCache::Git(&wheel.url, git_sha.as_short_str()).root(),
+                    wheel.filename.stem(),
+                );
+
+                let install_path = fetch.path().join(&wheel.install_path);
+
+                self.load_wheel(
+                    &install_path,
+                    &wheel.filename,
+                    WheelExtension::Whl,
+                    cache_entry,
+                    dist,
+                    hashes,
+                )
+                .await
+            }
+
             BuiltDist::Path(wheel) => {
                 let cache_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
@@ -564,7 +598,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .client
             .managed(|client| {
                 client
-                    .wheel_metadata(dist, self.build_context.capabilities())
+                    .wheel_metadata(
+                        dist,
+                        self.build_context.git(),
+                        self.build_context.capabilities(),
+                        self.reporter.clone().map(<dyn Reporter>::into_git_reporter),
+                    )
                     .boxed_local()
             })
             .await;
@@ -943,16 +982,19 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await
                     .map_err(Error::CacheWrite)?;
 
-                // If no hashes are required, parallelize the unzip operation.
+                // If no hashes are required, extract the wheel without hashing.
                 let (files, hashes) = if hashes.is_none() {
-                    // Unzip the wheel into a temporary directory.
-                    let file = file.into_std().await;
                     let target = temp_dir.path().to_owned();
-                    let files = tokio::task::spawn_blocking(move || match extension {
-                        WheelExtension::Whl => uv_extract::unzip(file, &target),
-                        WheelExtension::WhlZst => uv_extract::stream::untar_zst_file(file, &target),
-                    })
-                    .await?
+                    let files = match extension {
+                        WheelExtension::Whl => {
+                            let file = file.into_std().await;
+                            tokio::task::spawn_blocking(move || uv_extract::unzip(file, &target))
+                                .await?
+                        }
+                        WheelExtension::WhlZst => {
+                            uv_extract::stream::untar_zst(file, &target).await
+                        }
+                    }
                     .map_err(|err| Error::Extract(filename.to_string(), err))?;
 
                     (files, HashDigests::empty())
@@ -1145,12 +1187,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // Attempt to read the archive pointer from the cache.
         let pointer_entry = wheel_entry.with_file(format!("{}.rev", filename.cache_key()));
-        let pointer = LocalArchivePointer::read_from(&pointer_entry)?;
+        let pointer = PathArchivePointer::read_from(&pointer_entry)?;
 
         // Extract the archive from the pointer.
         let archive = pointer
             .filter(|pointer| pointer.is_up_to_date(modified))
-            .map(LocalArchivePointer::into_archive)
+            .map(PathArchivePointer::into_archive)
             .filter(|archive| archive.has_digests(hashes));
 
         // If the file is already unzipped, and the cache is up-to-date, return it.
@@ -1177,7 +1219,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             );
 
             // Write the archive pointer to the cache.
-            let pointer = LocalArchivePointer {
+            let pointer = PathArchivePointer {
                 timestamp: modified,
                 archive: archive.clone(),
             };
@@ -1244,7 +1286,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let archive = Archive::new(id, hashes, filename.clone());
 
             // Write the archive pointer to the cache.
-            let pointer = LocalArchivePointer {
+            let pointer = PathArchivePointer {
                 timestamp: modified,
                 archive: archive.clone(),
             };
@@ -1476,13 +1518,13 @@ impl HttpArchivePointer {
 ///
 /// Encoded with `MsgPack`, and represented on disk by a `.rev` file.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct LocalArchivePointer {
+pub struct PathArchivePointer {
     timestamp: Timestamp,
     archive: Archive,
 }
 
-impl LocalArchivePointer {
-    /// Read an [`LocalArchivePointer`] from the cache.
+impl PathArchivePointer {
+    /// Read an [`PathArchivePointer`] from the cache.
     pub fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         match fs_err::read(path) {
             Ok(cached) => Ok(Some(rmp_serde::from_slice::<Self>(&cached)?)),
@@ -1491,8 +1533,8 @@ impl LocalArchivePointer {
         }
     }
 
-    /// Write an [`LocalArchivePointer`] to the cache.
-    pub async fn write_to(&self, entry: &CacheEntry) -> Result<(), Error> {
+    /// Write an [`PathArchivePointer`] to the cache.
+    pub(crate) async fn write_to(&self, entry: &CacheEntry) -> Result<(), Error> {
         write_atomic(entry.path(), rmp_serde::to_vec(&self)?)
             .await
             .map_err(Error::CacheWrite)

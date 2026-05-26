@@ -20,7 +20,6 @@ use reqwest::{Response, StatusCode};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, debug, info_span, instrument, warn};
 use url::Url;
-use zip::ZipArchive;
 
 use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
@@ -32,12 +31,12 @@ use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildInfo, BuildVariables, BuildableSource, ConfigSettings, DirectorySourceUrl,
-    ExtraBuildRequirement, GitSourceUrl, HashPolicy, Hashed, IndexUrl, PathSourceUrl, SourceDist,
-    SourceUrl,
+    ExtraBuildRequirement, GitDirectorySourceUrl, GitPathSourceUrl, HashPolicy, Hashed, IndexUrl,
+    PathSourceUrl, SourceDist, SourceUrl,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry, write_atomic};
-use uv_git::{GIT_LFS, GitError};
+use uv_git::{Fetch, GIT_LFS, GitError};
 use uv_git_types::{GitHubRepository, GitOid};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
@@ -70,6 +69,9 @@ pub(crate) const HTTP_REVISION: &str = "revision.http";
 
 /// The name of the file that contains the revision ID for a local distribution, encoded via `MsgPack`.
 pub(crate) const LOCAL_REVISION: &str = "revision.rev";
+
+/// The name of the file that contains the cached distribution hashes, encoded via `MsgPack`.
+pub(crate) const HASHES: &str = "hashes.msgpack";
 
 /// The name of the file that contains the cached distribution metadata, encoded via `MsgPack`.
 pub(crate) const METADATA: &str = "metadata.msgpack";
@@ -182,8 +184,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .boxed_local()
                 .await?
             }
-            BuildableSource::Dist(SourceDist::Git(dist)) => {
-                self.git(source, &GitSourceUrl::from(dist), tags, hashes, client)
+            BuildableSource::Dist(SourceDist::GitDirectory(dist)) => {
+                self.git_source_tree(
+                    source,
+                    &GitDirectorySourceUrl::from(dist),
+                    tags,
+                    hashes,
+                    client,
+                )
+                .boxed_local()
+                .await?
+            }
+            BuildableSource::Dist(SourceDist::GitPath(dist)) => {
+                self.git_archive(source, &GitPathSourceUrl::from(dist), tags, hashes, client)
                     .boxed_local()
                     .await?
             }
@@ -228,8 +241,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .boxed_local()
                 .await?
             }
-            BuildableSource::Url(SourceUrl::Git(resource)) => {
-                self.git(source, resource, tags, hashes, client)
+            BuildableSource::Url(SourceUrl::GitDirectory(resource)) => {
+                self.git_source_tree(source, resource, tags, hashes, client)
+                    .boxed_local()
+                    .await?
+            }
+            BuildableSource::Url(SourceUrl::GitPath(resource)) => {
+                self.git_archive(source, resource, tags, hashes, client)
                     .boxed_local()
                     .await?
             }
@@ -326,16 +344,21 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .boxed_local()
                 .await?
             }
-            BuildableSource::Dist(SourceDist::Git(dist)) => {
-                self.git_metadata(
+            BuildableSource::Dist(SourceDist::GitDirectory(dist)) => {
+                self.git_source_tree_metadata(
                     source,
-                    &GitSourceUrl::from(dist),
+                    &GitDirectorySourceUrl::from(dist),
                     hashes,
                     client,
                     client.unmanaged.credentials_cache(),
                 )
                 .boxed_local()
                 .await?
+            }
+            BuildableSource::Dist(SourceDist::GitPath(dist)) => {
+                self.git_archive_metadata(source, &GitPathSourceUrl::from(dist), hashes, client)
+                    .boxed_local()
+                    .await?
             }
             BuildableSource::Dist(SourceDist::Directory(dist)) => {
                 self.source_tree_metadata(
@@ -376,8 +399,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .boxed_local()
                 .await?
             }
-            BuildableSource::Url(SourceUrl::Git(resource)) => {
-                self.git_metadata(
+            BuildableSource::Url(SourceUrl::GitDirectory(resource)) => {
+                self.git_source_tree_metadata(
                     source,
                     resource,
                     hashes,
@@ -386,6 +409,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 )
                 .boxed_local()
                 .await?
+            }
+            BuildableSource::Url(SourceUrl::GitPath(resource)) => {
+                self.git_archive_metadata(source, resource, hashes, client)
+                    .boxed_local()
+                    .await?
             }
             BuildableSource::Url(SourceUrl::Directory(resource)) => {
                 self.source_tree_metadata(
@@ -1570,11 +1598,321 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
     }
 
-    /// Build a source distribution from a Git repository.
-    async fn git(
+    /// Return the [`RevisionHashes`] for an archive stored in a Git repository.
+    async fn git_archive_revision(
         &self,
         source: &BuildableSource<'_>,
-        resource: &GitSourceUrl<'_>,
+        resource: &GitPathSourceUrl<'_>,
+        fetch: &Fetch,
+        cache_shard: &CacheShard,
+        hashes: HashPolicy<'_>,
+    ) -> Result<RevisionHashes, Error> {
+        // Verify that the archive exists.
+        let install_path = fetch.path().join(&resource.path);
+        if !install_path.is_file() {
+            return Err(Error::NotFound(resource.url.to_url()));
+        }
+
+        // Read the existing metadata from the cache.
+        let revision_entry = cache_shard.entry(HASHES);
+
+        // If the revision already exists, return it. There's no need to check for freshness, since
+        // everything is scoped to a Git commit.
+        if let Some(revision) = RevisionHashes::read_from(&revision_entry)? {
+            if revision.has_digests(hashes) {
+                return Ok(revision);
+            }
+        }
+
+        // Otherwise, we need to unzip the archive, or at least compute the hashes.
+        debug!("Unpacking source distribution: {source}");
+        let entry = cache_shard.entry(SOURCE);
+        let algorithms = hashes.algorithms();
+        let hashes = self
+            .persist_archive(&install_path, resource.ext, entry.path(), &algorithms)
+            .await?;
+
+        // Persist the revision.
+        let revision = RevisionHashes { hashes };
+        revision.write_to(&revision_entry).await?;
+
+        Ok(revision)
+    }
+
+    /// Build a source distribution from a Git repository.
+    async fn git_archive(
+        &self,
+        source: &BuildableSource<'_>,
+        resource: &GitPathSourceUrl<'_>,
+        tags: &Tags,
+        hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
+    ) -> Result<BuiltWheelMetadata, Error> {
+        // Fetch the Git repository.
+        let fetch = self
+            .build_context
+            .git()
+            .fetch(
+                resource.git,
+                client.unmanaged.disable_ssl(resource.git.url()),
+                client.unmanaged.connectivity() == Connectivity::Offline,
+                self.build_context.cache().bucket(CacheBucket::Git),
+                self.reporter
+                    .clone()
+                    .map(|reporter| reporter.into_git_reporter()),
+            )
+            .await?;
+
+        let git_sha = fetch.git().precise().expect("Exact commit after checkout");
+        let cache_shard = self.build_context.cache().shard(
+            CacheBucket::SourceDistributions,
+            WheelCache::Git(resource.url, git_sha.as_short_str()).root(),
+        );
+
+        // Fetch the revision for the source distribution.
+        let revision = self
+            .git_archive_revision(source, resource, &fetch, &cache_shard, hashes)
+            .await?;
+
+        // Before running the build, check that the hashes match.
+        if !revision.satisfies(hashes) {
+            return Err(Error::hash_mismatch(
+                source.to_string(),
+                hashes.digests(),
+                revision.hashes(),
+            ));
+        }
+
+        let source_entry = cache_shard.entry(SOURCE);
+
+        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
+        let config_settings = self.config_settings_for(source.name());
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
+
+        // If the cache contains a compatible wheel, return it.
+        if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
+            .ok()
+            .flatten()
+            .filter(|file| file.matches(source.name(), source.version()))
+        {
+            return Ok(BuiltWheelMetadata::from_file(
+                file,
+                revision.into_hashes(),
+                CacheInfo::default(),
+                build_info,
+            ));
+        }
+
+        // Otherwise, we need to build a wheel.
+        let task = self
+            .reporter
+            .as_ref()
+            .map(|reporter| reporter.on_build_start(source));
+
+        let (disk_filename, filename, metadata) = self
+            .build_distribution(
+                source,
+                source_entry.path(),
+                None,
+                &cache_shard,
+                NoSources::None,
+            )
+            .await?;
+
+        if let Some(task) = task {
+            if let Some(reporter) = self.reporter.as_ref() {
+                reporter.on_build_complete(source, task);
+            }
+        }
+
+        // Store the metadata.
+        let metadata_entry = cache_shard.entry(METADATA);
+        write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
+            .await
+            .map_err(Error::CacheWrite)?;
+
+        Ok(BuiltWheelMetadata {
+            path: cache_shard.join(&disk_filename).into_boxed_path(),
+            target: cache_shard.join(filename.stem()).into_boxed_path(),
+            filename,
+            hashes: revision.into_hashes(),
+            cache_info: CacheInfo::default(),
+            build_info,
+        })
+    }
+
+    /// Build a source distribution from a Git repository.
+    async fn git_archive_metadata(
+        &self,
+        source: &BuildableSource<'_>,
+        resource: &GitPathSourceUrl<'_>,
+        hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
+    ) -> Result<ArchiveMetadata, Error> {
+        // Fetch the Git repository.
+        let fetch = self
+            .build_context
+            .git()
+            .fetch(
+                resource.git,
+                client.unmanaged.disable_ssl(resource.git.url()),
+                client.unmanaged.connectivity() == Connectivity::Offline,
+                self.build_context.cache().bucket(CacheBucket::Git),
+                self.reporter
+                    .clone()
+                    .map(|reporter| reporter.into_git_reporter()),
+            )
+            .await?;
+
+        let git_sha = fetch.git().precise().expect("Exact commit after checkout");
+        let cache_shard = self.build_context.cache().shard(
+            CacheBucket::SourceDistributions,
+            WheelCache::Git(resource.url, git_sha.as_short_str()).root(),
+        );
+
+        // Fetch the revision for the source distribution.
+        let revision = self
+            .git_archive_revision(source, resource, &fetch, &cache_shard, hashes)
+            .await?;
+
+        // Before running the build, check that the hashes match.
+        if !revision.satisfies(hashes) {
+            return Err(Error::hash_mismatch(
+                source.to_string(),
+                hashes.digests(),
+                revision.hashes(),
+            ));
+        }
+
+        let source_entry = cache_shard.entry(SOURCE);
+
+        // If the metadata is static, return it.
+        let dynamic = match StaticMetadata::read(source, source_entry.path(), None).await? {
+            StaticMetadata::Some(metadata) => {
+                return Ok(ArchiveMetadata {
+                    metadata: Metadata::from_metadata23(metadata),
+                    hashes: revision.into_hashes(),
+                });
+            }
+            StaticMetadata::Dynamic => true,
+            StaticMetadata::None => false,
+        };
+
+        // If the cache contains compatible metadata, return it.
+        let metadata_entry = cache_shard.entry(METADATA);
+        match CachedMetadata::read(&metadata_entry).await {
+            Ok(Some(metadata)) => {
+                if metadata.matches(source.name(), source.version()) {
+                    debug!("Using cached metadata for: {source}");
+                    return Ok(ArchiveMetadata {
+                        metadata: Metadata::from_metadata23(metadata.into()),
+                        hashes: revision.into_hashes(),
+                    });
+                }
+                debug!("Cached metadata does not match expected name and version for: {source}");
+            }
+            Ok(None) => {}
+            Err(err) => {
+                debug!("Failed to deserialize cached metadata for: {source} ({err})");
+            }
+        }
+
+        // If the backend supports `prepare_metadata_for_build_wheel`, use it.
+        if let Some(metadata) = self
+            .build_metadata(source, source_entry.path(), None, NoSources::None)
+            .boxed_local()
+            .await?
+        {
+            // If necessary, mark the metadata as dynamic.
+            let metadata = if dynamic {
+                ResolutionMetadata {
+                    dynamic: true,
+                    ..metadata
+                }
+            } else {
+                metadata
+            };
+
+            // Store the metadata.
+            fs::create_dir_all(metadata_entry.dir())
+                .await
+                .map_err(Error::CacheWrite)?;
+            write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
+                .await
+                .map_err(Error::CacheWrite)?;
+
+            return Ok(ArchiveMetadata {
+                metadata: Metadata::from_metadata23(metadata),
+                hashes: revision.into_hashes(),
+            });
+        }
+
+        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
+        let config_settings = self.config_settings_for(source.name());
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
+
+        // Otherwise, we need to build a wheel.
+        let task = self
+            .reporter
+            .as_ref()
+            .map(|reporter| reporter.on_build_start(source));
+
+        let (_disk_filename, _filename, metadata) = self
+            .build_distribution(
+                source,
+                source_entry.path(),
+                None,
+                &cache_shard,
+                NoSources::None,
+            )
+            .await?;
+
+        if let Some(task) = task {
+            if let Some(reporter) = self.reporter.as_ref() {
+                reporter.on_build_complete(source, task);
+            }
+        }
+
+        // If necessary, mark the metadata as dynamic.
+        let metadata = if dynamic {
+            ResolutionMetadata {
+                dynamic: true,
+                ..metadata
+            }
+        } else {
+            metadata
+        };
+
+        // Store the metadata.
+        write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
+            .await
+            .map_err(Error::CacheWrite)?;
+
+        Ok(ArchiveMetadata {
+            metadata: Metadata::from_metadata23(metadata),
+            hashes: revision.into_hashes(),
+        })
+    }
+
+    /// Build a source distribution from a Git repository.
+    async fn git_source_tree(
+        &self,
+        source: &BuildableSource<'_>,
+        resource: &GitDirectorySourceUrl<'_>,
         tags: &Tags,
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
@@ -1703,10 +2041,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ///
     /// If the build backend supports `prepare_metadata_for_build_wheel`, this method will avoid
     /// building the wheel.
-    async fn git_metadata(
+    async fn git_source_tree_metadata(
         &self,
         source: &BuildableSource<'_>,
-        resource: &GitSourceUrl<'_>,
+        resource: &GitDirectorySourceUrl<'_>,
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
         credentials_cache: &CredentialsCache,
@@ -2045,8 +2383,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         client: &ManagedClient<'_>,
     ) -> Result<Option<GitOid>, Error> {
         let git = match source {
-            BuildableSource::Dist(SourceDist::Git(source)) => &*source.git,
-            BuildableSource::Url(SourceUrl::Git(source)) => source.git,
+            BuildableSource::Dist(SourceDist::GitDirectory(source)) => &*source.git,
+            BuildableSource::Dist(SourceDist::GitPath(source)) => &*source.git,
+            BuildableSource::Url(SourceUrl::GitDirectory(source)) => source.git,
+            BuildableSource::Url(SourceUrl::GitPath(source)) => source.git,
             _ => {
                 return Ok(None);
             }
@@ -2097,10 +2437,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         commit: GitOid,
         source: &BuildableSource<'_>,
-        resource: &GitSourceUrl<'_>,
+        resource: &GitDirectorySourceUrl<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<Option<ResolutionMetadata>, Error> {
-        let GitSourceUrl {
+        let GitDirectorySourceUrl {
             git, subdirectory, ..
         } = resource;
 
@@ -2440,7 +2780,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
         if let Err(err) = rename_with_retry(extracted, target).await {
             // If the directory already exists, accept it.
-            if err.kind() == std::io::ErrorKind::AlreadyExists {
+            if err.kind() == std::io::ErrorKind::DirectoryNotEmpty {
                 warn!("Directory already exists: {}", target.display());
             } else {
                 return Err(Error::CacheWrite(err));
@@ -2615,6 +2955,22 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         no_sources: NoSources,
     ) -> Result<Option<ResolutionMetadata>, Error> {
         debug!("Preparing metadata for: {source}");
+
+        let source_name = source.name();
+        if self
+            .build_context
+            .build_options()
+            .no_build_requirement(source_name)
+            // Editable requirements without a known name need metadata to apply
+            // package-specific build settings; named editables must respect `--no-build`.
+            && !(source_name.is_none() && source.is_editable())
+        {
+            return if let Some(name) = source_name {
+                Err(Error::NoBuildPackage(name.clone()))
+            } else {
+                Err(Error::NoBuild)
+            };
+        }
 
         // Ensure that the _installed_ Python version is compatible with the `requires-python`
         // specifier.
@@ -3061,6 +3417,46 @@ impl LocalRevisionPointer {
     }
 }
 
+/// A pointer to a source distribution revision in the cache, fetched from a local path.
+///
+/// Encoded with `MsgPack`, and represented on disk by a `.rev` file.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(crate) struct RevisionHashes {
+    hashes: Vec<HashDigest>,
+}
+
+impl RevisionHashes {
+    /// Read an [`RevisionHashes`] from the cache.
+    pub(crate) fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
+        match fs_err::read(path) {
+            Ok(cached) => Ok(Some(rmp_serde::from_slice::<Self>(&cached)?)),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(Error::CacheRead(err)),
+        }
+    }
+
+    /// Write an [`LocalRevisionPointer`] to the cache.
+    async fn write_to(&self, entry: &CacheEntry) -> Result<(), Error> {
+        fs::create_dir_all(&entry.dir())
+            .await
+            .map_err(Error::CacheWrite)?;
+        write_atomic(entry.path(), rmp_serde::to_vec(&self)?)
+            .await
+            .map_err(Error::CacheWrite)
+    }
+
+    /// Return the computed hashes of the archive.
+    pub(crate) fn into_hashes(self) -> HashDigests {
+        HashDigests::from(self.hashes)
+    }
+}
+
+impl Hashed for RevisionHashes {
+    fn hashes(&self) -> &[HashDigest] {
+        &self.hashes
+    }
+}
+
 /// Read the [`ResolutionMetadata`] from a source distribution's `PKG-INFO` file, if it uses Metadata 2.2
 /// or later _and_ none of the required fields (`Requires-Python`, `Requires-Dist`, and
 /// `Provides-Extra`) are marked as dynamic.
@@ -3145,8 +3541,7 @@ fn read_wheel_metadata(
 ) -> Result<ResolutionMetadata, Error> {
     let file = fs_err::File::open(wheel).map_err(Error::CacheRead)?;
     let reader = std::io::BufReader::new(file);
-    let mut archive = ZipArchive::new(reader)?;
-    let dist_info = read_archive_metadata(filename, &mut archive)
+    let dist_info = read_archive_metadata(filename, reader)
         .map_err(|err| Error::WheelMetadata(wheel.to_path_buf(), Box::new(err)))?;
     Ok(ResolutionMetadata::parse_metadata(&dist_info)?)
 }

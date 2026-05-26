@@ -9,6 +9,7 @@ use console::Term;
 use fs_err::File;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+
 use tracing::{debug, trace};
 
 use crate::{Error, Prompt};
@@ -114,22 +115,12 @@ pub(crate) fn create(
             } else {
                 "directory"
             };
-            let hint = format!(
-                "Use the `{}` flag or set `{}` to replace the existing {name}",
-                "--clear".green(),
-                "UV_VENV_CLEAR=1".green()
-            );
             // TODO(zanieb): We may want to consider omitting the hint in some of these cases, e.g.,
             // when `--no-clear` is used do we want to suggest `--clear`?
-            let err = Err(Error::Io(io::Error::new(
-                io::ErrorKind::AlreadyExists,
-                format!(
-                    "A {name} already exists at: {}\n\n{}{} {hint}",
-                    location.user_display(),
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                ),
-            )));
+            let err = Err(Error::Exists {
+                name,
+                path: location.to_path_buf(),
+            });
             match on_existing {
                 OnExisting::Allow => {
                     debug!("Allowing existing {name} due to `--allow-existing`");
@@ -142,7 +133,7 @@ pub(crate) fn create(
                     let location = location
                         .canonicalize()
                         .unwrap_or_else(|_| location.to_path_buf());
-                    remove_virtualenv(&location)?;
+                    uv_fs::remove_virtualenv(&location)?;
                     fs_err::create_dir_all(&location)?;
                 }
                 OnExisting::Fail => return err,
@@ -158,7 +149,7 @@ pub(crate) fn create(
                             let location = location
                                 .canonicalize()
                                 .unwrap_or_else(|_| location.to_path_buf());
-                            remove_virtualenv(&location)?;
+                            uv_fs::remove_virtualenv(&location)?;
                             fs_err::create_dir_all(&location)?;
                         }
                         Some(false) => return err,
@@ -608,58 +599,6 @@ fn confirm_clear(location: &Path, name: &'static str) -> Result<Option<bool>, io
     } else {
         Ok(None)
     }
-}
-
-/// Perform a safe removal of a virtual environment.
-pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
-    // On Windows, if the current executable is in the directory, defer self-deletion since Windows
-    // won't let you unlink a running executable.
-    #[cfg(windows)]
-    if let Ok(itself) = std::env::current_exe() {
-        let target = std::path::absolute(location)?;
-        if itself.starts_with(&target) {
-            debug!("Detected self-delete of executable: {}", itself.display());
-            self_replace::self_delete_outside_path(location)?;
-        }
-    }
-
-    // We defer removal of the `pyvenv.cfg` until the end, so if we fail to remove the environment,
-    // uv can still identify it as a Python virtual environment that can be deleted.
-    for entry in fs_err::read_dir(location)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path == location.join("pyvenv.cfg") {
-            continue;
-        }
-        if path.is_dir() {
-            fs_err::remove_dir_all(&path)?;
-        } else {
-            fs_err::remove_file(&path)?;
-        }
-    }
-
-    match fs_err::remove_file(location.join("pyvenv.cfg")) {
-        Ok(()) => {}
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-        Err(err) => return Err(err.into()),
-    }
-
-    // Remove the virtual environment directory itself
-    match fs_err::remove_dir_all(location) {
-        Ok(()) => {}
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-        // If the virtual environment is a mounted file system, e.g., in a Docker container, we
-        // cannot delete it — but that doesn't need to be a fatal error
-        Err(err) if err.kind() == io::ErrorKind::ResourceBusy => {
-            debug!(
-                "Skipping removal of `{}` directory due to {err}",
-                location.display(),
-            );
-        }
-        Err(err) => return Err(err.into()),
-    }
-
-    Ok(())
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

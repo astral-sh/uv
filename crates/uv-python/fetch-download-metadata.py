@@ -494,7 +494,7 @@ class PyPyFinder(Finder):
 class PyodideFinder(Finder):
     implementation = ImplementationName.CPYTHON
 
-    RELEASE_URL = "https://api.github.com/repos/pyodide/pyodide/releases"
+    RELEASE_URL = "https://api.github.com/repos/pyodide/pyodide/releases?per_page=100"
     METADATA_URL = (
         "https://pyodide.github.io/pyodide/api/pyodide-cross-build-environments.json"
     )
@@ -514,14 +514,19 @@ class PyodideFinder(Finder):
         return downloads
 
     async def _fetch_downloads(self) -> list[PythonDownload]:
-        # This will only download the first page, i.e., ~30 releases
-        [release_resp, meta_resp] = await asyncio.gather(
-            self.client.get(self.RELEASE_URL), self.client.get(self.METADATA_URL)
-        )
-        release_resp.raise_for_status()
+        meta_resp = await self.client.get(self.METADATA_URL)
         meta_resp.raise_for_status()
-        releases = release_resp.json()
         metadata = meta_resp.json()["releases"]
+
+        # Paginate through all pages of releases via the Link header
+        releases = []
+        release_url: str | None = self.RELEASE_URL
+        while release_url is not None:
+            resp = await self.client.get(release_url)
+            resp.raise_for_status()
+            releases.extend(resp.json())
+            next_link = resp.links.get("next", {})
+            release_url = next_link.get("url")
 
         results = {}
         for release in releases:

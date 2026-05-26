@@ -1,11 +1,13 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-use fs_err::File;
+use async_zip::base::read::mem::ZipFileReader;
+use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use std::env::current_dir;
+use std::path::Path;
 use url::Url;
 use uv_static::EnvVars;
 use uv_test::{DEFAULT_PYTHON_VERSION, apply_filters, uv_snapshot};
@@ -13,7 +15,20 @@ use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path as url_path},
 };
-use zip::ZipArchive;
+
+fn zip_file_names(path: &Path) -> Result<Vec<String>> {
+    block_on(async {
+        let wheel = ZipFileReader::new(fs_err::read(path)?).await?;
+        let mut files: Vec<_> = wheel
+            .file()
+            .entries()
+            .iter()
+            .map(|entry| Ok(entry.filename().as_str()?.to_string()))
+            .collect::<async_zip::error::Result<_>>()?;
+        files.sort();
+        Ok(files)
+    })
+}
 
 #[test]
 fn build_basic() -> Result<()> {
@@ -481,7 +496,8 @@ fn build_fail() -> Result<()> {
       × Failed to build `[TEMP_DIR]/project`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
     Ok(())
@@ -811,7 +827,8 @@ fn build_all_with_failure() -> Result<()> {
       × Failed to build `member-b @ [TEMP_DIR]/project/packages/member_b`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
     ");
@@ -1697,7 +1714,8 @@ fn build_hide_build_output_on_failure() -> Result<()> {
       × Failed to build `[TEMP_DIR]/project`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     Ok(())
@@ -1798,6 +1816,53 @@ fn build_tool_uv_sources() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn build_named_index_config_file_hint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.sources]
+        hatchling = { index = "privindex" }
+        "#,
+    )?;
+
+    project.child("uv.toml").write_str(
+        r#"
+        [[index]]
+        name = "privindex"
+        url = "https://example.com/simple"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.build().current_dir(project.path()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+      × Failed to build `[TEMP_DIR]/project`
+      ├─▶ Failed to parse entry: `hatchling`
+      ╰─▶ Package `hatchling` references an undeclared index: `privindex`
+
+    hint: Index `privindex` was found in a project-level `uv.toml`, but indexes referenced via `tool.uv.sources` must be defined in the project's `pyproject.toml`
+    ");
+
+    Ok(())
+}
+
 /// Check that we have a working git boundary for builds from source dist to wheel in `dist/`.
 #[test]
 fn build_git_boundary_in_dist_build() -> Result<()> {
@@ -1836,12 +1901,7 @@ fn build_git_boundary_in_dist_build() -> Result<()> {
     ");
 
     // Check that the source file is included
-    let reader = File::open(project.join("dist/demo-0.1.0-py3-none-any.whl"))?;
-    let mut files: Vec<_> = ZipArchive::new(reader)?
-        .file_names()
-        .map(ToString::to_string)
-        .collect();
-    files.sort();
+    let files = zip_file_names(&project.join("dist/demo-0.1.0-py3-none-any.whl"))?;
     assert_snapshot!(files.join("\n"), @"
     demo-0.1.0.dist-info/METADATA
     demo-0.1.0.dist-info/RECORD
@@ -2055,6 +2115,138 @@ fn build_fast_path() -> Result<()> {
     Ok(())
 }
 
+/// Reject path-shaped script entry point names before writing wheel metadata.
+#[test]
+fn build_unsafe_script_entry_point_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.init().assert().success();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [project.scripts]
+        "../script" = "project:main"
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+      × Failed to build `[TEMP_DIR]/`
+      ├─▶ Invalid project metadata
+      ╰─▶ Script entry point name `../script` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
+    ");
+
+    Ok(())
+}
+
+/// Reject dot-only script entry point names that do not resolve below the scripts directory.
+#[test]
+fn build_dot_script_entry_point_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.init().assert().success();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [project.scripts]
+        "." = "project:main"
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+      × Failed to build `[TEMP_DIR]/`
+      ├─▶ Invalid project metadata
+      ╰─▶ Script entry point name `.` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
+    ");
+
+    Ok(())
+}
+
+/// Reject script entry point names that PyPI rejects in uploaded wheels.
+#[test]
+fn build_nested_script_entry_point_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.init().assert().success();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [project.scripts]
+        "nested/script" = "project:main"
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+      × Failed to build `[TEMP_DIR]/`
+      ├─▶ Invalid project metadata
+      ╰─▶ Script entry point name `nested/script` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
+    ");
+
+    Ok(())
+}
+
 /// Test the `--list` option.
 #[test]
 fn build_list_files() -> Result<()> {
@@ -2068,18 +2260,21 @@ fn build_list_files() -> Result<()> {
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
-        .arg("--list"), @"
+        .arg("--list")
+        .arg("--preview-features")
+        .arg("toml-backwards-compatibility"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Building built_by_uv-0.1.0.tar.gz will include the following files:
     built_by_uv-0.1.0/PKG-INFO (generated)
+    built_by_uv-0.1.0/pyproject.toml (generated)
+    built_by_uv-0.1.0/pyproject.toml.orig (pyproject.toml)
     built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
     built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
     built_by_uv-0.1.0/README.md (README.md)
     built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
     built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
-    built_by_uv-0.1.0/pyproject.toml (pyproject.toml)
     built_by_uv-0.1.0/scripts/whoami.sh (scripts/whoami.sh)
     built_by_uv-0.1.0/src/built_by_uv/__init__.py (src/built_by_uv/__init__.py)
     built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
@@ -2125,18 +2320,21 @@ fn build_list_files() -> Result<()> {
         .arg(context.temp_dir.join("output2"))
         .arg("--list")
         .arg("--sdist")
-        .arg("--wheel"), @"
+        .arg("--wheel")
+        .arg("--preview-features")
+        .arg("toml-backwards-compatibility"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Building built_by_uv-0.1.0.tar.gz will include the following files:
     built_by_uv-0.1.0/PKG-INFO (generated)
+    built_by_uv-0.1.0/pyproject.toml (generated)
+    built_by_uv-0.1.0/pyproject.toml.orig (pyproject.toml)
     built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
     built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
     built_by_uv-0.1.0/README.md (README.md)
     built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
     built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
-    built_by_uv-0.1.0/pyproject.toml (pyproject.toml)
     built_by_uv-0.1.0/scripts/whoami.sh (scripts/whoami.sh)
     built_by_uv-0.1.0/src/built_by_uv/__init__.py (src/built_by_uv/__init__.py)
     built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
@@ -2541,7 +2739,8 @@ fn force_pep517() -> Result<()> {
       × Failed to build `[TEMP_DIR]/`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `uv_build.build_sdist` failed (exit status: 1)
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     Ok(())

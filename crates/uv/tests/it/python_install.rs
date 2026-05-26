@@ -2620,6 +2620,17 @@ fn python_install_prerelease() {
     Installed Python 3.15.0a2 in [TIME]
      + cpython-3.15.0a2-[PLATFORM]
     ");
+
+    // Install a release candidate for a non-zero patch version
+    uv_snapshot!(context.filters(), context.python_install().arg("3.14.5rc1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.5rc1 in [TIME]
+     + cpython-3.14.5rc1-[PLATFORM] (python3.14)
+    ");
 }
 
 #[test]
@@ -3672,6 +3683,7 @@ fn uninstall_last_patch() {
 /// (symlink on Unix, junction on Windows) should be removed.
 ///
 /// Regression test for <https://github.com/astral-sh/uv/issues/18793>.
+/// This now backstops the upgrade to `junction` >=2, which can read dangling junctions.
 #[test]
 fn uninstall_last_patch_removes_minor_version_link() {
     let context = uv_test::test_context_with_versions!(&[])

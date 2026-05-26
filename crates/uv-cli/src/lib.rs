@@ -11,7 +11,7 @@ use clap::error::ErrorKind;
 use clap::{Args, Parser, Subcommand};
 use clap::{ValueEnum, ValueHint};
 
-use uv_audit::service::VulnerabilityServiceFormat;
+use uv_audit::VulnerabilityServiceFormat;
 use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::{
@@ -61,6 +61,15 @@ pub enum PythonListFormat {
 
 #[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
 pub enum SyncFormat {
+    /// Display the result in a human-readable format.
+    #[default]
+    Text,
+    /// Display the result in JSON format.
+    Json,
+}
+
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum AuditOutputFormat {
     /// Display the result in a human-readable format.
     #[default]
     Text,
@@ -236,8 +245,8 @@ pub struct GlobalArgs {
     )]
     pub color: Option<ColorChoice>,
 
-    /// Whether to load TLS certificates from the platform's native certificate store [env:
-    /// UV_NATIVE_TLS=]
+    /// (Deprecated: use `--system-certs` instead.) Whether to load TLS certificates from the
+    /// platform's native certificate store [env: UV_NATIVE_TLS=]
     ///
     /// By default, uv uses bundled Mozilla root certificates. When enabled, this flag loads
     /// certificates from the platform's native certificate store instead.
@@ -532,8 +541,7 @@ pub enum Commands {
     /// Inspect uv workspaces.
     #[command(
         after_help = "Use `uv help workspace` for more details.",
-        after_long_help = "",
-        hide = true
+        after_long_help = ""
     )]
     Workspace(WorkspaceNamespace),
     /// The implementation of the build backend.
@@ -2111,6 +2119,10 @@ pub struct PipInstallArgs {
     #[arg(long, short, group = "sources")]
     pub editable: Vec<String>,
 
+    /// Install any editable dependencies as non-editable [env: UV_NO_EDITABLE=]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_editable: bool,
+
     /// Constrain versions using the given requirements files.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
@@ -3552,13 +3564,13 @@ pub struct RunArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_hint = ValueHint::Other)]
     pub group: Vec<GroupName>,
 
-    /// Disable the specified dependency group.
+    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
     ///
     /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -3896,13 +3908,13 @@ pub struct SyncArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_hint = ValueHint::Other)]
     pub group: Vec<GroupName>,
 
-    /// Disable the specified dependency group.
+    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
     ///
     /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -4711,13 +4723,13 @@ pub struct TreeArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
     pub group: Vec<GroupName>,
 
-    /// Disable the specified dependency group.
+    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
     ///
     /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
+    #[arg(long, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -4887,13 +4899,13 @@ pub struct ExportArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
     pub group: Vec<GroupName>,
 
-    /// Disable the specified dependency group.
+    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
     ///
     /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ')]
+    #[arg(long, value_delimiter = ' ')]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
@@ -5176,10 +5188,10 @@ pub struct AuditArgs {
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
-    /// Don't audit the specified dependency group.
+    /// Don't audit the specified dependency group [env: `UV_NO_GROUP`=]
     ///
     /// May be provided multiple times.
-    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
     pub no_group: Vec<GroupName>,
 
     /// Don't audit the default dependency groups.
@@ -5214,6 +5226,10 @@ pub struct AuditArgs {
     /// If the lockfile is missing, uv will exit with an error.
     #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
+
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = AuditOutputFormat::default())]
+    pub output_format: AuditOutputFormat,
 
     #[command(flatten)]
     pub build: BuildOptionsArgs,
@@ -6170,8 +6186,8 @@ pub struct ToolUpgradeArgs {
     )]
     pub no_sources: bool,
 
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages.
-    #[arg(long, help_heading = "Resolver options", env = EnvVars::UV_NO_SOURCES_PACKAGE, value_delimiter = ' ')]
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
     pub no_sources_package: Vec<PackageName>,
 
     #[command(flatten)]
@@ -7016,11 +7032,10 @@ pub struct BuildOptionsArgs {
     )]
     pub build: bool,
 
-    /// Don't build source distributions for a specific package.
+    /// Don't build source distributions for a specific package [env: `UV_NO_BUILD_PACKAGE`=]
     #[arg(
         long,
         help_heading = "Build options",
-        env = EnvVars::UV_NO_BUILD_PACKAGE,
         value_delimiter = ' ',
         value_hint = ValueHint::Other,
     )]
@@ -7047,11 +7062,10 @@ pub struct BuildOptionsArgs {
     )]
     pub binary: bool,
 
-    /// Don't install pre-built wheels for a specific package.
+    /// Don't install pre-built wheels for a specific package [env: `UV_NO_BINARY_PACKAGE`=]
     #[arg(
         long,
         help_heading = "Build options",
-        env = EnvVars::UV_NO_BINARY_PACKAGE,
         value_delimiter = ' ',
         value_hint = ValueHint::Other,
     )]
@@ -7243,8 +7257,8 @@ pub struct InstallerArgs {
     )]
     pub no_sources: bool,
 
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages.
-    #[arg(long, help_heading = "Resolver options", env = EnvVars::UV_NO_SOURCES_PACKAGE, value_delimiter = ' ')]
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
     pub no_sources_package: Vec<PackageName>,
 }
 
@@ -7463,8 +7477,8 @@ pub struct ResolverArgs {
     )]
     pub no_sources: bool,
 
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages.
-    #[arg(long, help_heading = "Resolver options", env = EnvVars::UV_NO_SOURCES_PACKAGE, value_delimiter = ' ')]
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
     pub no_sources_package: Vec<PackageName>,
 }
 
@@ -7740,8 +7754,8 @@ pub struct ResolverInstallerArgs {
     )]
     pub no_sources: bool,
 
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages.
-    #[arg(long, help_heading = "Resolver options", env = EnvVars::UV_NO_SOURCES_PACKAGE, value_delimiter = ' ')]
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
     pub no_sources_package: Vec<PackageName>,
 }
 
@@ -7996,7 +8010,6 @@ pub enum WorkspaceCommand {
     /// List the members of a workspace.
     ///
     /// Displays newline separated names of workspace members.
-    #[command(hide = true)]
     List(WorkspaceListArgs),
 }
 #[derive(Args)]

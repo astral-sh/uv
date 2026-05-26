@@ -10,22 +10,23 @@ pub use flat_index::{FlatDistributions, FlatIndex};
 pub use fork_strategy::ForkStrategy;
 pub use lock::{
     Installable, Lock, LockError, LockVersion, Metadata, Package, PackageMap, PylockToml,
-    PylockTomlErrorKind, RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay,
-    VERSION, cyclonedx_json,
+    PylockTomlError, PylockTomlErrorKind, RequirementsTxtExport, ResolverManifest, SatisfiesResult,
+    TreeDisplay, VERSION, cyclonedx_json,
 };
 pub use manifest::Manifest;
 pub use options::{Flexibility, Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError, Preferences};
 pub use prerelease::PrereleaseMode;
+pub use pubgrub::PubGrubHint;
 pub use python_requirement::PythonRequirement;
 pub use resolution::{
     AnnotationStyle, ConflictingDistributionError, DisplayResolutionGraph, ResolverOutput,
 };
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{
-    BuildId, DefaultResolverProvider, DerivationChainBuilder, InMemoryIndex, MetadataResponse,
-    PackageVersionsResult, Reporter as ResolverReporter, Resolver, ResolverEnvironment,
-    ResolverProvider, VersionsResponse, WheelMetadataResult,
+    DefaultResolverProvider, InMemoryIndex, MetadataResponse, PackageVersionsResult,
+    Reporter as ResolverReporter, Resolver, ResolverEnvironment, ResolverProvider,
+    VersionsResponse, WheelMetadataResult,
 };
 pub use universal_marker::{ConflictMarker, UniversalMarker};
 pub use upgrade::UpgradePackages;

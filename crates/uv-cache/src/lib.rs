@@ -766,7 +766,8 @@ impl Cache {
     /// On Windows, we write structured data ([`Link`]) to a file containing the archive ID and
     /// version. On Unix, we create a symlink to the target directory.
     #[cfg(windows)]
-    pub fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
+    #[expect(clippy::unused_self)]
+    fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
         // Serialize the link.
         let link = Link::new(id.clone());
         let contents = link.to_string();
@@ -824,7 +825,7 @@ impl Cache {
     /// On Windows, we write structured data ([`Link`]) to a file containing the archive ID and
     /// version. On Unix, we create a symlink to the target directory.
     #[cfg(unix)]
-    pub fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
+    fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
         // Construct the link target.
         let src = self.archive(id);
         let dst = dst.as_ref();
@@ -1174,6 +1175,11 @@ pub enum CacheBucket {
     Python,
     /// Downloaded tool binaries (e.g., Ruff).
     Binaries,
+    /// Cached vulnerability data from [OSV](https://osv.dev/).
+    ///
+    /// Cache structure:
+    ///  * `osv-v0/vulnerability/<vuln_id>.msgpack` — cached full vulnerability records
+    Osv,
 }
 
 impl CacheBucket {
@@ -1198,6 +1204,7 @@ impl CacheBucket {
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
             Self::Binaries => "binaries-v0",
+            Self::Osv => "osv-v0",
         }
     }
 
@@ -1305,7 +1312,8 @@ impl CacheBucket {
             | Self::Builds
             | Self::Environments
             | Self::Python
-            | Self::Binaries => {
+            | Self::Binaries
+            | Self::Osv => {
                 // Nothing to do.
             }
         }
@@ -1325,6 +1333,7 @@ impl CacheBucket {
             Self::Builds,
             Self::Environments,
             Self::Binaries,
+            Self::Osv,
         ]
         .iter()
         .copied()
@@ -1350,10 +1359,6 @@ pub enum Freshness {
 impl Freshness {
     pub const fn is_fresh(self) -> bool {
         matches!(self, Self::Fresh)
-    }
-
-    pub const fn is_stale(self) -> bool {
-        matches!(self, Self::Stale)
     }
 }
 

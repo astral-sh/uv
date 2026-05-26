@@ -28,8 +28,7 @@ use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
-use uv_requirements::ExtrasResolver;
-use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
+use uv_requirements::{ExtrasResolver, LockedRequirements, read_lock_requirements};
 use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, Package, PythonRequirement,
     ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
@@ -230,7 +229,7 @@ pub(crate) async fn lock(
                     }
                     FrozenSource::Env | FrozenSource::Configuration => {
                         warn_user!(
-                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because {} was provided; use `--no-frozen` or `--check` instead",
+                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because {} was provided; use `--check` instead",
                             MissingLockfileSource::from(frozen_source)
                         );
                     }
@@ -853,9 +852,13 @@ async fn do_lock(
         .await
         {
             Ok(result) => Some(result),
-            Err(ProjectError::Lock(err)) if err.is_resolution() => {
+            Err(ProjectError::Lock(err)) if err.is_resolution() || err.is_no_build() => {
                 // Resolver errors are not recoverable, as such errors can leave the resolver in a
                 // broken state. Specifically, tasks that fail with an error can be left as pending.
+                //
+                // Disabled builds are user policy errors. Static local projects are validated
+                // before this point, so reaching this case means validation genuinely needs
+                // metadata that cannot be obtained under `--no-build`.
                 return Err(ProjectError::Lock(err));
             }
             Err(err) => {
@@ -1259,6 +1262,7 @@ impl ValidatedLock {
                 indexes,
                 interpreter.tags()?,
                 interpreter.markers(),
+                &options.build_options,
                 hasher,
                 index,
                 database,

@@ -16,6 +16,26 @@ use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_mem
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
 
+/// Ensure the file path is safe to use as a [`Path`].
+///
+/// See: <https://docs.rs/zip/latest/zip/read/struct.ZipFile.html#method.enclosed_name>
+pub(crate) fn enclosed_name(file_name: &str) -> Option<PathBuf> {
+    if file_name.contains('\0') {
+        return None;
+    }
+    let path = PathBuf::from(file_name);
+    let mut depth = 0usize;
+    for component in path.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir => return None,
+            Component::ParentDir => depth = depth.checked_sub(1)?,
+            Component::Normal(_) => depth += 1,
+            Component::CurDir => (),
+        }
+    }
+    Some(path)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LocalHeaderEntry {
     /// The relative path of the entry, as computed from the local file header.
@@ -55,26 +75,6 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
-    /// Ensure the file path is safe to use as a [`Path`].
-    ///
-    /// See: <https://docs.rs/zip/latest/zip/read/struct.ZipFile.html#method.enclosed_name>
-    pub(crate) fn enclosed_name(file_name: &str) -> Option<PathBuf> {
-        if file_name.contains('\0') {
-            return None;
-        }
-        let path = PathBuf::from(file_name);
-        let mut depth = 0usize;
-        for component in path.components() {
-            match component {
-                Component::Prefix(_) | Component::RootDir => return None,
-                Component::ParentDir => depth = depth.checked_sub(1)?,
-                Component::Normal(_) => depth += 1,
-                Component::CurDir => (),
-            }
-        }
-        Some(path)
-    }
-
     // Determine whether ZIP validation is disabled.
     let skip_validation = insecure_no_validate();
 
@@ -664,7 +664,7 @@ async fn untar_in(
 /// This is useful for unpacking files as they're being downloaded.
 ///
 /// Returns the list of unpacked files and their sizes.
-pub async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
+async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
@@ -688,7 +688,7 @@ pub async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
 /// This is useful for unpacking files as they're being downloaded.
 ///
 /// Returns the list of unpacked files and their sizes.
-pub async fn untar_bz2<R: tokio::io::AsyncRead + Unpin>(
+async fn untar_bz2<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
@@ -731,68 +731,12 @@ pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
         .map_err(Error::io_or_compression)
 }
 
-/// Unpack a `.tar.zst` archive from a file on disk into the target directory.
-///
-/// Returns the list of unpacked files and their sizes.
-pub fn untar_zst_file<R: std::io::Read>(
-    reader: R,
-    target: impl AsRef<Path>,
-) -> Result<Vec<(PathBuf, u64)>, Error> {
-    let reader = std::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let decompressed = zstd::Decoder::new(reader).map_err(Error::Io)?;
-    let mut archive = tar::Archive::new(decompressed);
-    archive.set_preserve_mtime(false);
-
-    // The logic below is `Archive::unpack`, with slight simplifications as we know the target is
-    // a real directory, using our error handling and adding file recording.
-    let mut files = Vec::new();
-
-    // Canonicalizing the dst directory will prepend the path with '\\?\'
-    // on windows which will allow windows APIs to treat the path as an
-    // extended-length path with a 32,767 character limit. Otherwise all
-    // unpacked paths over 260 characters will fail on creation with a
-    // NotFound exception.
-    let dst = fs_err::canonicalize(&target).unwrap_or(target.as_ref().to_path_buf());
-
-    // Delay any directory entries until the end (they will be created if needed by
-    // descendants), to ensure that directory permissions do not interfere with descendant
-    // extraction.
-    let mut directories = Vec::new();
-    for entry in archive.entries().map_err(Error::io_or_compression)? {
-        let mut file = entry.map_err(Error::io_or_compression)?;
-        if file.header().entry_type() == tar::EntryType::Directory {
-            directories.push(file);
-        } else {
-            let entry_type = file.header().entry_type();
-            let path = file.path().map_err(Error::io_or_compression)?.into_owned();
-            let size = file.header().size().map_err(Error::io_or_compression)?;
-            if entry_type.is_file() || entry_type.is_hard_link() {
-                files.push((path, size));
-            }
-            file.unpack_in(&dst).map_err(Error::io_or_compression)?;
-        }
-    }
-
-    // Apply the directories.
-    //
-    // Note: the order of application is important to permissions. That is, we must traverse
-    // the filesystem graph in topological ordering or else we risk not being able to create
-    // child directories within those of more restrictive permissions. See [0] for details.
-    //
-    // [0]: <https://github.com/alexcrichton/tar-rs/issues/242>
-    directories.sort_by(|a, b| b.path_bytes().cmp(&a.path_bytes()));
-    for mut dir in directories {
-        dir.unpack_in(&dst).map_err(Error::io_or_compression)?;
-    }
-    Ok(files)
-}
-
 /// Unpack a `.tar.xz` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
 ///
 /// Returns the list of unpacked files and their sizes.
-pub async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
+async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
@@ -816,7 +760,7 @@ pub async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
 /// This is useful for unpacking files as they're being downloaded.
 ///
 /// Returns the list of unpacked files and their sizes.
-pub async fn untar<R: tokio::io::AsyncRead + Unpin>(
+async fn untar<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {

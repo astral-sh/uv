@@ -69,13 +69,13 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
 
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
     // > 1.d Else unpack archive into platlib (site-packages).
-    trace!(?name, "Extracting file");
+    trace!(?name, "Extracting wheel files");
     let site_packages = match lib_kind {
         LibKind::Pure => &layout.scheme.purelib,
         LibKind::Plat => &layout.scheme.platlib,
     };
-    let num_unpacked = link_wheel_files(link_mode, site_packages, &wheel, state, filename)?;
-    trace!(?name, "Extracted {num_unpacked} files");
+    link_wheel_files(link_mode, site_packages, &wheel, state, filename)?;
+    trace!(?name, "Extracted wheel files");
 
     // Read the RECORD file.
     let mut record_file = File::open(

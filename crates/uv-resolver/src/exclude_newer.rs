@@ -13,7 +13,7 @@ use uv_warnings::warn_user_once;
 
 /// The configuration layer that supplied the effective `exclude-newer` cutoff for a package.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum EffectiveExcludeNewerSource {
+pub enum EffectiveExcludeNewerSource {
     /// The global `exclude-newer` setting.
     Global,
     /// A package-specific `exclude-newer-package` override.

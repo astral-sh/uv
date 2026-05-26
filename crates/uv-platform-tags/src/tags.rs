@@ -6,10 +6,8 @@ use std::{cmp, num::NonZeroU32};
 
 use rustc_hash::FxHashMap;
 
-use uv_small_str::SmallString;
-
 use crate::abi_tag::CPythonAbiVariants;
-use crate::{AbiTag, Arch, LanguageTag, Os, Platform, PlatformError, PlatformTag};
+use crate::{AbiTag, Arch, LanguageTag, Os, Platform, PlatformError, PlatformTag, ReleaseArch};
 
 #[derive(Debug, thiserror::Error)]
 pub enum TagsError {
@@ -680,7 +678,12 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             let arch_tag = arch.machine();
             let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::FreeBsd {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::NetBsd { release }, arch) => {
@@ -688,7 +691,12 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             let arch_tag = arch.machine();
             let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::NetBsd {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::OpenBsd { release }, arch) => {
@@ -696,21 +704,36 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             let arch_tag = arch.machine();
             let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::OpenBsd {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::Dragonfly { release }, arch) => {
             let release = release.replace(['.', '-'], "_");
             let release_arch = format!("{release}_{arch}");
             vec![PlatformTag::Dragonfly {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::Haiku { release }, arch) => {
             let release = release.replace(['.', '-'], "_");
             let release_arch = format!("{release}_{arch}");
             vec![PlatformTag::Haiku {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::Illumos { release, arch }, _) => {
@@ -727,14 +750,24 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
                     let arch = format!("{arch}_64bit");
                     let release_arch = format!("{release}_{arch}");
                     return Ok(vec![PlatformTag::Solaris {
-                        release_arch: SmallString::from(release_arch),
+                        release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                            PlatformError::InvalidReleaseArch {
+                                release_arch,
+                                error,
+                            }
+                        })?,
                     }]);
                 }
             }
 
             let release_arch = format!("{release}_{arch}");
             vec![PlatformTag::Illumos {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::Android { api_level }, arch) => {
@@ -880,7 +913,7 @@ impl BinaryFormat {
     /// Determine the appropriate binary formats for a macOS version.
     ///
     /// See: <https://github.com/pypa/packaging/blob/fd4f11139d1c884a637be8aa26bb60a31fbc9411/packaging/tags.py#L314>
-    pub fn from_arch(arch: Arch) -> &'static [Self] {
+    fn from_arch(arch: Arch) -> &'static [Self] {
         match arch {
             Arch::Aarch64 => &[Self::Arm64, Self::Universal2],
             Arch::Powerpc64 => &[Self::Ppc64, Self::Fat64, Self::Universal],
@@ -992,7 +1025,7 @@ impl FromStr for AndroidAbi {
 
 impl AndroidAbi {
     /// Determine the appropriate Android arch.
-    pub fn from_arch(arch: Arch) -> Result<Self, PlatformError> {
+    fn from_arch(arch: Arch) -> Result<Self, PlatformError> {
         match arch {
             Arch::Aarch64 => Ok(Self::Arm64V8a),
             Arch::Armv7L => Ok(Self::ArmeabiV7a),
@@ -1058,7 +1091,7 @@ impl FromStr for IosMultiarch {
 
 impl IosMultiarch {
     /// Determine the appropriate multiarch for a iOS version.
-    pub fn from_arch(arch: Arch, simulator: bool) -> Result<Self, PlatformError> {
+    fn from_arch(arch: Arch, simulator: bool) -> Result<Self, PlatformError> {
         if simulator {
             match arch {
                 Arch::Aarch64 => Ok(Self::Arm64Simulator),
@@ -1452,6 +1485,24 @@ mod tests {
         ]
         "#
         );
+    }
+
+    #[test]
+    fn test_platform_tags_invalid_release_arch() {
+        let error = compatible_tags(&Platform::new(
+            Os::FreeBsd {
+                release: "13/14".to_string(),
+            },
+            Arch::X86_64,
+        ))
+        .unwrap_err();
+
+        assert_debug_snapshot!(error, @r#"
+        InvalidReleaseArch {
+            release_arch: "13/14_amd64",
+            error: ParseReleaseArchError,
+        }
+        "#);
     }
 
     #[test]

@@ -42,8 +42,7 @@ pub use crate::origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
 pub use crate::unnamed::{UnnamedRequirement, UnnamedRequirementUrl};
 pub use crate::verbatim_url::{
-    Scheme, VerbatimUrl, VerbatimUrlError, expand_env_vars, looks_like_git_repository,
-    split_scheme, strip_host,
+    Scheme, VerbatimUrl, VerbatimUrlError, expand_env_vars, looks_like_git_repository, split_scheme,
 };
 /// Version and version specifiers used in requirements (reexport).
 // https://github.com/konstin/pep508_rs/issues/19
@@ -396,20 +395,6 @@ impl<T: Pep508Url> Requirement<T> {
             &mut Cursor::new(input),
             Some(working_dir.as_ref()),
             &mut TracingReporter,
-        )
-    }
-
-    /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/)
-    /// with the given reporter for warnings.
-    pub fn parse_reporter(
-        input: &str,
-        working_dir: impl AsRef<Path>,
-        reporter: &mut impl Reporter,
-    ) -> Result<Self, Pep508Error<T>> {
-        parse_pep508_requirement(
-            &mut Cursor::new(input),
-            Some(working_dir.as_ref()),
-            reporter,
         )
     }
 }
@@ -794,7 +779,7 @@ fn parse_url<T: Pep508Url>(
 /// - If the string ends with a closing bracket (`]`)...
 /// - Iterate backwards until you find the open bracket (`[`)...
 /// - But abort if you find another closing bracket (`]`) first.
-pub fn split_extras(given: &str) -> Option<(&str, &str)> {
+pub(crate) fn split_extras(given: &str) -> Option<(&str, &str)> {
     let mut chars = given.char_indices().rev();
 
     // If the string ends with a closing bracket (`]`)...

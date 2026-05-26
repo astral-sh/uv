@@ -40,8 +40,8 @@ pub const PACKSE_VERSION: &str = "0.3.59";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
-pub const LATEST_PYTHON_3_15: &str = "3.15.0a8";
-pub const LATEST_PYTHON_3_14: &str = "3.14.4";
+pub const LATEST_PYTHON_3_15: &str = "3.15.0b1";
+pub const LATEST_PYTHON_3_14: &str = "3.14.5";
 pub const LATEST_PYTHON_3_13: &str = "3.13.13";
 pub const LATEST_PYTHON_3_12: &str = "3.12.13";
 pub const LATEST_PYTHON_3_11: &str = "3.11.15";
@@ -759,19 +759,6 @@ impl TestContext {
     }
 
     /// Use a working directory on the filesystem specified by
-    /// [`EnvVars::UV_INTERNAL__TEST_ALT_FS`].
-    ///
-    /// Returns `Ok(None)` if the environment variable is not set.
-    ///
-    /// Note a virtual environment is not created automatically.
-    pub fn with_working_dir_on_alt_fs(self) -> anyhow::Result<Option<Self>> {
-        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_ALT_FS).ok() else {
-            return Ok(None);
-        };
-        self.with_working_dir_on_fs(&dir, "ALT_FS").map(Some)
-    }
-
-    /// Use a working directory on the filesystem specified by
     /// [`EnvVars::UV_INTERNAL__TEST_NOCOW_FS`].
     ///
     /// Returns `Ok(None)` if the environment variable is not set.
@@ -1182,6 +1169,7 @@ impl TestContext {
     /// * Don't wrap text output based on the terminal we're in, the test output doesn't get printed
     ///   but snapshotted to a string.
     /// * Use a fake `HOME` to avoid accidentally changing the developer's machine.
+    /// * Ignore system configuration to avoid reading machine-specific settings.
     /// * Hide other Pythons with `UV_PYTHON_INSTALL_DIR` and installed interpreters with
     ///   `UV_PYTHON_SEARCH_PATH` and an active venv (if applicable) by removing `VIRTUAL_ENV`.
     /// * Increase the stack size to avoid stack overflows on windows due to large async functions.
@@ -1229,6 +1217,7 @@ impl TestContext {
                 EnvVars::XDG_DATA_HOME,
                 self.home_dir.join("data").as_os_str(),
             )
+            .env(EnvVars::UV_NO_SYSTEM_CONFIG, "1")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
             // Installations are not allowed by default; see `Self::with_managed_python_dirs`
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")

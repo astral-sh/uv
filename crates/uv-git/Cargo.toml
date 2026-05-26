@@ -1,6 +1,6 @@
 [package]
 name = "uv-git"
-version = "0.0.40"
+version = "0.0.49"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -11,7 +11,6 @@ license = { workspace = true }
 
 [lib]
 doctest = false
-test = false
 
 [lints]
 workspace = true
@@ -31,9 +30,10 @@ cargo-util = { workspace = true }
 dashmap = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 owo-colors = { workspace = true }
-reqwest = { workspace = true, features = ["blocking"] }
+reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+url = { workspace = true }
 which = { workspace = true }

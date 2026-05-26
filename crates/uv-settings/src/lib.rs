@@ -10,7 +10,9 @@ use uv_dirs::{system_config_file, user_config_dir};
 use uv_distribution_types::Origin;
 use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
+use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
+use uv_redacted::DisplaySafeUrl;
 use uv_static::{EnvVars, InvalidEnvironmentVariable, parse_boolish_environment_variable};
 use uv_warnings::warn_user;
 
@@ -76,6 +78,10 @@ impl FilesystemOptions {
     }
 
     pub fn system() -> Result<Option<Self>, Error> {
+        if parse_boolish_environment_variable(EnvVars::UV_NO_SYSTEM_CONFIG)? == Some(true) {
+            return Ok(None);
+        }
+
         let Some(file) = system_config_file() else {
             return Ok(None);
         };
@@ -747,10 +753,16 @@ pub struct EnvironmentOptions {
     pub show_resolution: EnvFlag,
     pub no_editable: EnvFlag,
     pub no_env_file: EnvFlag,
+    pub no_group: Option<Vec<GroupName>>,
+    pub no_binary_package: Option<Vec<PackageName>>,
+    pub no_build_package: Option<Vec<PackageName>>,
+    pub no_sources_package: Option<Vec<PackageName>>,
     pub venv_seed: EnvFlag,
     pub venv_clear: EnvFlag,
     pub venv_relocatable: EnvFlag,
     pub init_bare: EnvFlag,
+    pub malware_check: EnvFlag,
+    pub malware_check_url: Option<DisplaySafeUrl>,
 }
 
 impl EnvironmentOptions {
@@ -843,10 +855,28 @@ impl EnvironmentOptions {
             show_resolution: EnvFlag::new(EnvVars::UV_SHOW_RESOLUTION)?,
             no_editable: EnvFlag::new(EnvVars::UV_NO_EDITABLE)?,
             no_env_file: EnvFlag::new(EnvVars::UV_NO_ENV_FILE)?,
+            no_group: parse_name_list_environment_variable(EnvVars::UV_NO_GROUP)?,
+            no_binary_package: parse_name_list_environment_variable(EnvVars::UV_NO_BINARY_PACKAGE)?,
+            no_build_package: parse_name_list_environment_variable(EnvVars::UV_NO_BUILD_PACKAGE)?,
+            no_sources_package: parse_name_list_environment_variable(
+                EnvVars::UV_NO_SOURCES_PACKAGE,
+            )?,
             venv_seed: EnvFlag::new(EnvVars::UV_VENV_SEED)?,
             venv_clear: EnvFlag::new(EnvVars::UV_VENV_CLEAR)?,
             venv_relocatable: EnvFlag::new(EnvVars::UV_VENV_RELOCATABLE)?,
             init_bare: EnvFlag::new(EnvVars::UV_INIT_BARE)?,
+            malware_check: EnvFlag::new(EnvVars::UV_MALWARE_CHECK)?,
+            malware_check_url: parse_string_environment_variable(EnvVars::UV_MALWARE_CHECK_URL)?
+                .map(|value| {
+                    value.parse::<DisplaySafeUrl>().map_err(|err| {
+                        Error::InvalidEnvironmentVariable(InvalidEnvironmentVariable {
+                            name: EnvVars::UV_MALWARE_CHECK_URL.to_string(),
+                            value,
+                            err: err.to_string(),
+                        })
+                    })
+                })
+                .transpose()?,
         })
     }
 }
@@ -871,6 +901,36 @@ fn parse_string_environment_variable(name: &'static str) -> Result<Option<String
                 },
             )),
         },
+    }
+}
+
+/// Parse an environment variable containing a whitespace-delimited list of names.
+fn parse_name_list_environment_variable<T>(name: &'static str) -> Result<Option<Vec<T>>, Error>
+where
+    T: FromStr,
+    <T as FromStr>::Err: std::fmt::Display,
+{
+    let Some(value) = parse_string_environment_variable(name)? else {
+        return Ok(None);
+    };
+
+    let names = value
+        .split_whitespace()
+        .map(|entry| {
+            entry.parse::<T>().map_err(|err| {
+                Error::InvalidEnvironmentVariable(InvalidEnvironmentVariable {
+                    name: name.to_string(),
+                    value: value.clone(),
+                    err: err.to_string(),
+                })
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    if names.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(names))
     }
 }
 

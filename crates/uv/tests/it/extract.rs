@@ -27,6 +27,36 @@ async fn unzip(url: &str) -> anyhow::Result<(), uv_extract::Error> {
     Ok(())
 }
 
+async fn unzip_seekable(url: &str) -> anyhow::Result<(), uv_extract::Error> {
+    let backoff = backon::ExponentialBuilder::default()
+        .with_min_delay(std::time::Duration::from_millis(500))
+        .with_max_times(5)
+        .build();
+
+    let download = || async {
+        let response = reqwest::get(url).await?;
+        Ok::<_, reqwest::Error>(response)
+    };
+
+    let response = download.retry(backoff).await.unwrap();
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(std::io::Error::other)
+        .map_err(uv_extract::Error::Io)?;
+
+    let archive = tempfile::NamedTempFile::new().map_err(uv_extract::Error::Io)?;
+    fs_err::write(archive.path(), bytes).map_err(uv_extract::Error::Io)?;
+    let archive = fs_err::File::open(archive.path()).map_err(uv_extract::Error::Io)?;
+
+    let target = tempfile::TempDir::new().map_err(uv_extract::Error::Io)?;
+    let target_path = target.path().to_path_buf();
+    tokio::task::spawn_blocking(move || uv_extract::unzip(archive, &target_path))
+        .await
+        .expect("seekable ZIP extraction task should not panic")?;
+    Ok(())
+}
+
 #[tokio::test]
 async fn malo_accept_comment() {
     unzip("https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/0723f54ceb33a4fdc7f2eddc19635cd704d61c84/accept/comment.zip").await.unwrap();
@@ -48,6 +78,12 @@ async fn malo_accept_data_descriptor() {
 #[tokio::test]
 async fn malo_accept_deflate() {
     unzip("https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/0723f54ceb33a4fdc7f2eddc19635cd704d61c84/accept/deflate.zip").await.unwrap();
+    insta::assert_debug_snapshot!((), @"()");
+}
+
+#[tokio::test]
+async fn malo_seekable_accept_deflate() {
+    unzip_seekable("https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/0723f54ceb33a4fdc7f2eddc19635cd704d61c84/accept/deflate.zip").await.unwrap();
     insta::assert_debug_snapshot!((), @"()");
 }
 
@@ -229,6 +265,18 @@ async fn malo_reject_data_descriptor_bad_crc() {
         path: "fixme",
         computed: 907060870,
         expected: 1,
+    }
+    "#);
+}
+
+#[tokio::test]
+async fn malo_seekable_malicious_short_usize() {
+    let result = unzip_seekable("https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/0723f54ceb33a4fdc7f2eddc19635cd704d61c84/malicious/short_usize.zip").await.unwrap_err();
+    insta::assert_debug_snapshot!(result, @r#"
+    BadUncompressedSize {
+        path: "file",
+        computed: 51,
+        expected: 9,
     }
     "#);
 }

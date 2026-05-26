@@ -142,7 +142,7 @@ pub(crate) async fn init(
                 }
             };
 
-            init_project(
+            Box::pin(init_project(
                 &path,
                 &name,
                 package,
@@ -165,7 +165,7 @@ pub(crate) async fn init(
                 cache,
                 printer,
                 preview,
-            )
+            ))
             .await?;
 
             // Create the `README.md` if it does not already exist.
@@ -462,14 +462,14 @@ async fn init_project(
         if let Some(python_request) = python_pin {
             if PythonVersionFile::discover(path, &VersionFileDiscoveryOptions::default())
                 .await?
-                .filter(|file| {
+                .as_ref()
+                .is_none_or(|file| !{
                     file.version()
                         .is_some_and(|version| *version == python_request)
                         && file.path().parent().is_some_and(|parent| {
                             parent == workspace.install_path() || parent == path
                         })
                 })
-                .is_none()
             {
                 PythonVersionFile::new(path.join(".python-version"))
                     .with_versions(vec![python_request.clone()])
@@ -483,8 +483,8 @@ async fn init_project(
             if PythonVersionFile::discover(path, &VersionFileDiscoveryOptions::default())
                 .await?
                 .filter(|file| file.version().is_some())
-                .filter(|file| file.path().parent().is_some_and(|parent| parent == path))
-                .is_none()
+                .as_ref()
+                .is_none_or(|file| file.path().parent().is_none_or(|parent| parent != path))
             {
                 PythonVersionFile::new(path.join(".python-version"))
                     .with_versions(vec![python_request.clone()])
@@ -652,10 +652,8 @@ async fn determine_requires_python(
         .flatten()
     {
         // (3) `requires-python` from the workspace
-        let python_request = PythonRequest::Version(VersionRequest::Range(
-            requires_python.specifiers().clone(),
-            PythonVariant::Default,
-        ));
+        let python_request =
+            PythonRequest::from_requires_python(&requires_python).unwrap_or(PythonRequest::Default);
 
         // Pin to the minor version.
         let python_pin = if pin_python {

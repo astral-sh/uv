@@ -1055,7 +1055,7 @@ fn install_no_index() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
 
@@ -1104,7 +1104,7 @@ fn install_no_index_cached() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
 
@@ -1308,6 +1308,54 @@ fn install_local_wheel() -> Result<()> {
     Ok(())
 }
 
+/// Reject decoded path separators in an unnamed wheel URL before using the filename in cache paths.
+#[test]
+fn install_unnamed_wheel_url_rejects_path_traversal() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("https://example.com/packages/pkg-1.0-py3-none-..%2F..%2F..%2Ftarget.whl")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--strict"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The wheel filename \"pkg-1.0-py3-none-../../../target.whl\" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
+    "
+    );
+
+    Ok(())
+}
+
+/// Reject decoded stream separators in an unnamed wheel URL before using the filename in cache paths.
+#[test]
+fn install_unnamed_wheel_url_rejects_stream_separator() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("https://example.com/packages/pkg-1.0-py3-none-target%3Astream.whl")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--strict"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The wheel filename \"pkg-1.0-py3-none-target:stream.whl\" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
+    "
+    );
+
+    Ok(())
+}
+
 /// Install a wheel whose actual version doesn't match the version encoded in the filename.
 #[test]
 fn mismatched_version() -> Result<()> {
@@ -1388,8 +1436,8 @@ fn mismatched_name() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of `foo` was invalid
-            Caused by: The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
+    hint: The structure of `foo` was invalid
+      Caused by: The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
     "
     );
 
@@ -2726,9 +2774,9 @@ fn incompatible_wheel() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of `foo` was invalid
-            Caused by: Failed to read from zip file
-            Caused by: unable to locate the end of central directory record
+    hint: The structure of `foo` was invalid
+      Caused by: Failed to read from zip file
+      Caused by: unable to locate the end of central directory record
     "
     );
 
@@ -2879,7 +2927,7 @@ fn find_links_offline_no_match() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because numpy was not found in the cache and you require numpy, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
     );
 
@@ -3004,7 +3052,7 @@ fn offline() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because black was not found in the cache and you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
     );
 
@@ -5977,6 +6025,60 @@ fn pep_751() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn pep_751_require_hashes_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("foo").child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("foo")
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
+
+    let pylock_toml = context.temp_dir.child("pylock.toml");
+    pylock_toml.write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        requires-python = ">=3.12"
+
+        [[packages]]
+        name = "foo"
+        version = "1.0.0"
+        directory = { path = "foo" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--require-hashes"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: foo
+    "
+    );
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn pep_751_remote() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -6275,7 +6377,7 @@ fn pep_751_direct_url_tags() -> Result<()> {
 
     ----- stderr -----
     error: Failed to determine installation plan
-      Caused by: A URL dependency is incompatible with the current platform: https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl
+      Caused by: A URL (https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with macOS (`macosx_11_0_arm64`), but you're on Linux (`manylinux_2_28_x86_64`)
     "
@@ -6317,7 +6419,34 @@ fn incompatible_python_version_direct_url() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      Caused by: A URL dependency is incompatible with the current platform: https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl
+      Caused by: A URL (https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl) dependency is incompatible with the current platform
+
+    hint: The wheel is compatible with CPython 3.13 (`cp313`), but you're using CPython 3.12 (`cp312`)
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn incompatible_direct_url_redacts_credentials() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("numpy @ https://user:secret@files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl?X-Amz-Signature=signing-secret")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--python-platform")
+        .arg("windows"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to determine installation plan
+      Caused by: A URL (https://user:****@files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl?X-Amz-Signature=****) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with CPython 3.13 (`cp313`), but you're using CPython 3.12 (`cp312`)
     "
@@ -6344,7 +6473,7 @@ fn incompatible_platform_direct_url() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      Caused by: A URL dependency is incompatible with the current platform: https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl
+      Caused by: A URL (https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with Windows (`win32`), but you're on Linux (`manylinux_2_28_x86_64`)
     "
