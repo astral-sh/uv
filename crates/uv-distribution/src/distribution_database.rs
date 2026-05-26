@@ -977,19 +977,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     {
                         warn!(
                             "Invalid range request response from server that declares HTTP range \
-                             request support, restarting download: {download_url}"
+                             request support, abandoning resumed download: {download_url}"
                         );
-                        response = self
-                            .client
-                            .unmanaged
-                            .uncached_client(&download_url)
-                            .execute(self.request(download_url.clone())?)
-                            .await?;
-                        response.error_for_status_ref()?;
-                    } else {
-                        response = resumed_response;
+                        return Err(err);
                     }
 
+                    response = resumed_response;
                     resumed_at = Some(offset);
                 }
 

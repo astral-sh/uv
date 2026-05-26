@@ -1314,9 +1314,9 @@ async fn direct_url_no_range_resume() {
     ");
 }
 
-/// An invalid continuation response is discarded before restarting the download.
+/// An invalid continuation response does not bypass regular retry handling.
 #[tokio::test]
-async fn direct_url_invalid_range_resume() {
+async fn direct_url_invalid_range_does_not_bypass_retry() {
     let context = uv_test::test_context!("3.12");
 
     let wheel = wheel_requiring_download().await;
@@ -1330,16 +1330,16 @@ async fn direct_url_invalid_range_resume() {
         .env(EnvVars::UV_HTTP_TIMEOUT, "1")
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
         .env(EnvVars::RUST_LOG, "warn"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
     WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
-    WARN Invalid range request response from server that declares HTTP range request support, restarting download: http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+    WARN Invalid range request response from server that declares HTTP range request support, abandoning resumed download: http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl
+      × Failed to download `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl`
+      ├─▶ Failed to write to the distribution cache
+      ╰─▶ Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
     ");
 }
