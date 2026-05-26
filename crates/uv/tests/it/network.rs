@@ -1134,12 +1134,19 @@ async fn wheel_requiring_download() -> Vec<u8> {
     writer.close().await.unwrap()
 }
 
+#[derive(Clone, Copy)]
+enum RangeResponse {
+    Supported,
+    NotAdvertised,
+    InvalidContentRange,
+}
+
 /// Returns a server URL and a drop guard that serves a wheel with mid-stream interruption.
 ///
 /// HEAD and range requests complete normally so metadata reads do not affect the download count.
 /// The first full GET reaches the streaming fallback, and the second is interrupted. When
-/// `advertise_range` is true, that interrupted download can be resumed.
-fn wheel_server(wheel: Vec<u8>, advertise_range: bool) -> (String, impl Drop) {
+/// supported, that interrupted download can be resumed.
+fn wheel_server(wheel: Vec<u8>, range_response: RangeResponse) -> (String, impl Drop) {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let server_url = format!("http://{}", listener.local_addr().unwrap());
@@ -1191,10 +1198,19 @@ fn wheel_server(wheel: Vec<u8>, advertise_range: bool) -> (String, impl Drop) {
                                                     )
                                                 })
                                                 .unwrap();
+                                            let content_range_start = if matches!(
+                                                range_response,
+                                                RangeResponse::InvalidContentRange
+                                            ) && full_get_count.load(Ordering::Relaxed) >= 2
+                                            {
+                                                0
+                                            } else {
+                                                start
+                                            };
                                             let bytes = wheel.slice(start..=end);
                                             return Ok::<_, Infallible>(hyper::Response::builder()
                                                 .status(StatusCode::PARTIAL_CONTENT)
-                                                .header(CONTENT_RANGE, format!("bytes {start}-{end}/{size}"))
+                                                .header(CONTENT_RANGE, format!("bytes {content_range_start}-{end}/{size}"))
                                                 .header(CONTENT_LENGTH, bytes.len().to_string())
                                                 .body(http_body_util::Full::new(bytes).boxed())
                                                 .unwrap());
@@ -1216,7 +1232,11 @@ fn wheel_server(wheel: Vec<u8>, advertise_range: bool) -> (String, impl Drop) {
                                         });
                                         let mut response = hyper::Response::builder()
                                             .header(CONTENT_LENGTH, size.to_string());
-                                        if advertise_range {
+                                        if matches!(
+                                            range_response,
+                                            RangeResponse::Supported
+                                                | RangeResponse::InvalidContentRange
+                                        ) {
                                             response = response.header(ACCEPT_RANGES, "bytes");
                                         }
                                         Ok::<_, Infallible>(response
@@ -1242,7 +1262,7 @@ async fn direct_url_range_resume() {
     let context = uv_test::test_context!("3.12");
 
     let wheel = wheel_requiring_download().await;
-    let (server, _guard) = wheel_server(wheel, true);
+    let (server, _guard) = wheel_server(wheel, RangeResponse::Supported);
 
     let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
     uv_snapshot!(context.filters(), context
@@ -1271,7 +1291,7 @@ async fn direct_url_no_range_resume() {
     let context = uv_test::test_context!("3.12");
 
     let wheel = wheel_requiring_download().await;
-    let (server, _guard) = wheel_server(wheel, false);
+    let (server, _guard) = wheel_server(wheel, RangeResponse::NotAdvertised);
 
     let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
     uv_snapshot!(context.filters(), context
@@ -1288,6 +1308,36 @@ async fn direct_url_no_range_resume() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+    ");
+}
+
+/// An invalid continuation response is discarded before restarting the download.
+#[tokio::test]
+async fn direct_url_invalid_range_resume() {
+    let context = uv_test::test_context!("3.12");
+
+    let wheel = wheel_requiring_download().await;
+    let (server, _guard) = wheel_server(wheel, RangeResponse::InvalidContentRange);
+
+    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(format!("ok @ {wheel_url}"))
+        .env(EnvVars::UV_HTTP_RETRIES, "0")
+        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::RUST_LOG, "warn"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
+    WARN Invalid range request response from server that declares HTTP range request support, restarting download: http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)

@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use futures::{FutureExt, TryStreamExt};
+use http_content_range::{ContentRange, ContentRangeBytes, ContentRangeUnbound};
 use tokio::io::{AsyncRead, AsyncSeekExt, AsyncWriteExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -899,20 +900,22 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 ));
                 let mut resumed_at = None;
                 let mut supports_range_requests = false;
+                let mut can_resume = true;
 
                 loop {
-                    supports_range_requests |= response.status()
-                        == reqwest::StatusCode::PARTIAL_CONTENT
-                        || response
-                            .headers()
-                            .get(reqwest::header::ACCEPT_RANGES)
-                            .is_some_and(|value| value == "bytes");
+                    supports_range_requests |= can_resume
+                        && (response.status() == reqwest::StatusCode::PARTIAL_CONTENT
+                            || response
+                                .headers()
+                                .get(reqwest::header::ACCEPT_RANGES)
+                                .is_some_and(|value| value == "bytes"));
 
                     // A server can advertise range requests but ignore one. In that case, the
                     // response is a complete download and must replace the partial bytes.
                     if resumed_at.is_some()
                         && response.status() != reqwest::StatusCode::PARTIAL_CONTENT
                     {
+                        can_resume = false;
                         writer
                             .get_mut()
                             .set_len(0)
@@ -949,7 +952,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     let Err(err) = copy_result else {
                         break;
                     };
-                    if !supports_range_requests {
+                    if !can_resume || !supports_range_requests {
                         return Err(err);
                     }
 
@@ -964,13 +967,32 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     }
 
                     debug!("Resuming download of {download_url} at byte {offset}");
-                    response = self
+                    let resumed_response = self
                         .client
                         .unmanaged
                         .uncached_client(&download_url)
                         .execute(self.request_with_offset(download_url.clone(), offset)?)
                         .await?;
-                    response.error_for_status_ref()?;
+                    resumed_response.error_for_status_ref()?;
+
+                    if resumed_response.status() == reqwest::StatusCode::PARTIAL_CONTENT
+                        && !content_range_starts_at(&resumed_response, offset)
+                    {
+                        warn!(
+                            "Invalid range request response from server that declares HTTP range \
+                             request support, restarting download: {download_url}"
+                        );
+                        response = self
+                            .client
+                            .unmanaged
+                            .uncached_client(&download_url)
+                            .execute(self.request(download_url.clone())?)
+                            .await?;
+                        response.error_for_status_ref()?;
+                    } else {
+                        response = resumed_response;
+                    }
+
                     resumed_at = Some(offset);
                 }
 
@@ -1384,6 +1406,25 @@ fn content_length(response: &reqwest::Response) -> Option<u64> {
         .get(reqwest::header::CONTENT_LENGTH)
         .and_then(|val| val.to_str().ok())
         .and_then(|val| val.parse::<u64>().ok())
+}
+
+/// Returns `true` if `response` is a range response starting at `offset`.
+fn content_range_starts_at(response: &reqwest::Response, offset: u64) -> bool {
+    let Some(content_range) = response
+        .headers()
+        .get(reqwest::header::CONTENT_RANGE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(ContentRange::parse)
+    else {
+        return false;
+    };
+
+    matches!(
+        content_range,
+        ContentRange::Bytes(ContentRangeBytes { first_byte, .. })
+            | ContentRange::UnboundBytes(ContentRangeUnbound { first_byte, .. })
+            if first_byte == offset
+    )
 }
 
 /// An asynchronous reader that reports progress as bytes are read.
