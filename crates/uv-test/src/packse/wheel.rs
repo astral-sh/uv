@@ -16,6 +16,7 @@ use futures::io::AllowStdIo;
 use indoc::formatdoc;
 use sha2::{Digest, Sha256};
 use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
+
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::Requirement;

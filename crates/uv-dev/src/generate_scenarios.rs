@@ -18,7 +18,7 @@ use uv_test::packse::scenario::{Package, PackageMetadata, Scenario};
 use crate::ROOT_DIR;
 
 const GENERATED_FROM: &str = "test/scenarios";
-const GENERATED_WITH: &str = "cargo dev generate-scenarios";
+const GENERATED_WITH: &str = "cargo dev generate-scenario-tests";
 
 #[derive(clap::Args)]
 pub(crate) struct Args {
@@ -169,7 +169,7 @@ fn update_snapshots(template: TemplateKind) -> Result<()> {
             "insta",
             "test",
             "--features",
-            "test-python,test-python-patch",
+            "test-python,test-pypi,test-python-patch",
             "--accept",
             "--test-runner",
             "nextest",
@@ -207,9 +207,9 @@ fn render_header(output: &mut String) {
 
 fn render_install(output: &mut String, cases: &[&ScenarioCase]) -> Result<()> {
     render_header(output);
-    output.push_str("#![cfg(all(feature = \"test-python\", unix))]\n\n");
+    output.push_str("#![cfg(all(feature = \"test-python\", feature = \"test-pypi\", unix))]\n\n");
     output.push_str("use std::process::Command;\n\n");
-    output.push_str("use uv_static::EnvVars;\n\n");
+    output.push_str("use uv_static::EnvVars;\n");
     output.push_str("use uv_test::packse::PackseServer;\n");
     output.push_str("use uv_test::{TestContext, uv_snapshot};\n\n");
     output
@@ -259,13 +259,13 @@ fn render_install_case(output: &mut String, case: &ScenarioCase) -> Result<()> {
 
 fn render_compile(output: &mut String, cases: &[&ScenarioCase]) -> Result<()> {
     render_header(output);
-    output.push_str("#![cfg(all(feature = \"test-python\", unix))]\n\n");
+    output.push_str("#![cfg(all(feature = \"test-python\", feature = \"test-pypi\", unix))]\n\n");
     output.push_str("use std::process::Command;\n\n");
     output.push_str("use anyhow::Result;\n");
     output.push_str("use assert_cmd::assert::OutputAssertExt;\n");
     output.push_str("use assert_fs::fixture::{FileWriteStr, PathChild};\n");
     output.push_str("use predicates::prelude::predicate;\n\n");
-    output.push_str("use uv_static::EnvVars;\n\n");
+    output.push_str("use uv_static::EnvVars;\n");
     output.push_str("use uv_test::packse::PackseServer;\n");
     output.push_str(
         "use uv_test::{TestContext, get_bin, python_path_with_versions, uv_snapshot};\n\n",
@@ -359,7 +359,7 @@ fn render_compile_case(output: &mut String, case: &ScenarioCase) -> Result<()> {
 
 fn render_lock(output: &mut String, cases: &[&ScenarioCase]) -> Result<()> {
     render_header(output);
-    output.push_str("#![cfg(feature = \"test-python\")]\n");
+    output.push_str("#![cfg(all(feature = \"test-python\", feature = \"test-pypi\"))]\n");
     output.push_str("#![expect(clippy::needless_raw_string_hashes)]\n");
     output.push_str("#![expect(clippy::doc_markdown)]\n");
     output.push('\n');
@@ -367,7 +367,7 @@ fn render_lock(output: &mut String, cases: &[&ScenarioCase]) -> Result<()> {
     output.push_str("use assert_cmd::assert::OutputAssertExt;\n");
     output.push_str("use assert_fs::prelude::*;\n");
     output.push_str("use insta::assert_snapshot;\n\n");
-    output.push_str("use uv_static::EnvVars;\n\n");
+    output.push_str("use uv_static::EnvVars;\n");
     output.push_str("use uv_test::packse::PackseServer;\n");
     output.push_str("use uv_test::uv_snapshot;\n\n");
 
@@ -799,7 +799,7 @@ fn requirement_specifiers(requirement: &Requirement) -> Option<&uv_pep440::Versi
 
 #[cfg(test)]
 mod tests {
-    use super::compile_requirements;
+    use super::{TemplateKind, compile_requirements, render};
 
     #[test]
     fn compile_requirements_preserve_multiple_root_entries() {
@@ -809,5 +809,30 @@ mod tests {
         ];
 
         assert_eq!(compile_requirements(&requirements), "a==1.0.0\nb>=2.0.0");
+    }
+
+    #[test]
+    fn scenario_suites_require_pypi_feature() {
+        for (template, expected_gate) in [
+            (
+                TemplateKind::Install,
+                r#"#![cfg(all(feature = "test-python", feature = "test-pypi", unix))]"#,
+            ),
+            (
+                TemplateKind::Compile,
+                r#"#![cfg(all(feature = "test-python", feature = "test-pypi", unix))]"#,
+            ),
+            (
+                TemplateKind::Lock,
+                r#"#![cfg(all(feature = "test-python", feature = "test-pypi"))]"#,
+            ),
+        ] {
+            let output = render(template, &[]).expect("empty scenario suite should render");
+            let gate = output
+                .lines()
+                .find(|line| line.starts_with("#![cfg"))
+                .expect("scenario suite should contain a feature gate");
+            assert_eq!(gate, expected_gate);
+        }
     }
 }

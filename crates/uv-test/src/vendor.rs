@@ -9,6 +9,7 @@ use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
 
 use uv_configuration::TrustedHost;
+use uv_fs::{LockedFile, LockedFileMode};
 use uv_static::EnvVars;
 
 use crate::TestContext;
@@ -165,9 +166,25 @@ async fn ensure_cached_artifact(
     artifact: &VendorArtifact,
     path: &Path,
 ) -> Result<()> {
-    if let Ok(bytes) = fs_err::read(path)
-        && verify_bytes(artifact, &bytes).is_ok()
-    {
+    if cached_artifact_matches(artifact, path) {
+        return Ok(());
+    }
+
+    let lock_path = artifact_lock_path(path)?;
+    let _lock = LockedFile::acquire(
+        &lock_path,
+        LockedFileMode::Exclusive,
+        format_args!("vendor artifact `{}`", artifact.filename),
+    )
+    .await
+    .with_context(|| {
+        format!(
+            "failed to lock cached vendor artifact `{}`",
+            artifact.filename
+        )
+    })?;
+
+    if cached_artifact_matches(artifact, path) {
         return Ok(());
     }
 
@@ -223,6 +240,22 @@ async fn ensure_cached_artifact(
     }
 }
 
+fn cached_artifact_matches(artifact: &VendorArtifact, path: &Path) -> bool {
+    fs_err::read(path).is_ok_and(|bytes| verify_bytes(artifact, &bytes).is_ok())
+}
+
+fn artifact_lock_path(path: &Path) -> Result<PathBuf> {
+    let parent = path
+        .parent()
+        .context("vendor artifact cache path should have a parent")?;
+    let mut filename = path
+        .file_name()
+        .context("vendor artifact cache path should have a filename")?
+        .to_os_string();
+    filename.push(".lock");
+    Ok(parent.join(filename))
+}
+
 fn verify_bytes(artifact: &VendorArtifact, bytes: &[u8]) -> Result<()> {
     let actual = format!("{:x}", Sha256::digest(bytes));
     if actual == artifact.sha256 {
@@ -234,5 +267,20 @@ fn verify_bytes(artifact: &VendorArtifact, bytes: &[u8]) -> Result<()> {
             artifact.sha256,
             actual
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn artifact_lock_path_is_per_artifact() {
+        let path = Path::new("vendor").join("example-1.0.0-py3-none-any.whl");
+
+        assert_eq!(
+            artifact_lock_path(&path).expect("path should have a parent"),
+            Path::new("vendor").join("example-1.0.0-py3-none-any.whl.lock")
+        );
     }
 }

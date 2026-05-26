@@ -13,11 +13,11 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use serde_json::json;
-use uv_pep440::VersionSpecifiers;
 use wiremock::{Request, ResponseTemplate};
 
 use uv_distribution_filename::WheelFilename;
 use uv_normalize::PackageName;
+use uv_pep440::VersionSpecifiers;
 
 use crate::http_server::{HttpServer, content_type_for_filename};
 use crate::vendor::vendor_files;

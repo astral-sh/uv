@@ -1,9 +1,9 @@
 //! DO NOT EDIT
 //!
-//! Generated with `cargo dev generate-scenarios`
+//! Generated with `cargo dev generate-scenario-tests`
 //! Scenarios from <test/scenarios>
 //!
-#![cfg(feature = "test-python")]
+#![cfg(all(feature = "test-python", feature = "test-pypi"))]
 #![expect(clippy::needless_raw_string_hashes)]
 #![expect(clippy::doc_markdown)]
 
@@ -13,7 +13,6 @@ use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
 use uv_static::EnvVars;
-
 use uv_test::packse::PackseServer;
 use uv_test::uv_snapshot;
 

@@ -8,6 +8,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use serde::Deserialize;
+
 use uv_configuration::TargetTriple;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
