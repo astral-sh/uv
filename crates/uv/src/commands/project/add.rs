@@ -36,6 +36,7 @@ use uv_requirements::{NamedRequirementsResolver, RequirementsSource, Requirement
 use uv_resolver::FlatIndex;
 use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
+use uv_static::is_known_standard_library_package;
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{
@@ -647,6 +648,25 @@ pub(crate) async fn add(
         &mut toml,
     )?;
 
+    let standard_library_hint = edits.iter().find_map(|edit| {
+        if edit
+            .source
+            .as_ref()
+            .is_none_or(|source| matches!(source, Source::Registry { .. }))
+            && is_known_standard_library_package(
+                target.interpreter().python_minor(),
+                edit.requirement.name.as_ref(),
+            )
+        {
+            Some(format!(
+                "The module `{}` is included in the Python standard library for the current interpreter and usually should not be added as a dependency",
+                edit.requirement.name
+            ))
+        } else {
+            None
+        }
+    });
+
     // If no requirements were added but a dependency group or optional dependency was specified,
     // ensure the group/extra exists. This handles the case where `uv add -r requirements.txt
     // --group <name>` or `uv add -r requirements.txt --optional <extra>` is called with an empty
@@ -775,9 +795,20 @@ pub(crate) async fn add(
                 let _ = snapshot.revert();
             }
             match err {
-                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs()).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing", "--frozen".green()))
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
+                ProjectError::Operation(err) => {
+                    let diagnostic = diagnostics::OperationDiagnostic::with_system_certs(
+                        client_builder.system_certs(),
+                    );
+                    let diagnostic = if let Some(hint) = standard_library_hint {
+                        diagnostic.with_hint(hint)
+                    } else {
+                        diagnostic
+                    };
+                    diagnostic
+                        .with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing", "--frozen".green()))
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                }
                 err => Err(err.into()),
             }
         }
