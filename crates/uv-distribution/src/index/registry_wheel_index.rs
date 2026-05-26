@@ -22,11 +22,11 @@ use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRev
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct IndexEntry<'index> {
     /// The cached distribution.
-    pub(crate) dist: CachedRegistryDist,
+    dist: CachedRegistryDist,
     /// Whether the wheel was built from source (true), or downloaded from the registry directly (false).
-    pub(crate) built: bool,
+    built: bool,
     /// The index from which the wheel was downloaded.
-    pub(crate) index: &'index Index,
+    index: &'index Index,
 }
 
 impl<'index> IndexEntry<'index> {

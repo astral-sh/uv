@@ -62,11 +62,11 @@ pub struct Pep508Error<T: Pep508Url = VerbatimUrl> {
     /// Either we have an error string from our parser or an upstream error from `url`
     pub message: Pep508ErrorSource<T>,
     /// Span start index
-    pub start: usize,
+    start: usize,
     /// Span length
-    pub len: usize,
+    len: usize,
     /// The input string so we can print it underlined
-    pub input: String,
+    input: String,
 }
 
 /// Either we have an error string from our parser or an upstream error from `url`
@@ -402,13 +402,6 @@ impl<T: Pep508Url> Requirement<T> {
 /// A list of [`ExtraName`] that can be attached to a [`Requirement`].
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct Extras(Vec<ExtraName>);
-
-impl Extras {
-    /// Parse a list of extras.
-    pub fn parse<T: Pep508Url>(input: &str) -> Result<Self, Pep508Error<T>> {
-        Ok(Self(parse_extras_cursor(&mut Cursor::new(input))?))
-    }
-}
 
 /// The actual version specifier or URL to install.
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]

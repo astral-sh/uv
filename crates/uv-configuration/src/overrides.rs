@@ -31,7 +31,7 @@ impl Overrides {
     }
 
     /// Get the overrides for a package.
-    pub fn get(&self, name: &PackageName) -> Option<&Vec<Requirement>> {
+    fn get(&self, name: &PackageName) -> Option<&Vec<Requirement>> {
         self.0.get(name)
     }
 

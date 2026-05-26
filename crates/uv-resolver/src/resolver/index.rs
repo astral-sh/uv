@@ -28,12 +28,12 @@ pub(crate) type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 
 impl InMemoryIndex {
     /// Returns a reference to the package metadata map.
-    pub fn implicit(&self) -> &FxOnceMap<PackageName, Arc<VersionsResponse>> {
+    pub(crate) fn implicit(&self) -> &FxOnceMap<PackageName, Arc<VersionsResponse>> {
         &self.0.implicit
     }
 
     /// Returns a reference to the package metadata map.
-    pub fn explicit(&self) -> &FxOnceMap<(PackageName, IndexUrl), Arc<VersionsResponse>> {
+    pub(crate) fn explicit(&self) -> &FxOnceMap<(PackageName, IndexUrl), Arc<VersionsResponse>> {
         &self.0.explicit
     }
 

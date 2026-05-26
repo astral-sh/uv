@@ -1164,7 +1164,7 @@ impl BuildSystem {
     /// requires = ["uv_build>=0.4.15,<0.5.0"]
     /// build-backend = "uv_build"
     /// ```
-    pub(crate) fn check_build_system(&self, uv_version: &str) -> Vec<String> {
+    fn check_build_system(&self, uv_version: &str) -> Vec<String> {
         let mut warnings = Vec::new();
         if self.build_backend.as_deref() != Some("uv_build") {
             warnings.push(format!(

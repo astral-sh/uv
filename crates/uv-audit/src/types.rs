@@ -102,7 +102,7 @@ pub struct Vulnerability {
 }
 
 impl Vulnerability {
-    pub fn new(
+    pub(crate) fn new(
         dependency: Dependency,
         id: VulnerabilityID,
         summary: Option<String>,

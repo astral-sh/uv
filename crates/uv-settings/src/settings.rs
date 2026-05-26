@@ -136,7 +136,7 @@ pub struct Options {
             cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true } }]
         "#
     )]
-    pub cache_keys: Option<Vec<CacheKey>>,
+    pub(crate) cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -163,31 +163,31 @@ pub struct Options {
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're only respected in `pyproject.toml` files, and should be rejected in `uv.toml` files.
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub conflicts: Option<serde::de::IgnoredAny>,
+    pub(crate) conflicts: Option<serde::de::IgnoredAny>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub workspace: Option<serde::de::IgnoredAny>,
+    pub(crate) workspace: Option<serde::de::IgnoredAny>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub sources: Option<serde::de::IgnoredAny>,
+    pub(crate) sources: Option<serde::de::IgnoredAny>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub dev_dependencies: Option<serde::de::IgnoredAny>,
+    pub(crate) dev_dependencies: Option<serde::de::IgnoredAny>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub default_groups: Option<serde::de::IgnoredAny>,
+    pub(crate) default_groups: Option<serde::de::IgnoredAny>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub dependency_groups: Option<serde::de::IgnoredAny>,
+    pub(crate) dependency_groups: Option<serde::de::IgnoredAny>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub managed: Option<serde::de::IgnoredAny>,
+    pub(crate) managed: Option<serde::de::IgnoredAny>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub r#package: Option<serde::de::IgnoredAny>,
+    pub(crate) r#package: Option<serde::de::IgnoredAny>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub build_backend: Option<serde::de::IgnoredAny>,
+    pub(crate) build_backend: Option<serde::de::IgnoredAny>,
 }
 
 impl Options {
@@ -202,7 +202,7 @@ impl Options {
 
     /// Set the [`Origin`] on all indexes without an existing origin.
     #[must_use]
-    pub fn with_origin(mut self, origin: Origin) -> Self {
+    pub(crate) fn with_origin(mut self, origin: Origin) -> Self {
         if let Some(indexes) = &mut self.top_level.index {
             for index in indexes {
                 index.origin.get_or_insert(origin);
@@ -235,7 +235,7 @@ impl Options {
     }
 
     /// Resolve the [`Options`] relative to the given root directory.
-    pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+    pub(crate) fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
         Ok(Self {
             top_level: self.top_level.relative_to(root_dir)?,
             pip: self.pip.map(|pip| pip.relative_to(root_dir)).transpose()?,
@@ -438,25 +438,25 @@ pub struct GlobalOptions {
 /// Settings relevant to all installer operations.
 #[derive(Debug, Clone, Default, CombineOptions)]
 pub struct InstallerOptions {
-    pub index: Option<Vec<Index>>,
-    pub index_url: Option<PipIndex>,
-    pub extra_index_url: Option<Vec<PipExtraIndex>>,
-    pub no_index: Option<bool>,
-    pub find_links: Option<Vec<PipFindLinks>>,
-    pub index_strategy: Option<IndexStrategy>,
-    pub keyring_provider: Option<KeyringProviderType>,
-    pub config_settings: Option<ConfigSettings>,
-    pub exclude_newer: Option<ExcludeNewerValue>,
-    pub link_mode: Option<LinkMode>,
-    pub compile_bytecode: Option<bool>,
-    pub reinstall: Option<Reinstall>,
-    pub build_isolation: Option<BuildIsolation>,
-    pub no_build: Option<bool>,
-    pub no_build_package: Option<Vec<PackageName>>,
-    pub no_binary: Option<bool>,
-    pub no_binary_package: Option<Vec<PackageName>>,
-    pub no_sources: Option<bool>,
-    pub no_sources_package: Option<Vec<PackageName>>,
+    index: Option<Vec<Index>>,
+    index_url: Option<PipIndex>,
+    extra_index_url: Option<Vec<PipExtraIndex>>,
+    no_index: Option<bool>,
+    find_links: Option<Vec<PipFindLinks>>,
+    index_strategy: Option<IndexStrategy>,
+    keyring_provider: Option<KeyringProviderType>,
+    config_settings: Option<ConfigSettings>,
+    exclude_newer: Option<ExcludeNewerValue>,
+    link_mode: Option<LinkMode>,
+    compile_bytecode: Option<bool>,
+    reinstall: Option<Reinstall>,
+    build_isolation: Option<BuildIsolation>,
+    no_build: Option<bool>,
+    no_build_package: Option<Vec<PackageName>>,
+    no_binary: Option<bool>,
+    no_binary_package: Option<Vec<PackageName>>,
+    no_sources: Option<bool>,
+    no_sources_package: Option<Vec<PackageName>>,
 }
 
 /// Settings relevant to all resolver operations.
@@ -608,7 +608,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
 
 impl ResolverInstallerSchema {
     /// Resolve the [`ResolverInstallerSchema`] relative to the given root directory.
-    pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+    fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
         Ok(Self {
             index: self
                 .index
@@ -1998,7 +1998,7 @@ pub struct PipOptions {
 
 impl PipOptions {
     /// Resolve the [`PipOptions`] relative to the given root directory.
-    pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+    fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
         Ok(Self {
             index: self
                 .index
@@ -2140,68 +2140,68 @@ impl From<ResolverInstallerSchema> for InstallerOptions {
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolOptions {
-    pub index: Option<Vec<Index>>,
-    pub index_url: Option<PipIndex>,
-    pub extra_index_url: Option<Vec<PipExtraIndex>>,
-    pub no_index: Option<bool>,
-    pub find_links: Option<Vec<PipFindLinks>>,
-    pub index_strategy: Option<IndexStrategy>,
-    pub keyring_provider: Option<KeyringProviderType>,
-    pub resolution: Option<ResolutionMode>,
-    pub prerelease: Option<PrereleaseMode>,
-    pub fork_strategy: Option<ForkStrategy>,
-    pub dependency_metadata: Option<Vec<StaticMetadata>>,
-    pub config_settings: Option<ConfigSettings>,
-    pub config_settings_package: Option<PackageConfigSettings>,
-    pub build_isolation: Option<BuildIsolation>,
-    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
-    pub extra_build_variables: Option<ExtraBuildVariables>,
-    pub exclude_newer: Option<ExcludeNewerValue>,
-    pub exclude_newer_package: Option<ExcludeNewerPackage>,
-    pub link_mode: Option<LinkMode>,
-    pub compile_bytecode: Option<bool>,
-    pub no_sources: Option<bool>,
-    pub no_sources_package: Option<Vec<PackageName>>,
-    pub no_build: Option<bool>,
-    pub no_build_package: Option<Vec<PackageName>>,
-    pub no_binary: Option<bool>,
-    pub no_binary_package: Option<Vec<PackageName>>,
-    pub torch_backend: Option<TorchMode>,
+    index: Option<Vec<Index>>,
+    index_url: Option<PipIndex>,
+    extra_index_url: Option<Vec<PipExtraIndex>>,
+    no_index: Option<bool>,
+    find_links: Option<Vec<PipFindLinks>>,
+    index_strategy: Option<IndexStrategy>,
+    keyring_provider: Option<KeyringProviderType>,
+    resolution: Option<ResolutionMode>,
+    prerelease: Option<PrereleaseMode>,
+    fork_strategy: Option<ForkStrategy>,
+    dependency_metadata: Option<Vec<StaticMetadata>>,
+    config_settings: Option<ConfigSettings>,
+    config_settings_package: Option<PackageConfigSettings>,
+    build_isolation: Option<BuildIsolation>,
+    extra_build_dependencies: Option<ExtraBuildDependencies>,
+    extra_build_variables: Option<ExtraBuildVariables>,
+    exclude_newer: Option<ExcludeNewerValue>,
+    exclude_newer_package: Option<ExcludeNewerPackage>,
+    link_mode: Option<LinkMode>,
+    compile_bytecode: Option<bool>,
+    no_sources: Option<bool>,
+    no_sources_package: Option<Vec<PackageName>>,
+    no_build: Option<bool>,
+    no_build_package: Option<Vec<PackageName>>,
+    no_binary: Option<bool>,
+    no_binary_package: Option<Vec<PackageName>>,
+    torch_backend: Option<TorchMode>,
 }
 
 /// The on-disk representation of [`ToolOptions`] in a tool receipt.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct ToolOptionsWire {
-    pub index: Option<Vec<Index>>,
-    pub index_url: Option<PipIndex>,
-    pub extra_index_url: Option<Vec<PipExtraIndex>>,
-    pub no_index: Option<bool>,
-    pub find_links: Option<Vec<PipFindLinks>>,
-    pub index_strategy: Option<IndexStrategy>,
-    pub keyring_provider: Option<KeyringProviderType>,
-    pub resolution: Option<ResolutionMode>,
-    pub prerelease: Option<PrereleaseMode>,
-    pub fork_strategy: Option<ForkStrategy>,
-    pub dependency_metadata: Option<Vec<StaticMetadata>>,
-    pub config_settings: Option<ConfigSettings>,
-    pub config_settings_package: Option<PackageConfigSettings>,
-    pub build_isolation: Option<BuildIsolation>,
-    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
-    pub extra_build_variables: Option<ExtraBuildVariables>,
-    pub exclude_newer: Option<ExcludeNewerValue>,
-    pub exclude_newer_span: Option<ExcludeNewerSpan>,
+    index: Option<Vec<Index>>,
+    index_url: Option<PipIndex>,
+    extra_index_url: Option<Vec<PipExtraIndex>>,
+    no_index: Option<bool>,
+    find_links: Option<Vec<PipFindLinks>>,
+    index_strategy: Option<IndexStrategy>,
+    keyring_provider: Option<KeyringProviderType>,
+    resolution: Option<ResolutionMode>,
+    prerelease: Option<PrereleaseMode>,
+    fork_strategy: Option<ForkStrategy>,
+    dependency_metadata: Option<Vec<StaticMetadata>>,
+    config_settings: Option<ConfigSettings>,
+    config_settings_package: Option<PackageConfigSettings>,
+    build_isolation: Option<BuildIsolation>,
+    extra_build_dependencies: Option<ExtraBuildDependencies>,
+    extra_build_variables: Option<ExtraBuildVariables>,
+    exclude_newer: Option<ExcludeNewerValue>,
+    exclude_newer_span: Option<ExcludeNewerSpan>,
     #[serde(serialize_with = "serialize_exclude_newer_package_with_spans")]
-    pub exclude_newer_package: Option<ExcludeNewerPackage>,
-    pub link_mode: Option<LinkMode>,
-    pub compile_bytecode: Option<bool>,
-    pub no_sources: Option<bool>,
-    pub no_sources_package: Option<Vec<PackageName>>,
-    pub no_build: Option<bool>,
-    pub no_build_package: Option<Vec<PackageName>>,
-    pub no_binary: Option<bool>,
-    pub no_binary_package: Option<Vec<PackageName>>,
-    pub torch_backend: Option<TorchMode>,
+    exclude_newer_package: Option<ExcludeNewerPackage>,
+    link_mode: Option<LinkMode>,
+    compile_bytecode: Option<bool>,
+    no_sources: Option<bool>,
+    no_sources_package: Option<Vec<PackageName>>,
+    no_build: Option<bool>,
+    no_build_package: Option<Vec<PackageName>>,
+    no_binary: Option<bool>,
+    no_binary_package: Option<Vec<PackageName>>,
+    torch_backend: Option<TorchMode>,
 }
 
 impl From<ResolverInstallerOptions> for ToolOptions {

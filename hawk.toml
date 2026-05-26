@@ -1,0 +1,235 @@
+# Keep intentional uniform field visibility audited instead of excluding whole files.
+
+[[production]]
+package = "uv"
+bin = "uv"
+reason = "shipped package manager binary"
+
+[[production]]
+package = "uv-dev"
+bin = "uv-dev"
+reason = "developer binary shipped from this workspace"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_configuration"
+item = "concurrency::Concurrency::builds"
+kind = "field"
+level = "expect"
+reason = "kept public alongside the other Concurrency fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv_distribution"
+item = "index::cached_wheel::CachedWheel::entry"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other CachedWheel fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv_distribution"
+item = "index::cached_wheel::CachedWheel::hashes"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other CachedWheel fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv_distribution"
+item = "index::cached_wheel::CachedWheel::cache_info"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other CachedWheel fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv_distribution"
+item = "index::cached_wheel::CachedWheel::build_info"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other CachedWheel fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv_python"
+item = "discovery::PythonNotFound::python_preference"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other PythonNotFound fields"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_python"
+item = "installation::PythonInstallation::arch"
+kind = "inherent_method"
+level = "expect"
+reason = "retained as part of the PythonInstallation platform accessors"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_python"
+item = "installation::PythonInstallation::libc"
+kind = "inherent_method"
+level = "expect"
+reason = "retained as part of the PythonInstallation platform accessors"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_python"
+item = "installation::PythonInstallation::os"
+kind = "inherent_method"
+level = "expect"
+reason = "kept public alongside the other PythonInstallation platform accessors"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv_python"
+item = "installation::PythonInstallationKey::platform"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other PythonInstallationKey fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv_python"
+item = "virtualenv::PyVenvConfiguration::virtualenv"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other PyVenvConfiguration fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv_python"
+item = "virtualenv::PyVenvConfiguration::uv"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other PyVenvConfiguration fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv_python"
+item = "virtualenv::PyVenvConfiguration::relocatable"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other PyVenvConfiguration fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv_python"
+item = "virtualenv::PyVenvConfiguration::seed"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other PyVenvConfiguration fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv_python"
+item = "virtualenv::PyVenvConfiguration::include_system_site_packages"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other PyVenvConfiguration fields"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_python"
+item = "virtualenv::PyVenvConfiguration::is_virtualenv"
+kind = "inherent_method"
+level = "expect"
+reason = "retained as part of the PyVenvConfiguration accessors"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_python"
+item = "virtualenv::PyVenvConfiguration::set"
+kind = "inherent_method"
+level = "expect"
+reason = "retained as a public pyvenv.cfg editing helper"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv_resolver"
+item = "manifest::Manifest::lookaheads"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other Manifest fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv_resolver"
+item = "resolution::output::ResolverOutput::diagnostics"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other ResolverOutput fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv_resolver"
+item = "resolution::requirements_txt::RequirementsTxtDist::version"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other RequirementsTxtDist fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv_resolver"
+item = "resolver::ResolutionDependencyEdge::marker"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other ResolutionDependencyEdge fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv_tool"
+item = "receipt::ToolReceipt::raw"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other ToolReceipt fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv"
+item = "settings::NetworkSettings::offline"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other NetworkSettings fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv"
+item = "settings::SyncSettings::script"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other SyncSettings fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv"
+item = "settings::RemoveSettings::script"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other RemoveSettings fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv"
+item = "settings::TreeSettings::script"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other TreeSettings fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv"
+item = "settings::ExportSettings::script"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other ExportSettings fields"
+
+[[override]]
+lint = "hawk::unnecessary_restricted_visibility"
+crate = "uv"
+item = "settings::ExportSettings::refresh"
+kind = "field"
+level = "expect"
+reason = "kept crate-visible alongside the other ExportSettings fields"

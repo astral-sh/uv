@@ -54,12 +54,12 @@ pub(crate) const COMPANY_KEY: &str = "Astral";
 pub(crate) const COMPANY_DISPLAY_NAME: &str = "Astral Software Inc.";
 
 #[cfg(not(test))]
-pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
+fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
     std::env::current_dir()
 }
 
 #[cfg(test)]
-pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
+fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
     std::env::var_os(EnvVars::PWD)
         .map(std::path::PathBuf::from)
         .map(Ok)
@@ -183,7 +183,7 @@ impl uv_errors::Hint for Error {
 }
 
 impl Error {
-    pub(crate) fn with_hint(self, hint: MissingPythonHint) -> Self {
+    fn with_hint(self, hint: MissingPythonHint) -> Self {
         match self {
             Self::MissingPython(err, _) => Self::MissingPython(err, Some(Box::new(hint))),
             _ => self,

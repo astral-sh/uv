@@ -36,7 +36,7 @@ pub(crate) enum ToolRequest<'a> {
 
 impl<'a> ToolRequest<'a> {
     /// Parse a tool request into an executable name and a target.
-    pub(crate) fn parse(command: &'a str, from: Option<&'a str>) -> anyhow::Result<Self> {
+    fn parse(command: &'a str, from: Option<&'a str>) -> anyhow::Result<Self> {
         // If --from is used, the command could be an arbitrary binary in the PATH (e.g. `bash`),
         // and we don't try to parse it.
         let (component_to_parse, executable) = match from {
@@ -63,7 +63,7 @@ impl<'a> ToolRequest<'a> {
     }
 
     /// Returns `true` if the target is `latest`.
-    pub(crate) fn is_latest(&self) -> bool {
+    fn is_latest(&self) -> bool {
         matches!(
             self,
             Self::Package {
@@ -86,7 +86,7 @@ pub(crate) enum Target<'a> {
 
 impl<'a> Target<'a> {
     /// Parse a target into a command name and a requirement.
-    pub(crate) fn parse(target: &'a str) -> Self {
+    fn parse(target: &'a str) -> Self {
         // e.g. `ruff`, no special handling
         let Some((name, version)) = target.split_once('@') else {
             return Self::Unspecified(target);

@@ -44,9 +44,9 @@ pub(crate) struct OperationDiagnostic {
     /// Caller-provided hints to render after the error output.
     hints: Vec<String>,
     /// Whether system certificates are being used.
-    pub(crate) system_certs: bool,
+    system_certs: bool,
     /// The context to display to the user upon resolution failure.
-    pub(crate) context: Option<&'static str>,
+    context: Option<&'static str>,
 }
 
 impl OperationDiagnostic {
@@ -151,7 +151,7 @@ impl OperationDiagnostic {
 /// Render a distribution failure (read, download or build) with a help message.
 // https://github.com/rust-lang/rust/issues/147648
 #[allow(unused_assignments)]
-pub(crate) fn dist_error(
+fn dist_error(
     kind: DistErrorKind,
     dist: Box<Dist>,
     chain: &DerivationChain,
@@ -228,7 +228,7 @@ fn dependencies_error(
 }
 
 /// Render a [`uv_resolver::NoSolutionError`].
-pub(crate) fn no_solution(err: &uv_resolver::NoSolutionError, context: Option<&'static str>) {
+fn no_solution(err: &uv_resolver::NoSolutionError, context: Option<&'static str>) {
     let header = if let Some(context) = context {
         err.header().with_context(context)
     } else {

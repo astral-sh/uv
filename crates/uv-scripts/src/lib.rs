@@ -42,15 +42,6 @@ impl Pep723Item {
         }
     }
 
-    /// Return the path of the PEP 723 item, if any.
-    pub fn path(&self) -> Option<&Path> {
-        match self {
-            Self::Script(script) => Some(&script.path),
-            Self::Stdin(..) => None,
-            Self::Remote(..) => None,
-        }
-    }
-
     /// Return the PEP 723 script, if any.
     pub fn as_script(&self) -> Option<&Pep723Script> {
         match self {
@@ -155,9 +146,9 @@ pub struct Pep723Script {
     /// The parsed [`Pep723Metadata`] table from the script.
     pub metadata: Pep723Metadata,
     /// The content of the script before the metadata table.
-    pub prelude: String,
+    prelude: String,
     /// The content of the script after the metadata table.
-    pub postlude: String,
+    postlude: String,
 }
 
 impl Pep723Script {

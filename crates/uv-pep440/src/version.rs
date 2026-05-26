@@ -436,7 +436,7 @@ impl Version {
     /// The version `1.0min0` is smaller than all other `1.0` versions,
     /// like `1.0a1`, `1.0dev0`, etc.
     #[inline]
-    pub fn min(&self) -> Option<u64> {
+    fn min(&self) -> Option<u64> {
         match self.inner {
             VersionInner::Small { ref small } => small.min(),
             VersionInner::Full { ref full } => full.min,
@@ -449,7 +449,7 @@ impl Version {
     /// The version `1.0max0` is larger than all other `1.0` versions,
     /// like `1.0.post1`, `1.0+local`, etc.
     #[inline]
-    pub fn max(&self) -> Option<u64> {
+    fn max(&self) -> Option<u64> {
         match self.inner {
             VersionInner::Small { ref small } => small.max(),
             VersionInner::Full { ref full } => full.max,
@@ -618,7 +618,7 @@ impl Version {
     /// Return the version with any segments apart from the minor version of the release removed.
     #[inline]
     #[must_use]
-    pub fn only_minor_release(&self) -> Self {
+    pub(crate) fn only_minor_release(&self) -> Self {
         Self::new(self.release().iter().take(2).copied())
     }
 
@@ -1618,7 +1618,7 @@ impl VersionPattern {
 
     /// Consumes this pattern and returns ownership of the underlying version.
     #[inline]
-    pub fn into_version(self) -> Version {
+    pub(crate) fn into_version(self) -> Version {
         self.version
     }
 
@@ -1746,12 +1746,12 @@ pub enum LocalVersionSlice<'a> {
 
 impl LocalVersion {
     /// Return an empty local version.
-    pub fn empty() -> Self {
+    fn empty() -> Self {
         Self::Segments(Vec::new())
     }
 
     /// Returns `true` if the local version is empty.
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         match self {
             Self::Segments(segments) => segments.is_empty(),
             Self::Max => false,
@@ -1759,18 +1759,10 @@ impl LocalVersion {
     }
 
     /// Convert the local version segments into a slice.
-    pub fn as_slice(&self) -> LocalVersionSlice<'_> {
+    fn as_slice(&self) -> LocalVersionSlice<'_> {
         match self {
             Self::Segments(segments) => LocalVersionSlice::Segments(segments),
             Self::Max => LocalVersionSlice::Max,
-        }
-    }
-
-    /// Clear the local version segments, if they exist.
-    pub fn clear(&mut self) {
-        match self {
-            Self::Segments(segments) => segments.clear(),
-            Self::Max => *self = Self::Segments(Vec::new()),
         }
     }
 }
@@ -1832,7 +1824,7 @@ impl Ord for LocalVersionSlice<'_> {
 
 impl LocalVersionSlice<'_> {
     /// Return an empty local version.
-    pub const fn empty() -> Self {
+    const fn empty() -> Self {
         Self::Segments(&[])
     }
 

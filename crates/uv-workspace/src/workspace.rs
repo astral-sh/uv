@@ -298,7 +298,7 @@ impl Workspace {
     /// Set the [`ProjectWorkspace`] for a given workspace member.
     ///
     /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
-    pub fn update_member(
+    fn update_member(
         self,
         package_name: &PackageName,
         pyproject_toml: PyProjectToml,
@@ -468,7 +468,7 @@ impl Workspace {
     }
 
     /// Whether a given workspace member is required by another member.
-    pub fn is_required_member(&self, name: &PackageName) -> bool {
+    fn is_required_member(&self, name: &PackageName) -> bool {
         self.required_members().contains_key(name)
     }
 
@@ -1397,10 +1397,7 @@ impl ProjectWorkspace {
     /// Set the `pyproject.toml` for the current project.
     ///
     /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
-    pub fn update_member(
-        self,
-        pyproject_toml: PyProjectToml,
-    ) -> Result<Option<Self>, WorkspaceError> {
+    fn update_member(self, pyproject_toml: PyProjectToml) -> Result<Option<Self>, WorkspaceError> {
         let Some(workspace) = self
             .workspace
             .update_member(&self.project_name, pyproject_toml)?

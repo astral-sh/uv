@@ -78,7 +78,7 @@ pub struct Metadata {
 impl Metadata {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
-    pub fn from_metadata23(metadata: ResolutionMetadata) -> Self {
+    pub(crate) fn from_metadata23(metadata: ResolutionMetadata) -> Self {
         Self {
             name: metadata.name,
             version: metadata.version,
@@ -94,7 +94,7 @@ impl Metadata {
 
     /// Lower by considering `tool.uv` in `pyproject.toml` if present, used for Git and directory
     /// dependencies.
-    pub async fn from_workspace(
+    pub(crate) async fn from_workspace(
         metadata: ResolutionMetadata,
         install_path: &Path,
         git_source: Option<&GitWorkspaceMember<'_>>,

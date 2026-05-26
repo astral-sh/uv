@@ -13,11 +13,11 @@ pub struct Options {
     pub dependency_mode: DependencyMode,
     pub fork_strategy: ForkStrategy,
     pub exclude_newer: ExcludeNewer,
-    pub index_strategy: IndexStrategy,
-    pub artifact_environments: SupportedEnvironments,
-    pub flexibility: Flexibility,
+    pub(crate) index_strategy: IndexStrategy,
+    pub(crate) artifact_environments: SupportedEnvironments,
+    pub(crate) flexibility: Flexibility,
     pub build_options: BuildOptions,
-    pub torch_backend: Option<TorchStrategy>,
+    pub(crate) torch_backend: Option<TorchStrategy>,
 }
 
 /// Builder for [`Options`].

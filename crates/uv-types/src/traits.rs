@@ -314,11 +314,6 @@ impl Deref for AnyErrorBuild {
 pub struct BuildStack(FxHashSet<DistributionId>);
 
 impl BuildStack {
-    /// Return an empty stack.
-    pub fn empty() -> Self {
-        Self(FxHashSet::default())
-    }
-
     pub fn contains(&self, id: &DistributionId) -> bool {
         self.0.contains(id)
     }

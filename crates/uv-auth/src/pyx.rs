@@ -46,8 +46,8 @@ fn read_pyx_auth_token() -> Option<AccessToken> {
 /// and a new refresh token.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct PyxOAuthTokens {
-    pub access_token: AccessToken,
-    pub refresh_token: String,
+    access_token: AccessToken,
+    refresh_token: String,
 }
 
 /// An access token with an accompanying API key.
@@ -583,7 +583,7 @@ impl TokenStoreError {
 #[derive(Debug, serde::Deserialize)]
 pub struct PyxJwt {
     /// The expiration time of the JWT, as a Unix timestamp.
-    pub exp: Option<i64>,
+    exp: Option<i64>,
     /// The issuer of the JWT.
     pub iss: Option<String>,
     /// The name of the organization, if any.

@@ -40,7 +40,7 @@ impl ImplementationName {
         [Self::CPython, Self::PyPy, Self::GraalPy, Self::Pyodide].into_iter()
     }
 
-    pub fn pretty(self) -> &'static str {
+    pub(crate) fn pretty(self) -> &'static str {
         match self {
             Self::CPython => "CPython",
             Self::PyPy => "PyPy",
@@ -50,7 +50,7 @@ impl ImplementationName {
     }
 
     /// The executable name used in distributions of this implementation.
-    pub fn executable_name(self) -> &'static str {
+    pub(crate) fn executable_name(self) -> &'static str {
         match self {
             Self::CPython | Self::Pyodide => "python",
             Self::PyPy | Self::GraalPy => self.into(),

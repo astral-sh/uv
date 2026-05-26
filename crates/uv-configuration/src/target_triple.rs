@@ -697,7 +697,7 @@ impl TargetTriple {
     }
 
     /// Return the `platform_machine` value for the target.
-    pub fn platform_machine(self) -> &'static str {
+    fn platform_machine(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "x86_64",
             Self::Aarch64PcWindowsMsvc => "ARM64",
@@ -746,7 +746,7 @@ impl TargetTriple {
     }
 
     /// Return the `platform_system` value for the target.
-    pub fn platform_system(self) -> &'static str {
+    fn platform_system(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "Windows",
             Self::Aarch64PcWindowsMsvc => "Windows",
@@ -795,7 +795,7 @@ impl TargetTriple {
     }
 
     /// Return the `platform_version` value for the target.
-    pub fn platform_version(self) -> &'static str {
+    fn platform_version(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "",
             Self::Aarch64PcWindowsMsvc => "",
@@ -847,7 +847,7 @@ impl TargetTriple {
     }
 
     /// Return the `platform_release` value for the target.
-    pub fn platform_release(self) -> &'static str {
+    fn platform_release(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "",
             Self::Aarch64PcWindowsMsvc => "",
@@ -899,7 +899,7 @@ impl TargetTriple {
     }
 
     /// Return the `os_name` value for the target.
-    pub fn os_name(self) -> &'static str {
+    fn os_name(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "nt",
             Self::Aarch64PcWindowsMsvc => "nt",
@@ -948,7 +948,7 @@ impl TargetTriple {
     }
 
     /// Return the `sys_platform` value for the target.
-    pub fn sys_platform(self) -> &'static str {
+    fn sys_platform(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "win32",
             Self::Aarch64PcWindowsMsvc => "win32",

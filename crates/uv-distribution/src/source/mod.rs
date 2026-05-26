@@ -224,10 +224,10 @@ pub(crate) const LOCAL_REVISION: &str = "revision.rev";
 pub(crate) const HASHES: &str = "hashes.msgpack";
 
 /// The name of the file that contains the cached distribution metadata, encoded via `MsgPack`.
-pub(crate) const METADATA: &str = "metadata.msgpack";
+const METADATA: &str = "metadata.msgpack";
 
 /// The directory within each entry under which to store the unpacked source distribution.
-pub(crate) const SOURCE: &str = "src";
+const SOURCE: &str = "src";
 
 impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Initialize a [`SourceDistributionBuilder`] from a [`BuildContext`].
@@ -3516,7 +3516,7 @@ impl LocalRevisionPointer {
     }
 
     /// Return the [`Revision`] for the pointer.
-    pub(crate) fn revision(&self) -> &Revision {
+    fn revision(&self) -> &Revision {
         &self.revision
     }
 

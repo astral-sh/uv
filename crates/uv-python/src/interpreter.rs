@@ -116,7 +116,7 @@ impl Interpreter {
     }
 
     /// Return a new [`Interpreter`] to install into the given `--target` directory.
-    pub fn with_target(self, target: Target) -> io::Result<Self> {
+    pub(crate) fn with_target(self, target: Target) -> io::Result<Self> {
         target.init()?;
         Ok(Self {
             target: Some(target),
@@ -125,7 +125,7 @@ impl Interpreter {
     }
 
     /// Return a new [`Interpreter`] to install into the given `--prefix` directory.
-    pub fn with_prefix(self, prefix: Prefix) -> io::Result<Self> {
+    pub(crate) fn with_prefix(self, prefix: Prefix) -> io::Result<Self> {
         prefix.init(self.virtualenv())?;
         Ok(Self {
             prefix: Some(prefix),
@@ -202,7 +202,7 @@ impl Interpreter {
     }
 
     /// Returns the [`PythonInstallationKey`] for this interpreter.
-    pub fn key(&self) -> PythonInstallationKey {
+    pub(crate) fn key(&self) -> PythonInstallationKey {
         PythonInstallationKey::new(
             LenientImplementationName::from(self.implementation_name()),
             self.python_major(),
@@ -229,17 +229,17 @@ impl Interpreter {
     }
 
     /// Return the [`Arch`] reported by the interpreter platform tags.
-    pub fn arch(&self) -> Arch {
+    pub(crate) fn arch(&self) -> Arch {
         Arch::from(&self.platform().arch())
     }
 
     /// Return the [`Libc`] reported by the interpreter platform tags.
-    pub fn libc(&self) -> Libc {
+    pub(crate) fn libc(&self) -> Libc {
         Libc::from(self.platform().os())
     }
 
     /// Return the [`Os`] reported by the interpreter platform tags.
-    pub fn os(&self) -> Os {
+    pub(crate) fn os(&self) -> Os {
         Os::from(self.platform().os())
     }
 
@@ -284,7 +284,7 @@ impl Interpreter {
     /// Returns `true` if this interpreter is managed by uv.
     ///
     /// Returns `false` if we cannot determine the path of the uv managed Python interpreters.
-    pub fn is_managed(&self) -> bool {
+    pub(crate) fn is_managed(&self) -> bool {
         if let Ok(test_managed) =
             std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED)
         {
@@ -487,12 +487,12 @@ impl Interpreter {
     }
 
     /// Return the `purelib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
-    pub fn purelib(&self) -> &Path {
+    fn purelib(&self) -> &Path {
         &self.scheme.purelib
     }
 
     /// Return the `platlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
-    pub fn platlib(&self) -> &Path {
+    fn platlib(&self) -> &Path {
         &self.scheme.platlib
     }
 
@@ -502,12 +502,12 @@ impl Interpreter {
     }
 
     /// Return the `data` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
-    pub fn data(&self) -> &Path {
+    fn data(&self) -> &Path {
         &self.scheme.data
     }
 
     /// Return the `include` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
-    pub fn include(&self) -> &Path {
+    fn include(&self) -> &Path {
         &self.scheme.include
     }
 
@@ -542,12 +542,12 @@ impl Interpreter {
     }
 
     /// Return the `--target` directory for this interpreter, if any.
-    pub fn target(&self) -> Option<&Target> {
+    fn target(&self) -> Option<&Target> {
         self.target.as_ref()
     }
 
     /// Return the `--prefix` directory for this interpreter, if any.
-    pub fn prefix(&self) -> Option<&Prefix> {
+    fn prefix(&self) -> Option<&Prefix> {
         self.prefix.as_ref()
     }
 
@@ -641,18 +641,6 @@ impl Interpreter {
             .map(Cow::Borrowed)
             .chain(prefix.into_iter().flatten().map(Cow::Owned))
             .chain(interpreter.into_iter().flatten().map(Cow::Borrowed))
-    }
-
-    /// Check if the interpreter matches the given Python version.
-    ///
-    /// If a patch version is present, we will require an exact match.
-    /// Otherwise, just the major and minor version numbers need to match.
-    pub fn satisfies(&self, version: &PythonVersion) -> bool {
-        if version.patch().is_some() {
-            version.version() == self.python_version()
-        } else {
-            (version.major(), version.minor()) == self.python_tuple()
-        }
     }
 
     /// Whether or not this Python interpreter is from a default Python executable name, like
@@ -749,9 +737,9 @@ impl ExternallyManaged {
 #[derive(Debug, Error)]
 pub struct UnexpectedResponseError {
     #[source]
-    pub(super) err: serde_json::Error,
-    pub(super) stdout: String,
-    pub(super) stderr: String,
+    err: serde_json::Error,
+    stdout: String,
+    stderr: String,
     pub(super) path: PathBuf,
 }
 
@@ -786,9 +774,9 @@ impl Display for UnexpectedResponseError {
 
 #[derive(Debug, Error)]
 pub struct StatusCodeError {
-    pub(super) code: ExitStatus,
-    pub(super) stdout: String,
-    pub(super) stderr: String,
+    code: ExitStatus,
+    stdout: String,
+    stderr: String,
     pub(super) path: PathBuf,
 }
 
@@ -970,7 +958,7 @@ struct InterpreterInfo {
 
 impl InterpreterInfo {
     /// Return the resolved [`InterpreterInfo`] for the given Python executable.
-    pub(crate) fn query(interpreter: &Path, cache: &Cache) -> Result<Self, Error> {
+    fn query(interpreter: &Path, cache: &Cache) -> Result<Self, Error> {
         let tempdir = tempfile::tempdir_in(cache.root())?;
         Self::setup_python_query_files(tempdir.path())?;
 

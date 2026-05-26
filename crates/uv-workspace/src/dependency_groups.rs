@@ -20,7 +20,7 @@ pub struct FlatDependencyGroups(BTreeMap<GroupName, FlatDependencyGroup>);
 #[derive(Debug, Default, Clone)]
 pub struct FlatDependencyGroup {
     pub requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
-    pub requires_python: Option<VersionSpecifiers>,
+    pub(crate) requires_python: Option<VersionSpecifiers>,
 }
 
 impl FlatDependencyGroups {
@@ -224,12 +224,12 @@ impl FlatDependencyGroups {
     }
 
     /// Return the entry for a given group, if any.
-    pub fn entry(&mut self, group: GroupName) -> Entry<'_, GroupName, FlatDependencyGroup> {
+    fn entry(&mut self, group: GroupName) -> Entry<'_, GroupName, FlatDependencyGroup> {
         self.0.entry(group)
     }
 
     /// Consume the [`FlatDependencyGroups`] and return the inner map.
-    pub fn into_inner(self) -> BTreeMap<GroupName, FlatDependencyGroup> {
+    pub(crate) fn into_inner(self) -> BTreeMap<GroupName, FlatDependencyGroup> {
         self.0
     }
 }

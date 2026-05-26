@@ -250,8 +250,8 @@ static ANDROID_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
 /// This pairs a [`Dist`] with the [`HashDigests`] for the specific wheel or
 /// sdist that would be installed.
 pub(crate) struct HashedDist {
-    pub(crate) dist: Dist,
-    pub(crate) hashes: HashDigests,
+    dist: Dist,
+    hashes: HashDigests,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
@@ -699,7 +699,7 @@ impl Lock {
     }
 
     /// Returns the lockfile revision.
-    pub fn revision(&self) -> u32 {
+    fn revision(&self) -> u32 {
         self.revision
     }
 
@@ -756,7 +756,7 @@ impl Lock {
     }
 
     /// Returns the required platforms that were used to generate this lock.
-    pub fn required_environments(&self) -> &[MarkerTree] {
+    fn required_environments(&self) -> &[MarkerTree] {
         &self.required_environments
     }
 
@@ -766,12 +766,12 @@ impl Lock {
     }
 
     /// Returns the dependency groups that were used to generate this lock.
-    pub fn requirements(&self) -> &BTreeSet<Requirement> {
+    fn requirements(&self) -> &BTreeSet<Requirement> {
         &self.manifest.requirements
     }
 
     /// Returns the dependency groups that were used to generate this lock.
-    pub fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
+    pub(crate) fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
         &self.manifest.dependency_groups
     }
 
@@ -3620,7 +3620,7 @@ impl Package {
     }
 
     /// Return the fork markers for this package, if any.
-    pub fn fork_markers(&self) -> &[UniversalMarker] {
+    pub(crate) fn fork_markers(&self) -> &[UniversalMarker] {
         self.fork_markers.as_slice()
     }
 
@@ -3713,7 +3713,7 @@ impl Package {
     }
 
     /// Returns an [`InstallTarget`] view for filtering decisions.
-    pub(crate) fn as_install_target(&self) -> InstallTarget<'_> {
+    fn as_install_target(&self) -> InstallTarget<'_> {
         InstallTarget {
             name: self.name(),
             is_local: self.id.source.is_local(),
@@ -3833,7 +3833,7 @@ impl PackageWire {
 #[serde(rename_all = "kebab-case")]
 pub(crate) struct PackageId {
     pub(crate) name: PackageName,
-    pub(crate) version: Option<Version>,
+    version: Option<Version>,
     source: Source,
 }
 
@@ -4288,7 +4288,7 @@ impl Source {
     }
 
     /// Check if a package is local by examining its source.
-    pub(crate) fn is_local(&self) -> bool {
+    fn is_local(&self) -> bool {
         matches!(
             self,
             Self::Path(_) | Self::Directory(_) | Self::Editable(_) | Self::Virtual(_)
@@ -4611,7 +4611,7 @@ impl SourceDist {
         }
     }
 
-    pub(crate) fn hash(&self) -> Option<&Hash> {
+    fn hash(&self) -> Option<&Hash> {
         match self {
             Self::Metadata { metadata } => metadata.hash.as_ref(),
             Self::Url { metadata, .. } => metadata.hash.as_ref(),
@@ -4619,7 +4619,7 @@ impl SourceDist {
         }
     }
 
-    pub(crate) fn size(&self) -> Option<u64> {
+    fn size(&self) -> Option<u64> {
         match self {
             Self::Metadata { metadata } => metadata.size,
             Self::Url { metadata, .. } => metadata.size,
@@ -4627,7 +4627,7 @@ impl SourceDist {
         }
     }
 
-    pub(crate) fn upload_time(&self) -> Option<Timestamp> {
+    fn upload_time(&self) -> Option<Timestamp> {
         match self {
             Self::Metadata { metadata } => metadata.upload_time,
             Self::Url { metadata, .. } => metadata.upload_time,
@@ -5189,7 +5189,7 @@ impl Wheel {
         }
     }
 
-    pub(crate) fn to_registry_wheel(
+    fn to_registry_wheel(
         &self,
         source: &RegistrySource,
         root: &Path,

@@ -28,7 +28,7 @@ pub(crate) enum CompressionMethod {
 impl CompressionMethod {
     /// Returns `true` if this is a well-known compression method that we
     /// expect other ZIP implementations to support.
-    pub(crate) fn is_well_known(&self) -> bool {
+    fn is_well_known(&self) -> bool {
         matches!(self, Self::Stored | Self::Deflated | Self::Zstd)
     }
 }

@@ -21,10 +21,10 @@ use crate::{IndexStatusCodeStrategy, IndexUrl, IndexUrlError, SerializableStatus
 pub struct IndexCacheControl {
     /// Cache control header for Simple API requests.
     #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
-    pub api: Option<HeaderValue>,
+    pub(crate) api: Option<HeaderValue>,
     /// Cache control header for file downloads.
     #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
-    pub files: Option<HeaderValue>,
+    pub(crate) files: Option<HeaderValue>,
 }
 
 impl IndexCacheControl {
@@ -434,11 +434,6 @@ impl Index {
         &self.url
     }
 
-    /// Consume the [`Index`] and return the [`IndexUrl`].
-    pub fn into_url(self) -> IndexUrl {
-        self.url
-    }
-
     /// Return the raw [`Url`] of the index.
     pub fn raw_url(&self) -> &DisplaySafeUrl {
         self.url.url()
@@ -488,7 +483,7 @@ impl Index {
     }
 
     /// Return the [`IndexStatusCodeStrategy`] for this index.
-    pub fn status_code_strategy(&self) -> IndexStatusCodeStrategy {
+    pub(crate) fn status_code_strategy(&self) -> IndexStatusCodeStrategy {
         if let Some(ignore_error_codes) = &self.ignore_error_codes {
             IndexStatusCodeStrategy::from_ignored_error_codes(ignore_error_codes)
         } else {
@@ -513,7 +508,7 @@ impl Index {
     }
 
     /// Return the `exclude-newer` setting for this index.
-    pub fn exclude_newer(&self) -> Option<&ExcludeNewerOverride> {
+    pub(crate) fn exclude_newer(&self) -> Option<&ExcludeNewerOverride> {
         self.exclude_newer.as_ref()
     }
 }
@@ -589,12 +584,6 @@ pub struct IndexMetadata {
 }
 
 impl IndexMetadata {
-    /// Return a reference to the [`IndexMetadata`].
-    pub fn as_ref(&self) -> IndexMetadataRef<'_> {
-        let Self { url, format: kind } = self;
-        IndexMetadataRef { url, format: *kind }
-    }
-
     /// Consume the [`IndexMetadata`] and return the [`IndexUrl`].
     pub fn into_url(self) -> IndexUrl {
         self.url
@@ -614,13 +603,6 @@ impl IndexMetadata {
     /// Return the [`IndexUrl`] of the index.
     pub fn url(&self) -> &IndexUrl {
         &self.url
-    }
-}
-
-impl IndexMetadataRef<'_> {
-    /// Return the [`IndexUrl`] of the index.
-    pub fn url(&self) -> &IndexUrl {
-        self.url
     }
 }
 

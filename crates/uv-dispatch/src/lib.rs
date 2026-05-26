@@ -689,14 +689,4 @@ impl SharedState {
     pub fn in_flight(&self) -> &InFlight {
         &self.in_flight
     }
-
-    /// Return the [`IndexCapabilities`] used by the [`SharedState`].
-    pub fn capabilities(&self) -> &IndexCapabilities {
-        &self.capabilities
-    }
-
-    /// Return the [`BuildArena`] used by the [`SharedState`].
-    pub fn build_arena(&self) -> &BuildArena<SourceBuild> {
-        &self.build_arena
-    }
 }
