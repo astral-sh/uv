@@ -56,4 +56,11 @@ version-ranges = { workspace = true }
 toml = { workspace = true }
 
 [features]
-schemars = ["dep:schemars", "uv-auth/schemars", "uv-redacted/schemars"]
+schemars = [
+    "dep:schemars",
+    "uv-auth/schemars",
+    "uv-normalize/schemars",
+    "uv-pep508/schemars",
+    "uv-redacted/schemars",
+    "uv-small-str/schemars",
+]
