@@ -507,6 +507,30 @@ fn run_pep723_script() -> Result<()> {
     error: An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`.
     ");
 
+    // Regression test for: <https://github.com/astral-sh/uv/issues/18617>
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # dependencies = []
+        # ///
+
+        print("Hello, world!")
+
+        # /// script
+        # dependencies = []
+        # ///
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The script contains multiple PEP 723 metadata blocks
+    ");
+
     Ok(())
 }
 
