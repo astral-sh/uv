@@ -1,13 +1,12 @@
-use std::io::Write;
 use std::path::Path;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
-use fs_err::File;
+use async_zip::base::write::ZipFileWriter;
+use async_zip::{Compression, ZipEntryBuilder};
+use futures::executor::block_on;
 use url::Url;
-use zip::ZipWriter;
-use zip::write::SimpleFileOptions;
 
 use uv_test::{copy_dir_ignore, uv_snapshot};
 
@@ -17,36 +16,38 @@ fn write_wheel(
     dist_info_prefix: &str,
     files: &[(&str, &str)],
 ) -> Result<()> {
-    let mut writer = ZipWriter::new(File::create(path)?);
-    let options = SimpleFileOptions::default();
+    let mut writer = ZipFileWriter::new(Vec::new());
     let mut record = Vec::new();
 
     for (file_path, contents) in files {
-        writer.start_file(file_path, options)?;
-        writer.write_all(contents.as_bytes())?;
+        let entry = ZipEntryBuilder::new((*file_path).into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, contents.as_bytes()))?;
         record.push(format!("{file_path},,"));
     }
 
     let metadata_path = format!("{dist_info_prefix}.dist-info/METADATA");
-    writer.start_file(&metadata_path, options)?;
-    writer
-        .write_all(format!("Metadata-Version: 2.1\nName: {name}\nVersion: 0.1.0\n").as_bytes())?;
+    let entry = ZipEntryBuilder::new(metadata_path.clone().into(), Compression::Stored);
+    block_on(writer.write_entry_whole(
+        entry,
+        format!("Metadata-Version: 2.1\nName: {name}\nVersion: 0.1.0\n").as_bytes(),
+    ))?;
     record.push(format!("{metadata_path},,"));
 
     let wheel_path = format!("{dist_info_prefix}.dist-info/WHEEL");
-    writer.start_file(&wheel_path, options)?;
-    writer.write_all(
+    let entry = ZipEntryBuilder::new(wheel_path.clone().into(), Compression::Stored);
+    block_on(writer.write_entry_whole(
+        entry,
         b"Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-    )?;
+    ))?;
     record.push(format!("{wheel_path},,"));
 
     let record_path = format!("{dist_info_prefix}.dist-info/RECORD");
     record.push(format!("{record_path},,"));
-    writer.start_file(&record_path, options)?;
-    writer.write_all(record.join("\n").as_bytes())?;
-    writer.write_all(b"\n")?;
+    let entry = ZipEntryBuilder::new(record_path.into(), Compression::Stored);
+    let record = format!("{}\n", record.join("\n"));
+    block_on(writer.write_entry_whole(entry, record.as_bytes()))?;
 
-    writer.finish()?;
+    fs_err::write(path, block_on(writer.close())?)?;
     Ok(())
 }
 
