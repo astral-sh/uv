@@ -16124,6 +16124,161 @@ fn check_outdated_lock() -> Result<()> {
     Ok(())
 }
 
+/// Checks that a later `exclude-newer` cutoff does not invalidate a lock until a refresh occurs,
+/// while a more restrictive cutoff still requires an update.
+#[test]
+fn lock_reuses_newer_exclude_newer_timestamp() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2024-03-25T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-03-26T00:00:00Z")
+        .arg("--check"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-03-24T00:00:00Z")
+        .arg("--check"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolving despite existing lockfile due to change of exclude newer timestamp from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z`
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-03-26T00:00:00Z"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-03-26T00:00:00Z")
+        .arg("--refresh"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.11"
+
+    [options]
+    exclude-newer = "2024-03-26T00:00:00Z"
+
+    [[package]]
+    name = "project"
+    version = "0.1.0"
+    source = { virtual = "." }
+    "#);
+
+    Ok(())
+}
+
+/// Checks that compatible global and package-specific cutoffs do not mask a more restrictive
+/// package-specific `exclude-newer` cutoff.
+#[test]
+fn lock_check_allows_newer_exclude_newer_package_timestamp() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2024-03-25T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--exclude-newer-package")
+        .arg("idna=2024-03-25T00:00:00Z"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-03-26T00:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("idna=2024-03-26T00:00:00Z")
+        .arg("--check"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-03-26T00:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("idna=2024-03-24T00:00:00Z")
+        .arg("--check"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolving despite existing lockfile due to change of exclude newer timestamp from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z` for package `idna`
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// This checks that markers that normalize to 'false', which are serialized
 /// to the lockfile as `python_full_version < '0'`, get read back as false.
 /// Otherwise `uv lock --check` will always fail.
