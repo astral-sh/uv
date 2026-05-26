@@ -2771,6 +2771,93 @@ fn run_with_env_file() -> anyhow::Result<()> {
 }
 
 #[test]
+fn run_with_env_file_override() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Create a project with a custom script.
+    let foo_dir = context.temp_dir.child("foo");
+    let foo_pyproject_toml = foo_dir.child("pyproject.toml");
+
+    foo_pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = []
+
+        [project.scripts]
+        script = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    let foo_project_src = foo_dir.child("src");
+    let foo_module = foo_project_src.child("foo");
+    foo_module.child("__init__.py").touch()?;
+    let foo_main_py = foo_module.child("main.py");
+    foo_main_py.write_str(indoc! { r#"
+        def run():
+            import os
+            print(os.environ.get('MY_VAR'))
+
+        __name__ == "__main__" and run()
+       "#
+    })?;
+
+    context.temp_dir.child(".env").write_str(indoc! { "
+        MY_VAR=from_file
+       "
+    })?;
+
+    // Without --env-file-override, process env wins.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--env-file").arg(".env")
+        .arg("--from")
+        .arg("./foo")
+        .arg("script")
+        .env("MY_VAR", "from_process")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    from_process
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/foo)
+    ");
+
+    // With --env-file-override, .env file wins.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--env-file").arg(".env")
+        .arg("--env-file-override")
+        .arg("--from")
+        .arg("./foo")
+        .arg("script")
+        .env("MY_VAR", "from_process")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    from_file
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn tool_run_from_at() {
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-01-18T00:00:00Z")

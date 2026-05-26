@@ -115,6 +115,7 @@ pub(crate) async fn run(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     env_file: EnvFile,
+    env_file_override: bool,
     preview: Preview,
     max_recursion_depth: u32,
     malware_settings: MalwareCheckSettings,
@@ -167,7 +168,12 @@ pub(crate) async fn run(
 
     // Read from the `.env` file, if necessary.
     for env_file_path in env_file.iter().rev().map(PathBuf::as_path) {
-        match dotenvy::from_path(env_file_path) {
+        let result = if env_file_override {
+            dotenvy::from_path_override(env_file_path)
+        } else {
+            dotenvy::from_path(env_file_path)
+        };
+        match result {
             Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                 bail!(
                     "No environment file found at: `{}`",

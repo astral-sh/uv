@@ -5218,6 +5218,116 @@ fn run_with_not_existing_env_file() -> Result<()> {
 }
 
 #[test]
+fn run_with_env_file_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("test.py").write_str(indoc! { "
+        import os
+        print(os.environ.get('MY_VAR'))
+       "
+    })?;
+
+    context.temp_dir.child(".env").write_str(indoc! { "
+        MY_VAR=from_file
+       "
+    })?;
+
+    // Without --env-file-override, the process env wins.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--env-file").arg(".env")
+        .arg("test.py")
+        .env("MY_VAR", "from_process"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    from_process
+
+    ----- stderr -----
+    ");
+
+    // With --env-file-override, the .env file wins.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--env-file").arg(".env")
+        .arg("--env-file-override")
+        .arg("test.py")
+        .env("MY_VAR", "from_process"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    from_file
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn run_with_env_file_override_via_env_var() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("test.py").write_str(indoc! { "
+        import os
+        print(os.environ.get('MY_VAR'))
+       "
+    })?;
+
+    context.temp_dir.child(".env").write_str(indoc! { "
+        MY_VAR=from_file
+       "
+    })?;
+
+    // UV_ENV_FILE_OVERRIDE=true activates the override behavior.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--env-file").arg(".env")
+        .arg("test.py")
+        .env("MY_VAR", "from_process")
+        .env(EnvVars::UV_ENV_FILE_OVERRIDE, "true"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    from_file
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn run_with_env_file_override_no_env_file_wins() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("test.py").write_str(indoc! { "
+        import os
+        print(os.environ.get('MY_VAR'))
+       "
+    })?;
+
+    context.temp_dir.child(".env").write_str(indoc! { "
+        MY_VAR=from_file
+       "
+    })?;
+
+    // --no-env-file should still disable loading, even with --env-file-override.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--env-file").arg(".env")
+        .arg("--env-file-override")
+        .arg("--no-env-file")
+        .arg("test.py")
+        .env("MY_VAR", "from_process"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    from_process
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn run_with_extra_conflict() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

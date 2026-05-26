@@ -3640,6 +3640,14 @@ pub struct RunArgs {
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_env_file: bool,
 
+    /// Force `.env` file values to override existing environment variables.
+    ///
+    /// By default, environment variables already set in the process take precedence
+    /// over values defined in `.env` files. When this flag is set, `.env` file
+    /// values will override existing environment variables.
+    #[arg(long, env = EnvVars::UV_ENV_FILE_OVERRIDE, value_parser = clap::builder::BoolishValueParser::new())]
+    pub env_file_override: bool,
+
     /// The command to run.
     ///
     /// If the path to a Python script (i.e., ending in `.py`), it will be
@@ -5537,6 +5545,14 @@ pub struct ToolRunArgs {
     /// Avoid reading environment variables from a `.env` file [env: UV_NO_ENV_FILE=]
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_env_file: bool,
+
+    /// Force `.env` file values to override existing environment variables.
+    ///
+    /// By default, environment variables already set in the process take precedence
+    /// over values defined in `.env` files. When this flag is set, `.env` file
+    /// values will override existing environment variables.
+    #[arg(long, env = EnvVars::UV_ENV_FILE_OVERRIDE, value_parser = clap::builder::BoolishValueParser::new())]
+    pub env_file_override: bool,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
