@@ -1,13 +1,16 @@
 use std::convert::Infallible;
 use std::io;
-use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
+use async_zip::base::write::ZipFileWriter;
+use async_zip::{Compression, ZipEntryBuilder};
 use bytes::Bytes;
+use futures::io::AsyncWriteExt;
 use http::StatusCode;
+use http::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, RANGE};
 use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
@@ -17,8 +20,6 @@ use serde_json::json;
 use tokio_stream::wrappers::ReceiverStream;
 use wiremock::matchers::{any, method};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
-use zip::ZipWriter;
-use zip::write::SimpleFileOptions;
 
 use uv_static::EnvVars;
 use uv_test::{TestContext, uv_snapshot};
@@ -1107,54 +1108,43 @@ async fn retry_read_timeout_stream() {
     ");
 }
 
-/// A minimal `iniconfig-2.0.0-py3-none-any.whl` with only dist-info files.
-///
-/// `validate_and_heal_record` fills in missing RECORD entries at install time, so we don't
-/// need correct hashes here.
-fn minimal_iniconfig_wheel() -> Vec<u8> {
-    let mut buf = std::io::Cursor::new(Vec::new());
-    let mut zip = ZipWriter::new(&mut buf);
-    let options = SimpleFileOptions::default();
-
-    zip.start_file("iniconfig-2.0.0.dist-info/WHEEL", options)
-        .unwrap();
-    zip.write_all(
-        b"Wheel-Version: 1.0\nGenerator: test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-    )
-    .unwrap();
-
-    zip.start_file("iniconfig-2.0.0.dist-info/METADATA", options)
-        .unwrap();
-    zip.write_all(b"Metadata-Version: 2.1\nName: iniconfig\nVersion: 2.0.0\n")
-        .unwrap();
-
-    zip.start_file("iniconfig-2.0.0.dist-info/RECORD", options)
-        .unwrap();
-    zip.write_all(b"iniconfig-2.0.0.dist-info/RECORD,,\n")
-        .unwrap();
-
-    zip.finish().unwrap();
-    buf.into_inner()
+/// A valid wheel whose data descriptors require the on-disk extraction fallback.
+async fn wheel_requiring_download() -> Vec<u8> {
+    let mut writer = ZipFileWriter::new(Vec::new());
+    for (path, contents) in [
+        (
+            "ok-1.0.0.dist-info/WHEEL",
+            b"Wheel-Version: 1.0\nGenerator: test\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
+                .as_slice(),
+        ),
+        (
+            "ok-1.0.0.dist-info/METADATA",
+            b"Metadata-Version: 2.1\nName: ok\nVersion: 1.0.0\n".as_slice(),
+        ),
+        (
+            "ok-1.0.0.dist-info/RECORD",
+            b"ok-1.0.0.dist-info/RECORD,,\n".as_slice(),
+        ),
+    ] {
+        let entry = ZipEntryBuilder::new(path.to_string().into(), Compression::Stored);
+        let mut entry_writer = writer.write_entry_stream(entry).await.unwrap();
+        entry_writer.write_all(contents).await.unwrap();
+        entry_writer.close().await.unwrap();
+    }
+    writer.close().await.unwrap()
 }
 
 /// Returns a server URL and a drop guard that serves a wheel with mid-stream interruption.
 ///
-/// When `honor_range` is true:
-/// - HEAD → `Content-Length` + `Accept-Ranges: bytes`
-/// - Plain GET → first half, then hangs (timeout fires instead of TCP RST so bytes land on disk)
-/// - Range GET → 206 with the requested slice, enabling a free byte-level resume
-///
-/// When `honor_range` is false:
-/// - HEAD → `Content-Length` only (no `Accept-Ranges`)
-/// - Plain GET → first two requests hang (`stream_wheel` + first download attempt); the third
-///   serves the full wheel so the retry (which consumes one retry budget) succeeds
-/// - Range GET → 200 full content (ignored, but never sent by the client once Range is disabled)
-fn wheel_server(wheel: Vec<u8>, honor_range: bool) -> (String, impl Drop) {
+/// HEAD and range requests complete normally so metadata reads do not affect the download count.
+/// The first full GET reaches the streaming fallback, and the second is interrupted. When
+/// `advertise_range` is true, that interrupted download can be resumed.
+fn wheel_server(wheel: Vec<u8>, advertise_range: bool) -> (String, impl Drop) {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let server_url = format!("http://{}", listener.local_addr().unwrap());
     let wheel = Bytes::from(wheel);
-    let plain_get_count = Arc::new(AtomicUsize::new(0));
+    let full_get_count = Arc::new(AtomicUsize::new(0));
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     std::thread::spawn(move || {
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -1168,79 +1158,70 @@ fn wheel_server(wheel: Vec<u8>, honor_range: bool) -> (String, impl Drop) {
                     loop {
                         let Ok((stream, _)) = listener.accept().await else { break };
                         let wheel = wheel.clone();
-                        let plain_get_count = plain_get_count.clone();
+                        let full_get_count = full_get_count.clone();
                         tokio::spawn(async move {
                             let _ = hyper_util::server::conn::auto::Builder::new(
                                 hyper_util::rt::TokioExecutor::new(),
                             )
                             .serve_connection(
                                 TokioIo::new(stream),
-                                service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
+                                service_fn(move |request: hyper::Request<hyper::body::Incoming>| {
                                     let wheel = wheel.clone();
-                                    let plain_get_count = plain_get_count.clone();
+                                    let full_get_count = full_get_count.clone();
                                     async move {
-                                        let n = wheel.len();
-                                        if req.method() == hyper::Method::HEAD {
-                                            let mut builder = hyper::Response::builder()
-                                                .header("Content-Length", n.to_string());
-                                            if honor_range {
-                                                builder = builder.header("Accept-Ranges", "bytes");
-                                            }
-                                            Ok::<_, Infallible>(builder
+                                        let size = wheel.len();
+                                        if request.method() == hyper::Method::HEAD {
+                                            return Ok::<_, Infallible>(hyper::Response::builder()
+                                                .header(CONTENT_LENGTH, size.to_string())
+                                                .header(ACCEPT_RANGES, "bytes")
                                                 .body(http_body_util::Empty::new().boxed())
-                                                .unwrap())
-                                        } else if let Some(hdr) = req.headers().get("range") {
-                                            if honor_range {
-                                                let (start, end) = hdr.to_str().unwrap_or("bytes=0-")
-                                                    .trim_start_matches("bytes=")
-                                                    .split_once('-')
-                                                    .map(|(a, b)| (
-                                                        a.parse().unwrap_or(0),
-                                                        b.parse().unwrap_or(n - 1),
-                                                    ))
-                                                    .unwrap_or((0, n - 1));
-                                                let slice = wheel.slice(start..=end);
-                                                Ok::<_, Infallible>(hyper::Response::builder()
-                                                    .status(206)
-                                                    .header("Content-Range", format!("bytes {start}-{end}/{n}"))
-                                                    .header("Content-Length", slice.len().to_string())
-                                                    .body(http_body_util::Full::new(slice).boxed())
-                                                    .unwrap())
-                                            } else {
-                                                Ok::<_, Infallible>(hyper::Response::builder()
-                                                    .header("Content-Type", "application/zip")
-                                                    .header("Content-Length", n.to_string())
-                                                    .body(http_body_util::Full::new(wheel.clone()).boxed())
-                                                    .unwrap())
-                                            }
-                                        } else {
-                                            let count = plain_get_count.fetch_add(1, Ordering::Relaxed);
-                                            // First two plain GETs hang (stream_wheel + first
-                                            // download attempt); subsequent ones serve the full
-                                            // wheel for the retry.
-                                            if honor_range || count < 2 {
-                                                let (tx, rx) = tokio::sync::mpsc::channel(1);
-                                                tokio::spawn(async move {
-                                                    let _ = tx.send(Ok(Frame::data(wheel.slice(..n / 2)))).await;
-                                                    tokio::time::sleep(Duration::from_secs(60)).await;
-                                                });
-                                                let mut builder = hyper::Response::builder()
-                                                    .header("Content-Type", "application/zip")
-                                                    .header("Content-Length", n.to_string());
-                                                if honor_range {
-                                                    builder = builder.header("Accept-Ranges", "bytes");
-                                                }
-                                                Ok::<_, Infallible>(builder
-                                                    .body(StreamBody::new(ReceiverStream::new(rx)).boxed())
-                                                    .unwrap())
-                                            } else {
-                                                Ok::<_, Infallible>(hyper::Response::builder()
-                                                    .header("Content-Type", "application/zip")
-                                                    .header("Content-Length", n.to_string())
-                                                    .body(http_body_util::Full::new(wheel.clone()).boxed())
-                                                    .unwrap())
-                                            }
+                                                .unwrap());
                                         }
+
+                                        if let Some(range) = request.headers().get(RANGE) {
+                                            let (start, end) = range
+                                                .to_str()
+                                                .unwrap()
+                                                .trim_start_matches("bytes=")
+                                                .split_once('-')
+                                                .map(|(start, end)| {
+                                                    (
+                                                        start.parse().unwrap(),
+                                                        end.parse().unwrap_or(size - 1),
+                                                    )
+                                                })
+                                                .unwrap();
+                                            let bytes = wheel.slice(start..=end);
+                                            return Ok::<_, Infallible>(hyper::Response::builder()
+                                                .status(StatusCode::PARTIAL_CONTENT)
+                                                .header(CONTENT_RANGE, format!("bytes {start}-{end}/{size}"))
+                                                .header(CONTENT_LENGTH, bytes.len().to_string())
+                                                .body(http_body_util::Full::new(bytes).boxed())
+                                                .unwrap());
+                                        }
+
+                                        if full_get_count.fetch_add(1, Ordering::Relaxed) != 1 {
+                                            return Ok::<_, Infallible>(hyper::Response::builder()
+                                                .header(CONTENT_LENGTH, size.to_string())
+                                                .body(http_body_util::Full::new(wheel).boxed())
+                                                .unwrap());
+                                        }
+
+                                        let (tx, rx) = tokio::sync::mpsc::channel(1);
+                                        tokio::spawn(async move {
+                                            let _ = tx
+                                                .send(Ok(Frame::data(wheel.slice(..size / 2))))
+                                                .await;
+                                            tokio::time::sleep(Duration::from_mins(1)).await;
+                                        });
+                                        let mut response = hyper::Response::builder()
+                                            .header(CONTENT_LENGTH, size.to_string());
+                                        if advertise_range {
+                                            response = response.header(ACCEPT_RANGES, "bytes");
+                                        }
+                                        Ok::<_, Infallible>(response
+                                            .body(StreamBody::new(ReceiverStream::new(rx)).boxed())
+                                            .unwrap())
                                     }
                                 }),
                             )
@@ -1255,27 +1236,19 @@ fn wheel_server(wheel: Vec<u8>, honor_range: bool) -> (String, impl Drop) {
     (server_url, shutdown_tx)
 }
 
-/// A mid-stream interruption is transparently resumed via HTTP Range without consuming a retry.
-///
-/// The server sends the first half of the wheel then hangs. `UV_HTTP_TIMEOUT=1` causes the client
-/// to time out, but since bytes were written to disk, the retry loop resumes via a Range request
-/// rather than restarting from scratch. With `UV_HTTP_RETRIES=0`, a normal error would fail
-/// immediately; the Range-based resume is "free" (not counted as a retry), so the install
-/// succeeds.
+/// A mid-stream interruption is transparently resumed via HTTP range without consuming a retry.
 #[tokio::test]
 async fn direct_url_range_resume() {
     let context = uv_test::test_context!("3.12");
 
-    let wheel = minimal_iniconfig_wheel();
+    let wheel = wheel_requiring_download().await;
     let (server, _guard) = wheel_server(wheel, true);
 
-    let wheel_url = format!("{server}/iniconfig-2.0.0-py3-none-any.whl");
+    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
     uv_snapshot!(context.filters(), context
         .pip_install()
-        .arg(format!("iniconfig @ {wheel_url}"))
-        // Zero retries: the Range-based resume must not count as a retry.
+        .arg(format!("ok @ {wheel_url}"))
         .env(EnvVars::UV_HTTP_RETRIES, "0")
-        // Short timeout so the hanging body is interrupted quickly.
         .env(EnvVars::UV_HTTP_TIMEOUT, "1")
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: true
@@ -1284,29 +1257,26 @@ async fn direct_url_range_resume() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from http://[LOCALHOST]/iniconfig-2.0.0-py3-none-any.whl)
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
     ");
 }
 
-/// When the server does not support Range requests, uv falls back to a plain re-download from
-/// scratch. Because the server does not advertise `Accept-Ranges`, the interruption is not a
-/// free Range-resume—it consumes one retry. With `UV_HTTP_RETRIES=1` the install succeeds.
+/// Without advertised range support, a mid-stream interruption uses a regular retry.
 #[tokio::test]
 async fn direct_url_no_range_resume() {
     let context = uv_test::test_context!("3.12");
 
-    let wheel = minimal_iniconfig_wheel();
+    let wheel = wheel_requiring_download().await;
     let (server, _guard) = wheel_server(wheel, false);
 
-    let wheel_url = format!("{server}/iniconfig-2.0.0-py3-none-any.whl");
+    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
     uv_snapshot!(context.filters(), context
         .pip_install()
-        .arg(format!("iniconfig @ {wheel_url}"))
-        // One retry: the re-download from scratch consumes one retry budget.
+        .arg(format!("ok @ {wheel_url}"))
         .env(EnvVars::UV_HTTP_RETRIES, "1")
-        // Short timeout so the hanging body is interrupted quickly.
         .env(EnvVars::UV_HTTP_TIMEOUT, "1")
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: true
@@ -1315,8 +1285,9 @@ async fn direct_url_no_range_resume() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from http://[LOCALHOST]/iniconfig-2.0.0-py3-none-any.whl)
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
     ");
 }

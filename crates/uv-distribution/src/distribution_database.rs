@@ -1,4 +1,3 @@
-use std::cell::Cell;
 use std::future::Future;
 use std::io;
 use std::path::Path;
@@ -16,7 +15,7 @@ use url::Url;
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
-    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient, RetryState,
+    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
@@ -876,45 +875,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             lock_entry.lock().await.map_err(Error::CacheLock)?
         };
 
-        // Create an entry for the HTTP cache and ensure the cache dir exists
+        // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
-        fs_err::create_dir_all(wheel_entry.dir()).map_err(Error::CacheWrite)?;
-
-        // A NamedTempFile in the cache dir holds the completed .whl between download and
-        // extraction; auto-deleted on drop if extraction fails or the process is interrupted.
-        let complete_entry = tempfile::Builder::new()
-            .suffix(".whl")
-            .tempfile_in(wheel_entry.dir())
-            .map_err(Error::CacheWrite)?;
-
-        // A tempfile in the cache root accumulates bytes across retries. Using a NamedTempFile
-        // means it is cleaned up automatically on drop if the download fails.
-        let partial_entry = tempfile::Builder::new()
-            .tempfile_in(self.build_context.cache().root())
-            .map_err(Error::CacheWrite)?;
 
         let query_url = &url.clone();
+        let download_url = url.clone();
 
-        // Position for Range header retries
-        let use_range = Cell::new(false);
-        let bytes_on_disk = Cell::new(0u64);
-
-        let download = |response: reqwest::Response| {
+        let download = |mut response: reqwest::Response| {
             async {
-                // Resume when the server honored the Range header and returned 206.
-                // Otherwise, truncate and start fresh.
-                let resuming = response.status() == reqwest::StatusCode::PARTIAL_CONTENT;
-                // Confirm Range support so the retry loop can choose between a free
-                // byte-level resume and a retry that re-downloads from scratch.
-                if resuming
-                    || response
-                        .headers()
-                        .get("accept-ranges")
-                        .and_then(|v| v.to_str().ok())
-                        .is_some_and(|v| v != "none")
-                {
-                    use_range.set(true);
-                }
                 let size = size.or_else(|| content_length(&response));
 
                 let progress = self
@@ -922,62 +890,94 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .as_ref()
                     .map(|reporter| (reporter, reporter.on_download_start(dist.name(), size)));
 
-                let reader = response
-                    .bytes_stream()
-                    .map_err(|err| self.handle_response_errors(err))
-                    .into_async_read();
-
-                // Open the partial entry (temp file), truncating if not resuming.
-                let temp_file = fs_err::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .append(resuming)
-                    .truncate(!resuming)
-                    .open(partial_entry.path())
+                // Download the wheel to a temporary file.
+                let temp_file = tempfile::tempfile_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
                 let mut writer = tokio::io::BufWriter::new(fs_err::tokio::File::from_std(
-                    fs_err::File::from_parts(temp_file.into(), partial_entry.path()),
+                    // It's an unnamed file on Linux so that's the best approximation.
+                    fs_err::File::from_parts(temp_file, self.build_context.cache().root()),
                 ));
+                let mut resumed_at = None;
+                let mut supports_range_requests = false;
 
-                let copy_result = match progress {
-                    Some((reporter, progress)) => {
-                        // Wrap the reader in a progress reporter. This will report 100% progress
-                        // after the download is complete, even if we still have to unzip and hash
-                        // part of the file.
-                        let mut reader =
-                            ProgressReader::new(reader.compat(), progress, &**reporter);
+                loop {
+                    supports_range_requests |= response.status()
+                        == reqwest::StatusCode::PARTIAL_CONTENT
+                        || response
+                            .headers()
+                            .get(reqwest::header::ACCEPT_RANGES)
+                            .is_some_and(|value| value == "bytes");
 
-                        tokio::io::copy(&mut reader, &mut writer)
+                    // A server can advertise range requests but ignore one. In that case, the
+                    // response is a complete download and must replace the partial bytes.
+                    if resumed_at.is_some()
+                        && response.status() != reqwest::StatusCode::PARTIAL_CONTENT
+                    {
+                        writer
+                            .get_mut()
+                            .set_len(0)
                             .await
-                            .map_err(Error::CacheWrite)
+                            .map_err(Error::CacheWrite)?;
+                        writer
+                            .seek(io::SeekFrom::Start(0))
+                            .await
+                            .map_err(Error::CacheWrite)?;
                     }
-                    None => tokio::io::copy(&mut reader.compat(), &mut writer)
+
+                    let reader = response
+                        .bytes_stream()
+                        .map_err(|err| self.handle_response_errors(err))
+                        .into_async_read();
+
+                    let copy_result = match progress {
+                        Some((reporter, progress)) => {
+                            // Wrap the reader in a progress reporter. This will report 100%
+                            // progress after the download is complete, even if we still have to
+                            // unzip and hash part of the file.
+                            let mut reader =
+                                ProgressReader::new(reader.compat(), progress, &**reporter);
+
+                            tokio::io::copy(&mut reader, &mut writer)
+                                .await
+                                .map_err(Error::CacheWrite)
+                        }
+                        None => tokio::io::copy(&mut reader.compat(), &mut writer)
+                            .await
+                            .map_err(Error::CacheWrite),
+                    };
+
+                    let Err(err) = copy_result else {
+                        break;
+                    };
+                    if !supports_range_requests {
+                        return Err(err);
+                    }
+
+                    writer.flush().await.map_err(Error::CacheWrite)?;
+                    let offset = writer
+                        .get_mut()
+                        .stream_position()
                         .await
-                        .map_err(Error::CacheWrite),
-                };
+                        .map_err(Error::CacheWrite)?;
+                    if offset == 0 || resumed_at.is_some_and(|previous| offset <= previous) {
+                        return Err(err);
+                    }
 
-                // Flush before propagating any copy error. On partial downloads this
-                // ensures bytes land on disk so the retry loop can resume via Range.
-                let _ = writer.flush().await;
-                if copy_result.is_err() {
-                    let pos = writer.get_mut().stream_position().await.unwrap_or(0);
-                    bytes_on_disk.set(pos);
+                    debug!("Resuming download of {download_url} at byte {offset}");
+                    response = self
+                        .client
+                        .unmanaged
+                        .uncached_client(&download_url)
+                        .execute(self.request_with_offset(download_url.clone(), offset)?)
+                        .await?;
+                    response.error_for_status_ref()?;
+                    resumed_at = Some(offset);
                 }
-
-                copy_result?;
-
-                // Download is complete, atomically rename into place.
-                fs_err::rename(partial_entry.path(), complete_entry.path())
-                    .map_err(Error::CacheWrite)?;
-
-                // Re-open the renamed file for extraction.
-                let mut file = fs_err::tokio::File::open(complete_entry.path())
-                    .await
-                    .map_err(Error::CacheWrite)?;
 
                 // Unzip the wheel to a temporary directory.
                 let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
+                let mut file = writer.into_inner();
                 file.seek(io::SeekFrom::Start(0))
                     .await
                     .map_err(Error::CacheWrite)?;
@@ -1046,6 +1046,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .instrument(info_span!("wheel", wheel = %dist))
         };
 
+        // Fetch the archive from the cache, or download it if necessary.
+        let req = self.request(url.clone())?;
+
         // Determine the cache control policy for the URL.
         let cache_control = match self.client.unmanaged.connectivity() {
             Connectivity::Online => {
@@ -1067,74 +1070,21 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let mut retry_state = RetryState::start(
-            self.client
-                .unmanaged
-                .cached_client()
-                .uncached()
-                .retry_policy(),
-            url.clone(),
-        );
-
-        let archive = loop {
-            let bytes_written = bytes_on_disk.get();
-            // Send a Range header only when the server previously confirmed support and we have
-            // bytes on disk to resume from.
-            let sent_range = use_range.get() && bytes_written > 0;
-
-            let req = if sent_range {
-                debug!("Resuming download of {url} at byte {bytes_written}");
-                self.request_with_offset(url.clone(), bytes_written)?
-            } else {
-                self.request(url.clone())?
-            };
-
-            let result = self
-                .client
-                .managed(|client| {
-                    client.cached_client().get_serde(
-                        req,
-                        &http_entry,
-                        cache_control.clone(),
-                        &download,
-                    )
-                })
-                .await;
-
-            let new_partial_len = bytes_on_disk.get();
-            // Forward progress with Range confirmed means the next request can resume for free.
-            let can_resume = use_range.get() && new_partial_len > bytes_written;
-
-            match result {
-                Ok(archive) => break archive,
-                Err(CachedClientError::Client(err)) => {
-                    if can_resume {
-                        continue;
-                    }
-                    if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
-                        // Server ignored our Range header (returned 200, truncating the file);
-                        // fall back to plain GET for remaining retries.
-                        if sent_range && new_partial_len == 0 {
-                            use_range.set(false);
-                        }
-                        retry_state.sleep_backoff(backoff).await;
-                    } else {
-                        return Err(Error::Client(err));
-                    }
-                }
-                Err(CachedClientError::Callback { err, .. }) => {
-                    if can_resume {
-                        continue;
-                    }
-                    // Not on the Range resume path; consume a retry for a plain re-download.
-                    if let Some(backoff) = retry_state.should_retry(&err, 0) {
-                        retry_state.sleep_backoff(backoff).await;
-                    } else {
-                        return Err(err);
-                    }
-                }
-            }
-        };
+        let archive = self
+            .client
+            .managed(|client| {
+                client.cached_client().get_serde_with_retry(
+                    req,
+                    &http_entry,
+                    cache_control.clone(),
+                    download,
+                )
+            })
+            .await
+            .map_err(|err| match err {
+                CachedClientError::Callback { err, .. } => err,
+                CachedClientError::Client(err) => Error::Client(err),
+            })?;
 
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
         let archive = Some(archive)
@@ -1375,11 +1325,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 "accept-encoding",
                 reqwest::header::HeaderValue::from_static("identity"),
             )
-            .header(
-                reqwest::header::RANGE,
-                reqwest::header::HeaderValue::from_str(&format!("bytes={offset}-"))
-                    .expect("valid range header value"),
-            )
+            .header(reqwest::header::RANGE, format!("bytes={offset}-"))
             .build()
     }
 
