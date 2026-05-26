@@ -899,23 +899,20 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     fs_err::File::from_parts(temp_file, self.build_context.cache().root()),
                 ));
                 let mut resumed_at = None;
-                let mut supports_range_requests = false;
-                let mut can_resume = true;
 
                 loop {
-                    supports_range_requests |= can_resume
-                        && (response.status() == reqwest::StatusCode::PARTIAL_CONTENT
-                            || response
-                                .headers()
-                                .get(reqwest::header::ACCEPT_RANGES)
-                                .is_some_and(|value| value == "bytes"));
+                    let supports_range_requests = response.status()
+                        == reqwest::StatusCode::PARTIAL_CONTENT
+                        || response
+                            .headers()
+                            .get(reqwest::header::ACCEPT_RANGES)
+                            .is_some_and(|value| value == "bytes");
 
                     // A server can advertise range requests but ignore one. In that case, the
                     // response is a complete download and must replace the partial bytes.
-                    if resumed_at.is_some()
-                        && response.status() != reqwest::StatusCode::PARTIAL_CONTENT
-                    {
-                        can_resume = false;
+                    let replaces_partial_download = resumed_at.is_some()
+                        && response.status() != reqwest::StatusCode::PARTIAL_CONTENT;
+                    if replaces_partial_download {
                         writer
                             .get_mut()
                             .set_len(0)
@@ -952,7 +949,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     let Err(err) = copy_result else {
                         break;
                     };
-                    if !can_resume || !supports_range_requests {
+                    if replaces_partial_download || !supports_range_requests {
                         return Err(err);
                     }
 
