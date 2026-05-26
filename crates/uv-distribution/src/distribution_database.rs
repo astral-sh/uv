@@ -949,6 +949,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     let Err(err) = copy_result else {
                         break;
                     };
+                    // Only resume inline when range support is usable; otherwise let the outer
+                    // retry machinery retry the full download.
                     if replaces_partial_download || !supports_range_requests {
                         return Err(err);
                     }
