@@ -6343,6 +6343,7 @@ dependencies = [
  "tracing",
  "url",
  "uv-auth",
+ "uv-build-backend",
  "uv-cache",
  "uv-cache-info",
  "uv-client",

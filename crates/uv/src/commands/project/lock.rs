@@ -10,7 +10,6 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use tracing::debug;
 
-use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -902,18 +901,25 @@ async fn do_lock(
                 );
                 Some(ValidatedLock::Preferable(lock))
             }
-            Some(ValidatedLock::Satisfies(lock))
+            Some(ValidatedLock::Satisfies(lock)) => {
                 if lock_missing_build_dependencies(
                     &lock,
                     target.install_path(),
                     build_options,
                     &extra_build_requires,
-                )? =>
-            {
-                debug!(
-                    "Resolving despite existing lockfile because build-dependency locking is enabled and the lockfile is missing build dependencies"
-                );
-                Some(ValidatedLock::Preferable(lock))
+                    &database,
+                    &build_hasher,
+                )
+                .await
+                .map_err(ProjectError::from)?
+                {
+                    debug!(
+                        "Resolving despite existing lockfile because build-dependency locking is enabled and the lockfile is missing build dependencies"
+                    );
+                    Some(ValidatedLock::Preferable(lock))
+                } else {
+                    Some(ValidatedLock::Satisfies(lock))
+                }
             }
             lock => lock,
         }
@@ -1156,12 +1162,14 @@ fn graph_for_key<'a>(
     }
 }
 
-fn lock_missing_build_dependencies(
+async fn lock_missing_build_dependencies(
     lock: &Lock,
     workspace_root: &Path,
     build_options: &BuildOptions,
     extra_build_requires: &ExtraBuildRequires,
-) -> Result<bool, ProjectError> {
+    database: &DistributionDatabase<'_, BuildDispatch<'_>>,
+    build_hasher: &HashStrategy,
+) -> anyhow::Result<bool> {
     if build_options.no_build_requirement(None) {
         return Ok(false);
     }
@@ -1174,9 +1182,11 @@ fn lock_missing_build_dependencies(
         let extra_build_dependencies = extra_build_requires
             .get(&key.name)
             .is_some_and(|requirements| !requirements.is_empty());
-        if let SourceDist::Directory(directory) = &source_dist
-            && check_direct_build(&directory.install_path, uv_version::version()).is_ok()
-            && !extra_build_dependencies
+        let dist = Dist::Source(source_dist.clone());
+        if !extra_build_dependencies
+            && database
+                .is_direct_build(&source_dist, build_hasher.get(&dist), uv_version::version())
+                .await?
         {
             continue;
         }
@@ -1230,12 +1240,10 @@ async fn resolve_all_possible_builds(
         let mut resolved_statically = false;
 
         if !graph_exists {
-            let direct_build = if let SourceDist::Directory(directory) = &source_dist {
-                check_direct_build(&directory.install_path, uv_version::version())
-                    .is_ok_and(|()| extra_build_dependencies.is_empty())
-            } else {
-                false
-            };
+            let direct_build = extra_build_dependencies.is_empty()
+                && database
+                    .is_direct_build(&source_dist, build_hasher.get(&dist), uv_version::version())
+                    .await?;
             let build_requirements = if direct_build {
                 None
             } else {

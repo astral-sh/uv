@@ -185,6 +185,24 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await
     }
 
+    /// Return whether a source distribution can be built using the in-process uv backend.
+    #[instrument(skip_all, fields(%source))]
+    pub async fn is_direct_build(
+        &self,
+        source: &SourceDist,
+        hashes: HashPolicy<'_>,
+        uv_version: &str,
+    ) -> Result<bool, Error> {
+        self.builder
+            .download_direct_build(
+                &BuildableSource::Dist(source),
+                hashes,
+                &self.client,
+                uv_version,
+            )
+            .await
+    }
+
     /// Fetch a wheel from the cache or download it from the index.
     ///
     /// While hashes will be generated in all cases, hash-checking is _not_ enforced and should

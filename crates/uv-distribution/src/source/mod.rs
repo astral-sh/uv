@@ -22,6 +22,7 @@ use tracing::{Instrument, debug, info_span, instrument, warn};
 use url::Url;
 
 use uv_auth::CredentialsCache;
+use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
 use uv_cache_info::CacheInfo;
 use uv_client::{
@@ -749,6 +750,159 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .await
             }
             BuildableSource::Url(SourceUrl::GitPath(_)) => Ok(None),
+        }
+    }
+
+    /// Download a [`SourceDist`] and determine whether it supports an in-process uv build.
+    pub(crate) async fn download_direct_build(
+        &self,
+        source: &BuildableSource<'_>,
+        hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
+        uv_version: &str,
+    ) -> Result<bool, Error> {
+        match source {
+            BuildableSource::Dist(SourceDist::Registry(dist)) => {
+                let cache_shard = self.build_context.cache().shard(
+                    CacheBucket::SourceDistributions,
+                    WheelCache::Index(&dist.index)
+                        .wheel_dir(dist.name.as_ref())
+                        .join(dist.version.to_string()),
+                );
+
+                let url = dist.file.url.to_url()?;
+                if url.scheme() == "file" {
+                    let path = url
+                        .to_file_path()
+                        .map_err(|()| Error::NonFileUrl(url.clone()))?;
+                    return self
+                        .archive_direct_build(
+                            source,
+                            &PathSourceUrl {
+                                url: &url,
+                                path: Cow::Owned(path),
+                                ext: dist.ext,
+                            },
+                            &cache_shard,
+                            hashes,
+                            uv_version,
+                        )
+                        .boxed_local()
+                        .await;
+                }
+
+                self.url_direct_build(
+                    source,
+                    &url,
+                    Some(&dist.index),
+                    &cache_shard,
+                    None,
+                    dist.ext,
+                    hashes,
+                    client,
+                    uv_version,
+                )
+                .boxed_local()
+                .await
+            }
+            BuildableSource::Dist(SourceDist::DirectUrl(dist)) => {
+                let cache_shard = self.build_context.cache().shard(
+                    CacheBucket::SourceDistributions,
+                    WheelCache::Url(&dist.url).root(),
+                );
+
+                self.url_direct_build(
+                    source,
+                    &dist.url,
+                    None,
+                    &cache_shard,
+                    dist.subdirectory.as_deref(),
+                    dist.ext,
+                    hashes,
+                    client,
+                    uv_version,
+                )
+                .boxed_local()
+                .await
+            }
+            BuildableSource::Dist(SourceDist::Path(dist)) => {
+                let cache_shard = self.build_context.cache().shard(
+                    CacheBucket::SourceDistributions,
+                    WheelCache::Path(&dist.url).root(),
+                );
+                self.archive_direct_build(
+                    source,
+                    &PathSourceUrl::from(dist),
+                    &cache_shard,
+                    hashes,
+                    uv_version,
+                )
+                .boxed_local()
+                .await
+            }
+            BuildableSource::Dist(SourceDist::Directory(dist)) => {
+                Ok(check_direct_build(&dist.install_path, uv_version).is_ok())
+            }
+            BuildableSource::Dist(SourceDist::GitDirectory(dist)) => {
+                self.git_directory_direct_build(
+                    source,
+                    &GitDirectorySourceUrl::from(dist),
+                    hashes,
+                    client,
+                    uv_version,
+                )
+                .await
+            }
+            BuildableSource::Dist(SourceDist::GitPath(dist)) => {
+                self.git_archive_direct_build(
+                    source,
+                    &GitPathSourceUrl::from(dist),
+                    hashes,
+                    client,
+                    uv_version,
+                )
+                .await
+            }
+            BuildableSource::Url(SourceUrl::Direct(resource)) => {
+                let cache_shard = self.build_context.cache().shard(
+                    CacheBucket::SourceDistributions,
+                    WheelCache::Url(resource.url).root(),
+                );
+
+                self.url_direct_build(
+                    source,
+                    resource.url,
+                    None,
+                    &cache_shard,
+                    resource.subdirectory,
+                    resource.ext,
+                    hashes,
+                    client,
+                    uv_version,
+                )
+                .boxed_local()
+                .await
+            }
+            BuildableSource::Url(SourceUrl::Path(resource)) => {
+                let cache_shard = self.build_context.cache().shard(
+                    CacheBucket::SourceDistributions,
+                    WheelCache::Path(resource.url).root(),
+                );
+                self.archive_direct_build(source, resource, &cache_shard, hashes, uv_version)
+                    .boxed_local()
+                    .await
+            }
+            BuildableSource::Url(SourceUrl::Directory(resource)) => {
+                Ok(check_direct_build(resource.install_path, uv_version).is_ok())
+            }
+            BuildableSource::Url(SourceUrl::GitDirectory(resource)) => {
+                self.git_directory_direct_build(source, resource, hashes, client, uv_version)
+                    .await
+            }
+            BuildableSource::Url(SourceUrl::GitPath(resource)) => {
+                self.git_archive_direct_build(source, resource, hashes, client, uv_version)
+                    .await
+            }
         }
     }
 
@@ -1543,6 +1697,64 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         .await
     }
 
+    /// Return whether a remote source distribution supports an in-process uv build.
+    async fn url_direct_build<'data>(
+        &self,
+        source: &BuildableSource<'data>,
+        url: &'data DisplaySafeUrl,
+        index: Option<&'data IndexUrl>,
+        cache_shard: &CacheShard,
+        subdirectory: Option<&'data Path>,
+        ext: SourceDistExtension,
+        hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
+        uv_version: &str,
+    ) -> Result<bool, Error> {
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
+        let revision = self
+            .url_revision(source, ext, url, index, cache_shard, hashes, client)
+            .await?;
+
+        if !revision.satisfies(hashes) {
+            return Err(Error::hash_mismatch(
+                source.to_string(),
+                hashes.digests(),
+                revision.hashes(),
+            ));
+        }
+
+        let cache_shard = cache_shard.shard(revision.id());
+        let source_dist_entry = cache_shard.entry(SOURCE);
+        if !source_dist_entry.path().is_dir() {
+            self.heal_url_revision(
+                source,
+                ext,
+                url,
+                index,
+                &source_dist_entry,
+                revision,
+                hashes,
+                client,
+            )
+            .await?;
+        }
+
+        if let Some(subdirectory) = subdirectory {
+            if !source_dist_entry.path().join(subdirectory).is_dir() {
+                return Err(Error::MissingSubdirectory(
+                    url.clone(),
+                    subdirectory.to_path_buf(),
+                ));
+            }
+        }
+
+        let source_tree = subdirectory.map_or_else(
+            || source_dist_entry.path().to_path_buf(),
+            |subdirectory| source_dist_entry.path().join(subdirectory),
+        );
+        Ok(check_direct_build(&source_tree, uv_version).is_ok())
+    }
+
     /// Return the static build requirements from a local source distribution archive.
     async fn archive_build_requires(
         &self,
@@ -1578,6 +1790,38 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             client.unmanaged.credentials_cache(),
         )
         .await
+    }
+
+    /// Return whether a local source distribution archive supports an in-process uv build.
+    async fn archive_direct_build(
+        &self,
+        source: &BuildableSource<'_>,
+        resource: &PathSourceUrl<'_>,
+        cache_shard: &CacheShard,
+        hashes: HashPolicy<'_>,
+        uv_version: &str,
+    ) -> Result<bool, Error> {
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
+        let LocalRevisionPointer { revision, .. } = self
+            .archive_revision(source, resource, cache_shard, hashes)
+            .await?;
+
+        if !revision.satisfies(hashes) {
+            return Err(Error::hash_mismatch(
+                source.to_string(),
+                hashes.digests(),
+                revision.hashes(),
+            ));
+        }
+
+        let cache_shard = cache_shard.shard(revision.id());
+        let source_entry = cache_shard.entry(SOURCE);
+        if !source_entry.path().is_dir() {
+            self.heal_archive_revision(source, resource, &source_entry, revision, hashes)
+                .await?;
+        }
+
+        Ok(check_direct_build(source_entry.path(), uv_version).is_ok())
     }
 
     /// Return lowered static build requirements from a local source tree.
@@ -1662,6 +1906,81 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             client.unmanaged.credentials_cache(),
         )
         .await
+    }
+
+    /// Return whether a Git source tree supports an in-process uv build.
+    async fn git_directory_direct_build(
+        &self,
+        source: &BuildableSource<'_>,
+        resource: &GitDirectorySourceUrl<'_>,
+        hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
+        uv_version: &str,
+    ) -> Result<bool, Error> {
+        if hashes.requires_validation() {
+            return Err(Error::HashesNotSupportedGit(source.to_string()));
+        }
+
+        let fetch = fetch_git_source_tree(
+            self.build_context.git(),
+            resource.git,
+            resource.url.to_url(),
+            resource.subdirectory,
+            client.unmanaged.git_http_settings(resource.git.url()),
+            self.build_context.cache(),
+            self.reporter
+                .clone()
+                .map(|reporter| reporter.into_git_reporter()),
+        )
+        .await?;
+
+        let source_tree = resource.subdirectory.map_or_else(
+            || fetch.path().to_path_buf(),
+            |subdirectory| fetch.path().join(subdirectory),
+        );
+        Ok(check_direct_build(&source_tree, uv_version).is_ok())
+    }
+
+    /// Return whether a source archive in a Git repository supports an in-process uv build.
+    async fn git_archive_direct_build(
+        &self,
+        source: &BuildableSource<'_>,
+        resource: &GitPathSourceUrl<'_>,
+        hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
+        uv_version: &str,
+    ) -> Result<bool, Error> {
+        let fetch = self
+            .build_context
+            .git()
+            .fetch(
+                resource.git,
+                client.unmanaged.git_http_settings(resource.git.url()),
+                self.build_context.cache().bucket(CacheBucket::Git),
+                self.reporter
+                    .clone()
+                    .map(|reporter| reporter.into_git_reporter()),
+            )
+            .await?;
+
+        let git_sha = fetch.git().precise().expect("Exact commit after checkout");
+        let cache_shard = self.build_context.cache().shard(
+            CacheBucket::SourceDistributions,
+            WheelCache::Git(resource.url, git_sha.as_short_str()).root(),
+        );
+        let revision = self
+            .git_archive_revision(source, resource, &fetch, &cache_shard, hashes)
+            .await?;
+
+        if !revision.satisfies(hashes) {
+            return Err(Error::hash_mismatch(
+                source.to_string(),
+                hashes.digests(),
+                revision.hashes(),
+            ));
+        }
+
+        Ok(check_direct_build(cache_shard.entry(SOURCE).path(), uv_version).is_ok())
     }
 
     /// Return the [`Revision`] for a local archive, refreshing it if necessary.
