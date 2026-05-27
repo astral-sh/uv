@@ -238,16 +238,52 @@ type BuildResolutionGraphMap = BTreeMap<BuildPackageKey, BuildResolutionGraph>;
 
 /// Locked build dependency resolutions, indexed by package key.
 #[derive(Debug, Default, Clone)]
-pub struct LockedBuildResolutions(BTreeMap<BuildPackageKey, Resolution>);
+pub struct LockedBuildResolutions(BTreeMap<BuildPackageKey, LockedBuildResolution>);
+
+/// A locked build dependency resolution and its direct requirements.
+#[derive(Debug, Clone)]
+pub struct LockedBuildResolution {
+    resolution: Resolution,
+    direct_dependencies: Vec<LockedBuildDependency>,
+}
+
+impl LockedBuildResolution {
+    /// Create a locked build dependency resolution.
+    pub fn new(resolution: Resolution, direct_dependencies: Vec<LockedBuildDependency>) -> Self {
+        Self {
+            resolution,
+            direct_dependencies,
+        }
+    }
+
+    /// Return the installable resolution.
+    pub fn resolution(&self) -> &Resolution {
+        &self.resolution
+    }
+
+    /// Return the direct build dependencies.
+    pub fn direct_dependencies(&self) -> &[LockedBuildDependency] {
+        &self.direct_dependencies
+    }
+}
+
+/// A direct dependency in a locked build resolution.
+#[derive(Debug, Clone)]
+pub struct LockedBuildDependency {
+    /// The resolved distribution.
+    pub dist: ResolvedDist,
+    /// The extras requested on this direct build requirement.
+    pub extras: BTreeSet<ExtraName>,
+}
 
 impl LockedBuildResolutions {
     /// Create locked build resolutions from a map keyed by [`BuildPackageKey`].
-    pub fn new(map: BTreeMap<BuildPackageKey, Resolution>) -> Self {
+    pub fn new(map: BTreeMap<BuildPackageKey, LockedBuildResolution>) -> Self {
         Self(map)
     }
 
     /// Get the pre-built resolution for a package key.
-    pub fn get(&self, package: &BuildPackageKey) -> Option<&Resolution> {
+    pub fn get(&self, package: &BuildPackageKey) -> Option<&LockedBuildResolution> {
         if let Some(resolution) = self.0.get(package) {
             return Some(resolution);
         }

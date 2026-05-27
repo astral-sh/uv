@@ -550,7 +550,7 @@ impl SourceBuild {
                     resolved_requirements.clone()
                 } else {
                     let resolved_requirements = build_context
-                        .resolve(&DEFAULT_BACKEND.requirements, package, build_stack, true)
+                        .resolve(&DEFAULT_BACKEND.requirements, package, build_stack, None)
                         .await
                         .map_err(|err| {
                             Error::RequirementsResolve("`setup.py` build", err.into())
@@ -575,7 +575,7 @@ impl SourceBuild {
                     )
                 };
                 build_context
-                    .resolve(&requirements, package, build_stack, true)
+                    .resolve(&requirements, package, build_stack, None)
                     .await
                     .map_err(|err| Error::RequirementsResolve(dependency_sources, err.into()))?
             },
@@ -1144,10 +1144,15 @@ async fn create_pep517_build_environment(
             .iter()
             .cloned()
             .chain(extra_build_dependencies.iter().cloned())
-            .chain(extra_requires)
+            .chain(extra_requires.iter().cloned())
             .collect();
         let resolution = build_context
-            .resolve(&requirements, package_key, build_stack, false)
+            .resolve(
+                &requirements,
+                package_key,
+                build_stack,
+                Some(&extra_requires),
+            )
             .await
             .map_err(|err| {
                 Error::RequirementsResolve("`build-system.requires`", AnyErrorBuild::from(err))

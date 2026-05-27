@@ -1264,7 +1264,7 @@ async fn resolve_all_possible_builds(
                 if !requirements.is_empty() {
                     let build_stack = BuildStack::default();
                     let _ = build_dispatch
-                        .resolve(&requirements, Some(&key), &build_stack, true)
+                        .resolve(&requirements, Some(&key), &build_stack, None)
                         .await?;
                     resolved_statically = true;
                 }
@@ -1285,7 +1285,7 @@ async fn resolve_all_possible_builds(
                 requirements.extend(extra_build_dependencies.into_iter().map(Requirement::from));
                 let build_stack = BuildStack::default();
                 let _ = build_dispatch
-                    .resolve(&requirements, Some(&key), &build_stack, true)
+                    .resolve(&requirements, Some(&key), &build_stack, None)
                     .await?;
                 resolved_statically = true;
             }

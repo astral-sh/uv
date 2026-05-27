@@ -55,7 +55,10 @@ use uv_pypi_types::{
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
-use uv_types::{BuildContext, BuildPackageKey, BuildPackageSource, HashStrategy};
+use uv_types::{
+    BuildContext, BuildPackageKey, BuildPackageSource, HashStrategy, LockedBuildDependency,
+    LockedBuildResolution,
+};
 use uv_workspace::{Editability, WorkspaceMember};
 
 use crate::fork_strategy::ForkStrategy;
@@ -1239,7 +1242,7 @@ impl Lock {
         tags: &Tags,
         build_options: &BuildOptions,
         markers: &MarkerEnvironment,
-    ) -> Result<BTreeMap<BuildPackageKey, uv_distribution_types::Resolution>, LockError> {
+    ) -> Result<BTreeMap<BuildPackageKey, LockedBuildResolution>, LockError> {
         let package_by_id = self.package_by_id();
         let selected_package_ids: FxHashSet<PackageId> = resolution
             .distributions()
@@ -1322,8 +1325,42 @@ impl Lock {
                 });
             }
 
+            let mut direct_dependencies = Vec::new();
+            for build_dependency in &package.build_dependencies {
+                if let Some(marker) = build_dependency.marker() {
+                    let complexified = self.requires_python.complexify_markers(*marker);
+                    if !UniversalMarker::from_combined(complexified).evaluate_no_extras(markers) {
+                        continue;
+                    }
+                }
+
+                let Some(dependency_package) = package_by_id.get(&build_dependency.package_id)
+                else {
+                    continue;
+                };
+                let HashedDist { dist, .. } = dependency_package.to_dist(
+                    workspace_root,
+                    tag_policy,
+                    build_options,
+                    markers,
+                )?;
+                direct_dependencies.push(LockedBuildDependency {
+                    dist: ResolvedDist::Installable {
+                        dist: Arc::new(dist),
+                        version: dependency_package.version().cloned(),
+                    },
+                    extras: build_dependency.extras().clone(),
+                });
+            }
+
             let key = build_key_for_package(package, workspace_root);
-            resolutions.insert(key, uv_distribution_types::Resolution::new(graph));
+            resolutions.insert(
+                key,
+                LockedBuildResolution::new(
+                    uv_distribution_types::Resolution::new(graph),
+                    direct_dependencies,
+                ),
+            );
         }
 
         Ok(resolutions)

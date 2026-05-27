@@ -28,7 +28,8 @@ use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
     Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
-    PackageConfigSettings, Requirement, RequiresPython, Resolution, SourceDist, VersionOrUrlRef,
+    PackageConfigSettings, Requirement, RequirementSource, RequiresPython, Resolution, SourceDist,
+    VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
@@ -44,7 +45,8 @@ use uv_resolver::{
 use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildPackageKey, BuildPreferences,
     BuildResolutions, BuildStack, EmptyInstalledPackages, HashStrategy, InFlight,
-    LockedBuildResolutions, ResolvedRequirements, SourceTreeEditablePolicy,
+    LockedBuildDependency, LockedBuildResolution, LockedBuildResolutions, ResolvedRequirements,
+    SourceTreeEditablePolicy,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -321,6 +323,59 @@ impl<'a> BuildDispatch<'a> {
                 .collect(),
         )
     }
+
+    fn locked_resolution_satisfies(
+        &self,
+        resolution: &LockedBuildResolution,
+        requirements: &[Requirement],
+    ) -> bool {
+        let markers = self.interpreter.resolver_marker_environment();
+        requirements
+            .iter()
+            .filter(|requirement| requirement.evaluate_markers(Some(&markers), &[]))
+            .all(|requirement| {
+                resolution
+                    .direct_dependencies()
+                    .iter()
+                    .any(|dependency| locked_dependency_satisfies(requirement, dependency))
+            })
+    }
+}
+
+fn locked_dependency_satisfies(
+    requirement: &Requirement,
+    dependency: &LockedBuildDependency,
+) -> bool {
+    if requirement.name != *dependency.dist.name()
+        || !requirement
+            .extras
+            .iter()
+            .all(|extra| dependency.extras.contains(extra))
+    {
+        return false;
+    }
+
+    let selected_source = RequirementSource::from(&dependency.dist);
+    match (&requirement.source, &selected_source) {
+        (
+            RequirementSource::Registry {
+                specifier, index, ..
+            },
+            RequirementSource::Registry {
+                index: selected_index,
+                ..
+            },
+        ) => {
+            dependency
+                .dist
+                .version()
+                .is_some_and(|version| specifier.contains(version))
+                && index
+                    .as_ref()
+                    .is_none_or(|index| selected_index.as_ref() == Some(index))
+        }
+        (source, selected_source) => source == selected_source,
+    }
 }
 
 #[allow(refining_impl_trait)]
@@ -396,12 +451,18 @@ impl BuildContext for BuildDispatch<'_> {
         requirements: &'data [Requirement],
         package: Option<&'data BuildPackageKey>,
         build_stack: &'data BuildStack,
-        use_locked_resolution: bool,
+        validate_locked_requirements: Option<&'data [Requirement]>,
     ) -> Result<ResolvedRequirements, BuildDispatchError> {
-        // If we have a locked build resolution for this package, return it directly
-        // without running the resolver.
-        if use_locked_resolution && let Some(package) = package {
-            if let Some(resolution) = self.locked_build_resolutions.get(package) {
+        // If we have a suitable locked build resolution for this package, return it directly
+        // without running the resolver. Backend hook requirements are validated separately from
+        // `build-system.requires`, which remains fixed by a frozen lock.
+        if let Some(package) = package
+            && let Some(locked_resolution) = self.locked_build_resolutions.get(package)
+        {
+            if validate_locked_requirements.is_none_or(|requirements| {
+                self.locked_resolution_satisfies(locked_resolution, requirements)
+            }) {
+                let resolution = locked_resolution.resolution();
                 debug!(
                     "Using locked build resolution for `{}=={:?}` (skipping resolver)",
                     package.name, package.version
@@ -410,6 +471,10 @@ impl BuildContext for BuildDispatch<'_> {
                     .map_err(anyhow::Error::from)?;
                 return Ok(ResolvedRequirements::new(resolution.clone(), hasher));
             }
+            debug!(
+                "Locked build resolution for `{}=={:?}` does not satisfy backend hook requirements",
+                package.name, package.version
+            );
         }
 
         let marker_env = self.interpreter.resolver_marker_environment();
