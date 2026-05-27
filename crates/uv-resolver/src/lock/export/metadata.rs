@@ -68,9 +68,9 @@ pub struct Metadata {
     requires_python: RequiresPython,
     /// Info about conflicting packages
     conflicts: MetadataConflicts,
-    /// A mapping from importable module names to the IDs of the package nodes that provide them
+    /// A mapping from importable module names to the package nodes that provide them
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
-    module_owners: BTreeMap<ModuleName, Vec<MetadataNodeIdFlat>>,
+    module_owners: BTreeMap<ModuleName, Vec<MetadataModuleOwner>>,
     /// An index of which nodes are workspace members
     ///
     /// These entries are often what you should use as the entry-points into the `resolve` graph.
@@ -106,6 +106,13 @@ struct MetadataWorkspaceMember {
     path: PortablePathBuf,
     /// Key for the package's node in the `resolve` graph
     id: MetadataNodeIdFlat,
+}
+
+/// An installed distribution that provides an importable module.
+#[derive(Debug, serde::Serialize)]
+struct MetadataModuleOwner {
+    /// Key for the package node in the `resolution` graph.
+    package_id: MetadataNodeIdFlat,
 }
 
 /// A node in the dependency graph
@@ -849,8 +856,12 @@ impl Metadata {
     pub fn with_module_owners(mut self, module_owners: BTreeMap<ModuleName, Vec<String>>) -> Self {
         self.module_owners = module_owners
             .into_iter()
-            .filter_map(|(module, mut owners)| {
-                owners.retain(|owner| self.resolution.contains_key(owner));
+            .filter_map(|(module, owners)| {
+                let owners = owners
+                    .into_iter()
+                    .filter(|package_id| self.resolution.contains_key(package_id))
+                    .map(|package_id| MetadataModuleOwner { package_id })
+                    .collect::<Vec<_>>();
                 (!owners.is_empty()).then_some((module, owners))
             })
             .collect();

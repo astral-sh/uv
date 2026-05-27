@@ -8048,7 +8048,7 @@ pub struct MetadataArgs {
 
     /// Sync the environment to include module ownership metadata in the output.
     ///
-    /// This adds a mapping from importable module names to the IDs of the package nodes
+    /// This adds a mapping from importable module names to references to the package nodes
     /// that provide them. To do this, the venv will be synced in inexact mode.
     #[arg(long)]
     pub sync: bool,
