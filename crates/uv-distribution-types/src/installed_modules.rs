@@ -66,6 +66,8 @@ fn add_record_module(path: &str, modules: &mut BTreeSet<ModuleName>) {
         .iter()
         .map(std::convert::AsRef::as_ref)
         .collect::<Vec<_>>();
+    // We intentionally skip `.pyi` files here because we're looking for runtime module ownership.
+    // Type stubs will require separate ownership modeling.
     if file_name == "__init__.py" {
         // The parent path is the package.
     } else if let Some(stem) = file_name.strip_suffix(".py") {
