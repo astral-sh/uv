@@ -381,14 +381,11 @@ async fn infer_requires_python_from_registry_requirement(
     }
 
     let wheel = distribution.wheel?;
-    match client
-        .wheel_metadata(&wheel, git_resolver, &capabilities, None)
+    match StaticMetadataDatabase::new(client_builder, git_resolver, cache)
+        .wheel_requires_python(&wheel, &client, &capabilities)
         .await
     {
-        Ok(metadata) => metadata
-            .requires_python
-            .as_ref()
-            .map(RequiresPython::from_specifiers),
+        Ok(requires_python) => requires_python,
         Err(err) => {
             debug!(
                 "Failed to read wheel metadata while inferring `requires-python` (`{requirement}`): {err}"

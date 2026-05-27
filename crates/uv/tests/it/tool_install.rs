@@ -503,12 +503,37 @@ async fn tool_install_latest_replaces_environment_for_registry_requires_python()
     let package_dir = context.temp_dir.child("foo");
     let wheel_dir = context.temp_dir.child("dist");
 
-    copy_dir_all(
-        context
-            .workspace_root
-            .join("test/packages/python_printing_tool"),
-        &package_dir,
-    )?;
+    package_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+    package_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
+    package_dir
+        .child("src")
+        .child("foo")
+        .child("main.py")
+        .write_str(indoc! {r#"
+        import sys
+
+        def run():
+            print(f"{sys.version_info.major}.{sys.version_info.minor}")
+        "#
+        })?;
     context
         .build()
         .arg("--wheel")
