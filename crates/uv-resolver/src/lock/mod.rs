@@ -962,13 +962,12 @@ impl Lock {
         for package in &self.packages {
             let key = build_key_for_package(package, root);
 
-            let mut build_requires = BTreeSet::new();
-            for requirement in self
+            let static_build_requires = self
                 .lowered_build_requires(package, root, database, build_hasher)
-                .await?
-                .into_iter()
-                .flatten()
-            {
+                .await?;
+            let has_explicit_build_requires = static_build_requires.is_some();
+            let mut build_requires = BTreeSet::new();
+            for requirement in static_build_requires.into_iter().flatten() {
                 let requirement = match requirement.relative_to(root) {
                     Ok(requirement) => requirement,
                     Err(err) => {
@@ -977,8 +976,10 @@ impl Lock {
                 };
                 build_requires.insert(requirement);
             }
-            for req in extra_build_requires
+            let extra_build_requires = extra_build_requires
                 .get(&package.id.name)
+                .filter(|requires| !requires.is_empty());
+            for req in extra_build_requires
                 .into_iter()
                 .flatten()
                 .cloned()
@@ -992,7 +993,7 @@ impl Lock {
                 };
                 build_requires.insert(requirement);
             }
-            if !build_requires.is_empty() {
+            if has_explicit_build_requires || extra_build_requires.is_some() {
                 build_requires_map.insert(key, build_requires);
             }
         }
@@ -1087,7 +1088,7 @@ impl Lock {
             // Store the original build-system.requires in metadata for satisfies() checks.
             if let Some(build_requires) = lookup_build_key_value(&build_requires_map, package, root)
             {
-                package.metadata.build_requires.clone_from(build_requires);
+                package.metadata.build_requires = Some(build_requires.clone());
             }
 
             // Ensure build dependencies are sorted and deduplicated.
@@ -1144,7 +1145,7 @@ impl Lock {
             if build_options.no_build_package(&package.id.name) {
                 continue;
             }
-            if package.metadata.build_requires.is_empty()
+            if package.metadata.build_requires.is_none()
                 && extra_build_requires
                     .get(&package.id.name)
                     .is_none_or(Vec::is_empty)
@@ -2368,22 +2369,31 @@ impl Lock {
     /// `[package.metadata]`.
     fn satisfies_build_requires<'lock>(
         &self,
-        current_requires: BTreeSet<Requirement>,
+        current_requires: Option<BTreeSet<Requirement>>,
         package: &'lock Package,
         root: &Path,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
-        let current_build_requires: BTreeSet<Requirement> = current_requires
-            .into_iter()
-            .map(|req| normalize_requirement(req, root, &self.requires_python))
-            .collect::<Result<BTreeSet<_>, _>>()?;
+        let current_build_requires: Option<BTreeSet<Requirement>> = current_requires
+            .map(|requires| {
+                requires
+                    .into_iter()
+                    .map(|req| normalize_requirement(req, root, &self.requires_python))
+                    .collect::<Result<BTreeSet<_>, _>>()
+            })
+            .transpose()?;
 
-        let stored_build_requires: BTreeSet<Requirement> = package
+        let stored_build_requires: Option<BTreeSet<Requirement>> = package
             .metadata
             .build_requires
-            .iter()
-            .cloned()
-            .map(|req| normalize_requirement(req, root, &self.requires_python))
-            .collect::<Result<_, _>>()?;
+            .as_ref()
+            .map(|requires| {
+                requires
+                    .iter()
+                    .cloned()
+                    .map(|req| normalize_requirement(req, root, &self.requires_python))
+                    .collect::<Result<_, _>>()
+            })
+            .transpose()?;
 
         if current_build_requires != stored_build_requires {
             return Ok(SatisfiesResult::MismatchedBuildRequires(
@@ -2773,26 +2783,22 @@ impl Lock {
             // Validate mutable build requirements and configured extra build requirements
             // before metadata validation, since a changed build environment can otherwise
             // fail while trying to extract package metadata instead of reporting the stale lock.
-            if self.supports_build_dependencies() || !package.metadata.build_requires.is_empty() {
-                let build_requires = self
+            if self.supports_build_dependencies() || package.metadata.build_requires.is_some() {
+                let mut build_requires = self
                     .lowered_build_requires(package, root, database, hasher)
                     .await?
                     .map(|requires| requires.into_iter().collect::<BTreeSet<_>>());
 
-                let extra_build_requires = extra_build_requires.get(&package.id.name);
+                let extra_build_requires = extra_build_requires
+                    .get(&package.id.name)
+                    .filter(|requires| !requires.is_empty());
 
-                if build_requires.is_some()
-                    || extra_build_requires.is_some()
-                    || !package.metadata.build_requires.is_empty()
-                {
-                    let mut build_requires = build_requires.unwrap_or_default();
-                    build_requires.extend(
-                        extra_build_requires
-                            .into_iter()
-                            .flatten()
-                            .cloned()
-                            .map(Requirement::from),
-                    );
+                if let Some(extra_build_requires) = extra_build_requires {
+                    build_requires
+                        .get_or_insert_with(BTreeSet::new)
+                        .extend(extra_build_requires.iter().cloned().map(Requirement::from));
+                }
+                if build_requires.is_some() || package.metadata.build_requires.is_some() {
                     match self.satisfies_build_requires(build_requires, package, root) {
                         Ok(SatisfiesResult::Satisfied) => {}
                         Ok(result) => return Ok(result),
@@ -3715,7 +3721,7 @@ impl Package {
                 requires_dist: BTreeSet::default(),
                 provides_extra: Box::default(),
                 dependency_groups: BTreeMap::default(),
-                build_requires: BTreeSet::default(),
+                build_requires: None,
             },
         })
     }
@@ -4457,10 +4463,8 @@ impl Package {
                 metadata_table.insert("provides-extras", value(provides_extras));
             }
 
-            if !self.metadata.build_requires.is_empty() {
-                let build_requires = self
-                    .metadata
-                    .build_requires
+            if let Some(build_requires) = &self.metadata.build_requires {
+                let build_requires = build_requires
                     .iter()
                     .map(|requirement| {
                         serde::Serialize::serialize(
@@ -4691,7 +4695,7 @@ struct PackageMetadata {
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
     #[serde(default, rename = "build-requires")]
-    build_requires: BTreeSet<Requirement>,
+    build_requires: Option<BTreeSet<Requirement>>,
 }
 
 impl PackageMetadata {
@@ -4723,7 +4727,7 @@ impl PackageMetadata {
             requires_dist,
             provides_extra: metadata.provides_extra.clone(),
             dependency_groups,
-            build_requires: BTreeSet::default(),
+            build_requires: None,
         })
     }
 }
@@ -8093,7 +8097,7 @@ mod tests {
             let expr = format!("{:#?}", $expr)
                 .replace("                build_dependencies: [],\n", "")
                 .replace("                build_dependencies_resolved: false,\n", "")
-                .replace("                    build_requires: {},\n", "");
+                .replace("                    build_requires: None,\n", "");
             insta::assert_snapshot!(expr);
         }};
     }
