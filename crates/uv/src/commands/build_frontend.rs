@@ -26,7 +26,7 @@ use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
     PackageConfigSettings, Requirement, SourceDist,
 };
-use uv_errors::{ErrorOptions, Hint, Hints, write_error_chain_with_options};
+use uv_errors::{Hint, Hints, write_error_chain};
 use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
@@ -434,11 +434,7 @@ async fn build_impl(
             Err(err) => {
                 let err = anyhow::Error::from(err).context(format!("Failed to build `{source}`"));
                 let hints = crate::commands::diagnostics::hints_for_error(&err);
-                write_error_chain_with_options(
-                    err.as_ref(),
-                    ErrorOptions::default().with_hints(hints),
-                )
-                .expect("writing to stderr should not fail");
+                write_error_chain(err.as_ref(), hints).expect("writing to stderr should not fail");
 
                 success = false;
             }

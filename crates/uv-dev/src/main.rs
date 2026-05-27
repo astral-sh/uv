@@ -68,7 +68,8 @@ async fn main() -> ExitCode {
     if let Err(err) = result {
         trace!("Error trace: {err:?}");
         let err = err.context("uv-dev failed");
-        uv_errors::write_error_chain(err.as_ref()).expect("writing to stderr should not fail");
+        uv_errors::write_error_chain(err.as_ref(), uv_errors::Hints::none())
+            .expect("writing to stderr should not fail");
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS

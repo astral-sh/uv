@@ -22,7 +22,7 @@ use uv_distribution_types::{
     IndexCapabilities, IndexUrl, Name, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_errors::{ErrorOptions, write_error_chain_with_options};
+use uv_errors::write_error_chain;
 use uv_fs::CWD;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -307,8 +307,7 @@ pub(crate) async fn run(
         Err(ProjectError::Requirements(err)) => {
             let err = anyhow::Error::from(err).context("Failed to resolve `--with` requirement");
             let hints = diagnostics::hints_for_error(&err);
-            write_error_chain_with_options(err.as_ref(), ErrorOptions::default().with_hints(hints))
-                .expect("writing to stderr should not fail");
+            write_error_chain(err.as_ref(), hints).expect("writing to stderr should not fail");
             return Ok(ExitStatus::Failure);
         }
         Err(err) => return Err(err.into()),

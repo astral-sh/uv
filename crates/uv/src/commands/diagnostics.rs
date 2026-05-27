@@ -9,7 +9,7 @@ use version_ranges::Ranges;
 use uv_distribution_types::{
     DerivationChain, DerivationStep, Dist, DistErrorKind, Name, RequestedDist,
 };
-use uv_errors::{ErrorOptions, Hint, Hints, write_error_chain_with_options};
+use uv_errors::{Hint, Hints, write_error_chain};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_resolver::SentinelRange;
@@ -168,8 +168,7 @@ impl Hint for SystemCertsError {
 
 fn render_handled_error(err: &anyhow::Error) {
     let hints = hints_for_error(err);
-    write_error_chain_with_options(err.as_ref(), ErrorOptions::default().with_hints(hints))
-        .expect("writing to stderr should not fail");
+    write_error_chain(err.as_ref(), hints).expect("writing to stderr should not fail");
 }
 
 impl OperationDiagnostic {
