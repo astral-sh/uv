@@ -8768,18 +8768,18 @@ fn fail_to_add_revert_project() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
 
-                 [stderr]
-                 Traceback (most recent call last):
-                   File "<string>", line 14, in <module>
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-                     return self._get_build_requires(config_settings, requirements=['wheel'])
-                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-                     self.run_setup()
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-                     exec(code, locals())
-                   File "<string>", line 1, in <module>
-                 ZeroDivisionError: division by zero
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 14, in <module>
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+            return self._get_build_requires(config_settings, requirements=['wheel'])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+            self.run_setup()
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+            exec(code, locals())
+          File "<string>", line 1, in <module>
+        ZeroDivisionError: division by zero
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
 
@@ -8873,18 +8873,18 @@ fn fail_to_edit_revert_project() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
 
-                 [stderr]
-                 Traceback (most recent call last):
-                   File "<string>", line 14, in <module>
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-                     return self._get_build_requires(config_settings, requirements=['wheel'])
-                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-                     self.run_setup()
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-                     exec(code, locals())
-                   File "<string>", line 1, in <module>
-                 ZeroDivisionError: division by zero
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 14, in <module>
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+            return self._get_build_requires(config_settings, requirements=['wheel'])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+            self.run_setup()
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+            exec(code, locals())
+          File "<string>", line 1, in <module>
+        ZeroDivisionError: division by zero
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
 
@@ -8986,21 +8986,21 @@ fn fail_to_add_revert_workspace_root() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta.build_editable` failed (exit status: 1)
 
-                 [stderr]
-                 Traceback (most recent call last):
-                   File "<string>", line 14, in <module>
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 448, in get_requires_for_build_editable
-                     return self.get_requires_for_build_wheel(config_settings)
-                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-                     return self._get_build_requires(config_settings, requirements=['wheel'])
-                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-                     self.run_setup()
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-                     exec(code, locals())
-                   File "<string>", line 1, in <module>
-                 ZeroDivisionError: division by zero
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 14, in <module>
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 448, in get_requires_for_build_editable
+            return self.get_requires_for_build_wheel(config_settings)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+            return self._get_build_requires(config_settings, requirements=['wheel'])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+            self.run_setup()
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+            exec(code, locals())
+          File "<string>", line 1, in <module>
+        ZeroDivisionError: division by zero
 
     hint: `broken` was included because `parent` (v0.1.0) depends on `broken`
 
@@ -9104,21 +9104,21 @@ fn fail_to_add_revert_workspace_member() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta.build_editable` failed (exit status: 1)
 
-                 [stderr]
-                 Traceback (most recent call last):
-                   File "<string>", line 14, in <module>
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 448, in get_requires_for_build_editable
-                     return self.get_requires_for_build_wheel(config_settings)
-                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-                     return self._get_build_requires(config_settings, requirements=['wheel'])
-                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-                     self.run_setup()
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-                     exec(code, locals())
-                   File "<string>", line 1, in <module>
-                 ZeroDivisionError: division by zero
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 14, in <module>
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 448, in get_requires_for_build_editable
+            return self.get_requires_for_build_wheel(config_settings)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+            return self._get_build_requires(config_settings, requirements=['wheel'])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+            self.run_setup()
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+            exec(code, locals())
+          File "<string>", line 1, in <module>
+        ZeroDivisionError: division by zero
 
     hint: `broken` was included because `child` (v0.1.0) depends on `broken`
 
@@ -9851,12 +9851,12 @@ fn add_shadowed_name() -> Result<()> {
     ----- stderr -----
     error: No solution found when resolving dependencies
       Caused by: Because only the following versions of dagster-webserver are available:
-                     dagster-webserver<=1.6.11
-                     dagster-webserver==1.6.12
-                     dagster-webserver==1.6.13
-                 and dagster-webserver==1.6.11 depends on your project, we can conclude that dagster-webserver>=1.6.11,<1.6.12 depends on your project.
-                 And because dagster-webserver==1.6.12 depends on your project, we can conclude that dagster-webserver>=1.6.11,<1.6.13 depends on your project.
-                 And because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11, we can conclude that your project's requirements are unsatisfiable.
+            dagster-webserver<=1.6.11
+            dagster-webserver==1.6.12
+            dagster-webserver==1.6.13
+        and dagster-webserver==1.6.11 depends on your project, we can conclude that dagster-webserver>=1.6.11,<1.6.12 depends on your project.
+        And because dagster-webserver==1.6.12 depends on your project, we can conclude that dagster-webserver>=1.6.11,<1.6.13 depends on your project.
+        And because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
 
@@ -13339,8 +13339,8 @@ fn add_unsupported_git_scheme() {
     ----- stderr -----
     error: Failed to parse: `git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef`
       Caused by: Unsupported Git URL scheme `fantasy:` in `fantasy://ferris/dreams/of/urls` (expected one of `https:`, `ssh:`, or `file:`)
-                 git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     ");
 }
 
@@ -13665,7 +13665,7 @@ async fn lock_forbidden_index_with_available_package() -> Result<()> {
     ----- stderr -----
     error: No solution found when resolving dependencies
       Caused by: Because idna was not found in the package registry and anyio==4.3.0 depends on idna>=2.8, we can conclude that anyio==4.3.0 cannot be used.
-                 And because only anyio==4.3.0 is available and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+        And because only anyio==4.3.0 is available and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index (http://[LOCALHOST]/) returned a 403 Forbidden error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `[[tool.uv.index]]` entry to continue searching across indexes.
     ");
@@ -13786,10 +13786,10 @@ async fn add_invalid_ignore_error_code() -> Result<()> {
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 9, column 22
-                   |
-                 9 | ignore-error-codes = [401, 403, 1234]
-                   |                      ^^^^^^^^^^^^^^^^
-                 1234 is not a valid HTTP status code
+          |
+        9 | ignore-error-codes = [401, 403, 1234]
+          |                      ^^^^^^^^^^^^^^^^
+        1234 is not a valid HTTP status code
     "
     );
 
@@ -13820,12 +13820,12 @@ fn add_invalid_requires_python() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 4, column 19
-                   |
-                 4 | requires-python = "3.12"
-                   |                   ^^^^^^
-                 Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==3.12`?:
-                 3.12
-                 ^^^^
+          |
+        4 | requires-python = "3.12"
+          |                   ^^^^^^
+        Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==3.12`?:
+        3.12
+        ^^^^
     "#);
 
     Ok(())

@@ -105,8 +105,8 @@ fn tool_run_at_version() {
     ----- stderr -----
     error: Failed to parse: `pytest@`
       Caused by: Expected URL
-                 pytest@
-                        ^
+        pytest@
+               ^
     ");
 
     // Invalid versions are just treated as package and command names
@@ -3855,7 +3855,7 @@ fn tool_run_reresolve_python() -> anyhow::Result<()> {
     ----- stderr -----
     error: No solution found when resolving tool dependencies
       Caused by: Because the current Python version (3.11.[X]) does not satisfy Python>=3.12 and foo==1.0.0 depends on Python>=3.12, we can conclude that foo==1.0.0 cannot be used.
-                 And because only foo==1.0.0 is available and you require foo, we can conclude that your requirements are unsatisfiable.
+        And because only foo==1.0.0 is available and you require foo, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Unless the discovered interpreter is compatible with the request

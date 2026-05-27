@@ -163,10 +163,10 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
     error: Failed to parse: `pyproject.toml`
       Caused by: Invalid `pyproject.toml`
       Caused by: TOML parse error at line 1, column 5
-                   |
-                 1 | 123 - 456
-                   |     ^
-                 key with no value, expected `=`
+          |
+        1 | 123 - 456
+          |     ^
+        key with no value, expected `=`
     "
     );
 
@@ -189,10 +189,10 @@ fn invalid_pyproject_toml_project_schema() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 1
-                   |
-                 1 | [project]
-                   | ^^^^^^^^^
-                 `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
+          |
+        1 | [project]
+          | ^^^^^^^^^
+        `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
     "
     );
 
@@ -485,56 +485,56 @@ dependencies = ["flask==1.0.x"]
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-                 [stdout]
-                 configuration error: `project.dependencies[0]` must be pep508
-                 DESCRIPTION:
-                     Project dependency specification according to PEP 508
+        [stdout]
+        configuration error: `project.dependencies[0]` must be pep508
+        DESCRIPTION:
+            Project dependency specification according to PEP 508
 
-                 GIVEN VALUE:
-                     "flask==1.0.x"
+        GIVEN VALUE:
+            "flask==1.0.x"
 
-                 OFFENDING RULE: 'format'
+        OFFENDING RULE: 'format'
 
-                 DEFINITION:
-                     {
-                         "$id": "#/definitions/dependency",
-                         "title": "Dependency",
-                         "type": "string",
-                         "format": "pep508"
-                     }
+        DEFINITION:
+            {
+                "$id": "#/definitions/dependency",
+                "title": "Dependency",
+                "type": "string",
+                "format": "pep508"
+            }
 
-                 [stderr]
-                 Traceback (most recent call last):
-                   File "<string>", line 14, in <module>
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-                     return self._get_build_requires(config_settings, requirements=['wheel'])
-                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-                     self.run_setup()
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
-                     super().run_setup(setup_script=setup_script)
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-                     exec(code, locals())
-                   File "<string>", line 1, in <module>
-                   File "[CACHE_DIR]/builds-v0/[TMP]/__init__.py", line 104, in setup
-                     return distutils.core.setup(**attrs)
-                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                   File "[CACHE_DIR]/builds-v0/[TMP]/core.py", line 159, in setup
-                     dist.parse_config_files()
-                   File "[CACHE_DIR]/builds-v0/[TMP]/_virtualenv.py", line 20, in parse_config_files
-                     result = old_parse_config_files(self, *args, **kwargs)
-                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                   File "[CACHE_DIR]/builds-v0/[TMP]/dist.py", line 631, in parse_config_files
-                     pyprojecttoml.apply_configuration(self, filename, ignore_option_errors)
-                   File "[CACHE_DIR]/builds-v0/[TMP]/pyprojecttoml.py", line 68, in apply_configuration
-                     config = read_configuration(filepath, True, ignore_option_errors, dist)
-                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                   File "[CACHE_DIR]/builds-v0/[TMP]/pyprojecttoml.py", line 129, in read_configuration
-                     validate(subset, filepath)
-                   File "[CACHE_DIR]/builds-v0/[TMP]/pyprojecttoml.py", line 57, in validate
-                     raise ValueError(f"{error}/n{summary}") from None
-                 ValueError: invalid pyproject.toml config: `project.dependencies[0]`.
-                 configuration error: `project.dependencies[0]` must be pep508
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 14, in <module>
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+            return self._get_build_requires(config_settings, requirements=['wheel'])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+            self.run_setup()
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+            super().run_setup(setup_script=setup_script)
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+            exec(code, locals())
+          File "<string>", line 1, in <module>
+          File "[CACHE_DIR]/builds-v0/[TMP]/__init__.py", line 104, in setup
+            return distutils.core.setup(**attrs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/core.py", line 159, in setup
+            dist.parse_config_files()
+          File "[CACHE_DIR]/builds-v0/[TMP]/_virtualenv.py", line 20, in parse_config_files
+            result = old_parse_config_files(self, *args, **kwargs)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/dist.py", line 631, in parse_config_files
+            pyprojecttoml.apply_configuration(self, filename, ignore_option_errors)
+          File "[CACHE_DIR]/builds-v0/[TMP]/pyprojecttoml.py", line 68, in apply_configuration
+            config = read_configuration(filepath, True, ignore_option_errors, dist)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/pyprojecttoml.py", line 129, in read_configuration
+            validate(subset, filepath)
+          File "[CACHE_DIR]/builds-v0/[TMP]/pyprojecttoml.py", line 57, in validate
+            raise ValueError(f"{error}/n{summary}") from None
+        ValueError: invalid pyproject.toml config: `project.dependencies[0]`.
+        configuration error: `project.dependencies[0]` must be pep508
 
     hint: Build failures usually indicate a problem with the package or the build environment
     "##
@@ -596,7 +596,7 @@ fn no_solution() {
     ----- stderr -----
     error: No solution found when resolving dependencies
       Caused by: Because only flask<=3.0.2 is available and flask==3.0.2 depends on werkzeug>=3.0.0, we can conclude that flask>=3.0.2 depends on werkzeug>=3.0.0.
-                 And because you require flask>=3.0.2 and werkzeug<1.0.0, we can conclude that your requirements are unsatisfiable.
+        And because you require flask>=3.0.2 and werkzeug<1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 }
 
@@ -933,7 +933,7 @@ werkzeug==3.0.1
     ----- stderr -----
     error: No solution found when resolving dependencies
       Caused by: Because flask==3.0.2 depends on click>=8.1.3 and you require click==7.0.0, we can conclude that your requirements and flask==3.0.2 are incompatible.
-                 And because you require flask==3.0.2, we can conclude that your requirements are unsatisfiable.
+        And because you require flask==3.0.2, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -2476,8 +2476,8 @@ fn install_git_unescaped_ref() {
     ----- stderr -----
     error: Failed to parse: `example @ git+https://example.com/repository@pkg@1.2.3`
       Caused by: Ambiguous Git URL `https://example.com/repository@pkg@1.2.3`: the path contains multiple `@` characters. If the Git revision contains `@`, percent-encode it as `%40`
-                 example @ git+https://example.com/repository@pkg@1.2.3
-                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        example @ git+https://example.com/repository@pkg@1.2.3
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     ");
 }
 
@@ -2550,8 +2550,8 @@ fn install_git_public_https_missing_branch_or_tag() {
       Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
       Caused by: failed to fetch branch or tag `2.0.0`
       Caused by: process didn't exit successfully: `git fetch [...]` (exit code: 128)
-                 --- stderr
-                 fatal: couldn't find remote ref refs/tags/2.0.0
+        --- stderr
+        fatal: couldn't find remote ref refs/tags/2.0.0
     ");
 }
 
@@ -2641,13 +2641,13 @@ fn install_git_public_https_missing_commit() {
       Caused by: Git operation failed
       Caused by: failed to find branch, tag, or commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
       Caused by: process didn't exit successfully: `git rev-parse [...]` (exit code: 128)
-                 --- stdout
-                 79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b^0
+        --- stdout
+        79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b^0
 
-                 --- stderr
-                 fatal: ambiguous argument '79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b^0': unknown revision or path not in the working tree.
-                 Use '--' to separate paths from revisions, like this:
-                 'git <command> [<revision>...] -- [<file>...]'
+        --- stderr
+        fatal: ambiguous argument '79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b^0': unknown revision or path not in the working tree.
+        Use '--' to separate paths from revisions, like this:
+        'git <command> [<revision>...] -- [<file>...]'
     ");
 }
 
@@ -2879,9 +2879,9 @@ fn install_git_private_https_pat_not_authorized() {
       Caused by: Git operation failed
       Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
       Caused by: process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
-                 --- stderr
-                 remote: Invalid username or token. Password authentication is not supported for Git operations.
-                 fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
+        --- stderr
+        remote: Invalid username or token. Password authentication is not supported for Git operations.
+        fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
     ");
 }
 
@@ -2977,8 +2977,8 @@ fn install_git_private_https_interactive() {
       Caused by: Git operation failed
       Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
       Caused by: process didn't exit successfully: `/usr/bin/git fetch --force --update-head-ok 'https://github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
-                 --- stderr
-                 fatal: could not read Username for 'https://github.com': terminal prompts disabled
+        --- stderr
+        fatal: could not read Username for 'https://github.com': terminal prompts disabled
     ");
 }
 
@@ -4275,7 +4275,7 @@ fn build_prerelease_hint() -> Result<()> {
       Caused by: Failed to resolve requirements from `build-system.requires`
       Caused by: No solution found when resolving: `transitive-package-only-prereleases-in-range-a`
       Caused by: Because only transitive-package-only-prereleases-in-range-b<=0.1 is available and transitive-package-only-prereleases-in-range-a==0.1.0 depends on transitive-package-only-prereleases-in-range-b>0.1, we can conclude that transitive-package-only-prereleases-in-range-a==0.1.0 cannot be used.
-                 And because only transitive-package-only-prereleases-in-range-a==0.1.0 is available and you require transitive-package-only-prereleases-in-range-a, we can conclude that your requirements are unsatisfiable.
+        And because only transitive-package-only-prereleases-in-range-a==0.1.0 is available and you require transitive-package-only-prereleases-in-range-a, we can conclude that your requirements are unsatisfiable.
 
     hint: Only pre-releases of `transitive-package-only-prereleases-in-range-b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically. Add `transitive-package-only-prereleases-in-range-b>=1.0.0a1` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
     "
@@ -5571,7 +5571,7 @@ requires-python = ">=3.13"
     ----- stderr -----
     error: No solution found when resolving dependencies
       Caused by: Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-                 And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+        And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -5675,10 +5675,10 @@ fn no_build_isolation() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta.prepare_metadata_for_build_wheel` failed (exit status: 1)
 
-                 [stderr]
-                 Traceback (most recent call last):
-                   File "<string>", line 8, in <module>
-                 ModuleNotFoundError: No module named 'setuptools'
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 8, in <module>
+        ModuleNotFoundError: No module named 'setuptools'
 
     hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
@@ -5748,10 +5748,10 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta.prepare_metadata_for_build_wheel` failed (exit status: 1)
 
-                 [stderr]
-                 Traceback (most recent call last):
-                   File "<string>", line 8, in <module>
-                 ModuleNotFoundError: No module named 'setuptools'
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 8, in <module>
+        ModuleNotFoundError: No module named 'setuptools'
 
     hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
@@ -6164,7 +6164,7 @@ requires-python = ">=3.13"
     ----- stderr -----
     error: No solution found when resolving dependencies
       Caused by: Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-                 And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+        And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -6909,7 +6909,7 @@ fn already_installed_dependent_editable() {
     ----- stderr -----
     error: No solution found when resolving dependencies
       Caused by: Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
-                 And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
+        And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -7028,7 +7028,7 @@ fn already_installed_local_path_dependent() {
     ----- stderr -----
     error: No solution found when resolving dependencies
       Caused by: Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
-                 And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
+        And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -7705,12 +7705,12 @@ fn require_hashes_mismatch() -> Result<()> {
     error: Failed to download `anyio==4.0.0`
       Caused by: Hash mismatch for `anyio==4.0.0`
 
-                 Expected:
-                   sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-                   sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+        Expected:
+          sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
-                 Computed:
-                   sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+        Computed:
+          sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "
     );
 
@@ -8378,12 +8378,12 @@ fn verify_hashes_mismatch() -> Result<()> {
     error: Failed to download `idna==3.6`
       Caused by: Hash mismatch for `idna==3.6`
 
-                 Expected:
-                   sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2
-                   sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
+        Expected:
+          sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2
+          sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
 
-                 Computed:
-                   sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+        Computed:
+          sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
     "
     );
 
@@ -9343,8 +9343,8 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
     error: Failed to inspect Python interpreter from first executable in the search path at `[BIN]/python3`
       Caused by: Querying Python at `[BIN]/python3` failed with exit status exit status: 1
 
-                 [stderr]
-                 error: intentionally broken python executable
+        [stderr]
+        error: intentionally broken python executable
     "
     );
 
@@ -9676,10 +9676,10 @@ fn install_build_isolation_package() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `hatchling.build.prepare_metadata_for_build_wheel` failed (exit status: 1)
 
-                 [stderr]
-                 Traceback (most recent call last):
-                   File "<string>", line 8, in <module>
-                 ModuleNotFoundError: No module named 'hatchling'
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 8, in <module>
+        ModuleNotFoundError: No module named 'hatchling'
 
     hint: This error likely indicates that `iniconfig` depends on `hatchling`, but doesn't declare it as a build dependency. If `iniconfig` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
@@ -9748,8 +9748,8 @@ fn invalid_extension() {
     ----- stderr -----
     error: Failed to parse: `ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`
       Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
-                 ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz
-                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     ");
 }
 
@@ -9768,8 +9768,8 @@ fn no_extension() {
     ----- stderr -----
     error: Failed to parse: `ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`
       Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
-                 ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6
-                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     ");
 }
 
@@ -10007,22 +10007,22 @@ fn sklearn() {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-                 [stderr]
-                 The 'sklearn' PyPI package is deprecated, use 'scikit-learn'
-                 rather than 'sklearn' for pip commands.
+        [stderr]
+        The 'sklearn' PyPI package is deprecated, use 'scikit-learn'
+        rather than 'sklearn' for pip commands.
 
-                 Here is how to fix this error in the main use cases:
-                 - use 'pip install scikit-learn' rather than 'pip install sklearn'
-                 - replace 'sklearn' by 'scikit-learn' in your pip requirements files
-                   (requirements.txt, setup.py, setup.cfg, Pipfile, etc ...)
-                 - if the 'sklearn' package is used by one of your dependencies,
-                   it would be great if you take some time to track which package uses
-                   'sklearn' instead of 'scikit-learn' and report it to their issue tracker
-                 - as a last resort, set the environment variable
-                   SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True to avoid this error
+        Here is how to fix this error in the main use cases:
+        - use 'pip install scikit-learn' rather than 'pip install sklearn'
+        - replace 'sklearn' by 'scikit-learn' in your pip requirements files
+          (requirements.txt, setup.py, setup.cfg, Pipfile, etc ...)
+        - if the 'sklearn' package is used by one of your dependencies,
+          it would be great if you take some time to track which package uses
+          'sklearn' instead of 'scikit-learn' and report it to their issue tracker
+        - as a last resort, set the environment variable
+          SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True to avoid this error
 
-                 More information is available at
-                 https://github.com/scikit-learn/sklearn-pypi-package
+        More information is available at
+        https://github.com/scikit-learn/sklearn-pypi-package
 
     hint: `sklearn` is often confused for `scikit-learn`. Did you mean to install `scikit-learn` instead?
 
@@ -10063,23 +10063,23 @@ fn resolve_derivation_chain() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-                 [stderr]
-                 Traceback (most recent call last):
-                   File "<string>", line 14, in <module>
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-                     return self._get_build_requires(config_settings, requirements=['wheel'])
-                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-                     self.run_setup()
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
-                     super().run_setup(setup_script=setup_script)
-                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-                     exec(code, locals())
-                   File "<string>", line 5, in <module>
-                   File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-                     print "Setuptools version",version,"or greater has been installed."
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                 SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 14, in <module>
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+            return self._get_build_requires(config_settings, requirements=['wheel'])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+            self.run_setup()
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+            super().run_setup(setup_script=setup_script)
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+            exec(code, locals())
+          File "<string>", line 5, in <module>
+          File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+            print "Setuptools version",version,"or greater has been installed."
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
     hint: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
 
@@ -10224,8 +10224,8 @@ fn missing_git_prefix() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test`
       Caused by: Direct URL (`https://github.com/astral-sh/workspace-in-root-test`) references a Git repository, but is missing the `git+` prefix (e.g., `git+https://github.com/astral-sh/workspace-in-root-test`)
-                 workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test
-                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "
     );
 
@@ -10416,11 +10416,11 @@ fn direct_url_hash_source_tree_dependency() -> Result<()> {
     error: Failed to download `protobug @ https://files.pythonhosted.org/packages/f2/cc/db26b91cddffbcf0c6df7834fd642578f737fe34197635ae8ea64643a35f/protobug-0.3.0-py3-none-any.whl#sha256=ee81583f376bb38e5e7af425d2453e5e8d4b57bfbf45e5dba1a75329c2026520`
       Caused by: Hash mismatch for `protobug @ https://files.pythonhosted.org/packages/f2/cc/db26b91cddffbcf0c6df7834fd642578f737fe34197635ae8ea64643a35f/protobug-0.3.0-py3-none-any.whl#sha256=ee81583f376bb38e5e7af425d2453e5e8d4b57bfbf45e5dba1a75329c2026520`
 
-                 Expected:
-                   sha256:ee81583f376bb38e5e7af425d2453e5e8d4b57bfbf45e5dba1a75329c2026520
+        Expected:
+          sha256:ee81583f376bb38e5e7af425d2453e5e8d4b57bfbf45e5dba1a75329c2026520
 
-                 Computed:
-                   sha256:ee81583f376bb38e5e7af425d2453e5e8d4b57bfbf45e5dba1a75329c202652e
+        Computed:
+          sha256:ee81583f376bb38e5e7af425d2453e5e8d4b57bfbf45e5dba1a75329c202652e
 
     hint: `protobug` (v0.3.0) was included because `pylock` (v0.1.0) depends on `protobug`
     "
@@ -11841,8 +11841,8 @@ fn unsupported_git_scheme() {
     ----- stderr -----
     error: Failed to parse: `git+fantasy://foo`
       Caused by: Unsupported Git URL scheme `fantasy:` in `fantasy://foo` (expected one of `https:`, `ssh:`, or `file:`)
-                 git+fantasy://foo
-                 ^^^^^^^^^^^^^^^^^
+        git+fantasy://foo
+        ^^^^^^^^^^^^^^^^^
     "
     );
 }
@@ -12862,11 +12862,11 @@ fn pep_751_hash_mismatch() -> Result<()> {
     error: Failed to read `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl`
       Caused by: Hash mismatch for `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl`
 
-                 Expected:
-                   sha256:c5185871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+        Expected:
+          sha256:c5185871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
 
-                 Computed:
-                   sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+        Computed:
+          sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
     "
     );
 
@@ -14409,8 +14409,8 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-                 [stderr]
-                 Expected `anyio` version 3.0 but got 4.3.0
+        [stderr]
+        Expected `anyio` version 3.0 but got 4.3.0
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
 
@@ -14477,8 +14477,8 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-                 [stderr]
-                 Expected `anyio` version 4.0 but got 3.7.1
+        [stderr]
+        Expected `anyio` version 4.0 but got 3.7.1
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
 

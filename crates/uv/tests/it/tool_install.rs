@@ -3004,20 +3004,20 @@ fn tool_install_uninstallable() {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-                 [stdout]
-                 running bdist_wheel
-                 running build
-                 installing to build/bdist.linux-x86_64/wheel
-                 running install
+        [stdout]
+        running bdist_wheel
+        running build
+        installing to build/bdist.linux-x86_64/wheel
+        running install
 
-                 [stderr]
-                 # NOTE #
-                 We are sorry, but this package is not installable with pip.
+        [stderr]
+        # NOTE #
+        We are sorry, but this package is not installable with pip.
 
-                 Please read the installation instructions at:
+        Please read the installation instructions at:
 
-                 https://github.com/pyenv/pyenv#installation
-                 #
+        https://github.com/pyenv/pyenv#installation
+        #
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -4466,7 +4466,7 @@ fn tool_install_preserve_environment() {
     ----- stderr -----
     error: No solution found when resolving dependencies
       Caused by: Because black==24.1.1 depends on packaging>=22.0 and you require black==24.1.1, we can conclude that you require packaging>=22.0.
-                 And because you require packaging==0.0.1, we can conclude that your requirements are unsatisfiable.
+        And because you require packaging==0.0.1, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Install `black`. The tool should already be installed, since we didn't remove the environment.
@@ -5854,7 +5854,7 @@ fn tool_install_find_links() {
     ----- stderr -----
     error: No solution found when resolving tool dependencies
       Caused by: Because only basic-app==0.1 is available and basic-app==0.1 needs to be downloaded from a registry, we can conclude that all versions of basic-app cannot be used.
-                 And because you require basic-app, we can conclude that your requirements are unsatisfiable.
+        And because you require basic-app, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
