@@ -734,6 +734,7 @@ async fn get_or_create_environment(
         registry_python_inference,
         RegistryPythonInference::DeferUntilReuseCheck
     ) && has_registry_target
+        && python.is_none()
         && !isolated
         && !request.is_latest()
         && constraint_sources.is_empty()

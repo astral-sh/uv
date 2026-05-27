@@ -2314,6 +2314,43 @@ async fn tool_run_constraints_skip_registry_requires_python_inference() -> Resul
     Ok(())
 }
 
+#[tokio::test]
+async fn tool_run_explicit_python_skips_deferred_registry_inference_pass() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let server = simple_launcher_registry(&context, Some(">=3.12,<4.0")).await?;
+
+    let output = context
+        .tool_run()
+        .arg("--verbose")
+        .arg("--python")
+        .arg("3.12")
+        .arg("--index-url")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--from")
+        .arg("simple-launcher")
+        .arg("python")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .output()?;
+    assert!(output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let python_request_logs = stderr
+        .lines()
+        .filter(|line| line.contains("Using Python request `3.12` from explicit request"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    insta::assert_snapshot!(
+        python_request_logs,
+        @"DEBUG Using Python request `3.12` from explicit request"
+    );
+
+    Ok(())
+}
+
 async fn simple_launcher_registry(
     context: &TestContext,
     requires_python: Option<&str>,
