@@ -1075,6 +1075,9 @@ impl Lock {
     ) -> Result<Vec<(BuildPackageKey, uv_distribution_types::SourceDist)>, LockError> {
         let mut sources = Vec::new();
         for package in &self.packages {
+            if matches!(package.id.source, Source::Virtual(_)) {
+                continue;
+            }
             if let Some(source_dist) = package.to_source_dist(workspace_root)? {
                 let key = build_key_for_package(package, workspace_root);
                 sources.push((key, source_dist));
@@ -1093,6 +1096,9 @@ impl Lock {
     ) -> Result<Vec<(BuildPackageKey, uv_distribution_types::SourceDist)>, LockError> {
         let mut sources = Vec::new();
         for package in &self.packages {
+            if matches!(package.id.source, Source::Virtual(_)) {
+                continue;
+            }
             if !package.build_dependencies.is_empty() {
                 continue;
             }

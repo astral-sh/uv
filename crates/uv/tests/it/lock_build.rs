@@ -2244,6 +2244,150 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
     Ok(())
 }
 
+/// Verify build dependencies are captured for the project itself.
+#[test]
+fn lock_build_dependencies_trivial_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    context.temp_dir.child("project").create_dir_all()?;
+    context.temp_dir.child("project/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let project = package_section(&lock, "project");
+    assert!(project.contains(r#"source = { editable = "." }"#));
+    assert!(project.contains("build-dependencies = ["));
+    assert!(project.contains(r#"{ name = "setuptools", version = "69.2.0" }"#));
+    assert!(project.contains(r#"{ name = "wheel", version = "0.43.0" }"#));
+    assert!(project.contains("[package.metadata]"));
+    assert!(project.contains(r#"{ name = "setuptools", specifier = ">=42" }"#));
+    assert!(project.contains(r#"{ name = "wheel" }"#));
+
+    Ok(())
+}
+
+/// Verify virtual projects do not resolve declared build requirements, since they are not built.
+#[test]
+fn lock_build_dependencies_virtual_project_skips_build_requirements() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["unavailable-builder"]
+        build-backend = "unavailable_builder"
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let project = package_section(&lock, "project");
+    assert!(project.contains(r#"source = { virtual = "." }"#));
+    assert!(!project.contains("build-dependencies = ["));
+
+    Ok(())
+}
+
+/// Verify build dependencies are captured for workspace members.
+#[test]
+fn lock_build_dependencies_workspace_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["member"]
+        "#,
+    )?;
+
+    let member_dir = context.temp_dir.child("member");
+    member_dir.create_dir_all()?;
+    member_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    member_dir.child("member").create_dir_all()?;
+    member_dir.child("member/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let member = package_section(&lock, "member");
+    assert!(member.contains(r#"source = { editable = "member" }"#));
+    assert!(member.contains("build-dependencies = ["));
+    assert!(member.contains(r#"{ name = "setuptools", version = "69.2.0" }"#));
+    assert!(member.contains(r#"{ name = "wheel", version = "0.43.0" }"#));
+    assert!(member.contains("[package.metadata]"));
+    assert!(member.contains(r#"{ name = "setuptools", specifier = ">=42" }"#));
+    assert!(member.contains(r#"{ name = "wheel" }"#));
+
+    Ok(())
+}
+
 /// Verify that changing `build-system.requires` in a dependency's pyproject.toml
 /// invalidates the lock file and triggers re-resolution.
 #[test]
