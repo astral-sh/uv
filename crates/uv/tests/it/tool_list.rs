@@ -362,11 +362,11 @@ fn tool_list_deprecated() -> Result<()> {
         .assert()
         .success();
 
-    // Ensure that we have a modern tool receipt.
+    // Ensure that we have modern tool metadata.
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -441,7 +441,8 @@ fn tool_list_deprecated() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black", specifier = "==24.2.0" }]
         entrypoints = [
@@ -466,6 +467,7 @@ fn tool_list_deprecated() -> Result<()> {
         ]
         "#,
     )?;
+    fs::remove_file(tool_dir.join("black").join("uv.lock"))?;
 
     // Ensure that we can still list the tool.
     uv_snapshot!(context.filters(), context.tool_list()

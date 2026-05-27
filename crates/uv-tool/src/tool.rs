@@ -1,15 +1,15 @@
 use std::fmt::{self, Display, Formatter};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use toml_edit::{Array, Item, Table, Value, value};
 
-use uv_distribution_types::Requirement;
+use uv_distribution_types::{Requirement, StaticMetadata};
 use uv_fs::{PortablePath, Simplified};
-use uv_normalize::PackageName;
+use uv_normalize::{GroupName, PackageName};
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonRequest;
-use uv_resolver::Lock;
+use uv_resolver::{Lock, ResolverManifest};
 use uv_settings::{ToolOptions, ToolOptionsWire};
 
 /// A tool entry.
@@ -211,6 +211,22 @@ impl Tool {
     #[must_use]
     pub fn with_lock(self, lock: Option<Lock>) -> Self {
         Self { lock, ..self }
+    }
+
+    /// Return whether a standalone [`Lock`] was generated for this receipt.
+    pub(crate) fn matches_lock(&self, lock: &Lock, directory: &Path) -> bool {
+        ResolverManifest::new(
+            std::iter::empty::<PackageName>(),
+            self.requirements.iter().cloned(),
+            self.constraints.iter().cloned(),
+            self.overrides.iter().cloned(),
+            self.excludes.iter().cloned(),
+            self.build_constraints.iter().cloned(),
+            std::iter::empty::<(GroupName, Vec<Requirement>)>(),
+            std::iter::empty::<StaticMetadata>(),
+        )
+        .relative_to(directory)
+        .is_ok_and(|manifest| lock.matches_manifest(&manifest))
     }
 
     /// Returns the TOML table for this tool.

@@ -663,6 +663,11 @@ impl Lock {
         self
     }
 
+    /// Return whether this lock was generated with the given [`ResolverManifest`].
+    pub fn matches_manifest(&self, manifest: &ResolverManifest) -> bool {
+        self.manifest == *manifest
+    }
+
     /// Record the conflicting groups that were used to generate this lock.
     #[must_use]
     pub fn with_conflicts(mut self, conflicts: Conflicts) -> Self {
