@@ -219,17 +219,27 @@ fn check_generated_file(path: &Path, output: &str) -> Result<()> {
     }
 }
 
+// Normalize only inline snapshots emitted by this generator; scenario prose is arbitrary text.
+const INLINE_SNAPSHOT_MARKERS: [&str; 3] = [
+    "\n        , @",
+    "\n    uv_snapshot!(filters, cmd, @",
+    "\n            lock, @",
+];
+
 fn normalize_inline_snapshots(source: &str) -> Result<String> {
     let mut output = String::with_capacity(source.len());
     let mut remaining = source;
 
-    while let Some(start) = remaining.find('@') {
-        output.push_str(&remaining[..start]);
-        let snapshot = &remaining[start..];
+    while let Some((start, marker)) = INLINE_SNAPSHOT_MARKERS
+        .iter()
+        .filter_map(|marker| remaining.find(marker).map(|start| (start, *marker)))
+        .min_by_key(|(start, _)| *start)
+    {
+        let snapshot_start = start + marker.len() - 1;
+        output.push_str(&remaining[..snapshot_start]);
+        let snapshot = &remaining[snapshot_start..];
         let Some((opening_length, closing_delimiter)) = inline_snapshot_delimiters(snapshot) else {
-            output.push('@');
-            remaining = &snapshot[1..];
-            continue;
+            bail!("invalid inline snapshot in generated scenario file");
         };
         let contents = &snapshot[opening_length..];
         let Some(end) = contents.find(&closing_delimiter) else {
@@ -974,10 +984,34 @@ mod tests {
         let temporary_directory =
             tempfile::tempdir().expect("temporary directory should be created");
         let path = temporary_directory.path().join("scenario.rs");
-        fs_err::write(&path, "uv_snapshot!(command, @\"\naccepted output\n\");\n")
-            .expect("temporary file should be written");
+        fs_err::write(
+            &path,
+            "/// Literal @\"accepted\" remains significant.\nfn scenario() {\n    uv_snapshot!(filters, cmd, @\"\naccepted output\n\");\n}\n",
+        )
+        .expect("temporary file should be written");
 
-        check_generated_file(&path, "uv_snapshot!(command, @r#\"<snapshot>\n\"#);\n")
-            .expect("accepted snapshot should not make generated file stale");
+        check_generated_file(
+            &path,
+            "/// Literal @\"accepted\" remains significant.\nfn scenario() {\n    uv_snapshot!(filters, cmd, @r#\"<snapshot>\n\"#);\n}\n",
+        )
+        .expect("accepted snapshot should not make generated file stale");
+    }
+
+    #[test]
+    fn snapshot_like_documentation_changes_make_generated_file_stale() {
+        let temporary_directory =
+            tempfile::tempdir().expect("temporary directory should be created");
+        let path = temporary_directory.path().join("scenario.rs");
+        fs_err::write(
+            &path,
+            "/// Literal @\"current\" remains significant.\nfn scenario() {\n    uv_snapshot!(filters, cmd, @\"\naccepted output\n\");\n}\n",
+        )
+        .expect("temporary file should be written");
+
+        check_generated_file(
+            &path,
+            "/// Literal @\"generated\" remains significant.\nfn scenario() {\n    uv_snapshot!(filters, cmd, @r#\"<snapshot>\n\"#);\n}\n",
+        )
+        .expect_err("documentation changes should make generated output stale");
     }
 }
