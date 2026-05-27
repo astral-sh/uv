@@ -841,9 +841,6 @@ impl Lock {
         let mut existing_packages: FxHashSet<PackageId> =
             self.packages.iter().map(|p| p.id.clone()).collect();
 
-        // Track which packages are newly created (need dependency population).
-        let mut newly_created: FxHashSet<PackageId> = FxHashSet::default();
-
         // Collect direct build dep refs per parent, and new packages to add.
         let mut build_dep_refs: BTreeMap<BuildPackageKey, Vec<BuildDependency>> = BTreeMap::new();
         let mut build_requires_map: BTreeMap<BuildPackageKey, BTreeSet<Requirement>> =
@@ -886,7 +883,6 @@ impl Lock {
                 };
 
                 if existing_packages.insert(package_id.clone()) {
-                    newly_created.insert(package_id);
                     new_packages.push(package);
                 }
             }
@@ -962,8 +958,10 @@ impl Lock {
         let package_ids: FxHashSet<PackageId> =
             self.packages.iter().map(|p| p.id.clone()).collect();
 
-        // Second pass: populate dependencies on newly created packages and
-        // optional dependency edges captured through build requirement extras.
+        // Second pass: merge ordinary and optional dependency edges captured
+        // through build requirements into their packages. A package may
+        // already exist through runtime resolution while requiring additional
+        // dependency edges in a build-only marker region.
         // Collect updates keyed by PackageId to apply afterward.
         let mut dep_updates: FxHashMap<PackageId, Vec<Dependency>> = FxHashMap::default();
         let mut optional_dep_updates: FxHashMap<PackageId, BTreeMap<ExtraName, Vec<Dependency>>> =
@@ -976,28 +974,23 @@ impl Lock {
                     continue;
                 };
 
-                if newly_created.contains(&key) && !dep_updates.contains_key(&key) {
-                    let mut deps = Vec::new();
-                    for dep_edge in &entry.dependencies {
-                        let Ok(dep_id) = package_id_from_resolved_dist(&dep_edge.dist, root) else {
-                            continue;
-                        };
-                        if !package_ids.contains(&dep_id) {
-                            continue;
-                        }
-                        let simplified =
-                            SimplifiedMarkerTree::new(&self.requires_python, dep_edge.marker);
-                        let complexified = simplified.into_marker(&self.requires_python);
-                        deps.push(Dependency {
-                            package_id: dep_id,
-                            extra: dep_edge.extras.clone(),
-                            simplified_marker: simplified,
-                            complexified_marker: UniversalMarker::from_combined(complexified),
-                        });
+                let deps = dep_updates.entry(key.clone()).or_default();
+                for dep_edge in &entry.dependencies {
+                    let Ok(dep_id) = package_id_from_resolved_dist(&dep_edge.dist, root) else {
+                        continue;
+                    };
+                    if !package_ids.contains(&dep_id) {
+                        continue;
                     }
-                    deps.sort();
-                    deps.dedup();
-                    dep_updates.insert(key.clone(), deps);
+                    let simplified =
+                        SimplifiedMarkerTree::new(&self.requires_python, dep_edge.marker);
+                    let complexified = simplified.into_marker(&self.requires_python);
+                    deps.push(Dependency {
+                        package_id: dep_id,
+                        extra: dep_edge.extras.clone(),
+                        simplified_marker: simplified,
+                        complexified_marker: UniversalMarker::from_combined(complexified),
+                    });
                 }
 
                 let optional_updates = optional_dep_updates.entry(key).or_default();
@@ -1026,8 +1019,10 @@ impl Lock {
 
         // Apply dependency updates to packages.
         for package in &mut self.packages {
-            if let Some(deps) = dep_updates.remove(&package.id) {
-                package.dependencies = deps;
+            if let Some(mut deps) = dep_updates.remove(&package.id) {
+                package.dependencies.append(&mut deps);
+                package.dependencies.sort();
+                package.dependencies.dedup();
             }
             if let Some(optional_deps) = optional_dep_updates.remove(&package.id) {
                 for (extra, mut deps) in optional_deps {

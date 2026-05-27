@@ -27,6 +27,15 @@ fn package_section<'a>(lock: &'a str, name: &str) -> &'a str {
 }
 
 fn write_wheel(path: &ChildPath, name: &str, version: &str) -> Result<()> {
+    write_wheel_with_requires(path, name, version, &[])
+}
+
+fn write_wheel_with_requires(
+    path: &ChildPath,
+    name: &str,
+    version: &str,
+    requires_dist: &[&str],
+) -> Result<()> {
     let mut zip = ZipFileWriter::new(Vec::new());
     let dist_info = format!("{}-{version}.dist-info", name.replace('-', "_"));
 
@@ -36,10 +45,11 @@ fn write_wheel(path: &ChildPath, name: &str, version: &str) -> Result<()> {
     );
     block_on(zip.write_entry_whole(entry, b""))?;
     let entry = ZipEntryBuilder::new(format!("{dist_info}/METADATA").into(), Compression::Stored);
-    block_on(zip.write_entry_whole(
-        entry,
-        format!("Metadata-Version: 2.3\nName: {name}\nVersion: {version}\n").as_bytes(),
-    ))?;
+    let mut metadata = format!("Metadata-Version: 2.3\nName: {name}\nVersion: {version}\n");
+    for requirement in requires_dist {
+        metadata.push_str(&format!("Requires-Dist: {requirement}\n"));
+    }
+    block_on(zip.write_entry_whole(entry, metadata.as_bytes()))?;
     let entry = ZipEntryBuilder::new(format!("{dist_info}/WHEEL").into(), Compression::Stored);
     block_on(zip.write_entry_whole(
         entry,
@@ -1370,6 +1380,132 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     );
 
     write_backend("0.2.0")?;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+    ");
+
+    Ok(())
+}
+
+/// Verify that build-only dependency edges are retained for runtime-shared packages.
+#[test]
+fn lock_build_dependencies_merge_runtime_shared_build_edges() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let (build_marker, runtime_marker) = if cfg!(target_os = "macos") {
+        ("sys_platform == 'darwin'", "sys_platform != 'darwin'")
+    } else if cfg!(target_os = "windows") {
+        ("sys_platform == 'win32'", "sys_platform != 'win32'")
+    } else {
+        ("sys_platform == 'linux'", "sys_platform != 'linux'")
+    };
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    let leaf_requirement = format!("leaf==0.1.0 ; {build_marker}");
+    write_wheel_with_requires(
+        &links_dir.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+        &[&leaf_requirement],
+    )?;
+    write_wheel(
+        &links_dir.child("leaf-0.1.0-py3-none-any.whl"),
+        "leaf",
+        "0.1.0",
+    )?;
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper==0.1.0 ; {build_marker}"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+    ))?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    if version("leaf") != "0.1.0":
+        raise RuntimeError("leaf is unavailable")
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep/__init__.py", "")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "dep",
+            "helper==0.1.0 ; {runtime_marker}",
+        ]
+
+        [tool.uv.sources]
+        dep = {{ path = "dep" }}
+        "#
+        ))?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
 
     uv_snapshot!(context.filters(), context
         .sync()
