@@ -639,15 +639,17 @@ impl ResolverOutput {
                 continue;
             };
             let package_dist = base_dists.get(&key_for(dist)).copied().unwrap_or(dist);
-            let package =
-                packages
-                    .entry(key_for(package_dist))
-                    .or_insert_with(|| BuildDependencyPackage {
-                        dist: package_dist.dist.clone(),
-                        hashes: package_dist.hashes.clone().into_iter().collect(),
-                        dependencies: Vec::new(),
-                        optional_dependencies: BTreeMap::new(),
-                    });
+            let marker = package_dist.marker.pep508();
+            let package = packages
+                .entry(key_for(package_dist))
+                .and_modify(|package: &mut BuildDependencyPackage| package.marker.or(marker))
+                .or_insert_with(|| BuildDependencyPackage {
+                    dist: package_dist.dist.clone(),
+                    hashes: package_dist.hashes.clone().into_iter().collect(),
+                    marker,
+                    dependencies: Vec::new(),
+                    optional_dependencies: BTreeMap::new(),
+                });
 
             for edge in self.graph.edges(node_index) {
                 let ResolutionGraphNode::Dist(dep_dist) = &self.graph[edge.target()] else {

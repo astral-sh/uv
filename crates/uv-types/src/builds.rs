@@ -119,6 +119,8 @@ pub struct BuildDependencyPackage {
     pub dist: ResolvedDist,
     /// The hashes for verification.
     pub hashes: Vec<HashDigest>,
+    /// The marker environments in which this package is reachable.
+    pub marker: MarkerTree,
     /// This package's direct dependencies with markers.
     pub dependencies: Vec<BuildDependencyEdge>,
     /// This package's extra dependencies with markers.

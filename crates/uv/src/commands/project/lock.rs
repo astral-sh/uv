@@ -28,6 +28,7 @@ use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
+use uv_pep508::MarkerTree;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -803,44 +804,38 @@ async fn do_lock(
         })
         .unwrap_or_default();
 
-    // Create a build dispatch.
-    let build_dispatch = BuildDispatch::new(
-        &client,
-        cache,
-        &dispatch_constraints,
-        interpreter,
-        index_locations,
-        &flat_index,
-        dependency_metadata,
-        state.fork().into_inner(),
-        *index_strategy,
-        config_setting,
-        config_settings_package,
-        build_isolation,
-        &extra_build_requires,
-        extra_build_variables,
-        *link_mode,
-        build_options,
-        &build_hasher,
-        exclude_newer.clone(),
-        sources.clone(),
-        SourceTreeEditablePolicy::Project,
-        workspace_cache.clone(),
-        concurrency.clone(),
-        preview,
-    )
-    .with_build_preferences(build_preferences);
-
-    // Use universal resolution for build dependencies when locking, so the
-    // resolved build deps work on all platforms.
-    let build_dispatch = if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
-        build_dispatch.with_universal_build_resolution(
-            requires_python.clone(),
-            lock_supported_environments.clone(),
+    let make_build_dispatch = |build_preferences| {
+        BuildDispatch::new(
+            &client,
+            cache,
+            &dispatch_constraints,
+            interpreter,
+            index_locations,
+            &flat_index,
+            dependency_metadata,
+            state.fork().into_inner(),
+            *index_strategy,
+            config_setting,
+            config_settings_package,
+            build_isolation,
+            &extra_build_requires,
+            extra_build_variables,
+            *link_mode,
+            build_options,
+            &build_hasher,
+            exclude_newer.clone(),
+            sources.clone(),
+            SourceTreeEditablePolicy::Project,
+            workspace_cache.clone(),
+            concurrency.clone(),
+            preview,
         )
-    } else {
-        build_dispatch
+        .with_build_preferences(build_preferences)
     };
+
+    // Runtime metadata builds use the active interpreter. Universal build dependency
+    // locking runs after the runtime resolution can provide source reachability markers.
+    let build_dispatch = make_build_dispatch(build_preferences.clone());
 
     let database = DistributionDatabase::new(
         &client,
@@ -1063,18 +1058,25 @@ async fn do_lock(
             .relative_to(target.install_path())?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
-            let mut lock = Lock::from_resolution(
+            let (lock, build_markers) = Lock::from_resolution_with_build_markers(
                 &resolution,
                 target.install_path(),
                 lock_supported_environments.clone().into_markers(),
-            )?
-            .with_manifest(manifest)
-            .with_conflicts(conflicts)
-            .with_required_environments(lock_required_environments.into_markers());
+            )?;
+            let mut lock = lock
+                .with_manifest(manifest)
+                .with_conflicts(conflicts)
+                .with_required_environments(lock_required_environments.into_markers());
 
             // Only record build dependencies in the lock file when the preview feature is enabled.
             if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
                 if !build_options.no_build_requirement(None) {
+                    let build_dispatch = make_build_dispatch(build_preferences.clone())
+                        .with_universal_build_resolution(
+                            requires_python.clone(),
+                            lock_supported_environments.clone(),
+                            artifact_environments.clone(),
+                        );
                     let build_database = DistributionDatabase::new(
                         &client,
                         &build_dispatch,
@@ -1087,6 +1089,7 @@ async fn do_lock(
                         &build_dispatch,
                         &build_database,
                         &build_hasher,
+                        &build_markers,
                     )
                     .await
                     .map_err(ProjectError::from)?;
@@ -1191,16 +1194,24 @@ async fn resolve_all_possible_builds(
     build_dispatch: &BuildDispatch<'_>,
     database: &DistributionDatabase<'_, BuildDispatch<'_>>,
     build_hasher: &HashStrategy,
+    build_markers: &BTreeMap<BuildPackageKey, MarkerTree>,
 ) -> anyhow::Result<()> {
-    let mut queue: VecDeque<(BuildPackageKey, SourceDist)> = lock
+    let mut queue: VecDeque<(BuildPackageKey, SourceDist, Option<MarkerTree>)> = lock
         .source_distributions_for_build(workspace_root)?
         .into_iter()
         .filter(|(key, _)| !build_options.no_build_package(&key.name))
+        .map(|(key, source_dist)| {
+            let marker = build_markers.get(&key).copied();
+            (key, source_dist, marker)
+        })
         .collect();
 
     let mut seen: FxHashSet<BuildPackageKey> = FxHashSet::default();
 
-    while let Some((key, source_dist)) = queue.pop_front() {
+    while let Some((key, source_dist, marker)) = queue.pop_front() {
+        if let Some(marker) = marker {
+            build_dispatch.add_universal_build_marker(key.clone(), marker);
+        }
         if !seen.insert(key.clone()) {
             continue;
         }
@@ -1306,7 +1317,7 @@ async fn resolve_all_possible_builds(
                 package.dist.version().cloned(),
                 Some(&source_dist),
             );
-            queue.push_back((dep_key, source_dist));
+            queue.push_back((dep_key, source_dist, Some(package.marker)));
         }
     }
 

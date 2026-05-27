@@ -2,8 +2,10 @@
 //! [installer][`uv_installer`] and [build][`uv_build`] through [`BuildDispatch`]
 //! implementing [`BuildContext`].
 
+use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
+use std::sync::Mutex;
 
 use anyhow::{Context, Result};
 use futures::FutureExt;
@@ -30,6 +32,7 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
+use uv_pep508::MarkerTree;
 use uv_preview::Preview;
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonEnvironment};
@@ -143,6 +146,10 @@ pub struct BuildDispatch<'a> {
     universal_build_requires_python: Option<RequiresPython>,
     /// The supported marker environments to use when resolving universal build dependencies.
     universal_build_environments: SupportedEnvironments,
+    /// The marker environments that require artifact coverage for universal build dependencies.
+    universal_build_artifact_environments: SupportedEnvironments,
+    /// The environments in which individual source packages can require builds.
+    universal_build_markers: Mutex<BTreeMap<BuildPackageKey, MarkerTree>>,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -203,6 +210,8 @@ impl<'a> BuildDispatch<'a> {
             universal_build_resolution: false,
             universal_build_requires_python: None,
             universal_build_environments: SupportedEnvironments::default(),
+            universal_build_artifact_environments: SupportedEnvironments::default(),
+            universal_build_markers: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -251,16 +260,66 @@ impl<'a> BuildDispatch<'a> {
         mut self,
         requires_python: RequiresPython,
         environments: SupportedEnvironments,
+        artifact_environments: SupportedEnvironments,
     ) -> Self {
         self.universal_build_resolution = true;
         self.universal_build_requires_python = Some(requires_python);
         self.universal_build_environments = environments;
+        self.universal_build_artifact_environments = artifact_environments;
         self
+    }
+
+    /// Record the marker environments in which a source package can require building.
+    pub fn add_universal_build_marker(&self, package: BuildPackageKey, marker: MarkerTree) {
+        let mut markers = self
+            .universal_build_markers
+            .lock()
+            .expect("universal build marker lock poisoned");
+        markers
+            .entry(package)
+            .and_modify(|existing| existing.or(marker))
+            .or_insert(marker);
     }
 
     /// Return the collected build resolutions.
     pub fn build_resolutions(&self) -> &BuildResolutions {
         &self.build_resolutions
+    }
+
+    fn universal_environments_for_package(
+        &self,
+        environments: &SupportedEnvironments,
+        package: Option<&BuildPackageKey>,
+        restrict_unconstrained: bool,
+    ) -> SupportedEnvironments {
+        let Some(marker) = package.and_then(|package| {
+            self.universal_build_markers
+                .lock()
+                .expect("universal build marker lock poisoned")
+                .get(package)
+                .copied()
+        }) else {
+            return environments.clone();
+        };
+
+        if environments.is_empty() {
+            return if restrict_unconstrained && !marker.is_true() {
+                SupportedEnvironments::from_markers(vec![marker])
+            } else {
+                SupportedEnvironments::default()
+            };
+        }
+
+        SupportedEnvironments::from_markers(
+            environments
+                .iter()
+                .copied()
+                .filter_map(|mut environment| {
+                    environment.and(marker);
+                    (!environment.is_false()).then_some(environment)
+                })
+                .collect(),
+        )
     }
 }
 
@@ -363,8 +422,18 @@ impl BuildContext for BuildDispatch<'_> {
         } else {
             PythonRequirement::from_interpreter(self.interpreter)
         };
+        let universal_build_environments = self.universal_environments_for_package(
+            &self.universal_build_environments,
+            package,
+            true,
+        );
+        let universal_build_artifact_environments = self.universal_environments_for_package(
+            &self.universal_build_artifact_environments,
+            package,
+            false,
+        );
         let resolver_env = if self.universal_build_resolution {
-            ResolverEnvironment::universal(self.universal_build_environments.clone().into_markers())
+            ResolverEnvironment::universal(universal_build_environments.clone().into_markers())
         } else {
             ResolverEnvironment::specific(marker_env)
         };
@@ -426,6 +495,7 @@ impl BuildContext for BuildDispatch<'_> {
                 .exclude_newer(self.exclude_newer.clone())
                 .index_strategy(self.index_strategy)
                 .build_options(self.build_options.clone())
+                .artifact_environments(universal_build_artifact_environments)
                 .flexibility(Flexibility::Fixed)
                 .build(),
             &python_requirement,
@@ -469,9 +539,8 @@ impl BuildContext for BuildDispatch<'_> {
         }
 
         let resolution = if self.universal_build_resolution {
-            let markers = if self.universal_build_environments.is_empty()
-                || self
-                    .universal_build_environments
+            let markers = if universal_build_environments.is_empty()
+                || universal_build_environments
                     .iter()
                     .any(|environment| environment.evaluate(self.interpreter.markers(), &[]))
             {

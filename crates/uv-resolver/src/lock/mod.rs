@@ -433,7 +433,18 @@ impl Lock {
         root: &Path,
         supported_environments: Vec<MarkerTree>,
     ) -> Result<Self, LockError> {
+        Self::from_resolution_with_build_markers(resolution, root, supported_environments)
+            .map(|(lock, _)| lock)
+    }
+
+    /// Initialize a [`Lock`] and retain source-package reachability for build resolution.
+    pub fn from_resolution_with_build_markers(
+        resolution: &ResolverOutput,
+        root: &Path,
+        supported_environments: Vec<MarkerTree>,
+    ) -> Result<(Self, BTreeMap<BuildPackageKey, MarkerTree>), LockError> {
         let mut packages = BTreeMap::new();
+        let mut build_markers = BTreeMap::new();
         let requires_python = resolution.requires_python.clone();
         let supported_environments = supported_environments
             .into_iter()
@@ -491,6 +502,15 @@ impl Lock {
             };
 
             let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
+            if !matches!(package.id.source, Source::Virtual(_))
+                && package.to_source_dist(root)?.is_some()
+            {
+                let key = build_key_for_package(&package, root);
+                build_markers
+                    .entry(key)
+                    .and_modify(|marker: &mut MarkerTree| marker.or(dist.marker.pep508()))
+                    .or_insert_with(|| dist.marker.pep508());
+            }
             let mut wheel_marker = dist.marker;
             if let Some(supported_environments_marker) = supported_environments_marker {
                 wheel_marker.and(supported_environments_marker);
@@ -607,7 +627,7 @@ impl Lock {
             vec![],
             fork_markers,
         )?;
-        Ok(lock)
+        Ok((lock, build_markers))
     }
 
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
