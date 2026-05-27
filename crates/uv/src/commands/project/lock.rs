@@ -1209,6 +1209,7 @@ async fn resolve_all_possible_builds(
     let mut seen: FxHashSet<BuildPackageKey> = FxHashSet::default();
 
     while let Some((key, source_dist, marker)) = queue.pop_front() {
+        let resolve_backend_hook_requirements = marker.is_some();
         if let Some(marker) = marker {
             build_dispatch.add_universal_build_marker(key.clone(), marker);
         }
@@ -1244,7 +1245,7 @@ async fn resolve_all_possible_builds(
             };
             let has_explicit_build_system = build_requirements.is_some();
 
-            if !direct_build {
+            if !direct_build && resolve_backend_hook_requirements {
                 database
                     .resolve_static_build_requirements(&source_dist, build_hasher.get(&dist))
                     .await?;
@@ -1317,7 +1318,11 @@ async fn resolve_all_possible_builds(
                 package.dist.version().cloned(),
                 Some(&source_dist),
             );
-            queue.push_back((dep_key, source_dist, Some(package.marker)));
+            queue.push_back((
+                dep_key,
+                source_dist,
+                resolve_backend_hook_requirements.then_some(package.marker),
+            ));
         }
     }
 

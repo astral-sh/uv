@@ -502,7 +502,10 @@ impl Lock {
             };
 
             let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
-            if !matches!(package.id.source, Source::Virtual(_))
+            if matches!(
+                &dist.dist,
+                ResolvedDist::Installable { dist, .. } if matches!(dist.as_ref(), Dist::Source(_))
+            ) && !matches!(package.id.source, Source::Virtual(_))
                 && package.to_source_dist(root)?.is_some()
             {
                 let key = build_key_for_package(&package, root);

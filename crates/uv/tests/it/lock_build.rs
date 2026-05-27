@@ -4381,7 +4381,7 @@ fn sync_filters_locked_build_resolutions_to_selected_packages() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["helper @ {helper_url}"]
+        requires = ["setuptools>=42", "helper @ {helper_url}"]
         build-backend = "setuptools.build_meta"
         "#
     ))?;
