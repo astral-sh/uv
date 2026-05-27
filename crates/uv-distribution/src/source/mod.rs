@@ -675,7 +675,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             BuildableSource::Dist(SourceDist::Directory(dist)) => {
                 read_build_requires(&dist.install_path, None).await
             }
-            BuildableSource::Dist(SourceDist::GitDirectory(_) | SourceDist::GitPath(_)) => Ok(None),
+            BuildableSource::Dist(SourceDist::GitDirectory(dist)) => {
+                self.git_build_requires(source, &GitDirectorySourceUrl::from(dist), hashes, client)
+                    .await
+            }
+            BuildableSource::Dist(SourceDist::GitPath(_)) => Ok(None),
             BuildableSource::Url(SourceUrl::Direct(resource)) => {
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
@@ -707,7 +711,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             BuildableSource::Url(SourceUrl::Directory(resource)) => {
                 read_build_requires(resource.install_path, None).await
             }
-            BuildableSource::Url(SourceUrl::GitDirectory(_) | SourceUrl::GitPath(_)) => Ok(None),
+            BuildableSource::Url(SourceUrl::GitDirectory(resource)) => {
+                self.git_build_requires(source, resource, hashes, client)
+                    .await
+            }
+            BuildableSource::Url(SourceUrl::GitPath(_)) => Ok(None),
         }
     }
 
@@ -1492,6 +1500,34 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         read_build_requires(source_entry.path(), None).await
+    }
+
+    /// Return the static build requirements from a Git source distribution.
+    async fn git_build_requires(
+        &self,
+        source: &BuildableSource<'_>,
+        resource: &GitDirectorySourceUrl<'_>,
+        hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
+    ) -> Result<Option<Vec<Requirement>>, Error> {
+        if hashes.requires_validation() {
+            return Err(Error::HashesNotSupportedGit(source.to_string()));
+        }
+
+        let fetch = fetch_git_source_tree(
+            self.build_context.git(),
+            resource.git,
+            resource.url.to_url(),
+            resource.subdirectory,
+            client.unmanaged.git_http_settings(resource.git.url()),
+            self.build_context.cache(),
+            self.reporter
+                .clone()
+                .map(|reporter| reporter.into_git_reporter()),
+        )
+        .await?;
+
+        read_build_requires(fetch.path(), resource.subdirectory).await
     }
 
     /// Return the [`Revision`] for a local archive, refreshing it if necessary.

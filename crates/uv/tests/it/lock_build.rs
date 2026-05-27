@@ -1,3 +1,6 @@
+#[cfg(feature = "test-git")]
+use std::process::Command;
+
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -1510,6 +1513,91 @@ fn lock_build_dependencies_static_directory_implicit_default_backend() -> Result
         dep = { path = "dep" }
         "#,
     )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(dep.contains("build-dependencies = ["), "{dep}");
+    assert!(dep.contains(r#"{ name = "setuptools", version = "69.2.0" }"#));
+
+    Ok(())
+}
+
+/// Verify that static Git dependencies retain their declared build
+/// requirements in the locked build environment.
+#[test]
+#[cfg(feature = "test-git")]
+fn lock_build_dependencies_static_git() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    Command::new("git")
+        .arg("init")
+        .arg("--quiet")
+        .arg(dep_dir.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .args(["-C", dep_dir.path().to_str().expect("UTF-8 temp path")])
+        .args(["config", "user.name", "uv-test"])
+        .assert()
+        .success();
+    Command::new("git")
+        .args(["-C", dep_dir.path().to_str().expect("UTF-8 temp path")])
+        .args(["config", "user.email", "uv-test@example.com"])
+        .assert()
+        .success();
+    Command::new("git")
+        .args(["-C", dep_dir.path().to_str().expect("UTF-8 temp path")])
+        .args(["add", "pyproject.toml"])
+        .assert()
+        .success();
+    Command::new("git")
+        .args(["-C", dep_dir.path().to_str().expect("UTF-8 temp path")])
+        .args(["commit", "--quiet", "-m", "initial"])
+        .assert()
+        .success();
+
+    let dep_url = Url::from_directory_path(dep_dir.path()).expect("valid file URL");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = {{ git = "{dep_url}" }}
+        "#
+        ))?;
 
     uv_snapshot!(context.filters(), context
         .lock()
