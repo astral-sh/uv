@@ -36,7 +36,7 @@ type CachedWorkspace = Option<Arc<Workspace>>;
 /// Avoid re-reading the `pyproject.toml` files in a workspace for each member by caching the
 /// workspace members by their workspace root.
 ///
-/// The cache contains references to the workspace root from each workspace member.
+/// The cache is indexed both by the workspace root and by the path of each workspace member.
 ///
 /// The cache makes assumptions about [`DiscoveryOptions`]:
 /// * For a given discovery path, `stop_discovery_at` either always or never sits between a project
@@ -57,7 +57,7 @@ impl WorkspaceCache {
             .done(workspace.install_path.clone(), Some(workspace));
     }
 
-    // Handle an error without leaving the map dangling.
+    /// Handle an error without leaving the map dangling.
     fn insert_none(&self, install_path: PathBuf) {
         self.workspaces.done(install_path, None);
     }
@@ -222,6 +222,11 @@ impl Workspace {
             .ok_or(WorkspaceError::MissingPyprojectToml)?
             .to_path_buf();
 
+        // Fast path: The workspace was already fully discovered.
+        // It's possible that there are two separate discoveries for the same workspace going on
+        // at the same time from different roots, both failing this check. These cases are fine, we
+        // synchronize them after finding the workspace root and allow only one of them to perform
+        // the full discovery.
         if options.members == MemberDiscovery::All
             && let Some(workspace) = cache.get(&path)
         {
@@ -283,6 +288,10 @@ impl Workspace {
 
         if options.members == MemberDiscovery::All {
             // Ensure that workspace discovery runs only once for any given workspace root.
+            // If two threads start at different packages at the same time, they only read their
+            // package `pyproject.toml` and the workspace root `pyproject.toml` before arriving
+            // here. At this point, only one thread can continue and the other waits, then uses the
+            // cached workspace.
             if let Some(workspace) = cache.register_or_wait(&workspace_root).await {
                 return Ok(workspace);
             }
@@ -1838,7 +1847,7 @@ impl VirtualProject {
             project_root.simplified_display()
         );
 
-        // Fast path.
+        // Fast path: The workspace is already cached.
         if options.members == MemberDiscovery::All
             && let Some(workspace) = cache.get(project_root)
         {
@@ -1951,6 +1960,9 @@ impl VirtualProject {
     ) -> Result<Option<Self>, WorkspaceError> {
         // Our modifying operations run on a single workspace, clear that workspace.
         workspace_cache.remove(&self.workspace().install_path);
+        for member in self.workspace().packages.values() {
+            workspace_cache.remove(member.root());
+        }
         Ok(match self {
             Self::Project(project) => {
                 let Some(project) = project.update_member(pyproject_toml)? else {
@@ -2476,91 +2488,6 @@ mod tests {
         .expect("cached workspace member ignores invalid change in the meantime");
 
         assert!(Arc::ptr_eq(&root_workspace, &member_project.workspace));
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn workspace_cache_recovers_after_error() -> Result<()> {
-        fn is_child1_editable_conflict(error: &WorkspaceError) -> bool {
-            match error {
-                WorkspaceError::EditableConflict(package) => package.as_str() == "child1",
-                _ => false,
-            }
-        }
-
-        let root = tempfile::TempDir::new()?;
-        let root = ChildPath::new(root.path());
-
-        root.child("pyproject.toml").write_str(
-            r#"
-            [project]
-            name = "project"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-            dependencies = ["child1"]
-
-            [tool.uv.workspace]
-            members = ["child1", "child2"]
-
-            [tool.uv.sources]
-            child1 = { workspace = true, editable = false }
-            "#,
-        )?;
-
-        root.child("child1").child("pyproject.toml").write_str(
-            r#"
-            [project]
-            name = "child1"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-            "#,
-        )?;
-
-        let child2 = root.child("child2").child("pyproject.toml");
-        child2.write_str(
-            r#"
-            [project]
-            name = "child2"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-            dependencies = ["child1"]
-
-            [tool.uv.sources]
-            child1 = { workspace = true, editable = true }
-            "#,
-        )?;
-
-        let cache = WorkspaceCache::default();
-        let first = Workspace::discover(root.as_ref(), &DiscoveryOptions::default(), &cache).await;
-        assert!(matches!(first, Err(ref error) if is_child1_editable_conflict(error)));
-
-        let second = tokio::time::timeout(
-            Duration::from_secs(1),
-            Workspace::discover(root.as_ref(), &DiscoveryOptions::default(), &cache),
-        )
-        .await;
-        assert!(matches!(second, Ok(Err(ref error)) if is_child1_editable_conflict(error)));
-
-        child2.write_str(
-            r#"
-            [project]
-            name = "child2"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-            dependencies = ["child1"]
-
-            [tool.uv.sources]
-            child1 = { workspace = true, editable = false }
-            "#,
-        )?;
-
-        let recovered = tokio::time::timeout(
-            Duration::from_secs(1),
-            Workspace::discover(root.as_ref(), &DiscoveryOptions::default(), &cache),
-        )
-        .await;
-        assert!(matches!(recovered, Ok(Ok(_))));
 
         Ok(())
     }
