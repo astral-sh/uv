@@ -2103,7 +2103,7 @@ fn tool_run_latest() {
 
 #[tokio::test]
 async fn tool_run_registry_inference_preserves_installed_tool() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"]).with_filtered_counts();
+    let context = uv_test::test_context_with_versions!(&["3.11"]).with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let foo_dir = context
@@ -2179,6 +2179,7 @@ async fn tool_run_registry_inference_preserves_installed_tool() -> Result<()> {
         .success();
 
     uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--no-python-downloads")
         .arg("--index-url")
         .arg(format!("{}/simple", server.uri()))
         .arg("foo")

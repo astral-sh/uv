@@ -261,6 +261,7 @@ pub(crate) async fn run(
         &workspace_cache,
         printer,
         preview,
+        RegistryPythonInference::DeferUntilReuseCheck,
     ))
     .await;
 
@@ -668,6 +669,12 @@ impl std::fmt::Display for ToolRequirement {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum RegistryPythonInference {
+    DeferUntilReuseCheck,
+    Enabled,
+}
+
 /// Get or create a [`PythonEnvironment`] in which to run the specified tools.
 ///
 /// If the target tool is already installed in a compatible environment, returns that
@@ -675,9 +682,9 @@ impl std::fmt::Display for ToolRequirement {
 async fn get_or_create_environment(
     request: &ToolRequest<'_>,
     with: &[RequirementsSource],
-    constraints: &[RequirementsSource],
-    overrides: &[RequirementsSource],
-    build_constraints: &[RequirementsSource],
+    constraint_sources: &[RequirementsSource],
+    override_sources: &[RequirementsSource],
+    build_constraint_sources: &[RequirementsSource],
     show_resolution: bool,
     python: Option<&str>,
     python_platform: Option<TargetTriple>,
@@ -695,6 +702,7 @@ async fn get_or_create_environment(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    registry_python_inference: RegistryPythonInference,
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -712,6 +720,24 @@ async fn get_or_create_environment(
         ToolRequest::Package { target, .. } => target.registry_requirement(),
         ToolRequest::Python { .. } => None,
     };
+    let has_registry_target = registry_target_requirement.is_some()
+        || unresolved_target_requirement
+            .as_ref()
+            .is_some_and(|requirement| {
+                matches!(
+                    &requirement.requirement,
+                    UnresolvedRequirement::Named(requirement)
+                        if matches!(&requirement.source, RequirementSource::Registry { .. })
+                )
+            });
+    let defer_registry_requires_python = matches!(
+        registry_python_inference,
+        RegistryPythonInference::DeferUntilReuseCheck
+    ) && has_registry_target
+        && !isolated
+        && !request.is_latest()
+        && constraint_sources.is_empty()
+        && override_sources.is_empty();
 
     // Determine explicit Python version requests
     let explicit_python_request = python.map(PythonRequest::parse);
@@ -745,7 +771,9 @@ async fn get_or_create_environment(
             .as_ref()
             .map(|requirement| &requirement.requirement),
         registry_target_requirement.as_ref(),
-        constraints.is_empty() && overrides.is_empty(),
+        !defer_registry_requires_python
+            && constraint_sources.is_empty()
+            && override_sources.is_empty(),
         false,
         lfs,
         state.git(),
@@ -755,7 +783,6 @@ async fn get_or_create_environment(
         cache,
     )
     .await?;
-    let installed_environment_request = tool_python.installed_environment_request().cloned();
     let python_request = tool_python.python_request;
 
     // Discover an interpreter.
@@ -953,8 +980,8 @@ async fn get_or_create_environment(
     // Read the `--with` requirements.
     let spec = RequirementsSpecification::from_sources(
         with,
-        constraints,
-        overrides,
+        constraint_sources,
+        override_sources,
         &[],
         None,
         client_builder,
@@ -1020,11 +1047,9 @@ async fn get_or_create_environment(
             let existing_environment = installed_tools
                 .get_environment(&requirement.name, cache)?
                 .filter(|environment| {
-                    installed_environment_request
-                        .as_ref()
-                        .is_none_or(|python_request| {
-                            python_request.satisfied(environment.environment().interpreter(), cache)
-                        })
+                    python_request.as_ref().is_none_or(|python_request| {
+                        python_request.satisfied(environment.environment().interpreter(), cache)
+                    })
                 });
 
             // Check if the installed packages meet the requirements.
@@ -1033,7 +1058,7 @@ async fn get_or_create_environment(
                     .get_tool_receipt(&requirement.name)
                     .ok()
                     .flatten()
-                    .is_some_and(|receipt| ToolOptions::from(options) == *receipt.options())
+                    .is_some_and(|receipt| ToolOptions::from(options.clone()) == *receipt.options())
                 {
                     let ResolverInstallerSettings {
                         resolver:
@@ -1088,6 +1113,35 @@ async fn get_or_create_environment(
         }
     }
 
+    if defer_registry_requires_python {
+        return Box::pin(get_or_create_environment(
+            request,
+            with,
+            constraint_sources,
+            override_sources,
+            build_constraint_sources,
+            show_resolution,
+            python,
+            python_platform,
+            install_mirrors,
+            options.clone(),
+            settings,
+            client_builder,
+            isolated,
+            lfs,
+            python_preference,
+            python_downloads,
+            installer_metadata,
+            concurrency,
+            cache,
+            workspace_cache,
+            printer,
+            preview,
+            RegistryPythonInference::Enabled,
+        ))
+        .await;
+    }
+
     // Create a `RequirementsSpecification` from the resolved requirements, to avoid re-resolving.
     let spec = EnvironmentSpecification::from(RequirementsSpecification {
         requirements: requirements
@@ -1108,7 +1162,7 @@ async fn get_or_create_environment(
 
     // Read the `--build-constraints` requirements.
     let build_constraints = Constraints::from_requirements(
-        operations::read_constraints(build_constraints, client_builder)
+        operations::read_constraints(build_constraint_sources, client_builder)
             .await?
             .into_iter()
             .map(|constraint| constraint.requirement),

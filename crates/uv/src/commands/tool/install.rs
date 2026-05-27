@@ -14,7 +14,7 @@ use uv_configuration::{
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirementSpecification,
+    RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -56,10 +56,10 @@ pub(crate) async fn install(
     editable: bool,
     from: Option<String>,
     with: &[RequirementsSource],
-    constraints: &[RequirementsSource],
-    overrides: &[RequirementsSource],
-    excludes: &[RequirementsSource],
-    build_constraints: &[RequirementsSource],
+    constraint_sources: &[RequirementsSource],
+    override_sources: &[RequirementsSource],
+    exclude_sources: &[RequirementsSource],
+    build_constraint_sources: &[RequirementsSource],
     entrypoints: &[PackageName],
     lfs: GitLfsSetting,
     python: Option<String>,
@@ -79,6 +79,8 @@ pub(crate) async fn install(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    defer_registry_requires_python: bool,
+    removed_invalid_tool_receipt: bool,
 ) -> Result<ExitStatus> {
     if settings.resolver.torch_backend.is_some() {
         warn_user_once!(
@@ -124,6 +126,25 @@ pub(crate) async fn install(
         }
         _ => None,
     };
+    let has_registry_target = registry_target_requirement.is_some()
+        || unresolved_target_requirements
+            .as_ref()
+            .is_some_and(|requirements| {
+                requirements.first().is_some_and(|requirement| {
+                    matches!(
+                        &requirement.requirement,
+                        UnresolvedRequirement::Named(requirement)
+                            if matches!(&requirement.source, RequirementSource::Registry { .. })
+                    )
+                })
+            });
+    let defer_registry_requires_python = defer_registry_requires_python
+        && python.is_none()
+        && has_registry_target
+        && !force
+        && settings.reinstall.is_none()
+        && constraint_sources.is_empty()
+        && override_sources.is_empty();
 
     let tool_python = ToolPython::from_request(
         python.as_deref().map(PythonRequest::parse),
@@ -132,7 +153,9 @@ pub(crate) async fn install(
             .and_then(|requirements| requirements.first())
             .map(|requirement| &requirement.requirement),
         registry_target_requirement.as_ref(),
-        constraints.is_empty() && overrides.is_empty(),
+        !defer_registry_requires_python
+            && constraint_sources.is_empty()
+            && override_sources.is_empty(),
         no_config,
         lfs,
         state.git(),
@@ -363,9 +386,9 @@ pub(crate) async fn install(
     // Read the `--with` requirements.
     let spec = RequirementsSpecification::from_sources(
         with,
-        constraints,
-        overrides,
-        excludes,
+        constraint_sources,
+        override_sources,
+        exclude_sources,
         None,
         &client_builder,
     )
@@ -452,14 +475,14 @@ pub(crate) async fn install(
 
     // Resolve the build constraints.
     let build_constraints: Vec<Requirement> =
-        operations::read_constraints(build_constraints, &client_builder)
+        operations::read_constraints(build_constraint_sources, &client_builder)
             .await?
             .into_iter()
             .map(|constraint| constraint.requirement)
             .collect();
 
     // Convert to tool options.
-    let options = ToolOptions::from(options);
+    let tool_options = ToolOptions::from(options.clone());
 
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
@@ -496,6 +519,7 @@ pub(crate) async fn install(
                 (None, true)
             }
         };
+    let invalid_tool_receipt = invalid_tool_receipt || removed_invalid_tool_receipt;
 
     let existing_environment = if force {
         None
@@ -514,6 +538,41 @@ pub(crate) async fn install(
                 )
             })
     };
+
+    if defer_registry_requires_python && existing_environment.is_none() {
+        drop(_lock);
+        return Box::pin(install(
+            package.clone(),
+            editable,
+            from.clone(),
+            with,
+            constraint_sources,
+            override_sources,
+            exclude_sources,
+            build_constraint_sources,
+            entrypoints,
+            lfs,
+            python.clone(),
+            python_platform,
+            install_mirrors,
+            force,
+            options,
+            settings.clone(),
+            client_builder,
+            python_preference,
+            python_downloads,
+            installer_metadata,
+            concurrency,
+            no_config,
+            cache,
+            workspace_cache,
+            printer,
+            preview,
+            false,
+            invalid_tool_receipt,
+        ))
+        .await;
+    }
 
     // If the requested and receipt requirements are the same...
     if let Some(environment) = existing_environment.as_ref().filter(|_| {
@@ -578,10 +637,10 @@ pub(crate) async fn install(
                     Ok(SatisfiesResult::Fresh { .. })
                 ) {
                     // Then we're done! Though we might need to update the receipt.
-                    if *tool_receipt.options() != options {
+                    if *tool_receipt.options() != tool_options {
                         installed_tools.add_tool_receipt(
                             package_name,
-                            tool_receipt.clone().with_options(options),
+                            tool_receipt.clone().with_options(tool_options),
                         )?;
                     }
 
@@ -805,7 +864,7 @@ pub(crate) async fn install(
         package_name,
         entrypoints,
         &installed_tools,
-        &options,
+        &tool_options,
         force || invalid_tool_receipt,
         // Only persist the Python request if it was explicitly provided
         if explicit_python_request {

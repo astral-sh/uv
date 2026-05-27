@@ -148,11 +148,6 @@ pub(crate) struct ToolPython {
     /// The selected Python request, computed by considering an explicit request, a global
     /// version file, and static `requires-python` metadata from the target requirement.
     pub(crate) python_request: Option<PythonRequest>,
-    /// The Python request to apply when considering an existing installed tool environment.
-    ///
-    /// Registry metadata describes a new resolution of a tool, not an already-installed
-    /// version that may still be reusable.
-    installed_environment_request: Option<PythonRequest>,
 }
 
 impl ToolPython {
@@ -219,23 +214,16 @@ impl ToolPython {
             (None, None)
         };
 
-        let (source, selected_python_request) = Self::select_request(
-            python_request.clone(),
+        let (source, python_request) = Self::select_request(
+            python_request,
             source_requires_python
                 .as_ref()
                 .or(registry_requires_python.as_ref()),
             no_config,
         )
         .await?;
-        let installed_environment_request = if registry_requires_python.is_some() {
-            Self::select_request(python_request, source_requires_python.as_ref(), no_config)
-                .await?
-                .1
-        } else {
-            selected_python_request.clone()
-        };
 
-        if let Some(python_request) = selected_python_request.as_ref() {
+        if let Some(python_request) = python_request.as_ref() {
             debug!(
                 "Using Python request `{}` from {source}",
                 python_request.to_canonical_string()
@@ -244,8 +232,7 @@ impl ToolPython {
 
         Ok(Self {
             source,
-            python_request: selected_python_request,
-            installed_environment_request,
+            python_request,
         })
     }
 
@@ -285,11 +272,6 @@ impl ToolPython {
     /// Returns `true` if the selected request was explicitly provided by the user.
     pub(crate) fn is_explicit(&self) -> bool {
         matches!(self.source, PythonRequestSource::UserRequest)
-    }
-
-    /// Return the Python request to apply when considering an installed tool environment.
-    pub(crate) fn installed_environment_request(&self) -> Option<&PythonRequest> {
-        self.installed_environment_request.as_ref()
     }
 }
 
