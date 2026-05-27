@@ -4713,7 +4713,7 @@ fn add_standard_library_error() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because pickle was not found in the package registry and your project depends on pickle, we can conclude that your project's requirements are unsatisfiable.
 
-    hint: The module `pickle` is included in the Python standard library for the current interpreter and usually should not be added as a dependency
+    hint: The module `pickle` is included in the Python standard library and usually should not be added as a dependency
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     ");
 

@@ -659,7 +659,7 @@ pub(crate) async fn add(
             )
         {
             Some(format!(
-                "The module `{}` is included in the Python standard library for the current interpreter and usually should not be added as a dependency",
+                "The module `{}` is included in the Python standard library and usually should not be added as a dependency",
                 edit.requirement.name
             ))
         } else {
