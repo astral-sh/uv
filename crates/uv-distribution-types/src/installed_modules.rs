@@ -1,3 +1,12 @@
+//! Discovers importable modules provided by an installed wheel.
+//!
+//! Installed wheels record installed paths in `<name>-<version>.dist-info/RECORD`. Python source
+//! files, legacy sourceless bytecode, and recognized native extension modules located under the
+//! import root contribute a [`ModuleName`] and its parent package prefixes.
+//!
+//! This is intentionally file-based: it does not infer modules exposed through `.pth` files,
+//! legacy namespace declarations in `__init__.py`, or `.pyi`-only stub distributions.
+
 use std::collections::BTreeSet;
 use std::path::{Component, Path};
 
@@ -36,12 +45,15 @@ fn add_record_module(path: &str, modules: &mut BTreeSet<ModuleName>) {
         return;
     };
 
+    // Metadata and other entries under `.dist-info` directories are not modules.
     if components
         .iter()
         .any(|component| has_extension(component, "dist-info"))
     {
         return;
     }
+    // Files in a `.data` directory that were not relocated into the import root are not modules.
+    // Relocated files are recorded at their installed paths instead.
     if components
         .first()
         .is_some_and(|component| has_extension(component, "data"))
@@ -54,8 +66,7 @@ fn add_record_module(path: &str, modules: &mut BTreeSet<ModuleName>) {
         // The parent path is the package.
     } else if let Some(stem) = file_name.strip_suffix(".py") {
         module_components.push(stem);
-    } else if let Some((stem, bytecode_parents)) = bytecode_module_stem(file_name, parents) {
-        module_components = bytecode_parents.iter().map(String::as_str).collect();
+    } else if let Some(stem) = bytecode_module_stem(file_name, parents) {
         if stem != "__init__" {
             module_components.push(stem);
         }
@@ -92,10 +103,12 @@ fn record_path_components(path: &str) -> Option<Vec<String>> {
     Some(components)
 }
 
-fn bytecode_module_stem<'a>(
-    file_name: &'a str,
-    parents: &'a [String],
-) -> Option<(&'a str, &'a [String])> {
+/// Return the module stem for importable sourceless bytecode in a `RECORD` path.
+///
+/// CPython can import `package/module.pyc` directly when only bytecode is installed. In
+/// contrast, `package/__pycache__/module.cpython-312.pyc` is not an import source without
+/// `package/module.py`.
+fn bytecode_module_stem<'a>(file_name: &'a str, parents: &[String]) -> Option<&'a str> {
     let stem = file_name.strip_suffix(".pyc")?;
     if parents.last().is_some_and(|parent| parent == "__pycache__") {
         // A `.pyc` file in `__pycache__` does not make the module importable
@@ -104,9 +117,15 @@ fn bytecode_module_stem<'a>(
         return None;
     }
 
-    Some((stem, parents))
+    Some(stem)
 }
 
+/// Return the module stem for a supported native extension module filename.
+///
+/// Extension modules can be named `module.so` or `module.pyd`, or include an interpreter-specific
+/// suffix such as `module.cpython-312-darwin.so` or `module.cp312-win_amd64.pyd`. Dotted names
+/// with unrecognized suffixes are rejected instead of treating arbitrary shared libraries as
+/// Python modules.
 fn extension_module_stem(file_name: &str) -> Option<&str> {
     let stem = file_name
         .strip_suffix(".so")

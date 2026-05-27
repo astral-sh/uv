@@ -26,6 +26,11 @@ use crate::commands::project::sync::do_sync;
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverSettings};
 
+/// Sync all locked extras and groups as needed, then map importable modules to package IDs.
+///
+/// This uses a sufficient (inexact) sync so required distributions are available to inspect
+/// without removing unrelated packages from an existing environment. Only distributions in the
+/// selected resolution are assigned package IDs, so those unrelated packages are not reported.
 pub(crate) async fn collect_module_owners(
     workspace: &Workspace,
     lock: &Lock,
