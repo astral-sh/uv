@@ -17,6 +17,7 @@ use uv_python::PythonVersion;
 
 /// A complete packse scenario definition.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Scenario {
     /// The scenario name (e.g., `"fork-basic"`).
     pub name: String,
@@ -74,12 +75,14 @@ impl Scenario {
 
 /// A package with one or more versions.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Package {
     pub versions: BTreeMap<Version, PackageMetadata>,
 }
 
 /// Metadata for a single version of a package.
 #[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct PackageMetadata {
     /// The `Requires-Python` specifier. Defaults to `">=3.12"`.
     #[serde(default = "default_requires_python")]
@@ -113,6 +116,7 @@ pub struct PackageMetadata {
 
 /// The root/entrypoint package.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RootPackage {
     /// `Requires-Python` for the root.
     #[serde(default = "default_requires_python")]
@@ -125,6 +129,7 @@ pub struct RootPackage {
 
 /// Expected resolution outcome.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Expected {
     /// Whether the scenario is satisfiable.
     pub satisfiable: bool,
@@ -140,6 +145,7 @@ pub struct Expected {
 
 /// Python environment metadata.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Environment {
     /// Active Python version.
     #[serde(default = "default_python")]
@@ -161,6 +167,7 @@ impl Default for Environment {
 
 /// Additional resolver options.
 #[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ResolverOptions {
     /// Python version override for resolution.
     #[serde(default)]
@@ -285,6 +292,24 @@ satisfiable = true
 
 [packages.a.versions."1.0.0"]
 requires_python = "not a specifier"
+"#;
+
+        assert!(toml::from_str::<Scenario>(toml).is_err());
+    }
+
+    #[test]
+    fn reject_unknown_metadata_field() {
+        let toml = r#"
+name = "unknown-metadata-field"
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+
+[packages.a.versions."1.0.0"]
+wheels = false
 "#;
 
         assert!(toml::from_str::<Scenario>(toml).is_err());
