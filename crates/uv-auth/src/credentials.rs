@@ -806,6 +806,40 @@ mod tests {
         );
     }
 
+    /// A caller that already set `x-ms-version` should have it preserved, not overwritten.
+    ///
+    /// The signing path uses `entry().or_insert()` so that users who need a specific API
+    /// version (e.g., for preview features) can supply it themselves.
+    #[tokio::test]
+    async fn authenticated_request_with_azure_signer_preserves_caller_ms_version() {
+        let custom_version = "2020-08-04";
+        let signer = reqsign::azure::default_signer().with_credential_provider(
+            reqsign::azure::StaticCredentialProvider::new_bearer_token("token"),
+        );
+        let authentication = Authentication::from(signer);
+
+        let mut request = Request::new(
+            reqwest::Method::GET,
+            Url::parse("https://account.blob.core.windows.net/container/blob.whl").unwrap(),
+        );
+        request.headers_mut().insert(
+            HeaderName::from_static("x-ms-version"),
+            HeaderValue::from_static(custom_version),
+        );
+        let request = authentication.authenticate(request).await.unwrap();
+
+        assert_eq!(
+            request
+                .headers()
+                .get("x-ms-version")
+                .expect("x-ms-version header should be set")
+                .to_str()
+                .unwrap(),
+            custom_version,
+            "A caller-supplied x-ms-version should not be overwritten by the signer"
+        );
+    }
+
     #[tokio::test]
     async fn authenticated_request_with_aws_signer_missing_credentials() {
         let signer = reqsign::aws::default_signer("s3", "us-east-1")
