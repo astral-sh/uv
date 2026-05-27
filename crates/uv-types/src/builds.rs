@@ -274,6 +274,24 @@ pub struct LockedBuildDependency {
     pub dist: ResolvedDist,
     /// The extras requested on this direct build requirement.
     pub extras: BTreeSet<ExtraName>,
+    /// The selected distribution and its transitive installable dependencies.
+    resolution: Resolution,
+}
+
+impl LockedBuildDependency {
+    /// Create a locked direct build dependency and its installable closure.
+    pub fn new(dist: ResolvedDist, extras: BTreeSet<ExtraName>, resolution: Resolution) -> Self {
+        Self {
+            dist,
+            extras,
+            resolution,
+        }
+    }
+
+    /// Return the installable closure for this direct dependency.
+    pub fn resolution(&self) -> &Resolution {
+        &self.resolution
+    }
 }
 
 impl LockedBuildResolutions {

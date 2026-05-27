@@ -1570,12 +1570,16 @@ fn lock_build_dependencies_static_metadata_captures_hook_requirements() -> Resul
     )?;
     dep_dir.child("build_backend.py").write_str(
         r#"
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from zipfile import ZipFile
 
 def get_requires_for_build_wheel(config_settings=None):
-    return ["helper"]
+    try:
+        version("helper")
+    except PackageNotFoundError:
+        return ["helper"]
+    raise RuntimeError("helper is installed before the backend hook runs")
 
 def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     if version("helper") != "0.1.0":

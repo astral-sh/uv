@@ -1177,12 +1177,28 @@ impl Lock {
         package_by_id: &FxHashMap<PackageId, &Package>,
         markers: Option<&MarkerEnvironment>,
     ) -> Option<Vec<PackageId>> {
+        self.build_dependency_package_ids_from(
+            package,
+            &package.build_dependencies,
+            package_by_id,
+            markers,
+        )
+    }
+
+    /// Walk the build dependency graph starting from the given direct dependencies.
+    fn build_dependency_package_ids_from(
+        &self,
+        package: &Package,
+        build_dependencies: &[BuildDependency],
+        package_by_id: &FxHashMap<PackageId, &Package>,
+        markers: Option<&MarkerEnvironment>,
+    ) -> Option<Vec<PackageId>> {
         let mut dependency_ids = Vec::new();
         let mut emitted: FxHashSet<PackageId> = FxHashSet::default();
         let mut seen: FxHashSet<(PackageId, Option<ExtraName>)> = FxHashSet::default();
         let mut queue: VecDeque<(PackageId, Option<ExtraName>)> = VecDeque::new();
 
-        for build_dep in &package.build_dependencies {
+        for build_dep in build_dependencies {
             if let Some(markers) = markers
                 && let Some(marker) = build_dep.marker()
             {
@@ -1370,13 +1386,42 @@ impl Lock {
                     build_options,
                     markers,
                 )?;
-                direct_dependencies.push(LockedBuildDependency {
-                    dist: ResolvedDist::Installable {
+                let mut dependency_graph = petgraph::graph::DiGraph::new();
+                let Some(dependency_ids) = self.build_dependency_package_ids_from(
+                    package,
+                    std::slice::from_ref(build_dependency),
+                    &package_by_id,
+                    Some(markers),
+                ) else {
+                    continue;
+                };
+                for dependency_id in dependency_ids {
+                    let Some(dependency_package) = package_by_id.get(&dependency_id) else {
+                        continue;
+                    };
+                    let HashedDist { dist, hashes } = dependency_package.to_dist(
+                        workspace_root,
+                        tag_policy,
+                        build_options,
+                        markers,
+                    )?;
+                    dependency_graph.add_node(Node::Dist {
+                        dist: ResolvedDist::Installable {
+                            dist: Arc::new(dist),
+                            version: dependency_package.version().cloned(),
+                        },
+                        hashes,
+                        install: true,
+                    });
+                }
+                direct_dependencies.push(LockedBuildDependency::new(
+                    ResolvedDist::Installable {
                         dist: Arc::new(dist),
                         version: dependency_package.version().cloned(),
                     },
-                    extras: build_dependency.extras().clone(),
-                });
+                    build_dependency.extras().clone(),
+                    uv_distribution_types::Resolution::new(dependency_graph),
+                ));
             }
 
             let key = build_key_for_package(package, workspace_root);

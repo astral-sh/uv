@@ -356,6 +356,26 @@ impl<'a> BuildDispatch<'a> {
                     .any(|dependency| locked_dependency_satisfies(requirement, dependency))
             })
     }
+
+    fn locked_initial_resolution(
+        &self,
+        resolution: &LockedBuildResolution,
+        requirements: &[Requirement],
+    ) -> Option<Resolution> {
+        let markers = self.interpreter.resolver_marker_environment();
+        let mut selected = Resolution::default();
+        for requirement in requirements
+            .iter()
+            .filter(|requirement| requirement.evaluate_markers(Some(&markers), &[]))
+        {
+            let dependency = resolution
+                .direct_dependencies()
+                .iter()
+                .find(|dependency| locked_dependency_satisfies(requirement, dependency))?;
+            selected.extend(dependency.resolution());
+        }
+        Some(selected)
+    }
 }
 
 fn locked_dependency_satisfies(
@@ -475,17 +495,20 @@ impl BuildContext for BuildDispatch<'_> {
         if let Some(package) = package
             && let Some(locked_resolution) = self.locked_build_resolutions.get(package)
         {
-            if validate_locked_requirements.is_none_or(|requirements| {
+            let resolution = if let Some(requirements) = validate_locked_requirements {
                 self.locked_resolution_satisfies(locked_resolution, requirements)
-            }) {
-                let resolution = locked_resolution.resolution();
+                    .then(|| locked_resolution.resolution().clone())
+            } else {
+                self.locked_initial_resolution(locked_resolution, requirements)
+            };
+            if let Some(resolution) = resolution {
                 debug!(
                     "Using locked build resolution for `{}=={:?}` (skipping resolver)",
                     package.name, package.version
                 );
-                let hasher = HashStrategy::from_resolution(resolution, HashCheckingMode::Verify)
+                let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)
                     .map_err(anyhow::Error::from)?;
-                return Ok(ResolvedRequirements::new(resolution.clone(), hasher));
+                return Ok(ResolvedRequirements::new(resolution, hasher));
             }
             debug!(
                 "Locked build resolution for `{}=={:?}` does not satisfy backend hook requirements",
