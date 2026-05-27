@@ -1064,6 +1064,7 @@ impl Lock {
         for package in &mut self.packages {
             if let Some(deps) = lookup_build_key_value(&build_dep_refs, package, root) {
                 package.build_dependencies.clone_from(deps);
+                package.build_dependencies_resolved = true;
             }
 
             // Store the original build-system.requires in metadata for satisfies() checks.
@@ -1120,7 +1121,7 @@ impl Lock {
             if matches!(package.id.source, Source::Virtual(_)) {
                 continue;
             }
-            if !package.build_dependencies.is_empty() {
+            if package.build_dependencies_resolved {
                 continue;
             }
             if build_options.no_build_package(&package.id.name) {
@@ -3600,6 +3601,8 @@ pub struct Package {
     /// The resolved build dependencies of the package (packages needed to build this
     /// package from a source distribution).
     build_dependencies: Vec<BuildDependency>,
+    /// Whether the build dependency resolution was captured, including an empty resolution.
+    build_dependencies_resolved: bool,
     /// The exact requirements from the package metadata.
     metadata: PackageMetadata,
 }
@@ -3670,6 +3673,7 @@ impl Package {
             optional_dependencies: BTreeMap::default(),
             dependency_groups: BTreeMap::default(),
             build_dependencies: vec![],
+            build_dependencies_resolved: false,
             metadata: PackageMetadata {
                 requires_dist,
                 provides_extra,
@@ -3720,6 +3724,7 @@ impl Package {
             optional_dependencies: BTreeMap::default(),
             dependency_groups: BTreeMap::default(),
             build_dependencies: vec![],
+            build_dependencies_resolved: false,
             metadata: PackageMetadata {
                 requires_dist: BTreeSet::default(),
                 provides_extra: Box::default(),
@@ -4376,12 +4381,16 @@ impl Package {
             }
         }
 
-        if !self.build_dependencies.is_empty() {
-            let deps = each_element_on_its_line_array(
-                self.build_dependencies
-                    .iter()
-                    .map(|dep| dep.to_toml(dist_count_by_name).into_inline_table()),
-            );
+        if self.build_dependencies_resolved || !self.build_dependencies.is_empty() {
+            let deps = if self.build_dependencies.is_empty() {
+                Array::new()
+            } else {
+                each_element_on_its_line_array(
+                    self.build_dependencies
+                        .iter()
+                        .map(|dep| dep.to_toml(dist_count_by_name).into_inline_table()),
+                )
+            };
             table.insert("build-dependencies", value(deps));
         }
 
@@ -4683,7 +4692,7 @@ struct PackageWire {
     #[serde(default, rename = "dev-dependencies", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, Vec<DependencyWire>>,
     #[serde(default, rename = "build-dependencies")]
-    build_dependencies: Vec<BuildDependencyWire>,
+    build_dependencies: Option<Vec<BuildDependencyWire>>,
 }
 
 #[derive(Clone, Default, Debug, Eq, PartialEq, serde::Deserialize)]
@@ -4729,6 +4738,13 @@ impl PackageWire {
                 .map(|dep| dep.unwire(requires_python, unambiguous_package_ids))
                 .collect()
         };
+        let build_dependencies_resolved = self.build_dependencies.is_some();
+        let build_dependencies = self
+            .build_dependencies
+            .unwrap_or_default()
+            .into_iter()
+            .map(|dep| dep.unwire(unambiguous_package_ids))
+            .collect::<Result<_, _>>()?;
 
         Ok(Package {
             id: self.id,
@@ -4752,11 +4768,8 @@ impl PackageWire {
                 .into_iter()
                 .map(|(group, deps)| Ok((group, unwire_deps(deps)?)))
                 .collect::<Result<_, LockError>>()?,
-            build_dependencies: self
-                .build_dependencies
-                .into_iter()
-                .map(|dep| dep.unwire(unambiguous_package_ids))
-                .collect::<Result<_, _>>()?,
+            build_dependencies,
+            build_dependencies_resolved,
         })
     }
 }
@@ -8059,6 +8072,7 @@ mod tests {
         ($expr:expr) => {{
             let expr = format!("{:#?}", $expr)
                 .replace("                build_dependencies: [],\n", "")
+                .replace("                build_dependencies_resolved: false,\n", "")
                 .replace("                    build_requires: {},\n", "");
             insta::assert_snapshot!(expr);
         }};
