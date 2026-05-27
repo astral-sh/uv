@@ -4273,6 +4273,85 @@ fn lock_build_dependencies_no_build_disables_locking() -> Result<()> {
     Ok(())
 }
 
+/// Verify a revision-3 lock remains reusable when all builds are disabled.
+#[tokio::test]
+async fn lock_build_dependencies_no_build_reuses_revision_3() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let artifacts = context.temp_dir.child("artifacts");
+    artifacts.create_dir_all()?;
+    write_wheel(
+        &artifacts.child("runtime-0.1.0-py3-none-any.whl"),
+        "runtime",
+        "0.1.0",
+    )?;
+
+    let server = MockServer::start().await;
+    let index_url = format!("{}/simple/", server.uri());
+    Mock::given(method("GET"))
+        .and(path("/simple/runtime/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"<a href="{}/files/runtime-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">runtime-0.1.0-py3-none-any.whl</a>"#,
+                server.uri()
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/runtime-0.1.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(
+            artifacts.child("runtime-0.1.0-py3-none-any.whl").path(),
+        )?))
+        .mount(&server)
+        .await;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["runtime==0.1.0"]
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-build")
+        .arg("--index-url")
+        .arg(&index_url)
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains("revision = 3"), "{lock}");
+    assert!(!lock.contains("build-dependencies = ["), "{lock}");
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-build")
+        .arg("--index-url")
+        .arg(&index_url)
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Verify that a lock created with `--no-build` is not reused when build
 /// dependency locking is later requested without `--no-build`.
 #[test]
