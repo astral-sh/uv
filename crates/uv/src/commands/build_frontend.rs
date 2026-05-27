@@ -122,7 +122,7 @@ impl Hint for Error {
                     })
                 {
                     Hints::from(
-                        "This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions.",
+                        "The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.",
                     )
                 } else {
                     Hints::none()

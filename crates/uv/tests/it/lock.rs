@@ -3265,9 +3265,9 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because your project depends on sortedcontainers==2.3.0 and project:foo depends on sortedcontainers==2.4.0, we can conclude that your project and project:foo are incompatible.
-    And because your project requires your project and project:foo, we can conclude that your project's requirements are unsatisfiable.
+                 And because your project requires your project and project:foo, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     // And now with the same group configuration, we tell uv about the
@@ -3675,9 +3675,9 @@ fn lock_conflicting_workspace_members_depends_direct() -> Result<()> {
 
     ----- stderr -----
     warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
-    error: No solution found when resolving dependencies for split (included: example; excluded: subexample):
+    error: No solution found when resolving dependencies for split (included: example; excluded: subexample)
       Caused by: Because subexample depends on sortedcontainers==2.4.0 and example depends on sortedcontainers==2.3.0, we can conclude that example and subexample are incompatible.
-    And because example depends on subexample and your workspace requires example, we can conclude that your workspace's requirements are unsatisfiable.
+                 And because example depends on subexample and your workspace requires example, we can conclude that your workspace's requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -3972,10 +3972,10 @@ fn lock_conflicting_workspace_members_depends_transitive() -> Result<()> {
 
     ----- stderr -----
     warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
-    error: No solution found when resolving dependencies for split (included: example; excluded: subexample):
+    error: No solution found when resolving dependencies for split (included: example; excluded: subexample)
       Caused by: Because subexample depends on sortedcontainers==2.4.0 and indirection depends on subexample, we can conclude that indirection depends on sortedcontainers==2.4.0.
-    And because example depends on sortedcontainers==2.3.0, we can conclude that example and indirection are incompatible.
-    And because your workspace requires example and indirection, we can conclude that your workspace's requirements are unsatisfiable.
+                 And because example depends on sortedcontainers==2.3.0, we can conclude that example and indirection are incompatible.
+                 And because your workspace requires example and indirection, we can conclude that your workspace's requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -4426,9 +4426,9 @@ fn lock_conflicting_mixed() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because project:project1 depends on sortedcontainers==2.3.0 and project[project2] depends on sortedcontainers==2.4.0, we can conclude that project:project1 and project[project2] are incompatible.
-    And because your project requires project[project2] and project:project1, we can conclude that your project's requirements are unsatisfiable.
+                 And because your project requires project[project2] and project:project1, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     // And now with the same extra/group configuration, we tell uv
@@ -5785,20 +5785,20 @@ fn lock_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.7' and python_full_version < '3.7.9'):
+    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.7' and python_full_version < '3.7.9')
       Caused by: Because the requested Python version (>=3.7) does not satisfy Python>=3.7.9 and pygls>=1.1.0,<=1.2.1 depends on Python>=3.7.9,<4, we can conclude that pygls>=1.1.0,<=1.2.1 cannot be used.
-    And because only the following versions of pygls are available:
-        pygls<=1.1.0
-        pygls==1.1.1
-        pygls==1.1.2
-        pygls==1.2.0
-        pygls==1.2.1
-        pygls==1.3.0
-    we can conclude that pygls>=1.1.0,<1.3.0 cannot be used. (1)
+                 And because only the following versions of pygls are available:
+                     pygls<=1.1.0
+                     pygls==1.1.1
+                     pygls==1.1.2
+                     pygls==1.2.0
+                     pygls==1.2.1
+                     pygls==1.3.0
+                 we can conclude that pygls>=1.1.0,<1.3.0 cannot be used. (1)
 
-    Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and pygls==1.3.0 depends on Python>=3.8, we can conclude that pygls==1.3.0 cannot be used.
-    And because we know from (1) that pygls>=1.1.0,<1.3.0 cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
-    And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
+                 Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and pygls==1.3.0 depends on Python>=3.8, we can conclude that pygls==1.3.0 cannot be used.
+                 And because we know from (1) that pygls>=1.1.0,<1.3.0 cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
+                 And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
 
     hint: While the active Python version is 3.12, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
 
@@ -9129,11 +9129,11 @@ fn lock_invalid_hash() -> Result<()> {
     error: Failed to download `idna==3.6`
       Caused by: Hash mismatch for `idna==3.6`
 
-    Expected:
-      sha256:d05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+                 Expected:
+                   sha256:d05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
 
-    Computed:
-      sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+                 Computed:
+                   sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
 
     hint: `idna` (v3.6) was included because `project` (v0.1.0) depends on `anyio` (v3.7.0) which depends on `idna`
     ");
@@ -9689,7 +9689,7 @@ fn lock_requires_python_no_wheels() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because dearpygui==1.9.1 has no wheels with a matching Python version tag (e.g., `cp312`) and your project depends on dearpygui==1.9.1, we can conclude that your project's requirements are unsatisfiable.
 
     hint: Wheels are available for `dearpygui` (v1.9.1) with the following Python ABI tags: `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
@@ -10392,9 +10392,9 @@ async fn lock_index_workspace_member() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because iniconfig was not found in the package registry and child depends on iniconfig>=2, we can conclude that child's requirements are unsatisfiable.
-    And because your workspace requires child, we can conclude that your workspace's requirements are unsatisfiable.
+                 And because your workspace requires child, we can conclude that your workspace's requirements are unsatisfiable.
     ");
 
     uv_snapshot!(context.filters(), context.lock()
@@ -11400,7 +11400,7 @@ async fn lock_env_credentials() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
@@ -14303,8 +14303,8 @@ fn lock_editable() -> Result<()> {
     ----- stderr -----
     error: Failed to resolve dependencies for `workspace` (v0.1.0)
       Caused by: Requirements contain conflicting URLs for package `library` in all marker environments:
-    - file://[TEMP_DIR]/library
-    - file://[TEMP_DIR]/library (editable)
+                 - file://[TEMP_DIR]/library
+                 - file://[TEMP_DIR]/library (editable)
     ");
 
     Ok(())
@@ -15390,7 +15390,7 @@ fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()>
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because your project depends on datasets<2.19 and datasets>=2.19, we can conclude that your project's requirements are unsatisfiable.
     ");
 
@@ -16169,9 +16169,9 @@ fn lock_add_member_with_build_system() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because anyio was not found in the cache and leaf depends on anyio>3, we can conclude that leaf's requirements are unsatisfiable.
-    And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
+                 And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
@@ -16377,9 +16377,9 @@ fn lock_add_member_without_build_system() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because anyio was not found in the cache and leaf depends on anyio>3, we can conclude that leaf's requirements are unsatisfiable.
-    And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
+                 And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
@@ -19264,9 +19264,9 @@ fn lock_non_project_member_conflicts() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because member-a depends on sortedcontainers==2.3.0 and member-b depends on sortedcontainers==2.4.0, we can conclude that member-a and member-b are incompatible.
-    And because your workspace requires member-a and member-b, we can conclude that your workspace's requirements are unsatisfiable.
+                 And because your workspace requires member-a and member-b, we can conclude that your workspace's requirements are unsatisfiable.
     ");
 
     pyproject_toml.write_str(
@@ -20164,10 +20164,10 @@ fn lock_invalid_index() -> Result<()> {
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 9, column 31
-      |
-    9 |         iniconfig = { index = "internal proxy" }
-      |                               ^^^^^^^^^^^^^^^^
-    Index names may only contain letters, digits, hyphens, underscores, and periods, but found unsupported character (` `) in: `internal proxy`
+                   |
+                 9 |         iniconfig = { index = "internal proxy" }
+                   |                               ^^^^^^^^^^^^^^^^
+                 Index names may only contain letters, digits, hyphens, underscores, and periods, but found unsupported character (` `) in: `internal proxy`
     "#);
 
     Ok(())
@@ -20402,7 +20402,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Recording unit propagation conflict of anyio from incompatibility of (project)
     DEBUG Searching for a compatible version of project @ file://[TEMP_DIR]/ (<0.1.0 | >0.1.0)
     DEBUG No compatible version found for: project
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
     "#);
 
@@ -20481,10 +20481,10 @@ fn lock_unnamed_explicit_index() -> Result<()> {
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 8, column 9
-      |
-    8 |         [[tool.uv.index]]
-      |         ^^^^^^^^^^^^^^^^^
-    An index with `explicit = true` requires a `name`: https://test.pypi.org/simple
+                   |
+                 8 |         [[tool.uv.index]]
+                   |         ^^^^^^^^^^^^^^^^^
+                 An index with `explicit = true` requires a `name`: https://test.pypi.org/simple
     ");
 
     Ok(())
@@ -20513,7 +20513,7 @@ fn lock_invalid_index_cache_control() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -20522,17 +20522,17 @@ fn lock_invalid_index_cache_control() -> Result<()> {
     warning: Failed to parse `pyproject.toml` during settings discovery:
       TOML parse error at line 11, column 9
          |
-      11 |         cache-control.api = \"\"\"
+      11 |         cache-control.api = """
          |         ^^^^^^^^^^^^^
       `cache-control.api` must be a valid HTTP header value
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 11, column 9
-       |
-    11 |         cache-control.api = \"\"\"
-       |         ^^^^^^^^^^^^^
-    `cache-control.api` must be a valid HTTP header value
-    ");
+                    |
+                 11 |         cache-control.api = """
+                    |         ^^^^^^^^^^^^^
+                 `cache-control.api` must be a valid HTTP header value
+    "#);
 
     Ok(())
 }
@@ -20704,7 +20704,7 @@ fn lock_default_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
     ");
 
@@ -20973,10 +20973,10 @@ fn lock_repeat_named_index() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 8, column 9
-      |
-    8 |         [[tool.uv.index]]
-      |         ^^^^^^^^^^^^^^^^^
-    duplicate index name `pytorch`
+                   |
+                 8 |         [[tool.uv.index]]
+                   |         ^^^^^^^^^^^^^^^^^
+                 duplicate index name `pytorch`
     ");
 
     Ok(())
@@ -21016,10 +21016,10 @@ fn lock_multiple_default_indexes() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 8, column 9
-      |
-    8 |         [[tool.uv.index]]
-      |         ^^^^^^^^^^^^^^^^^
-    found multiple indexes with `default = true`; only one index may be marked as default
+                   |
+                 8 |         [[tool.uv.index]]
+                   |         ^^^^^^^^^^^^^^^^^
+                 found multiple indexes with `default = true`; only one index may be marked as default
     ");
 
     Ok(())
@@ -23218,10 +23218,10 @@ fn lock_duplicate_sources() -> Result<()> {
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 9, column 9
-      |
-    9 |         python-multipart = { url = "https://files.pythonhosted.org/packages/c0/3e/9fbfd74e7f5b54f653f7ca99d44ceb56e718846920162165061c4c22b71a/python_multipart-0.0.8-py3-none-any.whl" }
-      |         ^^^^^^^^^^^^^^^^
-    duplicate key
+                   |
+                 9 |         python-multipart = { url = "https://files.pythonhosted.org/packages/c0/3e/9fbfd74e7f5b54f653f7ca99d44ceb56e718846920162165061c4c22b71a/python_multipart-0.0.8-py3-none-any.whl" }
+                   |         ^^^^^^^^^^^^^^^^
+                 duplicate key
     "#);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -23246,10 +23246,10 @@ fn lock_duplicate_sources() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 7, column 9
-      |
-    7 |         [tool.uv.sources]
-      |         ^^^^^^^^^^^^^^^^^
-    duplicate sources for package `python-multipart`
+                   |
+                 7 |         [tool.uv.sources]
+                   |         ^^^^^^^^^^^^^^^^^
+                 duplicate sources for package `python-multipart`
     ");
 
     Ok(())
@@ -23291,10 +23291,10 @@ fn lock_invalid_project_table() -> Result<()> {
     error: Failed to build `b @ file://[TEMP_DIR]/b`
       Caused by: Failed to parse metadata from built wheel
       Caused by: TOML parse error at line 2, column 10
-      |
-    2 |         [project.urls]
-      |          ^^^^^^^
-    `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
+                   |
+                 2 |         [project.urls]
+                   |          ^^^^^^^
+                 `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
     ");
 
     Ok(())
@@ -23322,10 +23322,10 @@ fn lock_missing_name() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 1
-      |
-    1 | [project]
-      | ^^^^^^^^^
-    `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
+                   |
+                 1 | [project]
+                   | ^^^^^^^^^
+                 `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
     ");
 
     Ok(())
@@ -23353,10 +23353,10 @@ fn lock_missing_version() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 1
-      |
-    1 | [project]
-      | ^^^^^^^^^
-    `pyproject.toml` is using the `[project]` table, but the required `project.version` field is neither set nor present in the `project.dynamic` list
+                   |
+                 1 | [project]
+                   | ^^^^^^^^^
+                 `pyproject.toml` is using the `[project]` table, but the required `project.version` field is neither set nor present in the `project.dynamic` list
     ");
 
     Ok(())
@@ -23841,7 +23841,7 @@ async fn lock_keyring_explicit_always() -> Result<()> {
     ----- stderr -----
     Keyring request for http://[LOCALHOST]/basic-auth/simple
     Keyring request for [LOCALHOST]
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
@@ -25038,8 +25038,8 @@ fn lock_multiple_sources_index_overlapping_extras() -> Result<()> {
     ----- stderr -----
     error: Failed to resolve dependencies for `project` (v0.1.0)
       Caused by: Requirements contain conflicting indexes for package `jinja2` in all marker environments:
-    - https://astral-sh.github.io/pytorch-mirror/whl/cu118
-    - https://astral-sh.github.io/pytorch-mirror/whl/cu124
+                 - https://astral-sh.github.io/pytorch-mirror/whl/cu118
+                 - https://astral-sh.github.io/pytorch-mirror/whl/cu124
     ");
 
     Ok(())
@@ -26109,8 +26109,8 @@ fn lock_group_invalid_entry_package() -> Result<()> {
     error: Project `project` has malformed dependency groups
       Caused by: Failed to parse entry in group `foo`: `invalid!`
       Caused by: no such comparison operator "!", must be one of ~= == != <= >= < > ===
-    invalid!
-           ^
+                 invalid!
+                        ^
     "#);
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @r#"
@@ -26122,8 +26122,8 @@ fn lock_group_invalid_entry_package() -> Result<()> {
     error: Project `project` has malformed dependency groups
       Caused by: Failed to parse entry in group `foo`: `invalid!`
       Caused by: no such comparison operator "!", must be one of ~= == != <= >= < > ===
-    invalid!
-           ^
+                 invalid!
+                        ^
     "#);
 
     Ok(())
@@ -26155,10 +26155,10 @@ fn lock_group_invalid_entry_group_name() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 9, column 16
-      |
-    9 |         foo = [{include-group = "invalid!"}]
-      |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    Not a valid package or extra name: "invalid!". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+                   |
+                 9 |         foo = [{include-group = "invalid!"}]
+                   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                 Not a valid package or extra name: "invalid!". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
     "#);
 
     Ok(())
@@ -26191,10 +26191,10 @@ fn lock_group_invalid_duplicate_group_name() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 8, column 9
-      |
-    8 |         [dependency-groups]
-      |         ^^^^^^^^^^^^^^^^^^^
-    duplicate dependency group: `foo-bar`
+                   |
+                 8 |         [dependency-groups]
+                   |         ^^^^^^^^^^^^^^^^^^^
+                 duplicate dependency group: `foo-bar`
     ");
 
     Ok(())
@@ -26257,10 +26257,10 @@ fn lock_group_invalid_entry_type() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 9, column 33
-      |
-    9 |         foo = [{include-group = true}]
-      |                                 ^^^^
-    invalid type: boolean `true`, expected a string
+                   |
+                 9 |         foo = [{include-group = true}]
+                   |                                 ^^^^
+                 invalid type: boolean `true`, expected a string
     ");
 
     Ok(())
@@ -26292,10 +26292,10 @@ fn lock_group_empty_entry_table() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 9, column 16
-      |
-    9 |         foo = [{}]
-      |                ^^
-    missing field `include-group`
+                   |
+                 9 |         foo = [{}]
+                   |                ^^
+                 missing field `include-group`
     ");
 
     Ok(())
@@ -28426,23 +28426,23 @@ fn lock_derivation_chain_prod() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 14, in <module>
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-        return self._get_build_requires(config_settings, requirements=['wheel'])
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-        self.run_setup()
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
-        super().run_setup(setup_script=setup_script)
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-        exec(code, locals())
-      File "<string>", line 5, in <module>
-      File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-        print "Setuptools version",version,"or greater has been installed."
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+                 [stderr]
+                 Traceback (most recent call last):
+                   File "<string>", line 14, in <module>
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+                     return self._get_build_requires(config_settings, requirements=['wheel'])
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+                     self.run_setup()
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+                     super().run_setup(setup_script=setup_script)
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+                     exec(code, locals())
+                   File "<string>", line 5, in <module>
+                   File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+                     print "Setuptools version",version,"or greater has been installed."
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                 SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
     hint: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref==0.1.2`
 
@@ -28484,23 +28484,23 @@ fn lock_derivation_chain_extra() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 14, in <module>
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-        return self._get_build_requires(config_settings, requirements=['wheel'])
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-        self.run_setup()
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
-        super().run_setup(setup_script=setup_script)
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-        exec(code, locals())
-      File "<string>", line 5, in <module>
-      File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-        print "Setuptools version",version,"or greater has been installed."
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+                 [stderr]
+                 Traceback (most recent call last):
+                   File "<string>", line 14, in <module>
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+                     return self._get_build_requires(config_settings, requirements=['wheel'])
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+                     self.run_setup()
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+                     super().run_setup(setup_script=setup_script)
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+                     exec(code, locals())
+                   File "<string>", line 5, in <module>
+                   File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+                     print "Setuptools version",version,"or greater has been installed."
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                 SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
     hint: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref>=0.1`
 
@@ -28544,23 +28544,23 @@ fn lock_derivation_chain_group() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 14, in <module>
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-        return self._get_build_requires(config_settings, requirements=['wheel'])
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-        self.run_setup()
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
-        super().run_setup(setup_script=setup_script)
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-        exec(code, locals())
-      File "<string>", line 5, in <module>
-      File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-        print "Setuptools version",version,"or greater has been installed."
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+                 [stderr]
+                 Traceback (most recent call last):
+                   File "<string>", line 14, in <module>
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+                     return self._get_build_requires(config_settings, requirements=['wheel'])
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+                     self.run_setup()
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+                     super().run_setup(setup_script=setup_script)
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+                     exec(code, locals())
+                   File "<string>", line 5, in <module>
+                   File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+                     print "Setuptools version",version,"or greater has been installed."
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                 SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
     hint: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
 
@@ -28615,23 +28615,23 @@ fn lock_derivation_chain_extended() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 14, in <module>
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-        return self._get_build_requires(config_settings, requirements=['wheel'])
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-        self.run_setup()
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
-        super().run_setup(setup_script=setup_script)
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-        exec(code, locals())
-      File "<string>", line 5, in <module>
-      File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-        print "Setuptools version",version,"or greater has been installed."
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+                 [stderr]
+                 Traceback (most recent call last):
+                   File "<string>", line 14, in <module>
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+                     return self._get_build_requires(config_settings, requirements=['wheel'])
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+                     self.run_setup()
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+                     super().run_setup(setup_script=setup_script)
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+                     exec(code, locals())
+                   File "<string>", line 5, in <module>
+                   File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+                     print "Setuptools version",version,"or greater has been installed."
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                 SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
     hint: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `child` (v0.1.0) which depends on `wsgiref>=0.1, <0.2`
 
@@ -29272,7 +29272,7 @@ fn lock_self_incompatible() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because your project depends on itself at an incompatible version (project==0.2.0), we can conclude that your project's requirements are unsatisfiable.
 
     hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
@@ -29409,7 +29409,7 @@ fn lock_self_extra_to_same_extra_incompatible() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
     hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
@@ -29443,7 +29443,7 @@ fn lock_self_extra_to_other_extra_incompatible() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
     hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
@@ -29580,7 +29580,7 @@ fn lock_self_extra_incompatible() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
     hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
@@ -29710,7 +29710,7 @@ fn lock_self_marker_incompatible() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because your project depends on itself at an incompatible version (project{sys_platform == 'win32'}>0.1), we can conclude that your project's requirements are unsatisfiable.
 
     hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
@@ -33058,9 +33058,9 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.11'):
+    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.11')
       Caused by: Because pandas==1.5.3 depends on numpy{python_full_version >= '3.10'}>=1.21.0 and your project depends on numpy==1.20.3, we can conclude that your project and pandas==1.5.3 are incompatible.
-    And because your project depends on pandas==1.5.3, we can conclude that your project's requirements are unsatisfiable.
+                 And because your project depends on pandas==1.5.3, we can conclude that your project's requirements are unsatisfiable.
 
     hint: While the active Python version is 3.9, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
     ");
@@ -33280,7 +33280,7 @@ fn lock_conflict_for_disjoint_platform() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies for split (markers: sys_platform == 'exotic'):
+    error: No solution found when resolving dependencies for split (markers: sys_platform == 'exotic')
       Caused by: Because your project depends on numpy{sys_platform == 'exotic'}>=1.24,<1.26 and numpy>=1.26, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
@@ -33895,7 +33895,7 @@ fn lock_prefix_match() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only anyio<=4.3.0 is available and your project depends on anyio==5.4.*, we can conclude that your project's requirements are unsatisfiable.
     ");
 
@@ -34191,7 +34191,7 @@ fn lock_exclude_newer_hint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because there are no versions of iniconfig and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
     hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2000-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0, published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
@@ -34241,7 +34241,7 @@ async fn lock_exclude_newer_index_disable() -> Result<()> {
     ----- stderr -----
     warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2024-03-25T00:00:00Z
     warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2024-03-25T00:00:00Z
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
 
     hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2024-03-25T00:00:00Z. The latest version satisfying the requirement is v2.0.0. Consider using `exclude-newer-package` to override the cutoff for this package.
@@ -34325,7 +34325,7 @@ async fn lock_exclude_newer_index_value() -> Result<()> {
     warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
     warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2025-01-01T00:00:00Z
     warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2025-01-01T00:00:00Z
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
 
     hint: `iniconfig` was filtered by the index-specific `exclude-newer` setting to only include packages uploaded before 2025-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0. Consider updating that index's cutoff, setting it to `false`, or using `exclude-newer-package` to override the cutoff for this package.
@@ -34342,7 +34342,7 @@ async fn lock_exclude_newer_index_value() -> Result<()> {
     ----- stderr -----
     warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2025-01-01T00:00:00Z
     warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2025-01-01T00:00:00Z
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
 
     hint: `iniconfig` was filtered by the index-specific `exclude-newer` setting to only include packages uploaded before 2025-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0. Consider updating that index's cutoff, setting it to `false`, or using `exclude-newer-package` to override the cutoff for this package.
@@ -34413,7 +34413,7 @@ fn lock_exclude_newer_hint_pinned_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because there is no version of iniconfig==2.0.0 and your project depends on iniconfig==2.0.0, we can conclude that your project's requirements are unsatisfiable.
 
     hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2022-01-01T00:00:00Z. The requested version, v2.0.0, was published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
@@ -34452,7 +34452,7 @@ fn lock_exclude_newer_hint_compatible_release() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only iniconfig<=1.1.1 is available and your project depends on iniconfig>=2.0,<3.dev0, we can conclude that your project's requirements are unsatisfiable.
 
     hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2022-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0, published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
@@ -35470,7 +35470,7 @@ fn collapsed_error_with_marker_packages() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies for split (markers: python_full_version < '3.14' and sys_platform == 'other'):
+    error: No solution found when resolving dependencies for split (markers: python_full_version < '3.14' and sys_platform == 'other')
       Caused by: Because your project depends on anyio{sys_platform == 'other'} and anyio{python_full_version < '3.14'}>=4.4.0, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
@@ -35531,9 +35531,9 @@ fn lock_unsupported_wheel_url_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only numpy==2.3.5 is available and numpy==2.3.5 has no wheels with a matching Python version tag (e.g., `cp312`), we can conclude that all versions of numpy cannot be used.
-    And because your project depends on numpy, we can conclude that your project's requirements are unsatisfiable.
+                 And because your project depends on numpy, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -35573,9 +35573,9 @@ fn lock_unsupported_wheel_url_supported_platform() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies for split (markers: sys_platform == 'win32'):
+    error: No solution found when resolving dependencies for split (markers: sys_platform == 'win32')
       Caused by: Because only numpy==2.3.5 is available and numpy==2.3.5 has no Windows-compatible wheels, we can conclude that all versions of numpy cannot be used.
-    And because your project depends on numpy, we can conclude that your project's requirements are unsatisfiable.
+                 And because your project depends on numpy, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -35605,9 +35605,9 @@ fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only numpy==2.3.5 is available and numpy==2.3.5 has no Windows-compatible wheels, we can conclude that all versions of numpy cannot be used.
-    And because your project depends on numpy, we can conclude that your project's requirements are unsatisfiable.
+                 And because your project depends on numpy, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -35691,9 +35691,9 @@ fn lock_required_environment_cycle_reports_resolution_error() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies for split (markers: platform_machine == 'arm64'):
+    error: No solution found when resolving dependencies for split (markers: platform_machine == 'arm64')
       Caused by: Because no-sdist-no-wheels-with-matching-platform-a==1.0.0 has no `platform_machine == 'arm64'`-compatible wheels and only no-sdist-no-wheels-with-matching-platform-a==1.0.0 is available, we can conclude that all versions of no-sdist-no-wheels-with-matching-platform-a cannot be used.
-    And because pkg-a depends on no-sdist-no-wheels-with-matching-platform-a and your workspace requires pkg-a, we can conclude that your workspace's requirements are unsatisfiable.
+                 And because pkg-a depends on no-sdist-no-wheels-with-matching-platform-a and your workspace requires pkg-a, we can conclude that your workspace's requirements are unsatisfiable.
     "
     );
 
@@ -35734,26 +35734,26 @@ fn lock_supported_environment_wheel_only_package_requires_compatible_wheels() ->
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies for split (markers: sys_platform == 'linux'):
+    error: No solution found when resolving dependencies for split (markers: sys_platform == 'linux')
       Caused by: Because only the following versions of pywin32 are available:
-        pywin32==222
-        pywin32==223
-        pywin32==224
-        pywin32==225
-        pywin32==226
-        pywin32==227
-        pywin32==228
-        pywin32==300
-        pywin32==301
-        pywin32==302
-        pywin32==303
-        pywin32==304
-        pywin32==305
-        pywin32==306
-        pywin32==307
-        pywin32==308
-    and pywin32<=305 has no wheels with a matching Python version tag (e.g., `cp312`), we can conclude that pywin32<=305 cannot be used.
-    And because pywin32>=306 has no Linux-compatible wheels and your project depends on pywin32, we can conclude that your project's requirements are unsatisfiable.
+                     pywin32==222
+                     pywin32==223
+                     pywin32==224
+                     pywin32==225
+                     pywin32==226
+                     pywin32==227
+                     pywin32==228
+                     pywin32==300
+                     pywin32==301
+                     pywin32==302
+                     pywin32==303
+                     pywin32==304
+                     pywin32==305
+                     pywin32==306
+                     pywin32==307
+                     pywin32==308
+                 and pywin32<=305 has no wheels with a matching Python version tag (e.g., `cp312`), we can conclude that pywin32<=305 cannot be used.
+                 And because pywin32>=306 has no Linux-compatible wheels and your project depends on pywin32, we can conclude that your project's requirements are unsatisfiable.
 
     hint: Wheels are available for `pywin32` (v305) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
     ");
@@ -35921,10 +35921,10 @@ async fn lock_check_multiple_default_indexes_explicit_assignment_dependency_grou
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 13, column 9
-       |
-    13 |         [[tool.uv.index]]
-       |         ^^^^^^^^^^^^^^^^^
-    found multiple indexes with `default = true`; only one index may be marked as default
+                    |
+                 13 |         [[tool.uv.index]]
+                    |         ^^^^^^^^^^^^^^^^^
+                 found multiple indexes with `default = true`; only one index may be marked as default
     ");
 
     Ok(())
@@ -35953,8 +35953,8 @@ fn lock_tilde_equal_version_u64_max_rejected() -> Result<()> {
     error: Failed to build `foo @ file://[TEMP_DIR]/`
       Caused by: Failed to parse metadata from built wheel
       Caused by: expected number less than or equal to 18446744073709551614, but number found in "18446744073709551615" exceeds it
-    bar ~=18446744073709551615.0
-        ^^^^^^^^^^^^^^^^^^^^^^^^
+                 bar ~=18446744073709551615.0
+                     ^^^^^^^^^^^^^^^^^^^^^^^^
     "#);
 
     Ok(())

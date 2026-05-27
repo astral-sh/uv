@@ -1434,13 +1434,13 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
       Caused by: failed to clone into: [PATH]
       Caused by: failed to fetch branch, tag, or commit `d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
       Caused by: process didn't exit successfully: [GIT_COMMAND_ERROR]
-    --- stderr
-    Load key "[TEMP_DIR]/fake_deploy_key": [ERROR]
-    git@github.com: Permission denied (publickey).
-    fatal: Could not read from remote repository.
+                 --- stderr
+                 Load key "[TEMP_DIR]/fake_deploy_key": [ERROR]
+                 git@github.com: Permission denied (publickey).
+                 fatal: Could not read from remote repository.
 
-    Please make sure you have the correct access rights
-    and the repository exists.
+                 Please make sure you have the correct access rights
+                 and the repository exists.
     "#);
 
     let ssh_deploy_key = context.temp_dir.child("uv_test_key");

@@ -457,7 +457,7 @@ fn run_pep723_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving script dependencies:
+    error: No solution found when resolving script dependencies
       Caused by: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -479,7 +479,7 @@ fn run_pep723_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving script dependencies:
+    error: No solution found when resolving script dependencies
       Caused by: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -1461,7 +1461,7 @@ fn run_with() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 2 packages in [TIME]
-    error: No solution found when resolving `--with` dependencies:
+    error: No solution found when resolving `--with` dependencies
       Caused by: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -4227,10 +4227,10 @@ fn run_invalid_project_table() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 2
-      |
-    1 | [project.urls]
-      |  ^^^^^^^
-    `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
+                   |
+                 1 | [project.urls]
+                   |  ^^^^^^^
+                 `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
     ");
 
     Ok(())

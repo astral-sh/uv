@@ -1217,7 +1217,7 @@ fn invalid_pyproject_toml() -> Result<()> {
         build-backend = "uv_build"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.build().arg("child"), @r"
+    uv_snapshot!(context.filters(), context.build().arg("child"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1227,10 +1227,10 @@ fn invalid_pyproject_toml() -> Result<()> {
     error: Failed to build `[TEMP_DIR]/child`
       Caused by: Invalid metadata format in: child/pyproject.toml
       Caused by: TOML parse error at line 2, column 8
-      |
-    2 | name = 1
-      |        ^
-    invalid type: integer `1`, expected a string
+                   |
+                 2 | name = 1
+                   |        ^
+                 invalid type: integer `1`, expected a string
     ");
 
     Ok(())

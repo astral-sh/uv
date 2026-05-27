@@ -312,7 +312,7 @@ fn prune_unzipped() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because all versions of iniconfig need to be downloaded from a registry and you require iniconfig, we can conclude that your requirements are unsatisfiable.
 
     hint: Pre-releases are available for `iniconfig` in the requested range (e.g., 0.2.dev0), but pre-releases weren't enabled (try: `--prerelease=allow`)

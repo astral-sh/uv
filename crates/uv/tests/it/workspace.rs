@@ -1399,9 +1399,9 @@ fn workspace_inherit_sources() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because library was not found in the cache and leaf depends on library, we can conclude that leaf's requirements are unsatisfiable.
-    And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
+                 And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
@@ -1619,9 +1619,9 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only httpx<=0.27.0 is available and leaf depends on httpx>9999, we can conclude that leaf's requirements are unsatisfiable.
-    And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
+                 And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
     "
     );
 
@@ -1687,9 +1687,9 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because bar depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that bar and foo are incompatible.
-    And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
+                 And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
     "
     );
 
@@ -1770,9 +1770,9 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because bird depends on anyio==4.3.0 and knot depends on anyio==4.2.0, we can conclude that bird and knot are incompatible.
-    And because your workspace requires bird and knot, we can conclude that your workspace's requirements are unsatisfiable.
+                 And because your workspace requires bird and knot, we can conclude that your workspace's requirements are unsatisfiable.
     "
     );
 
@@ -1840,9 +1840,9 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because bar[some-extra] depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar[some-extra] are incompatible.
-    And because your workspace requires bar[some-extra] and foo, we can conclude that your workspace's requirements are unsatisfiable.
+                 And because your workspace requires bar[some-extra] and foo, we can conclude that your workspace's requirements are unsatisfiable.
     "
     );
 
@@ -1911,9 +1911,9 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `packages/bar/pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because bar:dev depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar:dev are incompatible.
-    And because your workspace requires bar:dev and foo, we can conclude that your workspace's requirements are unsatisfiable.
+                 And because your workspace requires bar:dev and foo, we can conclude that your workspace's requirements are unsatisfiable.
     "
     );
 

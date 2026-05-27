@@ -1340,18 +1340,17 @@ impl NoSolutionHeader {
 impl std::fmt::Display for NoSolutionHeader {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match (self.context, self.env.end_user_fork_display()) {
-            (None, None) => write!(f, "No solution found when resolving dependencies:"),
-            (Some(context), None) => write!(
-                f,
-                "No solution found when resolving {context} dependencies:"
-            ),
+            (None, None) => write!(f, "No solution found when resolving dependencies"),
+            (Some(context), None) => {
+                write!(f, "No solution found when resolving {context} dependencies")
+            }
             (None, Some(split)) => write!(
                 f,
-                "No solution found when resolving dependencies for {split}:"
+                "No solution found when resolving dependencies for {split}"
             ),
             (Some(context), Some(split)) => write!(
                 f,
-                "No solution found when resolving {context} dependencies for {split}:"
+                "No solution found when resolving {context} dependencies for {split}"
             ),
         }
     }

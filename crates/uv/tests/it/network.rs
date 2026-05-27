@@ -713,10 +713,10 @@ async fn proxy_invalid_url_in_uv_toml() {
     ----- stderr -----
     error: Failed to parse: `uv.toml`
       Caused by: TOML parse error at line 1, column 14
-      |
-    1 | http-proxy = "ftp://proxy.example.com:8080"
-      |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    invalid proxy URL scheme `ftp` in `ftp://proxy.example.com:8080/`: expected http, https, socks5, or socks5h
+                   |
+                 1 | http-proxy = "ftp://proxy.example.com:8080"
+                   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                 invalid proxy URL scheme `ftp` in `ftp://proxy.example.com:8080/`: expected http, https, socks5, or socks5h
     "#);
 }
 
@@ -744,10 +744,10 @@ async fn proxy_invalid_url_not_a_url_in_uv_toml() {
     ----- stderr -----
     error: Failed to parse: `uv.toml`
       Caused by: TOML parse error at line 1, column 14
-      |
-    1 | http-proxy = "not a valid url"
-      |              ^^^^^^^^^^^^^^^^^
-    invalid proxy URL: invalid international domain name
+                   |
+                 1 | http-proxy = "not a valid url"
+                   |              ^^^^^^^^^^^^^^^^^
+                 invalid proxy URL: invalid international domain name
     "#);
 }
 

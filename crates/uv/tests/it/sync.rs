@@ -873,10 +873,10 @@ fn group_requires_python_useful_defaults() -> Result<()> {
     ----- stderr -----
     Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtual environment at: .venv
-    error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
+    error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*')
       Caused by: Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
-    And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
-    And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
+                 And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+                 And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
@@ -888,10 +888,10 @@ fn group_requires_python_useful_defaults() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
+    error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*')
       Caused by: Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
-    And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
-    And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
+                 And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+                 And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
@@ -1017,10 +1017,10 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
     ----- stderr -----
     Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtual environment at: .venv
-    error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
+    error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*')
       Caused by: Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
-    And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
-    And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
+                 And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+                 And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
@@ -1033,10 +1033,10 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
+    error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*')
       Caused by: Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
-    And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
-    And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
+                 And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+                 And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
@@ -1692,10 +1692,10 @@ fn sync_build_isolation_package() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `hatchling.build.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 8, in <module>
-    ModuleNotFoundError: No module named 'hatchling'
+                 [stderr]
+                 Traceback (most recent call last):
+                   File "<string>", line 8, in <module>
+                 ModuleNotFoundError: No module named 'hatchling'
 
     hint: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
 
@@ -1781,10 +1781,10 @@ fn sync_build_isolation_package_order() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `hatchling.build.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 8, in <module>
-    ModuleNotFoundError: No module named 'hatchling'
+                 [stderr]
+                 Traceback (most recent call last):
+                   File "<string>", line 8, in <module>
+                 ModuleNotFoundError: No module named 'hatchling'
 
     hint: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
 
@@ -1958,10 +1958,10 @@ fn sync_build_isolation_extra() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `hatchling.build.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 8, in <module>
-    ModuleNotFoundError: No module named 'hatchling'
+                 [stderr]
+                 Traceback (most recent call last):
+                   File "<string>", line 8, in <module>
+                 ModuleNotFoundError: No module named 'hatchling'
 
     hint: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
 
@@ -2101,8 +2101,8 @@ fn sync_extra_build_dependencies() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Missing `anyio` module
+                 [stderr]
+                 Missing `anyio` module
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
 
@@ -2177,8 +2177,8 @@ fn sync_extra_build_dependencies() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Missing `anyio` module
+                 [stderr]
+                 Missing `anyio` module
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
 
@@ -2246,8 +2246,8 @@ fn sync_extra_build_dependencies() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Found `anyio` module
+                 [stderr]
+                 Found `anyio` module
 
     hint: `bad-child` was included because `parent` (v0.1.0) depends on `bad-child`
 
@@ -2341,8 +2341,8 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Missing `anyio` module
+                 [stderr]
+                 Missing `anyio` module
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -2446,8 +2446,8 @@ fn sync_extra_build_dependencies_setuptools() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Missing `anyio` module
+                 [stderr]
+                 Missing `anyio` module
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
 
@@ -2636,8 +2636,8 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Expected `anyio` version 3.0 but got 4.3.0
+                 [stderr]
+                 Expected `anyio` version 3.0 but got 4.3.0
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
 
@@ -2691,8 +2691,8 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Expected `anyio` version 4.3 but got 3.5.0
+                 [stderr]
+                 Expected `anyio` version 4.3 but got 3.5.0
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
 
@@ -2788,8 +2788,8 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Found system anyio instead of local anyio
+                 [stderr]
+                 Found system anyio instead of local anyio
 
     hint: `child` was included because `project` (v0.1.0) depends on `child`
 
@@ -2853,12 +2853,12 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 8, in <module>
-      File "[TEMP_DIR]/child/build_backend.py", line 4, in <module>
-        import anyio
-    ModuleNotFoundError: No module named 'anyio'
+                 [stderr]
+                 Traceback (most recent call last):
+                   File "<string>", line 8, in <module>
+                   File "[TEMP_DIR]/child/build_backend.py", line 4, in <module>
+                     import anyio
+                 ModuleNotFoundError: No module named 'anyio'
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
 
@@ -2920,12 +2920,12 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 8, in <module>
-      File "[TEMP_DIR]/child/build_backend.py", line 5, in <module>
-        import sklearn
-    ModuleNotFoundError: No module named 'sklearn'
+                 [stderr]
+                 Traceback (most recent call last):
+                   File "<string>", line 8, in <module>
+                   File "[TEMP_DIR]/child/build_backend.py", line 5, in <module>
+                     import sklearn
+                 ModuleNotFoundError: No module named 'sklearn'
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
 
@@ -4599,10 +4599,10 @@ fn sync_default_groups_gibberish() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 14, column 26
-       |
-    14 |         default-groups = "gibberish"
-       |                          ^^^^^^^^^^^
-    default-groups must be "all" or a ["list", "of", "groups"]
+                    |
+                 14 |         default-groups = "gibberish"
+                    |                          ^^^^^^^^^^^
+                 default-groups must be "all" or a ["list", "of", "groups"]
     "#);
 
     Ok(())
@@ -6257,8 +6257,8 @@ fn sync_extra_build_dependencies_script() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Missing `anyio` module
+                 [stderr]
+                 Missing `anyio` module
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -10368,23 +10368,23 @@ fn sync_derivation_chain() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 14, in <module>
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-        return self._get_build_requires(config_settings, requirements=['wheel'])
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-        self.run_setup()
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
-        super().run_setup(setup_script=setup_script)
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-        exec(code, locals())
-      File "<string>", line 5, in <module>
-      File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-        print "Setuptools version",version,"or greater has been installed."
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+                 [stderr]
+                 Traceback (most recent call last):
+                   File "<string>", line 14, in <module>
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+                     return self._get_build_requires(config_settings, requirements=['wheel'])
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+                     self.run_setup()
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+                     super().run_setup(setup_script=setup_script)
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+                     exec(code, locals())
+                   File "<string>", line 5, in <module>
+                   File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+                     print "Setuptools version",version,"or greater has been installed."
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                 SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
     hint: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
 
@@ -10432,23 +10432,23 @@ fn sync_derivation_chain_extra() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 14, in <module>
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-        return self._get_build_requires(config_settings, requirements=['wheel'])
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-        self.run_setup()
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
-        super().run_setup(setup_script=setup_script)
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-        exec(code, locals())
-      File "<string>", line 5, in <module>
-      File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-        print "Setuptools version",version,"or greater has been installed."
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+                 [stderr]
+                 Traceback (most recent call last):
+                   File "<string>", line 14, in <module>
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+                     return self._get_build_requires(config_settings, requirements=['wheel'])
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+                     self.run_setup()
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+                     super().run_setup(setup_script=setup_script)
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+                     exec(code, locals())
+                   File "<string>", line 5, in <module>
+                   File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+                     print "Setuptools version",version,"or greater has been installed."
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                 SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
     hint: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref`
 
@@ -10498,23 +10498,23 @@ fn sync_derivation_chain_group() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 14, in <module>
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-        return self._get_build_requires(config_settings, requirements=['wheel'])
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-        self.run_setup()
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
-        super().run_setup(setup_script=setup_script)
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-        exec(code, locals())
-      File "<string>", line 5, in <module>
-      File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-        print "Setuptools version",version,"or greater has been installed."
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+                 [stderr]
+                 Traceback (most recent call last):
+                   File "<string>", line 14, in <module>
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+                     return self._get_build_requires(config_settings, requirements=['wheel'])
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+                     self.run_setup()
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+                     super().run_setup(setup_script=setup_script)
+                   File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+                     exec(code, locals())
+                   File "<string>", line 5, in <module>
+                   File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+                     print "Setuptools version",version,"or greater has been installed."
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                 SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
     hint: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
 
@@ -11744,11 +11744,11 @@ fn url_hash_mismatch() -> Result<()> {
     error: Failed to download and build `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
       Caused by: Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
 
-    Expected:
-      sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
+                 Expected:
+                   sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
 
-    Computed:
-      sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
+                 Computed:
+                   sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
 
     hint: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
     ");
@@ -11818,11 +11818,11 @@ fn path_hash_mismatch() -> Result<()> {
     error: Failed to build `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`
       Caused by: Hash mismatch for `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`
 
-    Expected:
-      sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
+                 Expected:
+                   sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
 
-    Computed:
-      sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
+                 Computed:
+                   sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
 
     hint: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
     ");
@@ -14921,8 +14921,8 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Expected `anyio` version 3.0 but got 4.3.0
+                 [stderr]
+                 Expected `anyio` version 3.0 but got 4.3.0
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
 
@@ -14988,8 +14988,8 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-    [stderr]
-    Expected `anyio` version 4.0 but got 3.7.1
+                 [stderr]
+                 Expected `anyio` version 4.0 but got 3.7.1
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
 
@@ -15153,8 +15153,8 @@ fn sync_extra_build_variables() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `build_backend.build_editable` failed (exit status: 1)
 
-    [stderr]
-    Expected `anyio` version 3.0 but got 4.3.0
+                 [stderr]
+                 Expected `anyio` version 3.0 but got 4.3.0
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -15186,8 +15186,8 @@ fn sync_extra_build_variables() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `build_backend.build_editable` failed (exit status: 1)
 
-    [stderr]
-    Expected `anyio` version 3.0 but got 4.3.0
+                 [stderr]
+                 Expected `anyio` version 3.0 but got 4.3.0
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -16720,10 +16720,10 @@ fn sync_fails_ambiguous_url() -> Result<()> {
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 10, column 15
-       |
-    10 |         url = "https://user/name:password@domain/a/b/c"
-       |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c
+                    |
+                 10 |         url = "https://user/name:password@domain/a/b/c"
+                    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                 ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c
     "#);
 
     Ok(())
