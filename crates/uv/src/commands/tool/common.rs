@@ -11,11 +11,12 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{debug, warn};
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
-use uv_configuration::GitLfsSetting;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_configuration::{Concurrency, GitLfsSetting};
 use uv_distribution::StaticMetadataDatabase;
 use uv_distribution_types::{
-    InstalledDist, Name, Requirement, RequiresPython, UnresolvedRequirement,
+    IndexCapabilities, IndexMetadata, InstalledDist, Name, Requirement, RequirementSource,
+    RequiresPython, UnresolvedRequirement,
 };
 use uv_errors::{ErrorWithHints, Hint, Hints};
 #[cfg(unix)]
@@ -98,6 +99,7 @@ impl Hint for NoExecutablesError {
 use crate::commands::project::{ProjectError, PythonRequestSource};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
+use crate::settings::ResolverInstallerSettings;
 
 /// Return all packages which contain an executable with the given name.
 pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec<InstalledDist> {
@@ -144,7 +146,7 @@ pub(crate) struct ToolPython {
     /// The source of the Python request.
     source: PythonRequestSource,
     /// The selected Python request, computed by considering an explicit request, a global
-    /// version file, and static `requires-python` metadata from the source requirement.
+    /// version file, and static `requires-python` metadata from the target requirement.
     pub(crate) python_request: Option<PythonRequest>,
 }
 
@@ -153,14 +155,17 @@ impl ToolPython {
     pub(crate) async fn from_request(
         python_request: Option<PythonRequest>,
         requirement: Option<&UnresolvedRequirement>,
+        registry_requirement: Option<&Requirement>,
         no_config: bool,
         lfs: GitLfsSetting,
         git_resolver: &GitResolver,
         client_builder: &BaseClientBuilder<'_>,
+        settings: &ResolverInstallerSettings,
+        concurrency: &Concurrency,
         cache: &Cache,
     ) -> Result<Self, ProjectError> {
         let requires_python = if python_request.is_none() {
-            match requirement {
+            let source_requires_python = match requirement {
                 Some(requirement) => {
                     infer_requires_python_from_requirement(
                         requirement,
@@ -172,6 +177,32 @@ impl ToolPython {
                     .await
                 }
                 None => None,
+            };
+
+            if source_requires_python.is_some() {
+                source_requires_python
+            } else {
+                let registry_requirement = registry_requirement.or_else(|| {
+                    requirement.and_then(|requirement| match requirement {
+                        UnresolvedRequirement::Named(requirement) => Some(requirement),
+                        UnresolvedRequirement::Unnamed(_) => None,
+                    })
+                });
+
+                match registry_requirement {
+                    Some(requirement) => {
+                        infer_requires_python_from_registry_requirement(
+                            requirement,
+                            settings,
+                            git_resolver,
+                            client_builder,
+                            concurrency,
+                            cache,
+                        )
+                        .await
+                    }
+                    None => None,
+                }
             }
         } else {
             None
@@ -248,6 +279,94 @@ async fn infer_requires_python_from_requirement(
         Err(err) => {
             debug!(
                 "Failed to infer `requires-python` from source requirement (`{requirement}`): {err}"
+            );
+            None
+        }
+    }
+}
+
+/// Infer [`RequiresPython`] from static metadata exposed by a registry for the selected release.
+///
+/// The registry lookup reads Simple API metadata or wheel metadata; it never builds a source
+/// distribution to discover metadata.
+async fn infer_requires_python_from_registry_requirement(
+    requirement: &Requirement,
+    settings: &ResolverInstallerSettings,
+    git_resolver: &GitResolver,
+    client_builder: &BaseClientBuilder<'_>,
+    concurrency: &Concurrency,
+    cache: &Cache,
+) -> Option<RequiresPython> {
+    let RequirementSource::Registry {
+        specifier, index, ..
+    } = &requirement.source
+    else {
+        return None;
+    };
+
+    let client = match RegistryClientBuilder::new(
+        client_builder
+            .clone()
+            .keyring(settings.resolver.keyring_provider),
+        cache.clone(),
+    )
+    .index_locations(settings.resolver.index_locations.clone())
+    .index_strategy(settings.resolver.index_strategy)
+    .build()
+    {
+        Ok(client) => client,
+        Err(err) => {
+            debug!(
+                "Failed to create registry client while inferring `requires-python` (`{requirement}`): {err}"
+            );
+            return None;
+        }
+    };
+    let capabilities = IndexCapabilities::default();
+    let latest_client = pip::latest::LatestClient {
+        client: &client,
+        capabilities: &capabilities,
+        prerelease: settings.resolver.prerelease,
+        exclude_newer: &settings.resolver.exclude_newer,
+        index_locations: &settings.resolver.index_locations,
+        tags: None,
+        requires_python: None,
+    };
+
+    let distribution = match latest_client
+        .find_latest_with_specifier(
+            &requirement.name,
+            index.as_ref().map(IndexMetadata::url),
+            Some(specifier),
+            &concurrency.downloads_semaphore,
+        )
+        .await
+    {
+        Ok(distribution) => distribution?,
+        Err(err) => {
+            debug!(
+                "Failed to read registry metadata while inferring `requires-python` (`{requirement}`): {err}"
+            );
+            return None;
+        }
+    };
+
+    if let Some(requires_python) = distribution.requires_python.as_ref() {
+        return Some(RequiresPython::from_specifiers(requires_python));
+    }
+
+    let wheel = distribution.wheel?;
+    match client
+        .wheel_metadata(&wheel, git_resolver, &capabilities, None)
+        .await
+    {
+        Ok(metadata) => metadata
+            .requires_python
+            .as_ref()
+            .map(RequiresPython::from_specifiers),
+        Err(err) => {
+            debug!(
+                "Failed to read wheel metadata while inferring `requires-python` (`{requirement}`): {err}"
             );
             None
         }

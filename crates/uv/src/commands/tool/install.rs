@@ -94,6 +94,18 @@ pub(crate) async fn install(
     // Parse the input requirement.
     let request = ToolRequest::parse(&package, from.as_deref())?;
 
+    // If the user passed, e.g., `ruff@latest`, refresh the cache before reading metadata.
+    let cache = if request.is_latest() {
+        cache.with_refresh(Refresh::All(Timestamp::now()))
+    } else {
+        cache
+    };
+
+    let registry_target_requirement = match &request {
+        ToolRequest::Package { target, .. } => target.registry_requirement(),
+        ToolRequest::Python { .. } => None,
+    };
+
     let unresolved_target_requirements = match &request {
         ToolRequest::Package {
             target: Target::Unspecified(requirement),
@@ -119,10 +131,13 @@ pub(crate) async fn install(
             .as_ref()
             .and_then(|requirements| requirements.first())
             .map(|requirement| &requirement.requirement),
+        registry_target_requirement.as_ref(),
         no_config,
         lfs,
         state.git(),
         &client_builder,
+        &settings,
+        &concurrency,
         &cache,
     )
     .await?;
@@ -145,14 +160,6 @@ pub(crate) async fn install(
     )
     .await?
     .into_interpreter();
-
-    // If the user passed, e.g., `ruff@latest`, refresh the cache.
-    let refresh = if request.is_latest() {
-        refresh.combine(Refresh::All(Timestamp::now()))
-    } else {
-        refresh
-    };
-    let cache = cache.with_refresh(refresh.clone());
 
     // Resolve the `--from` requirement.
     let requirement = match &request {

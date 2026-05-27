@@ -2,8 +2,10 @@ use std::str::FromStr;
 
 use tracing::debug;
 
+use uv_distribution_types::{Requirement, RequirementSource};
 use uv_normalize::{ExtraName, PackageName};
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep508::MarkerTree;
 use uv_python::PythonRequest;
 
 pub(crate) mod common;
@@ -141,6 +143,39 @@ impl<'a> Target<'a> {
                     Self::Unspecified(target)
                 }
             }
+        }
+    }
+
+    /// Return a registry requirement for explicit version and `latest` targets.
+    pub(crate) fn registry_requirement(&self) -> Option<Requirement> {
+        match self {
+            Self::Unspecified(_) => None,
+            Self::Version(_, name, extras, version) => Some(Requirement {
+                name: name.clone(),
+                extras: extras.clone(),
+                groups: Box::new([]),
+                marker: MarkerTree::default(),
+                source: RequirementSource::Registry {
+                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
+                        version.clone(),
+                    )),
+                    index: None,
+                    conflict: None,
+                },
+                origin: None,
+            }),
+            Self::Latest(_, name, extras) => Some(Requirement {
+                name: name.clone(),
+                extras: extras.clone(),
+                groups: Box::new([]),
+                marker: MarkerTree::default(),
+                source: RequirementSource::Registry {
+                    specifier: VersionSpecifiers::empty(),
+                    index: None,
+                    conflict: None,
+                },
+                origin: None,
+            }),
         }
     }
 }

@@ -708,6 +708,10 @@ async fn get_or_create_environment(
         } => Some(RequirementsSpecification::parse_package(requirement)?),
         _ => None,
     };
+    let registry_target_requirement = match request {
+        ToolRequest::Package { target, .. } => target.registry_requirement(),
+        ToolRequest::Python { .. } => None,
+    };
 
     // Determine explicit Python version requests
     let explicit_python_request = python.map(PythonRequest::parse);
@@ -740,10 +744,13 @@ async fn get_or_create_environment(
         unresolved_target_requirement
             .as_ref()
             .map(|requirement| &requirement.requirement),
+        registry_target_requirement.as_ref(),
         false,
         lfs,
         state.git(),
         client_builder,
+        settings,
+        concurrency,
         cache,
     )
     .await?
