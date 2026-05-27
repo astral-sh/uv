@@ -1882,12 +1882,12 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         .arg("lock-build-dependencies")
         .arg("--locked"), @"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: Distribution not found at: file://[TEMP_DIR]/missing
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Re-lock without `--locked` to pick up the new `build-system.requires`.
