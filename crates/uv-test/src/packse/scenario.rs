@@ -329,7 +329,8 @@ wheels = false
         insta::assert_snapshot!(
             error
                 .to_string()
-                .replace(temporary_directory.path().to_string_lossy().as_ref(), "[TEMP_DIR]"),
+                .replace(temporary_directory.path().to_string_lossy().as_ref(), "[TEMP_DIR]")
+                .replace('\\', "/"),
             @"failed to parse scenario file `[TEMP_DIR]/invalid.toml`"
         );
     }
