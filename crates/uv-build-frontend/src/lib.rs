@@ -402,7 +402,7 @@ impl SourceBuild {
                 build_context,
                 source_build_context.clone(),
                 &pep517_backend,
-                extra_build_dependencies,
+                extra_build_dependencies.clone(),
                 package_key.as_ref(),
                 build_stack,
             )
@@ -459,6 +459,7 @@ impl SourceBuild {
                 install_path,
                 &venv,
                 &pep517_backend,
+                &extra_build_dependencies,
                 build_context,
                 package_name.as_ref(),
                 package_version.as_ref(),
@@ -1006,6 +1007,7 @@ async fn create_pep517_build_environment(
     install_path: &Path,
     venv: &PythonEnvironment,
     pep517_backend: &Pep517Backend,
+    extra_build_dependencies: &[Requirement],
     build_context: &impl BuildContext,
     package_name: Option<&PackageName>,
     package_version: Option<&Version>,
@@ -1141,6 +1143,7 @@ async fn create_pep517_build_environment(
             .requirements
             .iter()
             .cloned()
+            .chain(extra_build_dependencies.iter().cloned())
             .chain(extra_requires)
             .collect();
         let resolution = build_context

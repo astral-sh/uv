@@ -1217,7 +1217,7 @@ async fn resolve_all_possible_builds(
         };
         let mut resolved_statically = false;
 
-        if !graph_exists || !extra_build_dependencies.is_empty() {
+        if !graph_exists {
             let direct_build = if let SourceDist::Directory(directory) = &source_dist {
                 check_direct_build(&directory.install_path, uv_version::version())
                     .is_ok_and(|()| extra_build_dependencies.is_empty())

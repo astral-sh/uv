@@ -1050,6 +1050,107 @@ fn lock_build_dependencies_extra() -> Result<()> {
     Ok(())
 }
 
+/// Verify the hook-expanded build resolution replaces its initial stage without dropping extras.
+#[test]
+fn lock_build_dependencies_hook_resolution_replaces_initial_stage() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    for version in ["1.0.0", "2.0.0"] {
+        write_wheel(
+            &links_dir.child(format!("seed-{version}-py3-none-any.whl")),
+            "seed",
+            version,
+        )?;
+    }
+    write_wheel(
+        &links_dir.child("extra-0.1.0-py3-none-any.whl"),
+        "extra",
+        "0.1.0",
+    )?;
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["seed"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+
+def get_requires_for_build_wheel(config_settings=None):
+    return ["seed<2"]
+
+def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+    dist_info = Path(metadata_directory) / "dep-0.1.0.dist-info"
+    dist_info.mkdir()
+    (dist_info / "METADATA").write_text(
+        "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n"
+    )
+    return dist_info.name
+"#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+
+        [tool.uv.extra-build-dependencies]
+        dep = ["extra"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(
+        dep.contains(r#"{ name = "extra", version = "0.1.0" }"#),
+        "{dep}"
+    );
+    assert!(
+        dep.contains(r#"{ name = "seed", version = "1.0.0" }"#),
+        "{dep}"
+    );
+    assert!(
+        !dep.contains(r#"{ name = "seed", version = "2.0.0" }"#),
+        "{dep}"
+    );
+
+    Ok(())
+}
+
 /// Verify that `extra-build-dependencies` participate in lock freshness checks.
 #[test]
 fn lock_build_dependencies_extra_build_dependencies_invalidate() -> Result<()> {
@@ -3126,12 +3227,10 @@ fn lock_build_dependencies_static_sdist_lowers_build_sources() -> Result<()> {
     write_wheel(&private_builder, "private-builder", "0.1.0")?;
 
     let source_dist = context.temp_dir.child("dep-0.1.0.zip");
-    let file = File::create(source_dist.path())?;
-    let mut zip = ZipWriter::new(file);
-    let options = SimpleFileOptions::default();
-    zip.add_directory("dep-0.1.0/", options)?;
-    zip.start_file("dep-0.1.0/pyproject.toml", options)?;
-    zip.write_all(
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
         br#"
         [project]
         name = "dep"
@@ -3145,10 +3244,13 @@ fn lock_build_dependencies_static_sdist_lowers_build_sources() -> Result<()> {
         [tool.uv.sources]
         private-builder = { path = "private_builder-0.1.0-py3-none-any.whl" }
         "#,
-    )?;
-    zip.start_file("dep-0.1.0/private_builder-0.1.0-py3-none-any.whl", options)?;
-    zip.write_all(&fs_err::read(private_builder.path())?)?;
-    zip.finish()?;
+    ))?;
+    let entry = ZipEntryBuilder::new(
+        "dep-0.1.0/private_builder-0.1.0-py3-none-any.whl".into(),
+        Compression::Stored,
+    );
+    block_on(zip.write_entry_whole(entry, &fs_err::read(private_builder.path())?))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
 
     context.temp_dir.child("pyproject.toml").write_str(
         r#"
