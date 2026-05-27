@@ -152,11 +152,14 @@ pub trait BuildContext {
     ///
     /// If a package key is provided, the resolver may use previously stored
     /// build dependency preferences for that package to speed up resolution.
+    /// `use_locked_resolution` must be false for requirements returned by a
+    /// backend hook, since those requirements can change after a lock is generated.
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
         package: Option<&'a BuildPackageKey>,
         build_stack: &'a BuildStack,
+        use_locked_resolution: bool,
     ) -> impl Future<Output = Result<ResolvedRequirements, impl IsBuildBackendError>> + 'a;
 
     /// Record a build resolution graph that was reused from a cache.

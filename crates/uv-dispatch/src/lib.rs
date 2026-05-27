@@ -337,10 +337,11 @@ impl BuildContext for BuildDispatch<'_> {
         requirements: &'data [Requirement],
         package: Option<&'data BuildPackageKey>,
         build_stack: &'data BuildStack,
+        use_locked_resolution: bool,
     ) -> Result<ResolvedRequirements, BuildDispatchError> {
         // If we have a locked build resolution for this package, return it directly
         // without running the resolver.
-        if let Some(package) = package {
+        if use_locked_resolution && let Some(package) = package {
             if let Some(resolution) = self.locked_build_resolutions.get(package) {
                 debug!(
                     "Using locked build resolution for `{}=={:?}` (skipping resolver)",

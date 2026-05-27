@@ -306,7 +306,7 @@ pub(crate) async fn venv(
         // Since the virtual environment is empty, and the set of requirements is trivial (no
         // constraints, no editables, etc.), we can use the build dispatch APIs directly.
         let requirements = build_dispatch
-            .resolve(&requirements, None, &build_stack)
+            .resolve(&requirements, None, &build_stack, true)
             .await
             .map_err(|err| VenvError::Seed(err.into()))?;
         let installed = build_dispatch
