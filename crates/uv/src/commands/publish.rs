@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use console::Term;
-use owo_colors::{AnsiColors, OwoColorize};
+use owo_colors::OwoColorize;
 use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
 use uv_auth::{Credentials, PyxTokenStore};
@@ -13,7 +13,7 @@ use uv_client::{
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
-use uv_errors::{Hints, write_error_chain};
+use uv_errors::write_error_chain;
 use uv_preview::{Preview, PreviewFeature};
 use uv_publish::{
     CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, check_trusted_publishing,
@@ -241,14 +241,7 @@ pub(crate) async fn publish(
                 Ok(false) => {}
                 Err(err) => {
                     if dry_run {
-                        write_error_chain(
-                            &err,
-                            printer.stderr(),
-                            "error",
-                            AnsiColors::Red,
-                            Hints::none(),
-                            None,
-                        )?;
+                        write_error_chain(&err, printer.stderr())?;
                         error_count += 1;
                         continue;
                     }
@@ -286,14 +279,7 @@ pub(crate) async fn publish(
                 Ok(metadata) => metadata,
                 Err(err) => {
                     if dry_run {
-                        write_error_chain(
-                            &err,
-                            printer.stderr(),
-                            "error",
-                            AnsiColors::Red,
-                            Hints::none(),
-                            None,
-                        )?;
+                        write_error_chain(&err, printer.stderr())?;
                         error_count += 1;
                         continue;
                     }
@@ -334,14 +320,7 @@ pub(crate) async fn publish(
                     }
                     Err(err) => {
                         let err: anyhow::Error = err.into();
-                        write_error_chain(
-                            err.as_ref(),
-                            printer.stderr(),
-                            "error",
-                            AnsiColors::Red,
-                            Hints::none(),
-                            None,
-                        )?;
+                        write_error_chain(err.as_ref(), printer.stderr())?;
                         error_count += 1;
                     }
                 }
@@ -399,14 +378,7 @@ pub(crate) async fn publish(
                 Err(err) => {
                     if dry_run {
                         let err: anyhow::Error = err.into();
-                        write_error_chain(
-                            err.as_ref(),
-                            printer.stderr(),
-                            "error",
-                            AnsiColors::Red,
-                            Hints::none(),
-                            None,
-                        )?;
+                        write_error_chain(err.as_ref(), printer.stderr())?;
                         error_count += 1;
                         continue;
                     }
@@ -568,10 +540,6 @@ async fn gather_credentials(
                     .context("Trusted publishing failed")
                     .as_ref(),
                 printer.stderr(),
-                "error",
-                AnsiColors::Red,
-                Hints::none(),
-                None,
             )?;
         }
     }

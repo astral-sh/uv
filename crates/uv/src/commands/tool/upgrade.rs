@@ -1,6 +1,6 @@
 use anyhow::Result;
 use itertools::Itertools;
-use owo_colors::{AnsiColors, OwoColorize};
+use owo_colors::OwoColorize;
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str::FromStr;
@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, TargetTriple};
 use uv_distribution_types::{ExtraBuildRequires, Requirement, RequirementSource};
-use uv_errors::{Hints, write_error_chain};
+use uv_errors::write_error_chain;
 use uv_fs::CWD;
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
@@ -175,10 +175,6 @@ pub(crate) async fn upgrade(
                 err.context(format!("Failed to upgrade {}", name.green()))
                     .as_ref(),
                 printer.stderr(),
-                "error",
-                AnsiColors::Red,
-                Hints::none(),
-                None,
             )?;
         }
         return Ok(ExitStatus::Failure);

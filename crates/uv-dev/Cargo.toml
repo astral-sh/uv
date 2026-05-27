@@ -44,7 +44,6 @@ fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 itertools = { workspace = true }
 markdown = { version = "1.0.0" }
-owo-colors = { workspace = true }
 poloto = { version = "19.1.2", optional = true }
 pretty_assertions = { version = "1.4.1" }
 reqwest = { workspace = true, features = ["stream"] }

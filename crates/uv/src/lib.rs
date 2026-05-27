@@ -15,7 +15,7 @@ use anyhow::{Result, anyhow, bail};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use futures::FutureExt;
-use owo_colors::{AnsiColors, OwoColorize};
+use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
 use tokio::task::spawn_blocking;
 use tracing::{debug, instrument, trace};
@@ -2840,13 +2840,10 @@ where
 
             let hints = commands::diagnostics::hints_for_error(&err);
             let mut error_chain = String::new();
-            uv_errors::write_error_chain(
+            uv_errors::write_error_chain_with_options(
                 err.as_ref(),
                 &mut error_chain,
-                "error",
-                AnsiColors::Red,
-                hints,
-                None,
+                uv_errors::ErrorOptions::default().with_hints(hints),
             )
             .expect("writing to a string should not fail");
             anstream::eprint!("{error_chain}");

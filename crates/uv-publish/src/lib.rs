@@ -1518,9 +1518,8 @@ mod tests {
         FormMetadata, PublishError, Reporter, UploadDistribution, build_upload_request,
         group_files, upload,
     };
-    use owo_colors::AnsiColors;
     use tokio::sync::Semaphore;
-    use uv_errors::{Hints, write_error_chain};
+    use uv_errors::write_error_chain;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -2190,15 +2189,7 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain(
-            &err,
-            &mut capture,
-            "error",
-            AnsiColors::Red,
-            Hints::none(),
-            None,
-        )
-        .unwrap();
+        write_error_chain(&err, &mut capture).unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
@@ -2226,15 +2217,7 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain(
-            &err,
-            &mut capture,
-            "error",
-            AnsiColors::Red,
-            Hints::none(),
-            None,
-        )
-        .unwrap();
+        write_error_chain(&err, &mut capture).unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
@@ -2267,15 +2250,7 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain(
-            &err,
-            &mut capture,
-            "error",
-            AnsiColors::Red,
-            Hints::none(),
-            None,
-        )
-        .unwrap();
+        write_error_chain(&err, &mut capture).unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
@@ -2311,15 +2286,7 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain(
-            &err,
-            &mut capture,
-            "error",
-            AnsiColors::Red,
-            Hints::none(),
-            None,
-        )
-        .unwrap();
+        write_error_chain(&err, &mut capture).unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
