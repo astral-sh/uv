@@ -745,6 +745,7 @@ async fn get_or_create_environment(
             .as_ref()
             .map(|requirement| &requirement.requirement),
         registry_target_requirement.as_ref(),
+        constraints.is_empty() && overrides.is_empty(),
         false,
         lfs,
         state.git(),

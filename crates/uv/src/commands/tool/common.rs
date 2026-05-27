@@ -161,6 +161,7 @@ impl ToolPython {
         python_request: Option<PythonRequest>,
         requirement: Option<&UnresolvedRequirement>,
         registry_requirement: Option<&Requirement>,
+        infer_registry_requires_python: bool,
         no_config: bool,
         lfs: GitLfsSetting,
         git_resolver: &GitResolver,
@@ -187,26 +188,30 @@ impl ToolPython {
             if source_requires_python.is_some() {
                 (source_requires_python, None)
             } else {
-                let registry_requirement = registry_requirement.or_else(|| {
-                    requirement.and_then(|requirement| match requirement {
-                        UnresolvedRequirement::Named(requirement) => Some(requirement),
-                        UnresolvedRequirement::Unnamed(_) => None,
-                    })
-                });
+                let registry_requires_python = if infer_registry_requires_python {
+                    let registry_requirement = registry_requirement.or_else(|| {
+                        requirement.and_then(|requirement| match requirement {
+                            UnresolvedRequirement::Named(requirement) => Some(requirement),
+                            UnresolvedRequirement::Unnamed(_) => None,
+                        })
+                    });
 
-                let registry_requires_python = match registry_requirement {
-                    Some(requirement) => {
-                        infer_requires_python_from_registry_requirement(
-                            requirement,
-                            settings,
-                            git_resolver,
-                            client_builder,
-                            concurrency,
-                            cache,
-                        )
-                        .await
+                    match registry_requirement {
+                        Some(requirement) => {
+                            infer_requires_python_from_registry_requirement(
+                                requirement,
+                                settings,
+                                git_resolver,
+                                client_builder,
+                                concurrency,
+                                cache,
+                            )
+                            .await
+                        }
+                        None => None,
                     }
-                    None => None,
+                } else {
+                    None
                 };
                 (source_requires_python, registry_requires_python)
             }

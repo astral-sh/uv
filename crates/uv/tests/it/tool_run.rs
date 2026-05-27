@@ -2271,6 +2271,48 @@ async fn tool_run_latest_infers_requires_python_from_wheel_metadata() -> Result<
     Ok(())
 }
 
+#[tokio::test]
+async fn tool_run_constraints_skip_registry_requires_python_inference() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.13", "3.12"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    let server = simple_launcher_registry_with_newer_release(&context).await?;
+
+    constraints_txt.write_str("simple-launcher==0.1.0")?;
+    context
+        .python_pin()
+        .arg("3.12")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .arg("--index-url")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--from")
+        .arg("simple-launcher")
+        .arg("python")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + simple-launcher==0.1.0
+    ");
+
+    Ok(())
+}
+
 async fn simple_launcher_registry(
     context: &TestContext,
     requires_python: Option<&str>,
@@ -2318,6 +2360,55 @@ async fn simple_launcher_registry(
         .respond_with(ResponseTemplate::new(200).set_body_string(
             "Metadata-Version: 2.1\nName: simple-launcher\nVersion: 0.1.0\nRequires-Python: >=3.12,<4.0\n",
         ))
+        .mount(&server)
+        .await;
+
+    Ok(server)
+}
+
+async fn simple_launcher_registry_with_newer_release(context: &TestContext) -> Result<MockServer> {
+    let server = MockServer::start().await;
+    let wheel_filename = "simple_launcher-0.1.0-py3-none-any.whl";
+    let wheel = fs_err::read(
+        context
+            .workspace_root
+            .join("test/links")
+            .join(wheel_filename),
+    )?;
+    let body = format!(
+        r#"{{
+            "name": "simple-launcher",
+            "files": [
+                {{
+                    "filename": "{wheel_filename}",
+                    "url": "{}/files/{wheel_filename}",
+                    "hashes": {{}},
+                    "requires-python": ">=3.12,<4.0",
+                    "upload-time": "2024-01-01T00:00:00Z"
+                }},
+                {{
+                    "filename": "simple_launcher-0.2.0-py3-none-any.whl",
+                    "url": "{}/files/simple_launcher-0.2.0-py3-none-any.whl",
+                    "hashes": {{}},
+                    "requires-python": ">=3.13,<4.0",
+                    "upload-time": "2024-01-02T00:00:00Z"
+                }}
+            ]
+        }}"#,
+        server.uri(),
+        server.uri()
+    );
+
+    Mock::given(method("GET"))
+        .and(path("/simple/simple-launcher/"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(body, "application/vnd.pypi.simple.v1+json"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/files/{wheel_filename}")))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
         .mount(&server)
         .await;
 
