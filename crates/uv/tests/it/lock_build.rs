@@ -1130,6 +1130,92 @@ fn lock_build_dependencies_extra_build_dependencies_invalidate() -> Result<()> {
     Ok(())
 }
 
+/// Verify that configured extra build dependencies invalidate immutable
+/// source-distribution locks when the configuration is removed.
+#[test]
+fn lock_build_dependencies_extra_build_dependencies_invalidate_find_links() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    let source_dist = links_dir.child("locked_extra_dep-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new(
+        "locked_extra_dep-0.1.0/pyproject.toml".into(),
+        Compression::Stored,
+    );
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "locked-extra-dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        build-backend = "setuptools.build_meta"
+        "#,
+    ))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["locked-extra-dep==0.1.0"]
+
+        [tool.uv.extra-build-dependencies]
+        locked-extra-dep = ["setuptools>=42"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["locked-extra-dep==0.1.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// Verify that universal build dependency locks use the project's Python
 /// range, not just the interpreter used to generate the lock.
 #[test]

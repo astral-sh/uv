@@ -2660,15 +2660,9 @@ impl Lock {
                 }
             }
 
-            // If the package is immutable, we don't need to validate it (or its dependencies).
-            if package.id.source.is_immutable() {
-                continue;
-            }
-
-            // Validate that the build requirements haven't changed for source trees
-            // that can store build dependencies in the lock. Do this before metadata
-            // validation, since a changed build environment can otherwise fail while
-            // trying to extract package metadata instead of reporting the stale lock.
+            // Validate mutable build requirements and configured extra build requirements
+            // before metadata validation, since a changed build environment can otherwise
+            // fail while trying to extract package metadata instead of reporting the stale lock.
             if self.supports_build_dependencies() || !package.metadata.build_requires.is_empty() {
                 let build_requires = if let Some(member) = packages.get(&package.id.name) {
                     Some(
@@ -2748,6 +2742,12 @@ impl Lock {
                         }
                     }
                 }
+            }
+
+            // If the package is immutable, we don't need to validate its artifact metadata or
+            // dependencies after checking configuration-derived build requirements above.
+            if package.id.source.is_immutable() {
+                continue;
             }
 
             // Validating a direct URL package requires retrieving metadata from the remote
