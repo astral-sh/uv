@@ -91,6 +91,8 @@ fn record_path_components(path: &str) -> Option<Vec<Box<str>>> {
     let normalized = normalize_path(Path::new(path));
     let path = normalized.as_ref();
 
+    // `RECORD` can include absolute paths and relative paths that leave the directory containing
+    // `.dist-info`, for example installed scripts. Those entries cannot describe modules here.
     if path.is_absolute() {
         return None;
     }
