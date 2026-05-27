@@ -363,6 +363,7 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(&error, ErrorOptions::default().with_stream(&mut output))
             .unwrap();
+        assert_snapshot!(format!("{output:?}"), @r#""\u{1b}[1m\u{1b}[31merror\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Failed to write file\n  \u{1b}[1m\u{1b}[31mCaused by\u{1b}[39m\u{1b}[0m: Permission denied\n""#);
         let output = anstream::adapter::strip_str(&output);
 
         assert_snapshot!(output, @r"

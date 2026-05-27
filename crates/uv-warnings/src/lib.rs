@@ -94,6 +94,7 @@ mod tests {
             ErrorOptions::default().with_stream(&mut output),
         )
         .unwrap();
+        assert_snapshot!(format!("{output:?}"), @r#""\u{1b}[1m\u{1b}[33mwarning\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Failed to create registry entry\n""#);
         let output = anstream::adapter::strip_str(&output);
 
         assert_snapshot!(output, @"warning: Failed to create registry entry
