@@ -3,7 +3,7 @@ use std::sync::Arc;
 use uv_configuration::EditableMode;
 use uv_distribution_types::{DirectorySourceDist, Dist, Resolution, ResolvedDist, SourceDist};
 
-/// If necessary, convert editable distributions to non-editable.
+/// Apply editable installation overrides to local directory distributions.
 pub(crate) fn apply_editable_mode(
     resolution: Resolution,
     editable: Option<EditableMode>,
