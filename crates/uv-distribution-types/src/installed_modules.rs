@@ -11,24 +11,21 @@ use crate::installed::{InstalledDist, InstalledDistError};
 impl InstalledDist {
     /// Read the modules provided by this installed distribution.
     pub fn read_modules(&self) -> Result<BTreeSet<ModuleName>, InstalledDistError> {
-        read_modules(self.install_path())
+        let dist_info = self.install_path();
+        if !has_extension(dist_info, "dist-info") {
+            return Ok(BTreeSet::new());
+        }
+
+        let record_path = dist_info.join("RECORD");
+        let record = read_record(File::open(&record_path)?)?;
+
+        let mut modules = BTreeSet::new();
+        for entry in record {
+            add_record_module(&entry.path, &mut modules);
+        }
+
+        Ok(modules)
     }
-}
-
-fn read_modules(dist_info: &Path) -> Result<BTreeSet<ModuleName>, InstalledDistError> {
-    if !has_extension(dist_info, "dist-info") {
-        return Ok(BTreeSet::new());
-    }
-
-    let record_path = dist_info.join("RECORD");
-    let record = read_record(File::open(&record_path)?)?;
-
-    let mut modules = BTreeSet::new();
-    for entry in record {
-        add_record_module(&entry.path, &mut modules);
-    }
-
-    Ok(modules)
 }
 
 fn add_record_module(path: &str, modules: &mut BTreeSet<ModuleName>) {
