@@ -739,7 +739,7 @@ async fn get_or_create_environment(
         // e.g., `uvx python3.12`
         (None, Some(tool_request)) => Some(tool_request),
     };
-    let python_request = ToolPython::from_request(
+    let tool_python = ToolPython::from_request(
         python_request,
         unresolved_target_requirement
             .as_ref()
@@ -753,8 +753,9 @@ async fn get_or_create_environment(
         concurrency,
         cache,
     )
-    .await?
-    .python_request;
+    .await?;
+    let installed_environment_request = tool_python.installed_environment_request().cloned();
+    let python_request = tool_python.python_request;
 
     // Discover an interpreter.
     let interpreter = PythonInstallation::find_or_download(
@@ -1018,9 +1019,11 @@ async fn get_or_create_environment(
             let existing_environment = installed_tools
                 .get_environment(&requirement.name, cache)?
                 .filter(|environment| {
-                    python_request.as_ref().is_none_or(|python_request| {
-                        python_request.satisfied(environment.environment().interpreter(), cache)
-                    })
+                    installed_environment_request
+                        .as_ref()
+                        .is_none_or(|python_request| {
+                            python_request.satisfied(environment.environment().interpreter(), cache)
+                        })
                 });
 
             // Check if the installed packages meet the requirements.
@@ -1050,9 +1053,14 @@ async fn get_or_create_environment(
                     .into_inner();
 
                     // Determine the markers and tags to use for the resolution.
-                    let markers =
-                        pip::resolution_markers(None, python_platform.as_ref(), &interpreter);
-                    let tags = pip::resolution_tags(None, python_platform.as_ref(), &interpreter)?;
+                    let existing_interpreter = environment.environment().interpreter();
+                    let markers = pip::resolution_markers(
+                        None,
+                        python_platform.as_ref(),
+                        existing_interpreter,
+                    );
+                    let tags =
+                        pip::resolution_tags(None, python_platform.as_ref(), existing_interpreter)?;
 
                     // Check if the installed packages meet the requirements.
                     let site_packages = SitePackages::from_environment(environment.environment())?;

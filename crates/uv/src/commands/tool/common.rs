@@ -148,6 +148,11 @@ pub(crate) struct ToolPython {
     /// The selected Python request, computed by considering an explicit request, a global
     /// version file, and static `requires-python` metadata from the target requirement.
     pub(crate) python_request: Option<PythonRequest>,
+    /// The Python request to apply when considering an existing installed tool environment.
+    ///
+    /// Registry metadata describes a new resolution of a tool, not an already-installed
+    /// version that may still be reusable.
+    installed_environment_request: Option<PythonRequest>,
 }
 
 impl ToolPython {
@@ -164,7 +169,7 @@ impl ToolPython {
         concurrency: &Concurrency,
         cache: &Cache,
     ) -> Result<Self, ProjectError> {
-        let requires_python = if python_request.is_none() {
+        let (source_requires_python, registry_requires_python) = if python_request.is_none() {
             let source_requires_python = match requirement {
                 Some(requirement) => {
                     infer_requires_python_from_requirement(
@@ -180,7 +185,7 @@ impl ToolPython {
             };
 
             if source_requires_python.is_some() {
-                source_requires_python
+                (source_requires_python, None)
             } else {
                 let registry_requirement = registry_requirement.or_else(|| {
                     requirement.and_then(|requirement| match requirement {
@@ -189,7 +194,7 @@ impl ToolPython {
                     })
                 });
 
-                match registry_requirement {
+                let registry_requires_python = match registry_requirement {
                     Some(requirement) => {
                         infer_requires_python_from_registry_requirement(
                             requirement,
@@ -202,13 +207,49 @@ impl ToolPython {
                         .await
                     }
                     None => None,
-                }
+                };
+                (source_requires_python, registry_requires_python)
             }
         } else {
-            None
+            (None, None)
         };
 
-        let (source, python_request) = if let Some(request) = python_request {
+        let (source, selected_python_request) = Self::select_request(
+            python_request.clone(),
+            source_requires_python
+                .as_ref()
+                .or(registry_requires_python.as_ref()),
+            no_config,
+        )
+        .await?;
+        let installed_environment_request = if registry_requires_python.is_some() {
+            Self::select_request(python_request, source_requires_python.as_ref(), no_config)
+                .await?
+                .1
+        } else {
+            selected_python_request.clone()
+        };
+
+        if let Some(python_request) = selected_python_request.as_ref() {
+            debug!(
+                "Using Python request `{}` from {source}",
+                python_request.to_canonical_string()
+            );
+        }
+
+        Ok(Self {
+            source,
+            python_request: selected_python_request,
+            installed_environment_request,
+        })
+    }
+
+    async fn select_request(
+        python_request: Option<PythonRequest>,
+        requires_python: Option<&RequiresPython>,
+        no_config: bool,
+    ) -> Result<(PythonRequestSource, Option<PythonRequest>), ProjectError> {
+        let selected = if let Some(request) = python_request {
             (PythonRequestSource::UserRequest, Some(request))
         } else if let Some(file) = PythonVersionFile::discover(
             &*CWD,
@@ -217,7 +258,7 @@ impl ToolPython {
                 .with_no_local(true),
         )
         .await?
-        .filter(|file| match (file.version(), requires_python.as_ref()) {
+        .filter(|file| match (file.version(), requires_python) {
             (Some(request), Some(requires_python)) => {
                 request.intersects_requires_python(requires_python)
             }
@@ -230,28 +271,20 @@ impl ToolPython {
         } else {
             (
                 PythonRequestSource::RequiresPython,
-                requires_python
-                    .as_ref()
-                    .and_then(PythonRequest::from_requires_python),
+                requires_python.and_then(PythonRequest::from_requires_python),
             )
         };
-
-        if let Some(python_request) = python_request.as_ref() {
-            debug!(
-                "Using Python request `{}` from {source}",
-                python_request.to_canonical_string()
-            );
-        }
-
-        Ok(Self {
-            source,
-            python_request,
-        })
+        Ok(selected)
     }
 
     /// Returns `true` if the selected request was explicitly provided by the user.
     pub(crate) fn is_explicit(&self) -> bool {
         matches!(self.source, PythonRequestSource::UserRequest)
+    }
+
+    /// Return the Python request to apply when considering an installed tool environment.
+    pub(crate) fn installed_environment_request(&self) -> Option<&PythonRequest> {
+        self.installed_environment_request.as_ref()
     }
 }
 
