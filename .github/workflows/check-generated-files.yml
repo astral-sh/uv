@@ -33,6 +33,8 @@ jobs:
         run: cargo dev generate-all --mode dry-run
       - name: "Check sysconfig mappings"
         run: cargo dev generate-sysconfig-metadata --mode check
+      - name: "Check Packse scenario tests"
+        run: cargo dev generate-scenario-tests --mode check
       - name: "Check JSON schema"
         if: ${{ inputs.schema-changed == 'true' }}
         run: cargo dev generate-json-schema --mode check

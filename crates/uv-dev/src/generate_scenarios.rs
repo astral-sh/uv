@@ -8,6 +8,7 @@ use anstream::println;
 use anyhow::{Context, Result, bail};
 use clap::ValueEnum;
 use itertools::Itertools;
+use pretty_assertions::StrComparison;
 use walkdir::WalkDir;
 
 use uv_normalize::PackageName;
@@ -16,12 +17,16 @@ use uv_pep508::{Requirement, VersionOrUrl};
 use uv_test::packse::scenario::{Package, PackageMetadata, Scenario};
 
 use crate::ROOT_DIR;
+use crate::generate_all::Mode;
 
 const GENERATED_FROM: &str = "test/scenarios";
 const GENERATED_WITH: &str = "cargo dev generate-scenario-tests";
 
 #[derive(clap::Args)]
 pub(crate) struct Args {
+    #[arg(long, default_value_t, value_enum)]
+    mode: Mode,
+
     /// Regenerate only the selected scenario test files.
     #[arg(long, value_enum)]
     templates: Vec<TemplateKind>,
@@ -75,18 +80,23 @@ pub(crate) fn main(args: &Args) -> Result<()> {
 
     for template in selected_templates {
         let cases = scenarios_for_template(template, &scenarios);
-        let output = render(template, &cases)?;
+        let output = format_rust_source(&render(template, &cases)?)?;
         let path = Path::new(ROOT_DIR).join(template.test_file());
 
-        println!("Updating: {}", template.test_file());
-        fs_err::write(&path, output.as_bytes())
-            .with_context(|| format!("failed to write {}", path.display()))?;
-        format_rust_file(&path)?;
+        match args.mode {
+            Mode::Check => check_generated_file(&path, &output)?,
+            Mode::DryRun => println!("{output}"),
+            Mode::Write => {
+                println!("Updating: {}", template.test_file());
+                fs_err::write(&path, output.as_bytes())
+                    .with_context(|| format!("failed to write {}", path.display()))?;
 
-        if args.no_snapshot_update {
-            println!("Skipping snapshots for {}", template.test_name());
-        } else {
-            update_snapshots(template)?;
+                if args.no_snapshot_update {
+                    println!("Skipping snapshots for {}", template.test_name());
+                } else {
+                    update_snapshots(template)?;
+                }
+            }
         }
     }
 
@@ -169,6 +179,80 @@ fn format_rust_file(path: &Path) -> Result<()> {
         bail!("rustfmt failed for {}", path.display());
     }
     Ok(())
+}
+
+fn format_rust_source(output: &str) -> Result<String> {
+    let temporary_directory = tempfile::Builder::new()
+        .prefix(".generate-scenario-tests-")
+        .tempdir_in(ROOT_DIR)
+        .context("failed to create temporary directory for rustfmt")?;
+    let path = temporary_directory.path().join("scenarios.rs");
+    fs_err::write(&path, output.as_bytes())
+        .with_context(|| format!("failed to write {}", path.display()))?;
+    format_rust_file(&path)?;
+    fs_err::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))
+}
+
+fn check_generated_file(path: &Path, output: &str) -> Result<()> {
+    let filename = path
+        .strip_prefix(ROOT_DIR)
+        .unwrap_or(path)
+        .to_string_lossy();
+    let output = normalize_inline_snapshots(output)?;
+    match fs_err::read_to_string(path) {
+        Ok(current) => {
+            let current = normalize_inline_snapshots(&current)?;
+            if current == output {
+                println!("Up-to-date: {filename}");
+                Ok(())
+            } else {
+                let comparison = StrComparison::new(&current, &output);
+                bail!("{filename} changed, please run `{GENERATED_WITH}`:\n{comparison}");
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            bail!("{filename} not found, please run `{GENERATED_WITH}`");
+        }
+        Err(error) => {
+            bail!("{filename} changed, please run `{GENERATED_WITH}`:\n{error}");
+        }
+    }
+}
+
+fn normalize_inline_snapshots(source: &str) -> Result<String> {
+    let mut output = String::with_capacity(source.len());
+    let mut remaining = source;
+
+    while let Some(start) = remaining.find('@') {
+        output.push_str(&remaining[..start]);
+        let snapshot = &remaining[start..];
+        let Some((opening_length, closing_delimiter)) = inline_snapshot_delimiters(snapshot) else {
+            output.push('@');
+            remaining = &snapshot[1..];
+            continue;
+        };
+        let contents = &snapshot[opening_length..];
+        let Some(end) = contents.find(&closing_delimiter) else {
+            bail!("unterminated inline snapshot in generated scenario file");
+        };
+        output.push_str("@\"<snapshot>\"");
+        remaining = &contents[end + closing_delimiter.len()..];
+    }
+
+    output.push_str(remaining);
+    Ok(output)
+}
+
+fn inline_snapshot_delimiters(snapshot: &str) -> Option<(usize, String)> {
+    if snapshot.starts_with("@\"") {
+        return Some((2, "\"".to_string()));
+    }
+    let raw = snapshot.strip_prefix("@r")?;
+    let hashes = raw.bytes().take_while(|byte| *byte == b'#').count();
+    if raw.as_bytes().get(hashes) != Some(&b'"') {
+        return None;
+    }
+    Some((hashes + 3, format!("\"{}", "#".repeat(hashes))))
 }
 
 fn update_snapshots(template: TemplateKind) -> Result<()> {
@@ -808,7 +892,10 @@ fn requirement_specifiers(requirement: &Requirement) -> Option<&uv_pep440::Versi
 
 #[cfg(test)]
 mod tests {
-    use super::{TemplateKind, compile_requirements, load_scenarios, load_scenarios_from, render};
+    use super::{
+        TemplateKind, check_generated_file, compile_requirements, load_scenarios,
+        load_scenarios_from, render,
+    };
 
     #[test]
     fn compile_requirements_preserve_multiple_root_entries() {
@@ -858,5 +945,39 @@ mod tests {
         let scenarios = load_scenarios().expect("vendored scenarios should parse");
 
         assert!(!scenarios.is_empty());
+    }
+
+    #[test]
+    fn stale_generated_file_is_an_error() {
+        let temporary_directory =
+            tempfile::tempdir().expect("temporary directory should be created");
+        let path = temporary_directory.path().join("scenario.rs");
+        fs_err::write(&path, "old contents").expect("temporary file should be written");
+
+        let error =
+            check_generated_file(&path, "new contents").expect_err("stale file should fail");
+        let error = error.to_string().replace(
+            temporary_directory.path().to_string_lossy().as_ref(),
+            "[TEMP_DIR]",
+        );
+        assert_eq!(
+            error
+                .lines()
+                .next()
+                .expect("error should include a summary"),
+            "[TEMP_DIR]/scenario.rs changed, please run `cargo dev generate-scenario-tests`:"
+        );
+    }
+
+    #[test]
+    fn accepted_snapshots_do_not_make_generated_file_stale() {
+        let temporary_directory =
+            tempfile::tempdir().expect("temporary directory should be created");
+        let path = temporary_directory.path().join("scenario.rs");
+        fs_err::write(&path, "uv_snapshot!(command, @\"\naccepted output\n\");\n")
+            .expect("temporary file should be written");
+
+        check_generated_file(&path, "uv_snapshot!(command, @r#\"<snapshot>\n\"#);\n")
+            .expect("accepted snapshot should not make generated file stale");
     }
 }
