@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::str::FromStr;
 
+use anyhow::{Context, Result};
 use serde::Deserialize;
 
 use uv_configuration::TargetTriple;
@@ -47,9 +48,11 @@ pub struct Scenario {
 
 impl Scenario {
     /// Parse a single scenario from a TOML file path.
-    pub fn from_path(path: &Path) -> Self {
-        let contents = fs_err::read_to_string(path).expect("failed to read scenario file");
-        toml::from_str(&contents).expect("failed to parse scenario file")
+    pub fn from_path(path: &Path) -> Result<Self> {
+        let contents = fs_err::read_to_string(path)
+            .with_context(|| format!("failed to read scenario file `{}`", path.display()))?;
+        toml::from_str(&contents)
+            .with_context(|| format!("failed to parse scenario file `{}`", path.display()))
     }
 
     /// Construct an otherwise-empty scenario for indexes that should only expose vendored files.
@@ -313,5 +316,21 @@ wheels = false
 "#;
 
         assert!(toml::from_str::<Scenario>(toml).is_err());
+    }
+
+    #[test]
+    fn path_is_included_in_parse_errors() {
+        let temporary_directory =
+            tempfile::tempdir().expect("temporary directory should be created");
+        let path = temporary_directory.path().join("invalid.toml");
+        fs_err::write(&path, "not valid TOML = [").expect("invalid scenario should be written");
+
+        let error = Scenario::from_path(&path).expect_err("scenario should fail to parse");
+        insta::assert_snapshot!(
+            error
+                .to_string()
+                .replace(temporary_directory.path().to_string_lossy().as_ref(), "[TEMP_DIR]"),
+            @"failed to parse scenario file `[TEMP_DIR]/invalid.toml`"
+        );
     }
 }

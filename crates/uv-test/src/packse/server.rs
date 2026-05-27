@@ -77,7 +77,8 @@ impl PackseServer {
     /// and start a mock server for it.
     pub fn new(scenario_path: &str) -> Self {
         let full_path = scenarios_dir().join(scenario_path);
-        let scenario = Scenario::from_path(&full_path);
+        let scenario =
+            Scenario::from_path(&full_path).expect("vendored Packse scenario should parse");
         Self::from_scenario(&scenario)
     }
 

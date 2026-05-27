@@ -121,7 +121,7 @@ fn load_scenarios_from(scenarios_dir: &Path) -> Result<Vec<ScenarioCase>> {
     entries
         .into_iter()
         .map(|path| {
-            let scenario = Scenario::from_path(&path);
+            let scenario = Scenario::from_path(&path)?;
             let relative = path.strip_prefix(scenarios_dir).with_context(|| {
                 format!("scenario path was outside {}", scenarios_dir.display())
             })?;
