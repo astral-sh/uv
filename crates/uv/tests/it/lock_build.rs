@@ -1708,6 +1708,25 @@ fn lock_build_dependencies_static_directory_lowers_build_sources() -> Result<()>
         dep.contains(r#"{ name = "private-builder", version = "0.1.0" }"#),
         "{dep}"
     );
+    let private_builder = package_section(&lock, "private-builder");
+    assert!(
+        private_builder.contains(r#"hash = "sha256:"#),
+        "{private_builder}"
+    );
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index")
+        .arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
 
     Ok(())
 }

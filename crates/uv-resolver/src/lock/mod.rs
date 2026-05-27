@@ -30,10 +30,11 @@ use uv_distribution_filename::{
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Dist, ExtraBuildRequires, FileLocation, GitDirectorySourceDist, GitPathBuiltDist,
-    GitPathSourceDist, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name, Node, PYPI_URL,
-    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    RemoteSource, Requirement, RequirementSource, RequiresPython, Resolution, ResolvedDist,
-    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
+    GitPathSourceDist, HashGeneration, HashPolicy, Identifier, IndexLocations, IndexMetadata,
+    IndexUrl, Name, Node, PYPI_URL, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
+    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement, RequirementSource,
+    RequiresPython, Resolution, ResolvedDist, SimplifiedMarkerTree, StaticMetadata, ToUrlError,
+    UrlString,
 };
 use uv_fs::{
     PortablePath, PortablePathBuf, Simplified, normalize_path, relative_to, try_relative_to_if,
@@ -826,13 +827,35 @@ impl Lock {
             // Create Package entries for any packages not already in the lock.
             for entry in &info.packages {
                 let resolved_dist = &entry.dist;
-                let hashes = &entry.hashes;
+                let Ok(package_id) = package_id_from_resolved_dist(resolved_dist, root) else {
+                    continue;
+                };
+
+                let generated_hashes;
+                let hashes = if entry.hashes.is_empty()
+                    && let ResolvedDist::Installable { dist, .. } = resolved_dist
+                    && matches!(dist.as_ref(), Dist::Built(BuiltDist::Path(_)))
+                {
+                    generated_hashes = database
+                        .get_or_build_wheel_metadata(
+                            dist,
+                            HashPolicy::Generate(HashGeneration::Url),
+                        )
+                        .await
+                        .map_err(|err| LockErrorKind::Resolution {
+                            id: package_id.clone(),
+                            err,
+                        })?
+                        .hashes;
+                    generated_hashes.as_slice()
+                } else {
+                    entry.hashes.as_slice()
+                };
 
                 let Ok(package) = Package::from_resolved_dist(resolved_dist, hashes, root) else {
                     continue;
                 };
 
-                let package_id = package.id.clone();
                 if existing_packages.insert(package_id.clone()) {
                     newly_created.insert(package_id);
                     new_packages.push(package);
