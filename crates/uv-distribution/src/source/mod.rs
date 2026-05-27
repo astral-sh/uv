@@ -621,6 +621,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             },
                             &cache_shard,
                             hashes,
+                            client,
                         )
                         .boxed_local()
                         .await;
@@ -668,6 +669,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &PathSourceUrl::from(dist),
                     &cache_shard,
                     hashes,
+                    client,
                 )
                 .boxed_local()
                 .await
@@ -709,7 +711,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     CacheBucket::SourceDistributions,
                     WheelCache::Path(resource.url).root(),
                 );
-                self.archive_build_requires(source, resource, &cache_shard, hashes)
+                self.archive_build_requires(source, resource, &cache_shard, hashes, client)
                     .boxed_local()
                     .await
             }
@@ -1478,7 +1480,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
-        read_build_requires(source_dist_entry.path(), subdirectory).await
+        let source_tree = subdirectory.map_or_else(
+            || source_dist_entry.path().to_path_buf(),
+            |subdirectory| source_dist_entry.path().join(subdirectory),
+        );
+        self.source_tree_build_requires(
+            &source_tree,
+            source.name(),
+            client.unmanaged.credentials_cache(),
+        )
+        .await
     }
 
     /// Return the static build requirements from a local source distribution archive.
@@ -1488,6 +1499,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &PathSourceUrl<'_>,
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
     ) -> Result<Option<Vec<Requirement>>, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
         let LocalRevisionPointer { revision, .. } = self
@@ -1509,7 +1521,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?;
         }
 
-        read_build_requires(source_entry.path(), None).await
+        self.source_tree_build_requires(
+            source_entry.path(),
+            source.name(),
+            client.unmanaged.credentials_cache(),
+        )
+        .await
     }
 
     /// Return lowered static build requirements from a local source tree.
@@ -3931,36 +3948,6 @@ async fn read_pyproject_toml(
     let pyproject_toml = PyProjectToml::from_toml(&content, pyproject_toml.simplified_display())?;
 
     Ok(pyproject_toml)
-}
-
-/// Read the static build requirements from a source distribution's `pyproject.toml`.
-async fn read_build_requires(
-    source_tree: &Path,
-    subdirectory: Option<&Path>,
-) -> Result<Option<Vec<Requirement>>, Error> {
-    let pyproject_toml = match subdirectory {
-        Some(subdirectory) => source_tree.join(subdirectory).join("pyproject.toml"),
-        None => source_tree.join("pyproject.toml"),
-    };
-    let content = match fs::read_to_string(&pyproject_toml).await {
-        Ok(content) => content,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => return Err(Error::CacheRead(err)),
-    };
-
-    let Ok(pyproject) =
-        uv_workspace::pyproject::PyProjectToml::from_string(content, &pyproject_toml)
-    else {
-        return Ok(None);
-    };
-
-    Ok(pyproject.build_system.map(|build_system| {
-        build_system
-            .requires
-            .into_iter()
-            .map(Requirement::from)
-            .collect()
-    }))
 }
 
 /// Wheel metadata stored in the source distribution cache.
