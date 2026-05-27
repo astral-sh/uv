@@ -1255,8 +1255,7 @@ async fn resolve_all_possible_builds(
                 graph_for_key(&snapshot, &key).is_some()
             };
             if !graph_exists
-                && let SourceDist::Directory(directory) = &source_dist
-                && !directory.r#virtual.unwrap_or(false)
+                && !source_dist.is_virtual()
                 && !direct_build
                 && !has_explicit_build_system
             {
