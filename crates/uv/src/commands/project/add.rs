@@ -36,7 +36,6 @@ use uv_requirements::{NamedRequirementsResolver, RequirementsSource, Requirement
 use uv_resolver::FlatIndex;
 use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
-use uv_static::is_known_standard_library_package;
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{
@@ -737,7 +736,6 @@ pub(crate) async fn add(
     // Use separate state for locking and syncing.
     let lock_state = state.fork();
     let sync_state = state;
-    let python_minor = target.interpreter().python_minor();
 
     match Box::pin(lock_and_sync(
         target,
@@ -777,57 +775,13 @@ pub(crate) async fn add(
                 let _ = snapshot.revert();
             }
             match err {
-                ProjectError::Operation(err) => {
-                    let standard_library_hint = standard_library_hint(&err, &edits, python_minor);
-                    let diagnostic = diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    );
-                    let diagnostic = if let Some(hint) = standard_library_hint {
-                        diagnostic.with_hint(hint)
-                    } else {
-                        diagnostic
-                    };
-                    diagnostic
-                        .with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing", "--frozen".green()))
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
-                }
+                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs()).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing", "--frozen".green()))
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
                 err => Err(err.into()),
             }
         }
     }
-}
-
-fn standard_library_hint(
-    operation_error: &crate::commands::pip::operations::Error,
-    edits: &[DependencyEdit],
-    python_minor: u8,
-) -> Option<String> {
-    let crate::commands::pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(
-        no_solution_error,
-    )) = operation_error
-    else {
-        return None;
-    };
-
-    edits.iter().find_map(|edit| {
-        if edit
-            .source
-            .as_ref()
-            .is_none_or(|source| matches!(source, Source::Registry { .. }))
-            && is_known_standard_library_package(python_minor, edit.requirement.name.as_ref())
-            && no_solution_error
-                .packages()
-                .any(|package| package == &edit.requirement.name)
-        {
-            Some(format!(
-                "The module `{}` is included in the Python standard library and usually should not be added as a dependency",
-                edit.requirement.name
-            ))
-        } else {
-            None
-        }
-    })
 }
 
 fn edits(

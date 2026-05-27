@@ -11278,6 +11278,35 @@ async fn lock_redact_url_sources() -> Result<()> {
     Ok(())
 }
 
+/// Suggest avoiding dependencies for modules in the Python standard library.
+#[test]
+fn lock_standard_library_error() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pickle"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because pickle was not found in the package registry and your project depends on pickle, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The module `pickle` is included in the Python standard library and usually should not be added as a dependency
+    ");
+
+    Ok(())
+}
+
 /// Pass credentials for a named index via environment variables.
 #[tokio::test]
 async fn lock_env_credentials() -> Result<()> {

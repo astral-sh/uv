@@ -18,6 +18,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
+use uv_static::is_known_standard_library_package;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::{ErrorTree, PrefixMatch};
@@ -565,6 +566,8 @@ impl PubGrubReportFormatter<'_> {
         match derivation_tree {
             DerivationTree::External(External::Custom(package, set, reason)) => {
                 if let Some(name) = package.name_no_root() {
+                    Self::standard_library_hint(name, current_environment, output_hints);
+
                     // Check for no versions due to pre-release options.
                     if !fork_urls.contains_key(name) {
                         self.prerelease_hint(name, set, selector, env, options, output_hints);
@@ -623,6 +626,8 @@ impl PubGrubReportFormatter<'_> {
             }
             DerivationTree::External(External::NoVersions(package, set)) => {
                 if let Some(name) = package.name_no_root() {
+                    Self::standard_library_hint(name, current_environment, output_hints);
+
                     // Check for no versions due to pre-release options.
                     if !fork_urls.contains_key(name) {
                         self.prerelease_hint(name, set, selector, env, options, output_hints);
@@ -1130,6 +1135,25 @@ impl PubGrubReportFormatter<'_> {
         }
     }
 
+    fn standard_library_hint(
+        name: &PackageName,
+        current_environment: &MarkerEnvironment,
+        hints: &mut IndexSet<PubGrubHint>,
+    ) {
+        if let Some(minor) = current_environment
+            .python_version()
+            .version
+            .release()
+            .get(1)
+            .and_then(|minor| u8::try_from(*minor).ok())
+            && is_known_standard_library_package(minor, name.as_ref())
+        {
+            hints.insert(PubGrubHint::StandardLibrary {
+                package: name.clone(),
+            });
+        }
+    }
+
     fn prerelease_hint(
         &self,
         name: &PackageName,
@@ -1265,6 +1289,8 @@ pub enum PubGrubHint {
     NoIndex,
     /// A package was not found in the registry, but network access was disabled.
     Offline,
+    /// A package is provided by the Python standard library.
+    StandardLibrary { package: PackageName },
     /// Metadata for a package could not be parsed.
     InvalidPackageMetadata {
         package: PackageName,
@@ -1436,6 +1462,9 @@ enum PubGrubHintCore {
     },
     NoIndex,
     Offline,
+    StandardLibrary {
+        package: PackageName,
+    },
     InvalidPackageMetadata {
         package: PackageName,
     },
@@ -1517,6 +1546,7 @@ impl From<PubGrubHint> for PubGrubHintCore {
             }
             PubGrubHint::NoIndex => Self::NoIndex,
             PubGrubHint::Offline => Self::Offline,
+            PubGrubHint::StandardLibrary { package } => Self::StandardLibrary { package },
             PubGrubHint::InvalidPackageMetadata { package, .. } => {
                 Self::InvalidPackageMetadata { package }
             }
@@ -1640,6 +1670,13 @@ impl std::fmt::Display for PubGrubHint {
                 write!(
                     f,
                     "Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.",
+                )
+            }
+            Self::StandardLibrary { package } => {
+                write!(
+                    f,
+                    "The module `{}` is included in the Python standard library and usually should not be added as a dependency",
+                    package.cyan(),
                 )
             }
             Self::InvalidPackageMetadata { package, reason } => {

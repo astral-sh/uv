@@ -41,8 +41,8 @@ static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::ne
 /// installation.
 #[derive(Debug, Default)]
 pub(crate) struct OperationDiagnostic {
-    /// Caller-provided hints to render after the error output.
-    hints: Vec<String>,
+    /// A caller-provided hint to render after the error output.
+    hint: Option<String>,
     /// Whether system certificates are being used.
     pub(crate) system_certs: bool,
     /// The context to display to the user upon resolution failure.
@@ -59,11 +59,13 @@ impl OperationDiagnostic {
         }
     }
 
-    /// Add a hint to display to the user upon resolution failure.
+    /// Set the hint to display to the user upon resolution failure.
     #[must_use]
-    pub(crate) fn with_hint(mut self, hint: String) -> Self {
-        self.hints.push(hint);
-        self
+    pub(crate) fn with_hint(self, hint: String) -> Self {
+        Self {
+            hint: Some(hint),
+            ..self
+        }
     }
 
     /// Set the context to display to the user upon resolution failure.
@@ -138,10 +140,12 @@ impl OperationDiagnostic {
             err => Some(err),
         };
 
-        // Render the caller-provided hints after the error output.
+        // Render the caller-provided hint after the error output.
         if result.is_none() {
-            let hints: Hints<'_> = self.hints.into_iter().collect();
-            anstream::eprint!("{hints}");
+            if let Some(hint) = &self.hint {
+                let hints = Hints::from(hint.as_str());
+                anstream::eprint!("{hints}");
+            }
         }
 
         result
