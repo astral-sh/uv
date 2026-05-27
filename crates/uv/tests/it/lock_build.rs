@@ -1367,6 +1367,78 @@ fn lock_build_dependencies_extra() -> Result<()> {
     Ok(())
 }
 
+/// Verify build locking honors extra build dependencies constrained to the runtime resolution.
+#[test]
+fn lock_build_dependencies_extra_match_runtime() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all()?;
+    child_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    child_dir.child("build_backend.py").write_str(
+        r#"
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+"#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio<4.1", "child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = [{ requirement = "anyio", match-runtime = true }]
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let child = package_section(&lock, "child");
+    assert!(
+        child.contains(r#"{ name = "anyio", version = "4.0.0" }"#),
+        "{child}"
+    );
+    assert!(
+        child.contains(r#"build-requires = [{ name = "anyio" }]"#),
+        "{child}"
+    );
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .arg("--locked")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 /// Verify the hook-expanded build resolution replaces its initial stage without dropping extras.
 #[test]
 fn lock_build_dependencies_hook_resolution_replaces_initial_stage() -> Result<()> {

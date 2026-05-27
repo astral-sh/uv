@@ -14,8 +14,8 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    Dist, DistributionId, Edge, Identifier, IndexUrl, Name, Node, Requirement, RequiresPython,
-    ResolutionDiagnostic, ResolvedDist,
+    Dist, DistributionId, Edge, ExtraBuildRequires, ExtraBuildRequiresError, Identifier, IndexUrl,
+    Name, Node, Requirement, RequirementSource, RequiresPython, ResolutionDiagnostic, ResolvedDist,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -600,6 +600,22 @@ impl ResolverOutput {
                 ResolutionGraphNode::Root => None,
                 ResolutionGraphNode::Dist(dist) => Some(dist),
             })
+    }
+
+    /// Constrain extra build dependencies to distributions selected by this universal resolution.
+    pub fn match_runtime_extra_build_requires(
+        &self,
+        extra_build_requires: ExtraBuildRequires,
+    ) -> Result<ExtraBuildRequires, ExtraBuildRequiresError> {
+        let mut sources: BTreeMap<PackageName, Vec<(RequirementSource, MarkerTree)>> =
+            BTreeMap::new();
+        for dist in self.dists().filter(|dist| dist.is_base()) {
+            sources
+                .entry(dist.name.clone())
+                .or_default()
+                .push((RequirementSource::from(&dist.dist), dist.marker.pep508()));
+        }
+        extra_build_requires.match_runtime_sources(&sources)
     }
 
     /// Extract the build resolution graph: direct build requirements (root edges)

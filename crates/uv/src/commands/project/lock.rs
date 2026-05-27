@@ -803,7 +803,7 @@ async fn do_lock(
         })
         .unwrap_or_default();
 
-    let make_build_dispatch = |build_preferences| {
+    let make_build_dispatch = |build_preferences, extra_build_requires| {
         BuildDispatch::new(
             &client,
             cache,
@@ -817,7 +817,7 @@ async fn do_lock(
             config_setting,
             config_settings_package,
             build_isolation,
-            &extra_build_requires,
+            extra_build_requires,
             extra_build_variables,
             *link_mode,
             build_options,
@@ -834,7 +834,7 @@ async fn do_lock(
 
     // Runtime metadata builds use the active interpreter. Universal build dependency
     // locking runs after the runtime resolution can provide source reachability markers.
-    let build_dispatch = make_build_dispatch(build_preferences.clone());
+    let build_dispatch = make_build_dispatch(build_preferences.clone(), &extra_build_requires);
 
     let database = DistributionDatabase::new(
         &client,
@@ -1077,12 +1077,17 @@ async fn do_lock(
             // Only record build dependencies in the lock file when the preview feature is enabled.
             if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
                 if !build_options.no_build_requirement(None) {
-                    let build_dispatch = make_build_dispatch(build_preferences.clone())
-                        .with_universal_build_resolution(
-                            requires_python.clone(),
-                            lock_supported_environments.clone(),
-                            artifact_environments.clone(),
-                        );
+                    let matched_extra_build_requires = resolution
+                        .match_runtime_extra_build_requires(extra_build_requires.clone())?;
+                    let build_dispatch = make_build_dispatch(
+                        build_preferences.clone(),
+                        &matched_extra_build_requires,
+                    )
+                    .with_universal_build_resolution(
+                        requires_python.clone(),
+                        lock_supported_environments.clone(),
+                        artifact_environments.clone(),
+                    );
                     let build_database = DistributionDatabase::new(
                         &client,
                         &build_dispatch,
@@ -1104,7 +1109,7 @@ async fn do_lock(
                     lock = lock
                         .with_build_resolutions(
                             &build_resolutions,
-                            build_dispatch.extra_build_requires(),
+                            &extra_build_requires,
                             target.install_path(),
                             &build_database,
                             &build_hasher,
