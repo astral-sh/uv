@@ -648,25 +648,6 @@ pub(crate) async fn add(
         &mut toml,
     )?;
 
-    let standard_library_hint = edits.iter().find_map(|edit| {
-        if edit
-            .source
-            .as_ref()
-            .is_none_or(|source| matches!(source, Source::Registry { .. }))
-            && is_known_standard_library_package(
-                target.interpreter().python_minor(),
-                edit.requirement.name.as_ref(),
-            )
-        {
-            Some(format!(
-                "The module `{}` is included in the Python standard library and usually should not be added as a dependency",
-                edit.requirement.name
-            ))
-        } else {
-            None
-        }
-    });
-
     // If no requirements were added but a dependency group or optional dependency was specified,
     // ensure the group/extra exists. This handles the case where `uv add -r requirements.txt
     // --group <name>` or `uv add -r requirements.txt --optional <extra>` is called with an empty
@@ -756,6 +737,7 @@ pub(crate) async fn add(
     // Use separate state for locking and syncing.
     let lock_state = state.fork();
     let sync_state = state;
+    let python_minor = target.interpreter().python_minor();
 
     match Box::pin(lock_and_sync(
         target,
@@ -796,6 +778,7 @@ pub(crate) async fn add(
             }
             match err {
                 ProjectError::Operation(err) => {
+                    let standard_library_hint = standard_library_hint(&err, &edits, python_minor);
                     let diagnostic = diagnostics::OperationDiagnostic::with_system_certs(
                         client_builder.system_certs(),
                     );
@@ -813,6 +796,38 @@ pub(crate) async fn add(
             }
         }
     }
+}
+
+fn standard_library_hint(
+    operation_error: &crate::commands::pip::operations::Error,
+    edits: &[DependencyEdit],
+    python_minor: u8,
+) -> Option<String> {
+    let crate::commands::pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(
+        no_solution_error,
+    )) = operation_error
+    else {
+        return None;
+    };
+
+    edits.iter().find_map(|edit| {
+        if edit
+            .source
+            .as_ref()
+            .is_none_or(|source| matches!(source, Source::Registry { .. }))
+            && is_known_standard_library_package(python_minor, edit.requirement.name.as_ref())
+            && no_solution_error
+                .packages()
+                .any(|package| package == &edit.requirement.name)
+        {
+            Some(format!(
+                "The module `{}` is included in the Python standard library and usually should not be added as a dependency",
+                edit.requirement.name
+            ))
+        } else {
+            None
+        }
+    })
 }
 
 fn edits(
