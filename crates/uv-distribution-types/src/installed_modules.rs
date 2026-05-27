@@ -44,11 +44,12 @@ fn add_record_module(path: &str, modules: &mut BTreeSet<ModuleName>) {
     let Some((file_name, parents)) = components.split_last() else {
         return;
     };
+    let file_name = file_name.as_ref();
 
     // Metadata and other entries under `.dist-info` directories are not modules.
     if components
         .iter()
-        .any(|component| has_extension(component, "dist-info"))
+        .any(|component| has_extension(component.as_ref(), "dist-info"))
     {
         return;
     }
@@ -56,12 +57,15 @@ fn add_record_module(path: &str, modules: &mut BTreeSet<ModuleName>) {
     // Relocated files are recorded at their installed paths instead.
     if components
         .first()
-        .is_some_and(|component| has_extension(component, "data"))
+        .is_some_and(|component| has_extension(component.as_ref(), "data"))
     {
         return;
     }
 
-    let mut module_components = parents.iter().map(String::as_str).collect::<Vec<_>>();
+    let mut module_components = parents
+        .iter()
+        .map(std::convert::AsRef::as_ref)
+        .collect::<Vec<_>>();
     if file_name == "__init__.py" {
         // The parent path is the package.
     } else if let Some(stem) = file_name.strip_suffix(".py") {
@@ -81,7 +85,7 @@ fn add_record_module(path: &str, modules: &mut BTreeSet<ModuleName>) {
     add_module_components(&module_components, modules);
 }
 
-fn record_path_components(path: &str) -> Option<Vec<String>> {
+fn record_path_components(path: &str) -> Option<Vec<Box<str>>> {
     let normalized = normalize_path(Path::new(path));
     let path = normalized.as_ref();
 
@@ -93,7 +97,7 @@ fn record_path_components(path: &str) -> Option<Vec<String>> {
     for component in path.components() {
         match component {
             Component::Normal(component) => {
-                components.push(component.to_str()?.to_string());
+                components.push(Box::from(component.to_str()?));
             }
             Component::CurDir => {}
             Component::ParentDir | Component::Prefix(_) | Component::RootDir => return None,
@@ -108,9 +112,12 @@ fn record_path_components(path: &str) -> Option<Vec<String>> {
 /// CPython can import `package/module.pyc` directly when only bytecode is installed. In
 /// contrast, `package/__pycache__/module.cpython-312.pyc` is not an import source without
 /// `package/module.py`.
-fn bytecode_module_stem<'a>(file_name: &'a str, parents: &[String]) -> Option<&'a str> {
+fn bytecode_module_stem<'a>(file_name: &'a str, parents: &[Box<str>]) -> Option<&'a str> {
     let stem = file_name.strip_suffix(".pyc")?;
-    if parents.last().is_some_and(|parent| parent == "__pycache__") {
+    if parents
+        .last()
+        .is_some_and(|parent| parent.as_ref() == "__pycache__")
+    {
         // A `.pyc` file in `__pycache__` does not make the module importable
         // without the corresponding source file. Sourceless imports use the
         // legacy `module.pyc` location instead.
