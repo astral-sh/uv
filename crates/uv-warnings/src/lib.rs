@@ -1,3 +1,5 @@
+use std::error::Error;
+use std::fmt;
 use std::sync::atomic::AtomicBool;
 use std::sync::{LazyLock, Mutex};
 
@@ -7,6 +9,7 @@ pub use anstream;
 #[doc(hidden)]
 pub use owo_colors;
 use rustc_hash::FxHashSet;
+use uv_errors::{ErrorOptions, write_error_chain_with_options};
 
 /// Whether user-facing warnings are enabled.
 pub static ENABLED: AtomicBool = AtomicBool::new(false);
@@ -19,6 +22,23 @@ pub fn enable() {
 /// Disable user-facing warnings.
 pub fn disable() {
     ENABLED.store(false, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Format a warning chain to standard error.
+pub fn write_warning_chain(err: &dyn Error) -> fmt::Result {
+    write_warning_chain_with_options(err, ErrorOptions::default())
+}
+
+fn write_warning_chain_with_options<C, W: fmt::Write>(
+    err: &dyn Error,
+    options: ErrorOptions<'_, C, W>,
+) -> fmt::Result {
+    write_error_chain_with_options(
+        err,
+        options
+            .with_level("warning")
+            .with_color(owo_colors::AnsiColors::Yellow),
+    )
 }
 
 /// Warn a user, if warnings are enabled.
@@ -55,4 +75,28 @@ macro_rules! warn_user_once {
             }
         }
     }};
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::anyhow;
+    use insta::assert_snapshot;
+    use uv_errors::ErrorOptions;
+
+    use super::write_warning_chain_with_options;
+
+    #[test]
+    fn format_warning_chain() {
+        let error = anyhow!("Failed to create registry entry");
+        let mut output = String::new();
+        write_warning_chain_with_options(
+            error.as_ref(),
+            ErrorOptions::default().with_stream(&mut output),
+        )
+        .unwrap();
+        let output = anstream::adapter::strip_str(&output);
+
+        assert_snapshot!(output, @"warning: Failed to create registry entry
+");
+    }
 }

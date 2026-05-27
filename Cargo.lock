@@ -7395,8 +7395,11 @@ name = "uv-warnings"
 version = "0.0.49"
 dependencies = [
  "anstream",
+ "anyhow",
+ "insta",
  "owo-colors",
  "rustc-hash",
+ "uv-errors",
 ]
 
 [[package]]

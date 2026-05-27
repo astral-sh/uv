@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, TargetTriple};
 use uv_distribution_types::{ExtraBuildRequires, Requirement, RequirementSource};
-use uv_errors::write_error_chain;
+use uv_errors::{ErrorOptions, write_error_chain_with_options};
 use uv_fs::CWD;
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
@@ -171,10 +171,10 @@ pub(crate) async fn upgrade(
             .sorted_unstable_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b))
         {
             trace!("Error trace: {err:?}");
-            write_error_chain(
+            write_error_chain_with_options(
                 err.context(format!("Failed to upgrade {}", name.green()))
                     .as_ref(),
-                printer.stderr(),
+                ErrorOptions::default().with_stream(printer.stderr()),
             )?;
         }
         return Ok(ExitStatus::Failure);

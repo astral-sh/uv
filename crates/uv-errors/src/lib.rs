@@ -137,25 +137,38 @@ impl fmt::Display for HintPrefix {
 
 /// Options for formatting an error chain.
 #[must_use]
-pub struct ErrorOptions<'a, C = AnsiColors> {
+pub struct ErrorOptions<'a, C = AnsiColors, W = Stderr> {
     level: Cow<'a, str>,
     color: C,
     hints: Hints<'a>,
     width_override: Option<usize>,
+    stream: W,
 }
 
-impl Default for ErrorOptions<'_, AnsiColors> {
+/// A standard-error writer for formatted error chains.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Stderr;
+
+impl fmt::Write for Stderr {
+    fn write_str(&mut self, output: &str) -> fmt::Result {
+        anstream::eprint!("{output}");
+        Ok(())
+    }
+}
+
+impl Default for ErrorOptions<'_, AnsiColors, Stderr> {
     fn default() -> Self {
         Self {
             level: Cow::Borrowed("error"),
             color: AnsiColors::Red,
             hints: Hints::none(),
             width_override: None,
+            stream: Stderr,
         }
     }
 }
 
-impl<'a, C> ErrorOptions<'a, C> {
+impl<'a, C, W> ErrorOptions<'a, C, W> {
     /// Use a custom level prefix, such as `warning`.
     pub fn with_level(mut self, level: impl Into<Cow<'a, str>>) -> Self {
         self.level = level.into();
@@ -163,12 +176,13 @@ impl<'a, C> ErrorOptions<'a, C> {
     }
 
     /// Use a custom color for the level and cause prefixes.
-    pub fn with_color<D>(self, color: D) -> ErrorOptions<'a, D> {
+    pub fn with_color<D>(self, color: D) -> ErrorOptions<'a, D, W> {
         ErrorOptions {
             level: self.level,
             color,
             hints: self.hints,
             width_override: self.width_override,
+            stream: self.stream,
         }
     }
 
@@ -185,41 +199,47 @@ impl<'a, C> ErrorOptions<'a, C> {
         self.width_override = Some(width_override);
         self
     }
+
+    /// Write the rendered error chain to a custom stream.
+    pub fn with_stream<D>(self, stream: D) -> ErrorOptions<'a, C, D> {
+        ErrorOptions {
+            level: self.level,
+            color: self.color,
+            hints: self.hints,
+            width_override: self.width_override,
+            stream,
+        }
+    }
 }
 
-/// Format an error chain using the default `error` level and red color.
-pub fn write_error_chain(err: &dyn Error, stream: impl fmt::Write) -> fmt::Result {
-    write_error_chain_with_options(err, stream, ErrorOptions::default())
-}
-
-/// Format a warning chain using the `warning` level and yellow color.
-pub fn write_warning_chain(err: &dyn Error, stream: impl fmt::Write) -> fmt::Result {
-    write_error_chain_with_options(
-        err,
-        stream,
-        ErrorOptions::default()
-            .with_level("warning")
-            .with_color(AnsiColors::Yellow),
-    )
+/// Format an error chain to standard error using the default level and color.
+pub fn write_error_chain(err: &dyn Error) -> fmt::Result {
+    write_error_chain_with_options(err, ErrorOptions::default())
 }
 
 /// Formats an error or warning chain with custom options.
 ///
 /// Each hint is rendered on its own line, prefixed with the styled `hint:` label.
-pub fn write_error_chain_with_options<C: DynColor + Copy>(
+pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
     err: &dyn Error,
-    mut stream: impl fmt::Write,
-    options: ErrorOptions<'_, C>,
+    options: ErrorOptions<'_, C, W>,
 ) -> fmt::Result {
-    let width = get_wrap_width(options.width_override);
+    let ErrorOptions {
+        level,
+        color,
+        hints,
+        width_override,
+        mut stream,
+    } = options;
+    let width = get_wrap_width(width_override);
 
     let main_msg = err.to_string();
-    let main_padding = " ".repeat(options.level.len() + 2);
+    let main_padding = " ".repeat(level.len() + 2);
     let wrapped_main = wrap_text(&main_msg, width, &main_padding, &main_padding);
     writeln!(
         &mut stream,
         "{}{} {}",
-        options.level.as_ref().color(options.color).bold(),
+        level.as_ref().color(color).bold(),
         ":".bold(),
         wrapped_main.trim()
     )?;
@@ -238,7 +258,7 @@ pub fn write_error_chain_with_options<C: DynColor + Copy>(
                 &mut stream,
                 "{}{}: {}",
                 padding,
-                cause.color(options.color).bold(),
+                cause.color(color).bold(),
                 first.trim()
             )?;
             for line in lines {
@@ -251,7 +271,7 @@ pub fn write_error_chain_with_options<C: DynColor + Copy>(
         }
     }
 
-    for hint in options.hints {
+    for hint in hints {
         writeln!(&mut stream, "\n{HintPrefix} {hint}")?;
     }
 
@@ -265,10 +285,7 @@ mod tests {
     use insta::assert_snapshot;
     use owo_colors::AnsiColors;
 
-    use super::{
-        ErrorOptions, ErrorWithHints, HintPrefix, Hints, write_error_chain,
-        write_error_chain_with_options, write_warning_chain,
-    };
+    use super::{ErrorOptions, ErrorWithHints, HintPrefix, Hints, write_error_chain_with_options};
 
     #[test]
     fn extend_deduplicates_matching_hints() {
@@ -314,8 +331,9 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            &mut output,
-            ErrorOptions::default().with_width_override(80),
+            ErrorOptions::default()
+                .with_width_override(80)
+                .with_stream(&mut output),
         )
         .unwrap();
         let output = anstream::adapter::strip_str(&output);
@@ -343,7 +361,8 @@ mod tests {
 
         let error = Outer { source: Inner };
         let mut output = String::new();
-        write_error_chain(&error, &mut output).unwrap();
+        write_error_chain_with_options(&error, ErrorOptions::default().with_stream(&mut output))
+            .unwrap();
         let output = anstream::adapter::strip_str(&output);
 
         assert_snapshot!(output, @r"
@@ -358,23 +377,12 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             error.as_ref(),
-            &mut output,
             ErrorOptions::default()
                 .with_level("warning")
-                .with_color(AnsiColors::Yellow),
+                .with_color(AnsiColors::Yellow)
+                .with_stream(&mut output),
         )
         .unwrap();
-        let output = anstream::adapter::strip_str(&output);
-
-        assert_snapshot!(output, @"warning: Failed to create registry entry
-");
-    }
-
-    #[test]
-    fn format_warning_chain() {
-        let error = anyhow!("Failed to create registry entry");
-        let mut output = String::new();
-        write_warning_chain(error.as_ref(), &mut output).unwrap();
         let output = anstream::adapter::strip_str(&output);
 
         assert_snapshot!(output, @"warning: Failed to create registry entry
@@ -393,8 +401,9 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            &mut output,
-            ErrorOptions::default().with_width_override(50),
+            ErrorOptions::default()
+                .with_width_override(50)
+                .with_stream(&mut output),
         )
         .unwrap();
         let output = anstream::adapter::strip_str(&output);
@@ -416,8 +425,9 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            &mut output,
-            ErrorOptions::default().with_width_override(40),
+            ErrorOptions::default()
+                .with_width_override(40)
+                .with_stream(&mut output),
         )
         .unwrap();
         let output = anstream::adapter::strip_str(&output);
@@ -454,8 +464,9 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            &mut output,
-            ErrorOptions::default().with_width_override(60),
+            ErrorOptions::default()
+                .with_width_override(60)
+                .with_stream(&mut output),
         )
         .unwrap();
         let output = anstream::adapter::strip_str(&output);
@@ -478,8 +489,9 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            &mut output,
-            ErrorOptions::default().with_width_override(50),
+            ErrorOptions::default()
+                .with_width_override(50)
+                .with_stream(&mut output),
         )
         .unwrap();
         let output = anstream::adapter::strip_str(&output);
@@ -503,8 +515,9 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            &mut output,
-            ErrorOptions::default().with_width_override(50),
+            ErrorOptions::default()
+                .with_width_override(50)
+                .with_stream(&mut output),
         )
         .unwrap();
         let output = anstream::adapter::strip_str(&output);
@@ -528,8 +541,9 @@ mod tests {
         let mut rendered = String::new();
         write_error_chain_with_options(
             err.as_ref(),
-            &mut rendered,
-            ErrorOptions::default().with_hints(hints),
+            ErrorOptions::default()
+                .with_hints(hints)
+                .with_stream(&mut rendered),
         )
         .unwrap();
         let rendered = anstream::adapter::strip_str(&rendered);
@@ -555,7 +569,11 @@ mod tests {
             .context("Failed to download Python 3.12");
 
         let mut rendered = String::new();
-        write_error_chain(err.as_ref(), &mut rendered).unwrap();
+        write_error_chain_with_options(
+            err.as_ref(),
+            ErrorOptions::default().with_stream(&mut rendered),
+        )
+        .unwrap();
         let rendered = anstream::adapter::strip_str(&rendered);
 
         assert_snapshot!(rendered, @r"

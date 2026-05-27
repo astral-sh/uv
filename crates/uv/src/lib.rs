@@ -2839,14 +2839,11 @@ where
             trace!("Error trace: {err:?}");
 
             let hints = commands::diagnostics::hints_for_error(&err);
-            let mut error_chain = String::new();
             uv_errors::write_error_chain_with_options(
                 err.as_ref(),
-                &mut error_chain,
                 uv_errors::ErrorOptions::default().with_hints(hints),
             )
-            .expect("writing to a string should not fail");
-            anstream::eprint!("{error_chain}");
+            .expect("writing to stderr should not fail");
 
             ExitStatus::Error.into()
         }

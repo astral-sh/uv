@@ -1,5 +1,4 @@
 use std::env;
-use std::fmt;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
@@ -15,15 +14,6 @@ use tracing_subscriber::{EnvFilter, Layer};
 
 use uv_dev::run;
 use uv_static::EnvVars;
-
-struct Stderr;
-
-impl fmt::Write for Stderr {
-    fn write_str(&mut self, output: &str) -> fmt::Result {
-        anstream::eprint!("{output}");
-        Ok(())
-    }
-}
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
@@ -78,8 +68,7 @@ async fn main() -> ExitCode {
     if let Err(err) = result {
         trace!("Error trace: {err:?}");
         let err = err.context("uv-dev failed");
-        uv_errors::write_error_chain(err.as_ref(), Stderr)
-            .expect("writing to stderr should not fail");
+        uv_errors::write_error_chain(err.as_ref()).expect("writing to stderr should not fail");
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS
