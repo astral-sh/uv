@@ -966,10 +966,13 @@ mod tests {
 
         let error =
             check_generated_file(&path, "new contents").expect_err("stale file should fail");
-        let error = error.to_string().replace(
-            temporary_directory.path().to_string_lossy().as_ref(),
-            "[TEMP_DIR]",
-        );
+        let error = error
+            .to_string()
+            .replace(
+                temporary_directory.path().to_string_lossy().as_ref(),
+                "[TEMP_DIR]",
+            )
+            .replace('\\', "/");
         assert_eq!(
             error
                 .lines()
