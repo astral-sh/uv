@@ -3228,6 +3228,87 @@ fn run_editable() -> Result<()> {
 }
 
 #[test]
+fn run_no_editable_from_config() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv]
+        no-editable = true
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#
+    })?;
+
+    let src = context.temp_dir.child("src").child("foo");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir_all(&child)?;
+
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import child"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+    ");
+
+    fs_err::remove_dir_all(&child)?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("python").arg("-c").arg("import child"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn run_from_directory() -> Result<()> {
     // Default to 3.11 so that the `.python-version` is meaningful.
     let context = uv_test::test_context_with_versions!(&["3.10", "3.11", "3.12"])

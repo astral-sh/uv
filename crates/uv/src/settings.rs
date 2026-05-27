@@ -241,6 +241,36 @@ pub(crate) fn resolve_preview(
     }
 }
 
+pub(crate) fn resolve_no_editable(
+    editable: bool,
+    no_editable: bool,
+    filesystem: Option<&FilesystemOptions>,
+    environment: &EnvironmentOptions,
+) -> Option<EditableMode> {
+    let (editable, no_editable) = resolve_flag_pair(
+        editable,
+        no_editable,
+        "editable",
+        "no-editable",
+        None,
+        Some(environment.no_editable),
+    );
+    let no_editable_config = filesystem
+        .as_ref()
+        .and_then(|filesystem| filesystem.no_editable)
+        .unwrap_or(false);
+
+    let no_editable = if editable.is_enabled() || no_editable.is_enabled() {
+        no_editable
+    } else if no_editable_config {
+        Flag::from_config("no-editable")
+    } else {
+        no_editable
+    };
+
+    flag(editable.into(), no_editable.into(), "editable").map(EditableMode::from)
+}
+
 /// The resolved network settings to use for any invocation of the CLI.
 #[derive(Debug, Clone)]
 pub(crate) struct NetworkSettings {
@@ -685,14 +715,9 @@ impl RunSettings {
             Some(environment.no_dev),
         );
 
-        let (editable, no_editable) = resolve_flag_pair(
-            editable,
-            no_editable,
-            "editable",
-            "no-editable",
-            None,
-            Some(environment.no_editable),
-        );
+        let editable =
+            resolve_no_editable(editable, no_editable, filesystem.as_ref(), &environment);
+
         let isolated = isolated || environment.isolated.value == Some(true);
         let show_resolution = show_resolution || environment.show_resolution.value == Some(true);
         let no_env_file = no_env_file || environment.no_env_file.value == Some(true);
@@ -725,7 +750,7 @@ impl RunSettings {
                 only_group,
                 all_groups,
             ),
-            editable: flag(editable.into(), no_editable.into(), "editable").map(EditableMode::from),
+            editable,
             modifications: if flag(exact, inexact, "inexact").unwrap_or(false) {
                 Modifications::Exact
             } else {
@@ -1750,6 +1775,9 @@ impl SyncSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
+        let editable =
+            resolve_no_editable(editable, no_editable, filesystem.as_ref(), &environment);
+
         let settings = ResolverInstallerSettings::combine(
             resolver_installer_options(installer, build),
             filesystem,
@@ -1777,14 +1805,6 @@ impl SyncSettings {
             "no-dev",
             Some(environment.dev),
             Some(environment.no_dev),
-        );
-        let (editable, no_editable) = resolve_flag_pair(
-            editable,
-            no_editable,
-            "editable",
-            "no-editable",
-            None,
-            Some(environment.no_editable),
         );
 
         let malware_settings = MalwareCheckSettings::from(&environment);
@@ -1819,7 +1839,7 @@ impl SyncSettings {
                 only_group,
                 all_groups,
             ),
-            editable: flag(editable.into(), no_editable.into(), "editable").map(EditableMode::from),
+            editable,
             install_options: InstallOptions::new(
                 no_install_project,
                 only_install_project,
@@ -2613,14 +2633,9 @@ impl ExportSettings {
             Some(environment.dev),
             Some(environment.no_dev),
         );
-        let (editable, no_editable) = resolve_flag_pair(
-            editable,
-            no_editable,
-            "editable",
-            "no-editable",
-            None,
-            Some(environment.no_editable),
-        );
+
+        let editable =
+            resolve_no_editable(editable, no_editable, filesystem.as_ref(), &environment);
 
         Self {
             format,
@@ -2650,7 +2665,7 @@ impl ExportSettings {
                 only_group,
                 all_groups,
             ),
-            editable: flag(editable.into(), no_editable.into(), "editable").map(EditableMode::from),
+            editable,
             hashes: flag(hashes, no_hashes, "hashes").unwrap_or(true),
             install_options: InstallOptions::new(
                 no_emit_project,

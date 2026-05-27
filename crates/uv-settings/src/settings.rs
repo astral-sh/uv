@@ -138,6 +138,19 @@ pub struct Options {
     )]
     pub cache_keys: Option<Vec<CacheKey>>,
 
+    /// Install any editable dependencies, including the project and any workspace members, as
+    /// non-editable.
+    ///
+    /// This is equivalent to passing `--no-editable`.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            no-editable = true
+        "#
+    )]
+    pub no_editable: Option<bool>,
+
     // NOTE(charlie): These fields are shared with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're respected in both `pyproject.toml` and `uv.toml` files.
@@ -2425,6 +2438,7 @@ struct OptionsWire {
     no_binary: Option<bool>,
     no_binary_package: Option<Vec<PackageName>>,
     torch_backend: Option<TorchMode>,
+    no_editable: Option<bool>,
 
     // #[serde(flatten)]
     // install_mirror: PythonInstallMirrors,
@@ -2550,6 +2564,7 @@ impl From<OptionsWire> for Options {
             add_bounds: bounds,
             // Used by the build backend
             build_backend,
+            no_editable,
         } = value;
 
         Self {
@@ -2635,6 +2650,7 @@ impl From<OptionsWire> for Options {
             dependency_groups,
             managed,
             package,
+            no_editable,
         }
     }
 }
