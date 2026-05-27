@@ -2656,6 +2656,84 @@ fn lock_build_dependencies_static_sdist() -> Result<()> {
     Ok(())
 }
 
+/// Verify that changing build requirements in a mutable local source archive
+/// invalidates the locked build environment.
+#[test]
+fn lock_build_dependencies_static_sdist_build_requires_invalidate() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
+    let write_source_dist = |requires: &str| -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+        let pyproject_toml = format!(
+            r#"
+                [project]
+                name = "dep"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+
+                [build-system]
+                requires = [{requires}]
+                build-backend = "setuptools.build_meta"
+                "#
+        );
+        block_on(zip.write_entry_whole(entry, pyproject_toml.as_bytes()))?;
+        let entry = ZipEntryBuilder::new("dep-0.1.0/dep/__init__.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+        Ok(())
+    };
+    write_source_dist(r#""setuptools>=42""#)?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep-0.1.0.zip" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(dep.contains(r#"build-requires = [{ name = "setuptools", specifier = ">=42" }]"#));
+
+    write_source_dist(r#""setuptools>=42", "wheel""#)?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// Verify that `--no-build-package` skips build dependency locking only for
 /// the selected package.
 #[test]

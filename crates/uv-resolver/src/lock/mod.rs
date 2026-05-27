@@ -795,12 +795,14 @@ impl Lock {
     /// consistent with how regular `dependencies` work. The build dep packages
     /// are added to the lock with their `dependencies` populated so that
     /// transitive deps can be walked at sync time via BFS.
-    pub fn with_build_resolutions(
+    pub async fn with_build_resolutions<Context: BuildContext>(
         mut self,
         build_resolutions: &BTreeMap<BuildPackageKey, uv_types::BuildResolutionGraph>,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         extra_build_requires: &ExtraBuildRequires,
         root: &Path,
+        database: &DistributionDatabase<'_, Context>,
+        build_hasher: &HashStrategy,
     ) -> Result<Self, LockError> {
         // Bump the revision to indicate the lockfile contains build dependencies.
         self.revision = BUILD_DEPENDENCIES_REVISION;
@@ -898,6 +900,27 @@ impl Lock {
                     }
                 };
                 build_requires.insert(requirement);
+            }
+            if matches!(package.id.source, Source::Path(_))
+                && let Some(source_dist) = package.to_source_dist(root)?
+            {
+                let dist = Dist::Source(source_dist.clone());
+                let requires = database
+                    .get_static_build_requires(&source_dist, build_hasher.get(&dist))
+                    .await
+                    .map_err(|err| LockErrorKind::Resolution {
+                        id: package.id.clone(),
+                        err,
+                    })?;
+                for requirement in requires.into_iter().flatten() {
+                    let requirement = match requirement.relative_to(root) {
+                        Ok(requirement) => requirement,
+                        Err(err) => {
+                            return Err(LockErrorKind::RequirementRelativePath(err).into());
+                        }
+                    };
+                    build_requires.insert(requirement);
+                }
             }
             for req in extra_build_requires
                 .get(&package.id.name)
@@ -2654,7 +2677,10 @@ impl Lock {
                             .build_system
                             .as_ref()
                             .map(|build_system| build_system.requires.clone())
-                            .unwrap_or_default(),
+                            .unwrap_or_default()
+                            .into_iter()
+                            .map(Requirement::from)
+                            .collect::<BTreeSet<_>>(),
                     )
                 } else if let Some(source_tree) = package.id.source.as_source_tree() {
                     let path = root.join(source_tree).join("pyproject.toml");
@@ -2667,6 +2693,9 @@ impl Lock {
                                         .build_system
                                         .map(|build_system| build_system.requires)
                                         .unwrap_or_default()
+                                        .into_iter()
+                                        .map(Requirement::from)
+                                        .collect::<BTreeSet<_>>()
                                 })
                         }
                         Err(err) if err.kind() == io::ErrorKind::NotFound => None,
@@ -2674,18 +2703,29 @@ impl Lock {
                             return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
                         }
                     }
+                } else if matches!(&package.id.source, Source::Path(_))
+                    && let Some(source_dist) = package.to_source_dist(root)?
+                {
+                    let dist = Dist::Source(source_dist.clone());
+                    database
+                        .get_static_build_requires(&source_dist, hasher.get(&dist))
+                        .await
+                        .map_err(|err| LockErrorKind::Resolution {
+                            id: package.id.clone(),
+                            err,
+                        })?
+                        .map(|requires| requires.into_iter().collect())
                 } else {
                     None
                 };
 
                 let extra_build_requires = extra_build_requires.get(&package.id.name);
 
-                if build_requires.is_some() || extra_build_requires.is_some() {
-                    let mut build_requires = build_requires
-                        .unwrap_or_default()
-                        .into_iter()
-                        .map(Requirement::from)
-                        .collect::<BTreeSet<_>>();
+                if build_requires.is_some()
+                    || extra_build_requires.is_some()
+                    || !package.metadata.build_requires.is_empty()
+                {
+                    let mut build_requires = build_requires.unwrap_or_default();
                     build_requires.extend(
                         extra_build_requires
                             .into_iter()

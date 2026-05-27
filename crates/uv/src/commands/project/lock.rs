@@ -1090,20 +1090,22 @@ async fn do_lock(
                     )
                     .await
                     .map_err(ProjectError::from)?;
+
+                    let build_resolutions = build_dispatch.build_resolutions().snapshot();
+                    lock = lock
+                        .with_build_resolutions(
+                            &build_resolutions,
+                            packages,
+                            build_dispatch.extra_build_requires(),
+                            target.install_path(),
+                            &build_database,
+                            &build_hasher,
+                        )
+                        .await?;
                 } else {
                     debug!(
                         "Skipping lock build dependency resolution because `--no-build` is enabled"
                     );
-                }
-
-                if !build_options.no_build_requirement(None) {
-                    let build_resolutions = build_dispatch.build_resolutions().snapshot();
-                    lock = lock.with_build_resolutions(
-                        &build_resolutions,
-                        packages,
-                        build_dispatch.extra_build_requires(),
-                        target.install_path(),
-                    )?;
                 }
             }
 
