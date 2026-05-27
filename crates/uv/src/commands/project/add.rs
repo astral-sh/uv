@@ -17,7 +17,8 @@ use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting, InstallOptions, NoSources,
+    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting,
+    InstallOptions, NoSources,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -79,7 +80,7 @@ pub(crate) async fn add(
     requirements: Vec<RequirementsSource>,
     constraints: Vec<RequirementsSource>,
     marker: Option<MarkerTree>,
-    editable: Option<bool>,
+    editable: Option<EditableMode>,
     dependency_type: DependencyType,
     raw: bool,
     bounds: Option<AddBoundsKind>,
@@ -635,7 +636,7 @@ pub(crate) async fn add(
     let edits = edits(
         requirements,
         &target,
-        editable,
+        editable.as_ref(),
         &dependency_type,
         raw,
         rev.as_deref(),
@@ -787,7 +788,7 @@ pub(crate) async fn add(
 fn edits(
     requirements: Vec<Requirement>,
     target: &AddTarget,
-    editable: Option<bool>,
+    editable: Option<&EditableMode>,
     dependency_type: &DependencyType,
     raw: bool,
     rev: Option<&str>,
@@ -800,6 +801,8 @@ fn edits(
 ) -> Result<Vec<DependencyEdit>> {
     let mut edits = Vec::<DependencyEdit>::with_capacity(requirements.len());
     for mut requirement in requirements {
+        let editable = editable.and_then(|editable| editable.for_package(&requirement.name));
+
         // Add the specified extras.
         let mut ex = requirement.extras.to_vec();
         ex.extend(extras.iter().cloned());

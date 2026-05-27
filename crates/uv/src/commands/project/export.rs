@@ -393,7 +393,7 @@ pub(crate) async fn export(
                 &extras,
                 &groups,
                 include_annotations,
-                editable,
+                editable.as_ref(),
                 &install_options,
             )?;
 
