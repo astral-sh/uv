@@ -6224,6 +6224,7 @@ dependencies = [
  "clap",
  "fs-err",
  "futures",
+ "insta",
  "itertools 0.14.0",
  "markdown",
  "owo-colors",
