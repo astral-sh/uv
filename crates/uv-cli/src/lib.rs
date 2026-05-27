@@ -4206,6 +4206,21 @@ pub struct LockArgs {
     )]
     pub dry_run: bool,
 
+    /// Rewrite the lockfile in the latest format, even if the lockfile is up-to-date.
+    ///
+    /// By default, `uv lock` skips writing the lockfile if the existing lockfile already satisfies
+    /// the workspace requirements. When `--force` is provided, uv will always perform a full
+    /// resolution and rewrite the lockfile. This is useful for migrating the lockfile to a newer
+    /// format revision (e.g., to add `upload-time` fields introduced in revision 3).
+    #[arg(
+        long,
+        conflicts_with = "check_exists",
+        conflicts_with = "check",
+        conflicts_with = "locked",
+        conflicts_with = "dry_run"
+    )]
+    pub force: bool,
+
     /// Lock the specified Python script, rather than the current project.
     ///
     /// If provided, uv will lock the script (based on its inline metadata table, in adherence with

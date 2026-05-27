@@ -86,6 +86,7 @@ pub(crate) async fn lock(
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     dry_run: DryRun,
+    force: bool,
     refresh: Refresh,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -214,6 +215,7 @@ pub(crate) async fn lock(
             printer,
             preview,
         )
+        .with_force(force)
         .with_refresh(&refresh)
         .execute(target),
     )
@@ -296,6 +298,7 @@ pub(crate) enum LockMode<'env> {
 /// A lock operation.
 pub(crate) struct LockOperation<'env> {
     mode: LockMode<'env>,
+    force: bool,
     constraints: Vec<NameRequirementSpecification>,
     refresh: Option<&'env Refresh>,
     settings: &'env ResolverSettings,
@@ -325,6 +328,7 @@ impl<'env> LockOperation<'env> {
     ) -> Self {
         Self {
             mode,
+            force: false,
             constraints: vec![],
             refresh: None,
             settings,
@@ -337,6 +341,17 @@ impl<'env> LockOperation<'env> {
             printer,
             preview,
         }
+    }
+
+    /// Force a rewrite of the lockfile, even if the lockfile is up-to-date.
+    ///
+    /// When set, uv will perform a full resolution and rewrite the lockfile in the newest format,
+    /// even if the existing lockfile satisfies the workspace requirements. This is useful for
+    /// updating the lockfile to a newer revision (e.g., to add `upload-time` fields).
+    #[must_use]
+    pub(crate) fn with_force(mut self, force: bool) -> Self {
+        self.force = force;
+        self
     }
 
     /// Set the external constraints for the [`LockOperation`].
@@ -404,6 +419,7 @@ impl<'env> LockOperation<'env> {
                     self.workspace_cache,
                     self.printer,
                     self.preview,
+                    false,
                 ))
                 .await?;
 
@@ -448,6 +464,7 @@ impl<'env> LockOperation<'env> {
                     self.workspace_cache,
                     self.printer,
                     self.preview,
+                    self.force,
                 ))
                 .await?;
 
@@ -480,6 +497,7 @@ async fn do_lock(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    force: bool,
 ) -> Result<LockResult, ProjectError> {
     let start = std::time::Instant::now();
 
@@ -848,6 +866,7 @@ async fn do_lock(
             state.index(),
             &database,
             printer,
+            force,
         )
         .await
         {
@@ -1067,11 +1086,22 @@ impl ValidatedLock {
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
         printer: Printer,
+        force: bool,
     ) -> Result<Self, ProjectError> {
         // Perform checks in a deliberate order, such that the most extreme conditions are tested
         // first (i.e., every check that returns `Self::Unusable`, followed by every check that
         // returns `Self::Versions`, followed by every check that returns `Self::Preferable`, and
         // finally `Self::Satisfies`).
+
+        // If the user requested a force rewrite, treat the existing lock as preferable rather than
+        // satisfying. This triggers a full re-resolution using the locked versions as preferences,
+        // which will regenerate the lockfile in the latest format (e.g., adding `upload-time`
+        // fields introduced in revision 3).
+        if force {
+            debug!("Ignoring existing lockfile due to `--force`");
+            return Ok(Self::Preferable(lock));
+        }
+
         if lock.resolution_mode() != options.resolution_mode {
             let _ = writeln!(
                 printer.stderr(),

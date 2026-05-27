@@ -35849,3 +35849,81 @@ fn lock_frozen_warning() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that `uv lock --force` rewrites the lockfile even when it satisfies the workspace
+/// requirements, allowing migration to newer format revisions.
+///
+/// See: <https://github.com/astral-sh/uv/issues/15220>
+#[test]
+fn lock_force_rewrite() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    // Create the initial lockfile.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Simulate an outdated lockfile format by removing the `revision` field. Without `revision`,
+    // the lockfile is parsed as revision 0 (older than the current revision 3). However, `uv lock`
+    // treats it as up-to-date since the packages satisfy the workspace requirements.
+    let lock_path = context.temp_dir.child("uv.lock");
+    let lock_content = fs_err::read_to_string(&lock_path)?;
+    let outdated_content = lock_content
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("revision"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    lock_path.write_str(&outdated_content)?;
+
+    // Without `--force`, `uv lock` does not rewrite the lockfile—the outdated format is
+    // accepted because it still satisfies the workspace requirements.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // The lockfile should still be in the outdated format (no `revision` field).
+    let lock_after_normal = fs_err::read_to_string(&lock_path)?;
+    assert_eq!(outdated_content, lock_after_normal);
+
+    // With `--force`, `uv lock` performs a full resolution and rewrites the lockfile in the
+    // latest format (including the `revision` field).
+    uv_snapshot!(context.filters(), context.lock().arg("--force"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // The lockfile should now be in the current format, with `revision = 3`.
+    let lock_after_force = fs_err::read_to_string(&lock_path)?;
+    assert!(
+        lock_after_force.contains("revision"),
+        "Expected lockfile to contain `revision` after `--force`, got:\n{lock_after_force}"
+    );
+
+    Ok(())
+}
