@@ -185,8 +185,7 @@ fn non_empty(value: &str) -> Option<&str> {
 fn has_extension(path: impl AsRef<Path>, extension: &str) -> bool {
     path.as_ref()
         .extension()
-        .and_then(|extension| extension.to_str())
-        .is_some_and(|candidate| candidate.eq_ignore_ascii_case(extension))
+        .is_some_and(|candidate| candidate == extension)
 }
 
 fn add_module_components(components: &[&str], modules: &mut BTreeSet<ModuleName>) {
