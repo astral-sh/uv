@@ -3021,11 +3021,8 @@ where
             trace!("Error trace: {err:?}");
 
             let hints = commands::diagnostics::hints_for_error(&err);
-            uv_errors::write_error_chain_with_options(
-                err.as_ref(),
-                uv_errors::ErrorOptions::default().with_hints(hints),
-            )
-            .expect("writing to stderr should not fail");
+            uv_errors::write_error_chain(err.as_ref(), hints)
+                .expect("writing to stderr should not fail");
 
             ExitStatus::Error.into()
         }

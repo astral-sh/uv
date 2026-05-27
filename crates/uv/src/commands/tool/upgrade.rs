@@ -11,7 +11,7 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, TargetTriple};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{ExtraBuildRequires, Name, Requirement, RequirementSource};
-use uv_errors::{ErrorOptions, write_error_chain_with_options};
+use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_fs::CWD;
 use uv_installer::{InstallationStrategy, Planner, SitePackages};
 use uv_normalize::PackageName;
@@ -176,6 +176,7 @@ pub(crate) async fn upgrade(
             write_error_chain_with_options(
                 err.context(format!("Failed to upgrade {}", name.green()))
                     .as_ref(),
+                Hints::none(),
                 ErrorOptions::default().with_stream(printer.stderr()),
             )?;
         }
