@@ -1217,10 +1217,13 @@ async fn resolve_all_possible_builds(
         let mut resolved_statically = false;
 
         if !graph_exists || !extra_build_dependencies.is_empty() {
+            let direct_build = if let SourceDist::Directory(directory) = &source_dist {
+                check_direct_build(&directory.install_path, uv_version::version())
+                    .is_ok_and(|()| extra_build_dependencies.is_empty())
+            } else {
+                false
+            };
             let build_requirements = if let SourceDist::Directory(directory) = &source_dist {
-                let direct_build =
-                    check_direct_build(&directory.install_path, uv_version::version())
-                        .is_ok_and(|()| extra_build_dependencies.is_empty());
                 let pyproject_toml = directory.install_path.join("pyproject.toml");
                 if !direct_build {
                     fs_err::read_to_string(&pyproject_toml)
@@ -1248,6 +1251,7 @@ async fn resolve_all_possible_builds(
                     .get_static_build_requires(&source_dist, build_hasher.get(&dist))
                     .await?
             };
+            let has_explicit_build_system = build_requirements.is_some();
 
             if let Some(mut requirements) = build_requirements {
                 requirements.extend(
@@ -1271,8 +1275,9 @@ async fn resolve_all_possible_builds(
             };
             if !graph_exists
                 && let SourceDist::Directory(directory) = &source_dist
-                && (directory.install_path.join("setup.py").is_file()
-                    || directory.install_path.join("setup.cfg").is_file())
+                && !directory.r#virtual.unwrap_or(false)
+                && !direct_build
+                && !has_explicit_build_system
             {
                 let mut requirements = vec![Requirement::from(uv_pep508::Requirement::from_str(
                     "setuptools >= 40.8.0",

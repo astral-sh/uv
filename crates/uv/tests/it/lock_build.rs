@@ -1479,6 +1479,58 @@ fn lock_build_dependencies_default_backend_cache_records_each_package() -> Resul
     Ok(())
 }
 
+/// Verify that a static source package without an explicit build system still
+/// records PEP 517's implicit setuptools build requirement.
+#[test]
+fn lock_build_dependencies_static_directory_implicit_default_backend() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+    dep_dir.child("dep").create_dir_all()?;
+    dep_dir.child("dep/__init__.py").touch()?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(dep.contains("build-dependencies = ["), "{dep}");
+    assert!(dep.contains(r#"{ name = "setuptools", version = "69.2.0" }"#));
+
+    Ok(())
+}
+
 /// Verify that build dependencies are captured correctly when the resolver forks
 /// due to platform-specific dependencies.
 #[test]
