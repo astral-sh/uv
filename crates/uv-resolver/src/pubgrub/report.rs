@@ -1122,6 +1122,9 @@ impl PubGrubReportFormatter<'_> {
             if index_capabilities.forbidden(&index.url) {
                 hints.insert(PubGrubHint::ForbiddenIndex {
                     index: index.url.clone(),
+                    any_successful_response: available_indexes
+                        .values()
+                        .any(|indexes| indexes.contains(&index.url)),
                 });
             }
         }
@@ -1360,7 +1363,11 @@ pub enum PubGrubHint {
     /// An index returned an Unauthorized (401) response.
     UnauthorizedIndex { index: IndexUrl },
     /// An index returned a Forbidden (403) response.
-    ForbiddenIndex { index: IndexUrl },
+    ForbiddenIndex {
+        index: IndexUrl,
+        // excluded from `PartialEq` and `Hash`
+        any_successful_response: bool,
+    },
     /// None of the available wheels for a package have a compatible Python language tag (e.g.,
     /// `cp310` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
     LanguageTags {
@@ -1550,7 +1557,7 @@ impl From<PubGrubHint> for PubGrubHintCore {
             }
             PubGrubHint::UncheckedIndex { name: package, .. } => Self::UncheckedIndex { package },
             PubGrubHint::UnauthorizedIndex { index } => Self::UnauthorizedIndex { index },
-            PubGrubHint::ForbiddenIndex { index } => Self::ForbiddenIndex { index },
+            PubGrubHint::ForbiddenIndex { index, .. } => Self::ForbiddenIndex { index },
             PubGrubHint::NoBuild { package, .. } => Self::NoBuild { package },
             PubGrubHint::NoBinary { package, .. } => Self::NoBinary { package },
             PubGrubHint::LanguageTags { package, .. } => Self::LanguageTags { package },
@@ -1813,13 +1820,25 @@ impl std::fmt::Display for PubGrubHint {
                     "401 Unauthorized".red(),
                 )
             }
-            Self::ForbiddenIndex { index } => {
-                write!(
-                    f,
-                    "An index URL ({}) returned a {} error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.",
-                    index.without_credentials().cyan(),
-                    "403 Forbidden".red(),
-                )
+            Self::ForbiddenIndex {
+                index,
+                any_successful_response,
+            } => {
+                if *any_successful_response {
+                    write!(
+                        f,
+                        "An index ({}) returned a {} error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `[[tool.uv.index]]` entry to continue searching across indexes.",
+                        index.without_credentials().cyan(),
+                        "403 Forbidden".red(),
+                    )
+                } else {
+                    write!(
+                        f,
+                        "An index ({}) returned a {} error. Check that the index URL is correct and the credentials are valid.",
+                        index.without_credentials().cyan(),
+                        "403 Forbidden".red(),
+                    )
+                }
             }
             Self::NoBuild { package, option } => {
                 let option = match option {

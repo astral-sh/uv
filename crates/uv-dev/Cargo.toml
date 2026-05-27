@@ -63,6 +63,9 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 uv-performance-memory-allocator = { path = "../uv-performance-memory-allocator", optional = true }
 walkdir = { workspace = true }
 
+[dev-dependencies]
+insta = { workspace = true }
+
 [lib]
 name = "uv_dev"
 doctest = false
