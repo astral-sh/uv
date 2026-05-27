@@ -1203,7 +1203,15 @@ impl Lock {
         let package_by_id = self.package_by_id();
         let selected_package_ids: FxHashSet<PackageId> = resolution
             .distributions()
-            .filter_map(|dist| package_id_from_resolved_dist(dist, workspace_root).ok())
+            .filter_map(|resolved_dist| {
+                let ResolvedDist::Installable { dist, .. } = resolved_dist else {
+                    return None;
+                };
+                if !matches!(dist.as_ref(), Dist::Source(_)) {
+                    return None;
+                }
+                package_id_from_resolved_dist(resolved_dist, workspace_root).ok()
+            })
             .collect();
         let mut build_resolution_roots: FxHashSet<PackageId> = FxHashSet::default();
         let mut queue: VecDeque<PackageId> = selected_package_ids.iter().cloned().collect();

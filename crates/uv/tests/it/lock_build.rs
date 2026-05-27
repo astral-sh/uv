@@ -10,6 +10,8 @@ use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
 use insta::assert_snapshot;
 use url::Url;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_test::uv_snapshot;
 
@@ -3189,6 +3191,144 @@ fn sync_filters_locked_build_resolutions_to_selected_packages() -> Result<()> {
 
     ----- stderr -----
     Checked in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Verify that a selected wheel does not reconstruct its locked source build
+/// environment during frozen sync.
+#[tokio::test]
+async fn sync_filters_locked_build_resolutions_to_selected_wheels() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let builder_dir = context.temp_dir.child("builder");
+    builder_dir.create_dir_all()?;
+    builder_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "builder"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        build-backend = "builder"
+        "#,
+    )?;
+    let builder_url = Url::from_directory_path(builder_dir.path()).expect("valid file URL");
+
+    let artifacts = context.temp_dir.child("artifacts");
+    artifacts.create_dir_all()?;
+    write_wheel(
+        &artifacts.child("wheel_selected_dep-0.1.0-py3-none-any.whl"),
+        "wheel-selected-dep",
+        "0.1.0",
+    )?;
+
+    let source_dist = artifacts.child("wheel_selected_dep-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new(
+        "wheel_selected_dep-0.1.0/pyproject.toml".into(),
+        Compression::Stored,
+    );
+    let pyproject_toml = format!(
+        r#"
+            [project]
+            name = "wheel-selected-dep"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["builder @ {builder_url}"]
+            build-backend = "builder"
+            "#
+    );
+    block_on(zip.write_entry_whole(entry, pyproject_toml.as_bytes()))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+
+    let server = MockServer::start().await;
+    let index_url = format!("{}/simple/", server.uri());
+    Mock::given(method("GET"))
+        .and(path("/simple/wheel-selected-dep/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"
+                <a href="{}/files/wheel_selected_dep-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">wheel_selected_dep-0.1.0-py3-none-any.whl</a>
+                <a href="{}/files/wheel_selected_dep-0.1.0.zip" data-upload-time="2024-03-01T00:00:00Z">wheel_selected_dep-0.1.0.zip</a>
+                "#,
+                server.uri(),
+                server.uri()
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/wheel_selected_dep-0.1.0-py3-none-any.whl"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_bytes(fs_err::read(
+                artifacts
+                    .child("wheel_selected_dep-0.1.0-py3-none-any.whl")
+                    .path(),
+            )?),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/wheel_selected_dep-0.1.0.zip"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(
+            artifacts.child("wheel_selected_dep-0.1.0.zip").path(),
+        )?))
+        .mount(&server)
+        .await;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["wheel-selected-dep"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--index-url")
+        .arg(&index_url), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(
+        package_section(&lock, "wheel-selected-dep").contains("build-dependencies = ["),
+        "{lock}"
+    );
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--frozen")
+        .arg("--no-build")
+        .arg("--index-url")
+        .arg(index_url), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + wheel-selected-dep==0.1.0
     ");
 
     Ok(())
