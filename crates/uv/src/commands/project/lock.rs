@@ -1220,12 +1220,13 @@ async fn resolve_all_possible_builds(
 
     while let Some((key, source_dist, marker)) = queue.pop_front() {
         let resolve_backend_hook_requirements = marker.is_some();
-        if let Some(marker) = marker {
-            build_dispatch.add_universal_build_marker(key.clone(), marker);
-        }
-        if !seen.insert(key.clone()) {
+        let marker_widened = marker
+            .is_some_and(|marker| build_dispatch.add_universal_build_marker(key.clone(), marker));
+        let seen_before = !seen.insert(key.clone());
+        if seen_before && !marker_widened {
             continue;
         }
+        let re_resolve_build_requirements = seen_before && marker_widened;
 
         let dist = Dist::Source(source_dist.clone());
         let extra_build_dependencies = build_dispatch
@@ -1233,7 +1234,7 @@ async fn resolve_all_possible_builds(
             .get(&key.name)
             .cloned()
             .unwrap_or_default();
-        let mut graph_exists = {
+        let mut graph_exists = !re_resolve_build_requirements && {
             let snapshot = build_dispatch.build_resolutions().snapshot();
             graph_for_key(&snapshot, &key).is_some()
         };

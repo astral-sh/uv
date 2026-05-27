@@ -317,6 +317,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "flit-core"
         version = "3.9.0"
         source = { registry = "https://pypi.org/simple" }
+        build-dependencies = []
         sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
@@ -389,7 +390,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         version = "24.0"
         source = { registry = "https://pypi.org/simple" }
         build-dependencies = [
-            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882, upload-time = "2024-03-10T09:39:28.33Z" }
         wheels = [
@@ -459,8 +460,8 @@ fn lock_build_dependencies_universal() -> Result<()> {
             { name = "typing-extensions", marker = "sys_platform == 'linux'" },
         ]
         build-dependencies = [
-            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
-            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
         wheels = [
@@ -500,7 +501,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         version = "4.10.0"
         source = { registry = "https://pypi.org/simple" }
         build-dependencies = [
-            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
         wheels = [
@@ -539,6 +540,142 @@ fn lock_build_dependencies_universal() -> Result<()> {
          + dep==0.1.0 (from file://[TEMP_DIR]/dep)
         ");
     }
+
+    Ok(())
+}
+
+/// Verify that a shared source build dependency is locked for every marker
+/// region from which it can be reached.
+#[test]
+fn lock_build_dependencies_shared_source_widens_marker_reachability() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("seed_linux-0.1.0-py3-none-any.whl"),
+        "seed-linux",
+        "0.1.0",
+    )?;
+    write_wheel(
+        &links_dir.child("seed_win-0.1.0-py3-none-any.whl"),
+        "seed-win",
+        "0.1.0",
+    )?;
+
+    let builder_dir = context.temp_dir.child("builder");
+    builder_dir.create_dir_all()?;
+    builder_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "builder"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = [
+            "seed-linux==0.1.0 ; sys_platform == 'linux'",
+            "seed-win==0.1.0 ; sys_platform == 'win32'",
+        ]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    builder_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "builder-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("builder/__init__.py", "")
+        wheel.writestr(
+            "builder-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: builder\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "builder-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("builder-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+    let builder_url = Url::from_directory_path(builder_dir.path()).unwrap();
+
+    for (name, marker) in [
+        ("alpha-parent", "sys_platform == 'linux'"),
+        ("omega-parent", "sys_platform == 'win32'"),
+    ] {
+        let parent_dir = context.temp_dir.child(name);
+        parent_dir.create_dir_all()?;
+        parent_dir.child("pyproject.toml").write_str(&format!(
+            r#"
+            [project]
+            name = "{name}"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["builder @ {builder_url} ; {marker}"]
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#
+        ))?;
+        parent_dir.child("build_backend.py").write_str(
+            r#"
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+"#,
+        )?;
+    }
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "alpha-parent",
+            "omega-parent",
+        ]
+
+        [tool.uv.sources]
+        alpha-parent = { path = "alpha-parent" }
+        omega-parent = { path = "omega-parent" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let builder = package_section(&lock, "builder");
+    assert!(
+        builder.contains(r#"{ name = "seed-linux", version = "0.1.0""#),
+        "{builder}"
+    );
+    assert!(
+        builder.contains(r#"{ name = "seed-win", version = "0.1.0""#),
+        "{builder}"
+    );
 
     Ok(())
 }
@@ -4423,12 +4560,10 @@ fn lock_build_dependencies_empty_conditional_resolution() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let source_dist = context.temp_dir.child("dep-0.1.0.zip");
-    let file = File::create(source_dist.path())?;
-    let mut zip = ZipWriter::new(file);
-    let options = SimpleFileOptions::default();
-    zip.add_directory("dep-0.1.0/", options)?;
-    zip.start_file("dep-0.1.0/pyproject.toml", options)?;
-    zip.write_all(
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
         br#"
         [project]
         name = "dep"
@@ -4440,18 +4575,18 @@ fn lock_build_dependencies_empty_conditional_resolution() -> Result<()> {
         backend-path = ["."]
         build-backend = "build_backend"
         "#,
-    )?;
-    zip.start_file("dep-0.1.0/build_backend.py", options)?;
-    zip.write_all(
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
         br#"
 def get_requires_for_build_wheel(config_settings=None):
     return []
 "#,
-    )?;
-    zip.add_directory("dep-0.1.0/dep/", options)?;
-    zip.start_file("dep-0.1.0/dep/__init__.py", options)?;
-    zip.write_all(b"")?;
-    zip.finish()?;
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/dep/__init__.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b""))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
 
     context.temp_dir.child("pyproject.toml").write_str(
         r#"
@@ -4917,14 +5052,11 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         "0.1.0",
     )?;
 
-    let file = File::create(artifacts.child("nested-0.1.0.zip").path())?;
-    let mut zip = ZipWriter::new(file);
-    let options = SimpleFileOptions::default();
-    zip.add_directory("nested-0.1.0/", options)?;
-    zip.start_file("nested-0.1.0/pyproject.toml", options)?;
-    zip.write_all(
-        format!(
-            r#"
+    let nested_source_dist = artifacts.child("nested-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("nested-0.1.0/pyproject.toml".into(), Compression::Stored);
+    let pyproject_toml = format!(
+        r#"
             [project]
             name = "nested"
             version = "0.1.0"
@@ -4935,12 +5067,12 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
             backend-path = ["."]
             build-backend = "build_backend"
             "#
-        )
-        .as_bytes(),
-    )?;
-    zip.start_file("nested-0.1.0/build_backend.py", options)?;
-    zip.write_all(backend("nested").as_bytes())?;
-    zip.finish()?;
+    );
+    block_on(zip.write_entry_whole(entry, pyproject_toml.as_bytes()))?;
+    let entry = ZipEntryBuilder::new("nested-0.1.0/build_backend.py".into(), Compression::Stored);
+    let nested_backend = backend("nested");
+    block_on(zip.write_entry_whole(entry, nested_backend.as_bytes()))?;
+    fs_err::write(nested_source_dist.path(), block_on(zip.close())?)?;
 
     let server = MockServer::start().await;
     let index_url = format!("{}/simple/", server.uri());

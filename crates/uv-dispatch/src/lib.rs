@@ -3,6 +3,7 @@
 //! implementing [`BuildContext`].
 
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::sync::Mutex;
@@ -272,15 +273,30 @@ impl<'a> BuildDispatch<'a> {
     }
 
     /// Record the marker environments in which a source package can require building.
-    pub fn add_universal_build_marker(&self, package: BuildPackageKey, marker: MarkerTree) {
+    ///
+    /// Returns `true` if the marker environments for the package expanded.
+    pub fn add_universal_build_marker(&self, package: BuildPackageKey, marker: MarkerTree) -> bool {
         let mut markers = self
             .universal_build_markers
             .lock()
             .expect("universal build marker lock poisoned");
-        markers
-            .entry(package)
-            .and_modify(|existing| existing.or(marker))
-            .or_insert(marker);
+        match markers.entry(package) {
+            Entry::Vacant(entry) => {
+                entry.insert(marker);
+                true
+            }
+            Entry::Occupied(mut entry) => {
+                let existing = *entry.get();
+                let mut combined = existing;
+                combined.or(marker);
+                if combined == existing {
+                    false
+                } else {
+                    entry.insert(combined);
+                    true
+                }
+            }
+        }
     }
 
     /// Return the collected build resolutions.
