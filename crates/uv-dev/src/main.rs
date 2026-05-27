@@ -1,11 +1,11 @@
 use std::env;
+use std::fmt;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::time::Instant;
 
-use anstream::eprintln;
-use owo_colors::OwoColorize;
+use owo_colors::AnsiColors;
 use tracing::{debug, trace};
 use tracing_durations_export::DurationsLayerBuilder;
 use tracing_durations_export::plot::PlotConfig;
@@ -16,6 +16,15 @@ use tracing_subscriber::{EnvFilter, Layer};
 
 use uv_dev::run;
 use uv_static::EnvVars;
+
+struct Stderr;
+
+impl fmt::Write for Stderr {
+    fn write_str(&mut self, output: &str) -> fmt::Result {
+        anstream::eprint!("{output}");
+        Ok(())
+    }
+}
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
@@ -69,10 +78,16 @@ async fn main() -> ExitCode {
     debug!("Took {}ms", start.elapsed().as_millis());
     if let Err(err) = result {
         trace!("Error trace: {err:?}");
-        eprintln!("{}", "uv-dev failed".red().bold());
-        for err in err.chain() {
-            eprintln!("  {}: {}", "Caused by".red().bold(), err.to_string().trim());
-        }
+        let err = err.context("uv-dev failed");
+        uv_errors::write_error_chain(
+            err.as_ref(),
+            Stderr,
+            "error",
+            AnsiColors::Red,
+            uv_errors::Hints::none(),
+            None,
+        )
+        .expect("writing to stderr should not fail");
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS
