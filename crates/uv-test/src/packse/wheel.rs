@@ -9,6 +9,7 @@ use std::io::Cursor;
 
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression as ZipCompression, ZipEntryBuilder};
+use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD as base64};
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use futures::executor::block_on;
@@ -38,18 +39,14 @@ pub fn generate_wheel(
     let mut zip = ZipFileWriter::new(Vec::new());
 
     let init_py = format!("__version__ = \"{version}\"\n");
-    let init_py_entry = ZipEntryBuilder::new(
-        format!("{normalized}/__init__.py").into(),
-        ZipCompression::Stored,
-    );
+    let init_py_path = format!("{normalized}/__init__.py");
+    let init_py_entry = ZipEntryBuilder::new(init_py_path.clone().into(), ZipCompression::Stored);
     block_on(zip.write_entry_whole(init_py_entry, init_py.as_bytes()))
         .expect("failed to write wheel module file");
 
     let metadata = build_metadata(name, version, requires, extras, requires_python);
-    let metadata_entry = ZipEntryBuilder::new(
-        format!("{dist_info}/METADATA").into(),
-        ZipCompression::Stored,
-    );
+    let metadata_path = format!("{dist_info}/METADATA");
+    let metadata_entry = ZipEntryBuilder::new(metadata_path.clone().into(), ZipCompression::Stored);
     block_on(zip.write_entry_whole(metadata_entry, metadata.as_bytes()))
         .expect("failed to write wheel metadata file");
 
@@ -59,18 +56,41 @@ pub fn generate_wheel(
          Root-Is-Purelib: true\n\
          Tag: {tag}\n"
     );
+    let wheel_info_path = format!("{dist_info}/WHEEL");
     let wheel_info_entry =
-        ZipEntryBuilder::new(format!("{dist_info}/WHEEL").into(), ZipCompression::Stored);
+        ZipEntryBuilder::new(wheel_info_path.clone().into(), ZipCompression::Stored);
     block_on(zip.write_entry_whole(wheel_info_entry, wheel_info.as_bytes()))
         .expect("failed to write WHEEL metadata file");
 
+    let record = build_record(
+        &dist_info,
+        &[
+            (init_py_path.as_str(), init_py.as_bytes()),
+            (metadata_path.as_str(), metadata.as_bytes()),
+            (wheel_info_path.as_str(), wheel_info.as_bytes()),
+        ],
+    );
     let record_entry =
         ZipEntryBuilder::new(format!("{dist_info}/RECORD").into(), ZipCompression::Stored);
-    block_on(zip.write_entry_whole(record_entry, b"")).expect("failed to write RECORD file");
+    block_on(zip.write_entry_whole(record_entry, record.as_bytes()))
+        .expect("failed to write RECORD file");
 
     let bytes = block_on(zip.close()).expect("failed to finish in-memory wheel");
     let filename = format!("{normalized}-{version}-{tag}.whl");
     (filename, bytes)
+}
+
+/// Build the `RECORD` metadata for a generated wheel.
+fn build_record(dist_info: &str, entries: &[(&str, &[u8])]) -> String {
+    let mut record = String::new();
+    for (path, contents) in entries {
+        let hash = base64.encode(Sha256::digest(*contents));
+        writeln!(&mut record, "{path},sha256={hash},{}", contents.len())
+            .expect("writing RECORD metadata into a string should succeed");
+    }
+    writeln!(&mut record, "{dist_info}/RECORD,,")
+        .expect("writing RECORD metadata into a string should succeed");
+    record
 }
 
 /// Generate a source distribution (`.tar.gz`) as an in-memory tarball.
@@ -282,6 +302,36 @@ mod tests {
         assert!(names.contains(&"my_package/__init__.py"));
         assert!(names.contains(&"my_package-1.0.0.dist-info/METADATA"));
         assert!(names.contains(&"my_package-1.0.0.dist-info/WHEEL"));
+        assert!(names.contains(&"my_package-1.0.0.dist-info/RECORD"));
+
+        let record_index = archive
+            .file()
+            .entries()
+            .iter()
+            .position(|entry| {
+                entry
+                    .filename()
+                    .as_str()
+                    .is_ok_and(|name| name == "my_package-1.0.0.dist-info/RECORD")
+            })
+            .expect("wheel RECORD should exist");
+        let mut record = String::new();
+        block_on(async {
+            let mut reader = archive
+                .reader_with_entry(record_index)
+                .await
+                .expect("wheel RECORD should be readable");
+            reader
+                .read_to_string_checked(&mut record)
+                .await
+                .expect("wheel RECORD should be valid UTF-8");
+        });
+        insta::assert_snapshot!(record, @"
+        my_package/__init__.py,sha256=J-j-u0itpEFT6irdmWmixQqYMadNl1X91TxUmoiLHMI,22
+        my_package-1.0.0.dist-info/METADATA,sha256=5SmEsY5VDieqZOfjFTk5WyL4HQZueAVyhthkJaH2xC4,102
+        my_package-1.0.0.dist-info/WHEEL,sha256=ujr00BDMtYYidJ71ulklWmNFpiGqy5NyjK1fX-JwFO4,78
+        my_package-1.0.0.dist-info/RECORD,,
+        ");
     }
 
     #[test]
