@@ -904,13 +904,30 @@ impl Lock {
                     entry.hashes.as_slice()
                 };
 
-                let Ok(package) = Package::from_resolved_dist(resolved_dist, hashes, root) else {
+                let Ok(mut package) = Package::from_resolved_dist(resolved_dist, hashes, root)
+                else {
                     continue;
                 };
 
-                if existing_packages.insert(package_id.clone()) {
-                    new_packages.push(package);
+                if !existing_packages.insert(package_id.clone()) {
+                    continue;
                 }
+
+                if !package.id.source.is_immutable() {
+                    let ResolvedDist::Installable { dist, .. } = resolved_dist else {
+                        return Err(LockErrorKind::InstalledBuildDep.into());
+                    };
+                    let archive = database
+                        .get_or_build_wheel_metadata(dist, build_hasher.get(dist.as_ref()))
+                        .await
+                        .map_err(|err| LockErrorKind::Resolution {
+                            id: package_id,
+                            err,
+                        })?;
+                    package.metadata =
+                        PackageMetadata::from_distribution_metadata(&archive.metadata, root)?;
+                }
+                new_packages.push(package);
             }
 
             // Collect only the direct build requirements as build-dependencies.
@@ -3627,49 +3644,16 @@ impl Package {
         let id = PackageId::from_annotated_dist(annotated_dist, root)?;
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist)?;
-        let requires_dist = if id.source.is_immutable() {
-            BTreeSet::default()
+        let metadata = if id.source.is_immutable() {
+            PackageMetadata::default()
         } else {
-            annotated_dist
-                .metadata
-                .as_ref()
-                .expect("metadata is present")
-                .requires_dist
-                .iter()
-                .cloned()
-                .map(|requirement| requirement.relative_to(root))
-                .collect::<Result<_, _>>()
-                .map_err(LockErrorKind::RequirementRelativePath)?
-        };
-        let provides_extra = if id.source.is_immutable() {
-            Box::default()
-        } else {
-            annotated_dist
-                .metadata
-                .as_ref()
-                .expect("metadata is present")
-                .provides_extra
-                .clone()
-        };
-        let dependency_groups = if id.source.is_immutable() {
-            BTreeMap::default()
-        } else {
-            annotated_dist
-                .metadata
-                .as_ref()
-                .expect("metadata is present")
-                .dependency_groups
-                .iter()
-                .map(|(group, requirements)| {
-                    let requirements = requirements
-                        .iter()
-                        .cloned()
-                        .map(|requirement| requirement.relative_to(root))
-                        .collect::<Result<_, _>>()
-                        .map_err(LockErrorKind::RequirementRelativePath)?;
-                    Ok::<_, LockError>((group.clone(), requirements))
-                })
-                .collect::<Result<_, _>>()?
+            PackageMetadata::from_distribution_metadata(
+                annotated_dist
+                    .metadata
+                    .as_ref()
+                    .expect("metadata is present"),
+                root,
+            )?
         };
         Ok(Self {
             id,
@@ -3681,12 +3665,7 @@ impl Package {
             dependency_groups: BTreeMap::default(),
             build_dependencies: vec![],
             build_dependencies_resolved: false,
-            metadata: PackageMetadata {
-                requires_dist,
-                provides_extra,
-                dependency_groups,
-                build_requires: BTreeSet::default(),
-            },
+            metadata,
         })
     }
 
@@ -4713,6 +4692,40 @@ struct PackageMetadata {
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
     #[serde(default, rename = "build-requires")]
     build_requires: BTreeSet<Requirement>,
+}
+
+impl PackageMetadata {
+    fn from_distribution_metadata(
+        metadata: &uv_distribution::Metadata,
+        root: &Path,
+    ) -> Result<Self, LockError> {
+        let requires_dist = metadata
+            .requires_dist
+            .iter()
+            .cloned()
+            .map(|requirement| requirement.relative_to(root))
+            .collect::<Result<_, _>>()
+            .map_err(LockErrorKind::RequirementRelativePath)?;
+        let dependency_groups = metadata
+            .dependency_groups
+            .iter()
+            .map(|(group, requirements)| {
+                let requirements = requirements
+                    .iter()
+                    .cloned()
+                    .map(|requirement| requirement.relative_to(root))
+                    .collect::<Result<_, _>>()
+                    .map_err(LockErrorKind::RequirementRelativePath)?;
+                Ok::<_, LockError>((group.clone(), requirements))
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Self {
+            requires_dist,
+            provides_extra: metadata.provides_extra.clone(),
+            dependency_groups,
+            build_requires: BTreeSet::default(),
+        })
+    }
 }
 
 impl PackageWire {

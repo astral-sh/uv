@@ -5521,6 +5521,129 @@ fn lock_build_dependencies_build_only_source_package() -> Result<()> {
     Ok(())
 }
 
+/// Verify that runtime metadata is preserved for source packages reached only
+/// through build dependencies.
+#[test]
+fn lock_build_dependencies_build_only_source_package_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+    )?;
+
+    let builder_dir = context.temp_dir.child("builder");
+    builder_dir.create_dir_all()?;
+    builder_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "builder"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["helper==0.1.0"]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    builder_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "builder-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("builder/__init__.py", "")
+        wheel.writestr(
+            "builder-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: builder\nVersion: 0.1.0\nRequires-Dist: helper==0.1.0\n",
+        )
+        wheel.writestr(
+            "builder-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("builder-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+    let builder_url = Url::from_directory_path(builder_dir.path()).unwrap();
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["builder @ {builder_url}"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+    ))?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+"#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let builder = package_section(&lock, "builder");
+    assert!(builder.contains(r#"{ name = "helper" }"#), "{builder}");
+    assert!(
+        builder.contains(r#"requires-dist = [{ name = "helper", specifier = "==0.1.0" }]"#),
+        "{builder}"
+    );
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 /// Verify that relocking without the preview feature preserves existing
 /// locked build dependencies without churn.
 #[test]
