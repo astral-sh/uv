@@ -38,38 +38,32 @@ pub fn generate_wheel(
 
     let mut zip = ZipFileWriter::new(Vec::new());
 
-    let init_py = format!("__version__ = \"{version}\"\n");
-    let init_py_path = format!("{normalized}/__init__.py");
-    let init_py_entry = ZipEntryBuilder::new(init_py_path.clone().into(), ZipCompression::Stored);
-    block_on(zip.write_entry_whole(init_py_entry, init_py.as_bytes()))
-        .expect("failed to write wheel module file");
+    let entries = [
+        (
+            format!("{normalized}/__init__.py"),
+            format!("__version__ = \"{version}\"\n"),
+        ),
+        (
+            format!("{dist_info}/METADATA"),
+            build_metadata(name, version, requires, extras, requires_python),
+        ),
+        (
+            format!("{dist_info}/WHEEL"),
+            format!(
+                "Wheel-Version: 1.0\n\
+                 Generator: uv-test\n\
+                 Root-Is-Purelib: true\n\
+                 Tag: {tag}\n"
+            ),
+        ),
+    ];
+    for (path, contents) in &entries {
+        let entry = ZipEntryBuilder::new(path.clone().into(), ZipCompression::Stored);
+        block_on(zip.write_entry_whole(entry, contents.as_bytes()))
+            .expect("failed to write wheel file");
+    }
 
-    let metadata = build_metadata(name, version, requires, extras, requires_python);
-    let metadata_path = format!("{dist_info}/METADATA");
-    let metadata_entry = ZipEntryBuilder::new(metadata_path.clone().into(), ZipCompression::Stored);
-    block_on(zip.write_entry_whole(metadata_entry, metadata.as_bytes()))
-        .expect("failed to write wheel metadata file");
-
-    let wheel_info = format!(
-        "Wheel-Version: 1.0\n\
-         Generator: uv-test\n\
-         Root-Is-Purelib: true\n\
-         Tag: {tag}\n"
-    );
-    let wheel_info_path = format!("{dist_info}/WHEEL");
-    let wheel_info_entry =
-        ZipEntryBuilder::new(wheel_info_path.clone().into(), ZipCompression::Stored);
-    block_on(zip.write_entry_whole(wheel_info_entry, wheel_info.as_bytes()))
-        .expect("failed to write WHEEL metadata file");
-
-    let record = build_record(
-        &dist_info,
-        &[
-            (init_py_path.as_str(), init_py.as_bytes()),
-            (metadata_path.as_str(), metadata.as_bytes()),
-            (wheel_info_path.as_str(), wheel_info.as_bytes()),
-        ],
-    );
+    let record = build_record(&dist_info, &entries);
     let record_entry =
         ZipEntryBuilder::new(format!("{dist_info}/RECORD").into(), ZipCompression::Stored);
     block_on(zip.write_entry_whole(record_entry, record.as_bytes()))
@@ -81,10 +75,11 @@ pub fn generate_wheel(
 }
 
 /// Build the `RECORD` metadata for a generated wheel.
-fn build_record(dist_info: &str, entries: &[(&str, &[u8])]) -> String {
+fn build_record(dist_info: &str, entries: &[(String, String)]) -> String {
     let mut record = String::new();
     for (path, contents) in entries {
-        let hash = base64.encode(Sha256::digest(*contents));
+        let contents = contents.as_bytes();
+        let hash = base64.encode(Sha256::digest(contents));
         writeln!(&mut record, "{path},sha256={hash},{}", contents.len())
             .expect("writing RECORD metadata into a string should succeed");
     }
