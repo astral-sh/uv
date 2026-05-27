@@ -3,6 +3,7 @@ use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
+use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
@@ -21,6 +22,27 @@ fn package_section<'a>(lock: &'a str, name: &str) -> &'a str {
         .map(|offset| offset + 1)
         .unwrap_or(rest.len());
     &rest[..end]
+}
+
+fn write_wheel(path: &ChildPath, name: &str, version: &str) -> Result<()> {
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let dist_info = format!("{}-{version}.dist-info", name.replace('-', "_"));
+
+    let entry = ZipEntryBuilder::new(format!("{dist_info}/METADATA").into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        format!("Metadata-Version: 2.3\nName: {name}\nVersion: {version}\n").as_bytes(),
+    ))?;
+    let entry = ZipEntryBuilder::new(format!("{dist_info}/WHEEL").into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+    ))?;
+    let entry = ZipEntryBuilder::new(format!("{dist_info}/RECORD").into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b""))?;
+    fs_err::write(path.path(), block_on(zip.close())?)?;
+
+    Ok(())
 }
 
 /// Lock a project with a dependency that requires building from source
@@ -1620,12 +1642,19 @@ fn lock_build_dependencies_static_directory_implicit_default_backend() -> Result
     Ok(())
 }
 
-/// Verify that static Git dependencies retain their declared build
-/// requirements in the locked build environment.
+/// Verify that static directory dependencies lower build requirements through
+/// their own source configuration before locking the build environment.
 #[test]
-#[cfg(feature = "test-git")]
-fn lock_build_dependencies_static_git() -> Result<()> {
+fn lock_build_dependencies_static_directory_lowers_build_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+
+    write_wheel(
+        &context
+            .temp_dir
+            .child("private_builder-0.1.0-py3-none-any.whl"),
+        "private-builder",
+        "0.1.0",
+    )?;
 
     let dep_dir = context.temp_dir.child("dep");
     dep_dir.create_dir_all()?;
@@ -1637,8 +1666,77 @@ fn lock_build_dependencies_static_git() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["private-builder"]
+        build-backend = "private_builder"
+
+        [tool.uv.sources]
+        private-builder = { path = "../private_builder-0.1.0-py3-none-any.whl" }
+        "#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(
+        dep.contains(r#"{ name = "private-builder", version = "0.1.0" }"#),
+        "{dep}"
+    );
+
+    Ok(())
+}
+
+/// Verify that static Git dependencies lower their declared build requirements
+/// through their own source configuration before locking the build environment.
+#[test]
+#[cfg(feature = "test-git")]
+fn lock_build_dependencies_static_git() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    write_wheel(
+        &dep_dir.child("private_builder-0.1.0-py3-none-any.whl"),
+        "private-builder",
+        "0.1.0",
+    )?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["private-builder"]
+        build-backend = "private_builder"
+
+        [tool.uv.sources]
+        private-builder = { path = "private_builder-0.1.0-py3-none-any.whl" }
         "#,
     )?;
     Command::new("git")
@@ -1659,7 +1757,7 @@ fn lock_build_dependencies_static_git() -> Result<()> {
         .success();
     Command::new("git")
         .args(["-C", dep_dir.path().to_str().expect("UTF-8 temp path")])
-        .args(["add", "pyproject.toml"])
+        .args(["add", "."])
         .assert()
         .success();
     Command::new("git")
@@ -1688,7 +1786,8 @@ fn lock_build_dependencies_static_git() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--preview-features")
-        .arg("lock-build-dependencies"), @"
+        .arg("lock-build-dependencies")
+        .arg("--no-index"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1700,7 +1799,10 @@ fn lock_build_dependencies_static_git() -> Result<()> {
     let lock = context.read("uv.lock");
     let dep = package_section(&lock, "dep");
     assert!(dep.contains("build-dependencies = ["), "{dep}");
-    assert!(dep.contains(r#"{ name = "setuptools", version = "69.2.0" }"#));
+    assert!(
+        dep.contains(r#"{ name = "private-builder", version = "0.1.0" }"#),
+        "{dep}"
+    );
 
     Ok(())
 }

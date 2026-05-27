@@ -51,7 +51,7 @@ use uv_workspace::pyproject::ToolUvSources;
 use crate::distribution_database::ManagedClient;
 use crate::error::Error;
 use crate::hash::http_hash_algorithms;
-use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
+use crate::metadata::{ArchiveMetadata, BuildRequires, GitWorkspaceMember, Metadata};
 use crate::source::built_wheel_metadata::{BuiltWheelFile, BuiltWheelMetadata};
 use crate::source::revision::Revision;
 use crate::{Reporter, RequiresDist};
@@ -673,7 +673,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await
             }
             BuildableSource::Dist(SourceDist::Directory(dist)) => {
-                read_build_requires(&dist.install_path, None).await
+                self.source_tree_build_requires(
+                    &dist.install_path,
+                    Some(&dist.name),
+                    client.unmanaged.credentials_cache(),
+                )
+                .await
             }
             BuildableSource::Dist(SourceDist::GitDirectory(dist)) => {
                 self.git_build_requires(source, &GitDirectorySourceUrl::from(dist), hashes, client)
@@ -709,7 +714,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .await
             }
             BuildableSource::Url(SourceUrl::Directory(resource)) => {
-                read_build_requires(resource.install_path, None).await
+                self.source_tree_build_requires(
+                    resource.install_path,
+                    source.name(),
+                    client.unmanaged.credentials_cache(),
+                )
+                .await
             }
             BuildableSource::Url(SourceUrl::GitDirectory(resource)) => {
                 self.git_build_requires(source, resource, hashes, client)
@@ -1502,6 +1512,53 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         read_build_requires(source_entry.path(), None).await
     }
 
+    /// Return lowered static build requirements from a local source tree.
+    async fn source_tree_build_requires(
+        &self,
+        source_tree: &Path,
+        package_name: Option<&PackageName>,
+        credentials_cache: &CredentialsCache,
+    ) -> Result<Option<Vec<Requirement>>, Error> {
+        let pyproject_toml = source_tree.join("pyproject.toml");
+        let content = match fs::read_to_string(&pyproject_toml).await {
+            Ok(content) => content,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(Error::CacheRead(err)),
+        };
+
+        let Ok(pyproject) =
+            uv_workspace::pyproject::PyProjectToml::from_string(content, &pyproject_toml)
+        else {
+            return Ok(None);
+        };
+        let name = pyproject
+            .project
+            .as_ref()
+            .map(|project| project.name.clone())
+            .or_else(|| package_name.cloned());
+        let Some(build_system) = pyproject.build_system else {
+            return Ok(None);
+        };
+
+        let build_requires = uv_pypi_types::BuildRequires {
+            name,
+            requires_dist: build_system.requires,
+        };
+        Ok(Some(
+            BuildRequires::from_project_maybe_workspace(
+                build_requires,
+                source_tree,
+                self.build_context.locations(),
+                self.build_context.sources(),
+                true,
+                self.build_context.workspace_cache(),
+                credentials_cache,
+            )
+            .await?
+            .requires_dist,
+        ))
+    }
+
     /// Return the static build requirements from a Git source distribution.
     async fn git_build_requires(
         &self,
@@ -1527,7 +1584,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         )
         .await?;
 
-        read_build_requires(fetch.path(), resource.subdirectory).await
+        let source_tree = resource.subdirectory.map_or_else(
+            || fetch.path().to_path_buf(),
+            |subdirectory| fetch.path().join(subdirectory),
+        );
+        self.source_tree_build_requires(
+            &source_tree,
+            source.name(),
+            client.unmanaged.credentials_cache(),
+        )
+        .await
     }
 
     /// Return the [`Revision`] for a local archive, refreshing it if necessary.

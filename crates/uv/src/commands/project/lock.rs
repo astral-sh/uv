@@ -1225,29 +1225,8 @@ async fn resolve_all_possible_builds(
             } else {
                 false
             };
-            let build_requirements = if let SourceDist::Directory(directory) = &source_dist {
-                let pyproject_toml = directory.install_path.join("pyproject.toml");
-                if !direct_build {
-                    fs_err::read_to_string(&pyproject_toml)
-                        .ok()
-                        .and_then(|contents| {
-                            uv_workspace::pyproject::PyProjectToml::from_string(
-                                contents,
-                                &pyproject_toml,
-                            )
-                            .ok()
-                        })
-                        .and_then(|pyproject| pyproject.build_system)
-                        .map(|build_system| {
-                            build_system
-                                .requires
-                                .into_iter()
-                                .map(Requirement::from)
-                                .collect()
-                        })
-                } else {
-                    None
-                }
+            let build_requirements = if direct_build {
+                None
             } else {
                 database
                     .get_static_build_requires(&source_dist, build_hasher.get(&dist))
