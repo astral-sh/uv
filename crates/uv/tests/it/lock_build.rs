@@ -3298,6 +3298,134 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
     Ok(())
 }
 
+/// Verify that stale build requirements in non-host marker branches invalidate the lock file.
+#[test]
+fn lock_build_dependencies_stale_build_requires_foreign_platform() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let foreign_marker = if cfg!(target_os = "windows") {
+        "sys_platform == 'linux'"
+    } else {
+        "sys_platform == 'win32'"
+    };
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("seed-0.1.0-py3-none-any.whl"),
+        "seed",
+        "0.1.0",
+    )?;
+    write_wheel(
+        &links_dir.child("seed-0.2.0-py3-none-any.whl"),
+        "seed",
+        "0.2.0",
+    )?;
+
+    let builder_dir = context.temp_dir.child("builder");
+    builder_dir.create_dir_all()?;
+    let builder_pyproject = builder_dir.child("pyproject.toml");
+    let write_builder = |seed_version: &str| {
+        builder_pyproject.write_str(&format!(
+            r#"
+        [project]
+        name = "builder"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["seed=={seed_version}"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+        ))
+    };
+    write_builder("0.1.0")?;
+    builder_dir.child("build_backend.py").write_str(
+        r#"
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+"#,
+    )?;
+    let builder_url = Url::from_directory_path(builder_dir.path()).unwrap();
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["builder @ {builder_url} ; {foreign_marker}"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+    ))?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+"#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(
+        package_section(&lock, "builder").contains(r#"{ name = "seed", version = "0.1.0","#),
+        "{lock}"
+    );
+
+    write_builder("0.2.0")?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// Verify that transitive build dependencies behind platform markers are
 /// correctly excluded at sync time. When `anyio` (linux-only build dep)
 /// is skipped on macOS/Windows, its transitive deps `idna` and `sniffio`

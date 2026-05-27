@@ -3120,7 +3120,7 @@ impl Lock {
 
             if self.supports_build_dependencies()
                 && let Some(dependency_ids) =
-                    self.build_dependency_package_ids(package, &package_by_id, Some(markers))
+                    self.build_dependency_package_ids(package, &package_by_id, None)
             {
                 for dependency_id in dependency_ids {
                     let Some(dependency_package) = package_by_id.get(&dependency_id) else {
