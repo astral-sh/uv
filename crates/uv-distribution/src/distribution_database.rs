@@ -682,11 +682,26 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let metadata = self
             .builder
-            .download_and_build_metadata(source, hashes, &self.client)
+            .download_and_build_metadata(source, hashes, &self.client, false)
             .boxed_local()
             .await?;
 
         Ok(metadata)
+    }
+
+    /// Resolve PEP 517 hook build requirements for source distributions with static metadata.
+    #[instrument(skip_all, fields(%source))]
+    pub async fn resolve_static_build_requirements(
+        &self,
+        source: &SourceDist,
+        hashes: HashPolicy<'_>,
+    ) -> Result<(), Error> {
+        self.builder
+            .download_and_build_metadata(&BuildableSource::Dist(source), hashes, &self.client, true)
+            .boxed_local()
+            .await?;
+
+        Ok(())
     }
 
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.

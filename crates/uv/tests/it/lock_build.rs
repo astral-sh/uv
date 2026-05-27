@@ -30,6 +30,11 @@ fn write_wheel(path: &ChildPath, name: &str, version: &str) -> Result<()> {
     let mut zip = ZipFileWriter::new(Vec::new());
     let dist_info = format!("{}-{version}.dist-info", name.replace('-', "_"));
 
+    let entry = ZipEntryBuilder::new(
+        format!("{}.py", name.replace('-', "_")).into(),
+        Compression::Stored,
+    );
+    block_on(zip.write_entry_whole(entry, b""))?;
     let entry = ZipEntryBuilder::new(format!("{dist_info}/METADATA").into(), Compression::Stored);
     block_on(zip.write_entry_whole(
         entry,
@@ -1147,6 +1152,118 @@ def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
         !dep.contains(r#"{ name = "seed", version = "2.0.0" }"#),
         "{dep}"
     );
+
+    Ok(())
+}
+
+/// Verify static metadata builds lock dependencies returned by the backend hook.
+#[test]
+fn lock_build_dependencies_static_metadata_captures_hook_requirements() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+    )?;
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return ["helper"]
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    if version("helper") != "0.1.0":
+        raise RuntimeError("helper is unavailable")
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep/__init__.py", "")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(
+        dep.contains(r#"{ name = "helper", version = "0.1.0" }"#),
+        "{dep}"
+    );
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+    ");
 
     Ok(())
 }
@@ -3513,6 +3630,7 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         source = { directory = "dep2" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]

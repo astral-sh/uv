@@ -429,6 +429,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
+        resolve_static_build_requirements: bool,
     ) -> Result<ArchiveMetadata, Error> {
         let metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
@@ -457,6 +458,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             },
                             &cache_shard,
                             hashes,
+                            resolve_static_build_requirements,
                         )
                         .boxed_local()
                         .await;
@@ -471,6 +473,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     dist.ext,
                     hashes,
                     client,
+                    resolve_static_build_requirements,
                 )
                 .boxed_local()
                 .await?
@@ -491,6 +494,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     dist.ext,
                     hashes,
                     client,
+                    resolve_static_build_requirements,
                 )
                 .boxed_local()
                 .await?
@@ -502,6 +506,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     hashes,
                     client,
                     client.unmanaged.credentials_cache(),
+                    resolve_static_build_requirements,
                 )
                 .boxed_local()
                 .await?
@@ -517,6 +522,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &DirectorySourceUrl::from(dist),
                     hashes,
                     client.unmanaged.credentials_cache(),
+                    resolve_static_build_requirements,
                 )
                 .boxed_local()
                 .await?
@@ -526,9 +532,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     CacheBucket::SourceDistributions,
                     WheelCache::Path(&dist.url).root(),
                 );
-                self.archive_metadata(source, &PathSourceUrl::from(dist), &cache_shard, hashes)
-                    .boxed_local()
-                    .await?
+                self.archive_metadata(
+                    source,
+                    &PathSourceUrl::from(dist),
+                    &cache_shard,
+                    hashes,
+                    resolve_static_build_requirements,
+                )
+                .boxed_local()
+                .await?
             }
             BuildableSource::Url(SourceUrl::Direct(resource)) => {
                 // For direct URLs, cache directly under the hash of the URL itself.
@@ -546,6 +558,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     resource.ext,
                     hashes,
                     client,
+                    resolve_static_build_requirements,
                 )
                 .boxed_local()
                 .await?
@@ -557,6 +570,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     hashes,
                     client,
                     client.unmanaged.credentials_cache(),
+                    resolve_static_build_requirements,
                 )
                 .boxed_local()
                 .await?
@@ -572,6 +586,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     resource,
                     hashes,
                     client.unmanaged.credentials_cache(),
+                    resolve_static_build_requirements,
                 )
                 .boxed_local()
                 .await?
@@ -581,9 +596,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     CacheBucket::SourceDistributions,
                     WheelCache::Path(resource.url).root(),
                 );
-                self.archive_metadata(source, resource, &cache_shard, hashes)
-                    .boxed_local()
-                    .await?
+                self.archive_metadata(
+                    source,
+                    resource,
+                    &cache_shard,
+                    hashes,
+                    resolve_static_build_requirements,
+                )
+                .boxed_local()
+                .await?
             }
         };
 
@@ -906,6 +927,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         ext: SourceDistExtension,
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
+        resolve_static_build_requirements: bool,
     ) -> Result<ArchiveMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
@@ -932,6 +954,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let dynamic =
             match StaticMetadata::read(source, source_dist_entry.path(), subdirectory).await? {
                 StaticMetadata::Some(metadata) => {
+                    if resolve_static_build_requirements {
+                        self.setup_build_environment(
+                            source,
+                            source_dist_entry.path(),
+                            subdirectory,
+                            NoSources::None,
+                        )
+                        .await?;
+                    }
                     return Ok(ArchiveMetadata {
                         metadata: Metadata::from_metadata23(metadata),
                         hashes: revision.into_hashes(),
@@ -1285,6 +1316,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &PathSourceUrl<'_>,
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
+        resolve_static_build_requirements: bool,
     ) -> Result<ArchiveMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
@@ -1310,6 +1342,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If the metadata is static, return it.
         let dynamic = match StaticMetadata::read(source, source_entry.path(), None).await? {
             StaticMetadata::Some(metadata) => {
+                if resolve_static_build_requirements {
+                    self.setup_build_environment(
+                        source,
+                        source_entry.path(),
+                        None,
+                        NoSources::None,
+                    )
+                    .await?;
+                }
                 return Ok(ArchiveMetadata {
                     metadata: Metadata::from_metadata23(metadata),
                     hashes: revision.into_hashes(),
@@ -1778,6 +1819,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &DirectorySourceUrl<'_>,
         hashes: HashPolicy<'_>,
         credentials_cache: &CredentialsCache,
+        resolve_static_build_requirements: bool,
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
         if hashes.requires_validation() {
@@ -1795,6 +1837,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If the metadata is static, return it.
         let dynamic = match StaticMetadata::read(source, resource.install_path, None).await? {
             StaticMetadata::Some(metadata) => {
+                if resolve_static_build_requirements {
+                    self.setup_build_environment(
+                        source,
+                        resource.install_path,
+                        None,
+                        self.build_context.sources().clone(),
+                    )
+                    .await?;
+                }
                 return Ok(ArchiveMetadata::from(
                     Metadata::from_workspace(
                         metadata,
@@ -2514,6 +2565,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
         credentials_cache: &CredentialsCache,
+        resolve_static_build_requirements: bool,
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
         if hashes.requires_validation() {
@@ -2572,10 +2624,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                     debug!(
                                         "Found static metadata via GitHub fast path for: {source}"
                                     );
-                                    return Ok(ArchiveMetadata {
-                                        metadata: Metadata::from_metadata23(metadata),
-                                        hashes: HashDigests::empty(),
-                                    });
+                                    if !resolve_static_build_requirements {
+                                        return Ok(ArchiveMetadata {
+                                            metadata: Metadata::from_metadata23(metadata),
+                                            hashes: HashDigests::empty(),
+                                        });
+                                    }
                                 }
                                 Err(err) => {
                                     debug!(
@@ -2641,6 +2695,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let dynamic =
             match StaticMetadata::read(source, fetch.path(), resource.subdirectory).await? {
                 StaticMetadata::Some(metadata) => {
+                    if resolve_static_build_requirements {
+                        self.setup_build_environment(
+                            source,
+                            fetch.path(),
+                            resource.subdirectory,
+                            self.build_context.sources().clone(),
+                        )
+                        .await?;
+                    }
                     return Ok(ArchiveMetadata::from(
                         Metadata::from_workspace(
                             metadata,
@@ -3511,6 +3574,42 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         validate_metadata(source, &metadata)?;
 
         Ok(Some(metadata))
+    }
+
+    /// Resolve a source distribution's complete PEP 517 build environment without building it.
+    async fn setup_build_environment(
+        &self,
+        source: &BuildableSource<'_>,
+        source_root: &Path,
+        subdirectory: Option<&Path>,
+        no_sources: NoSources,
+    ) -> Result<(), Error> {
+        let build_kind = if source.is_editable() {
+            BuildKind::Editable
+        } else {
+            BuildKind::Wheel
+        };
+
+        self.build_context
+            .setup_build(
+                source_root,
+                subdirectory,
+                source_root,
+                Some(&source.to_string()),
+                source.as_dist(),
+                &no_sources,
+                build_kind,
+                if uv_flags::contains(uv_flags::EnvironmentFlags::HIDE_BUILD_OUTPUT) {
+                    BuildOutput::Quiet
+                } else {
+                    BuildOutput::Debug
+                },
+                self.build_stack.cloned().unwrap_or_default(),
+            )
+            .await
+            .map_err(|err| Error::Build(err.into()))?;
+
+        Ok(())
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.

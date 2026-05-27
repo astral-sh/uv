@@ -1211,7 +1211,7 @@ async fn resolve_all_possible_builds(
             .get(&key.name)
             .cloned()
             .unwrap_or_default();
-        let graph_exists = {
+        let mut graph_exists = {
             let snapshot = build_dispatch.build_resolutions().snapshot();
             graph_for_key(&snapshot, &key).is_some()
         };
@@ -1233,7 +1233,16 @@ async fn resolve_all_possible_builds(
             };
             let has_explicit_build_system = build_requirements.is_some();
 
-            if let Some(mut requirements) = build_requirements {
+            if !direct_build {
+                database
+                    .resolve_static_build_requirements(&source_dist, build_hasher.get(&dist))
+                    .await?;
+                let snapshot = build_dispatch.build_resolutions().snapshot();
+                graph_exists = graph_for_key(&snapshot, &key).is_some();
+                resolved_statically = graph_exists;
+            }
+
+            if !graph_exists && let Some(mut requirements) = build_requirements {
                 requirements.extend(
                     extra_build_dependencies
                         .clone()
