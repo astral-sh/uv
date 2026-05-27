@@ -22,7 +22,7 @@ use uv_pep440::VersionSpecifiers;
 use crate::http_server::{HttpServer, content_type_for_filename};
 use crate::vendor::{VendorArtifact, vendor_artifacts};
 
-use super::scenario::Scenario;
+use super::scenario::{Scenario, WheelTag};
 use super::scenarios_dir;
 use super::wheel::{generate_sdist, generate_wheel, sha256_hex};
 
@@ -116,12 +116,12 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
         for (version, meta) in &package.versions {
             if meta.wheel {
                 let tags = if meta.wheel_tags.is_empty() {
-                    vec!["py3-none-any".to_string()]
+                    vec!["py3-none-any"]
                 } else {
-                    meta.wheel_tags.clone()
+                    meta.wheel_tags.iter().map(WheelTag::as_str).collect()
                 };
 
-                for tag in &tags {
+                for tag in tags {
                     let (filename, bytes) = generate_wheel(
                         package_name,
                         version,

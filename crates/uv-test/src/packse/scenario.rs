@@ -11,6 +11,7 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 
 use uv_configuration::TargetTriple;
+use uv_distribution_filename::WheelFilename;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Requirement};
@@ -114,7 +115,43 @@ pub struct PackageMetadata {
     /// Specific wheel tags to produce (e.g., `["cp312-abi3-win_amd64"]`).
     /// An empty list means produce only the default `py3-none-any` wheel.
     #[serde(default)]
-    pub wheel_tags: Vec<String>,
+    pub wheel_tags: Vec<WheelTag>,
+}
+
+/// A validated three-component compatibility tag for generated wheels.
+#[derive(Clone, Debug)]
+pub struct WheelTag(String);
+
+impl WheelTag {
+    /// Return the compatibility tag as it should appear in a wheel filename.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl FromStr for WheelTag {
+    type Err = String;
+
+    fn from_str(tag: &str) -> Result<Self, Self::Err> {
+        if tag.split('-').count() != 3 {
+            return Err(format!(
+                "wheel tag `{tag}` must have exactly three components"
+            ));
+        }
+        WheelFilename::from_str(&format!("package-0-{tag}.whl"))
+            .map_err(|error| format!("wheel tag `{tag}` is invalid: {error}"))?;
+        Ok(Self(tag.to_string()))
+    }
+}
+
+impl<'de> Deserialize<'de> for WheelTag {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let tag = String::deserialize(deserializer)?;
+        Self::from_str(&tag).map_err(serde::de::Error::custom)
+    }
 }
 
 /// The root/entrypoint package.
@@ -313,6 +350,24 @@ satisfiable = true
 
 [packages.a.versions."1.0.0"]
 wheels = false
+"#;
+
+        assert!(toml::from_str::<Scenario>(toml).is_err());
+    }
+
+    #[test]
+    fn reject_invalid_wheel_tag() {
+        let toml = r#"
+name = "invalid-wheel-tag"
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+
+[packages.a.versions."1.0.0"]
+wheel_tags = ["1-py3-none-any"]
 "#;
 
         assert!(toml::from_str::<Scenario>(toml).is_err());
