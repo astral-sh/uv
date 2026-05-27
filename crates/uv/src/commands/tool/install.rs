@@ -80,6 +80,7 @@ pub(crate) async fn install(
     printer: Printer,
     preview: Preview,
     defer_registry_requires_python: bool,
+    require_selected_interpreter: bool,
     removed_invalid_tool_receipt: bool,
 ) -> Result<ExitStatus> {
     if settings.resolver.torch_backend.is_some() {
@@ -532,47 +533,13 @@ pub(crate) async fn install(
                     &interpreter,
                     package_name,
                     explicit_python_request,
+                    require_selected_interpreter,
                     &settings,
                     existing_tool_receipt.as_ref(),
                     printer,
                 )
             })
     };
-
-    if defer_registry_requires_python && existing_environment.is_none() {
-        drop(_lock);
-        return Box::pin(install(
-            package.clone(),
-            editable,
-            from.clone(),
-            with,
-            constraint_sources,
-            override_sources,
-            exclude_sources,
-            build_constraint_sources,
-            entrypoints,
-            lfs,
-            python.clone(),
-            python_platform,
-            install_mirrors,
-            force,
-            options,
-            settings.clone(),
-            client_builder,
-            python_preference,
-            python_downloads,
-            installer_metadata,
-            concurrency,
-            no_config,
-            cache,
-            workspace_cache,
-            printer,
-            preview,
-            false,
-            invalid_tool_receipt,
-        ))
-        .await;
-    }
 
     // If the requested and receipt requirements are the same...
     if let Some(environment) = existing_environment.as_ref().filter(|_| {
@@ -654,6 +621,42 @@ pub(crate) async fn install(
                 }
             }
         }
+    }
+
+    if defer_registry_requires_python {
+        drop(_lock);
+        return Box::pin(install(
+            package.clone(),
+            editable,
+            from.clone(),
+            with,
+            constraint_sources,
+            override_sources,
+            exclude_sources,
+            build_constraint_sources,
+            entrypoints,
+            lfs,
+            python.clone(),
+            python_platform,
+            install_mirrors,
+            force,
+            options,
+            settings.clone(),
+            client_builder,
+            python_preference,
+            python_downloads,
+            installer_metadata,
+            concurrency,
+            no_config,
+            cache,
+            workspace_cache,
+            printer,
+            preview,
+            false,
+            true,
+            invalid_tool_receipt,
+        ))
+        .await;
     }
 
     // Create a `RequirementsSpecification` from the resolved requirements, to avoid re-resolving.
@@ -888,6 +891,7 @@ fn existing_environment_usable(
     interpreter: &Interpreter,
     package_name: &PackageName,
     explicit_python_request: bool,
+    require_selected_interpreter: bool,
     settings: &ResolverInstallerSettings,
     existing_tool_receipt: Option<&uv_tool::Tool>,
     printer: Printer,
@@ -900,6 +904,17 @@ fn existing_environment_usable(
             environment.interpreter().sys_executable().display()
         );
         return true;
+    }
+
+    // After registry metadata causes an install to select a different interpreter, do not update
+    // an existing environment in place with that incompatible interpreter.
+    if require_selected_interpreter {
+        trace!(
+            "Existing interpreter does not match the selected interpreter for `{}`: {}",
+            package_name,
+            environment.interpreter().sys_executable().display()
+        );
+        return false;
     }
 
     // If there was an explicit Python request that does not match, we'll invalidate the

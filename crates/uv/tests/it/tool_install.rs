@@ -494,6 +494,155 @@ async fn tool_install_latest_infers_registry_requires_python() -> Result<()> {
 }
 
 #[tokio::test]
+async fn tool_install_latest_replaces_environment_for_registry_requires_python() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let package_dir = context.temp_dir.child("foo");
+    let wheel_dir = context.temp_dir.child("dist");
+
+    copy_dir_all(
+        context
+            .workspace_root
+            .join("test/packages/python_printing_tool"),
+        &package_dir,
+    )?;
+    context
+        .build()
+        .arg("--wheel")
+        .arg("--python")
+        .arg("3.11")
+        .arg(package_dir.as_os_str())
+        .arg("--out-dir")
+        .arg(wheel_dir.as_os_str())
+        .assert()
+        .success();
+    let initial_wheel_filename = "foo-0.1.0-py3-none-any.whl";
+    let initial_wheel = fs_err::read(wheel_dir.join(initial_wheel_filename))?;
+
+    package_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.2.0"
+        requires-python = ">=3.12,<4"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context
+        .build()
+        .arg("--wheel")
+        .arg("--python")
+        .arg("3.12")
+        .arg(package_dir.as_os_str())
+        .arg("--out-dir")
+        .arg(wheel_dir.as_os_str())
+        .assert()
+        .success();
+    let updated_wheel_filename = "foo-0.2.0-py3-none-any.whl";
+    let updated_wheel = fs_err::read(wheel_dir.join(updated_wheel_filename))?;
+
+    let server = MockServer::start().await;
+    let body = format!(
+        r#"{{
+            "name": "foo",
+            "files": [
+                {{
+                    "filename": "{initial_wheel_filename}",
+                    "url": "{}/files/{initial_wheel_filename}",
+                    "hashes": {{}},
+                    "requires-python": ">=3.11,<3.13",
+                    "upload-time": "2024-01-01T00:00:00Z"
+                }},
+                {{
+                    "filename": "{updated_wheel_filename}",
+                    "url": "{}/files/{updated_wheel_filename}",
+                    "hashes": {{}},
+                    "requires-python": ">=3.12,<4",
+                    "upload-time": "2024-01-02T00:00:00Z"
+                }}
+            ]
+        }}"#,
+        server.uri(),
+        server.uri()
+    );
+    Mock::given(method("GET"))
+        .and(path("/simple/foo/"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(body, "application/vnd.pypi.simple.v1+json"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/files/{initial_wheel_filename}")))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(initial_wheel))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/files/{updated_wheel_filename}")))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(updated_wheel))
+        .mount(&server)
+        .await;
+
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+    context
+        .tool_install()
+        .arg("foo==0.1.0")
+        .arg("--index-url")
+        .arg(format!("{}/simple", server.uri()))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), Command::new("foo")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.11
+
+    ----- stderr -----
+    ");
+
+    context
+        .tool_install()
+        .arg("foo@latest")
+        .arg("--index-url")
+        .arg(format!("{}/simple", server.uri()))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), Command::new("foo")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn tool_install_registry_inference_preserves_installed_tool() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_counts()
