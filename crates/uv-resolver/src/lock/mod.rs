@@ -1259,6 +1259,7 @@ impl Lock {
             .collect();
         let mut build_resolution_roots: FxHashSet<PackageId> = FxHashSet::default();
         let mut queue: VecDeque<PackageId> = selected_package_ids.iter().cloned().collect();
+        let tag_policy = TagPolicy::Required(tags);
 
         while let Some(package_id) = queue.pop_front() {
             let Some(package) = package_by_id.get(&package_id) else {
@@ -1280,7 +1281,14 @@ impl Lock {
                 let Some(dependency_package) = package_by_id.get(&dependency_id) else {
                     continue;
                 };
-                if !dependency_package.build_dependencies.is_empty()
+                let HashedDist { dist, .. } = dependency_package.to_dist(
+                    workspace_root,
+                    tag_policy,
+                    build_options,
+                    markers,
+                )?;
+                if matches!(dist, Dist::Source(_))
+                    && !dependency_package.build_dependencies.is_empty()
                     && !build_resolution_roots.contains(&dependency_package.id)
                 {
                     queue.push_back(dependency_package.id.clone());
@@ -1289,7 +1297,6 @@ impl Lock {
         }
 
         let mut resolutions = BTreeMap::new();
-        let tag_policy = TagPolicy::Required(tags);
 
         for package in &self.packages {
             if package.build_dependencies.is_empty() {

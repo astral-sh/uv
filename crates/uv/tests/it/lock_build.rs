@@ -4856,6 +4856,199 @@ async fn sync_filters_locked_build_resolutions_to_selected_wheels() -> Result<()
     Ok(())
 }
 
+/// Verify that a wheel selected inside a locked build environment does not
+/// reconstruct the build environment of its fallback source distribution.
+#[tokio::test]
+async fn sync_filters_nested_locked_build_resolutions_to_selected_wheels() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let backend = |name: &str| {
+        format!(
+            r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "{name}-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("{name}/__init__.py", "")
+        wheel.writestr(
+            "{name}-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: {name}\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "{name}-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("{name}-0.1.0.dist-info/RECORD", "")
+    return filename
+"#
+        )
+    };
+
+    let trouble_dir = context.temp_dir.child("trouble");
+    trouble_dir.create_dir_all()?;
+    trouble_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "trouble"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    trouble_dir
+        .child("build_backend.py")
+        .write_str(&backend("trouble"))?;
+    let trouble_url = Url::from_directory_path(trouble_dir.path()).expect("valid file URL");
+
+    let artifacts = context.temp_dir.child("artifacts");
+    artifacts.create_dir_all()?;
+    write_wheel(
+        &artifacts.child("nested-0.1.0-py3-none-any.whl"),
+        "nested",
+        "0.1.0",
+    )?;
+
+    let file = File::create(artifacts.child("nested-0.1.0.zip").path())?;
+    let mut zip = ZipWriter::new(file);
+    let options = SimpleFileOptions::default();
+    zip.add_directory("nested-0.1.0/", options)?;
+    zip.start_file("nested-0.1.0/pyproject.toml", options)?;
+    zip.write_all(
+        format!(
+            r#"
+            [project]
+            name = "nested"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["trouble @ {trouble_url}"]
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#
+        )
+        .as_bytes(),
+    )?;
+    zip.start_file("nested-0.1.0/build_backend.py", options)?;
+    zip.write_all(backend("nested").as_bytes())?;
+    zip.finish()?;
+
+    let server = MockServer::start().await;
+    let index_url = format!("{}/simple/", server.uri());
+    Mock::given(method("GET"))
+        .and(path("/simple/nested/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"
+                <a href="{}/files/nested-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">nested-0.1.0-py3-none-any.whl</a>
+                <a href="{}/files/nested-0.1.0.zip" data-upload-time="2024-03-01T00:00:00Z">nested-0.1.0.zip</a>
+                "#,
+                server.uri(),
+                server.uri()
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/nested-0.1.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(
+            artifacts.child("nested-0.1.0-py3-none-any.whl").path(),
+        )?))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/nested-0.1.0.zip"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_bytes(fs_err::read(artifacts.child("nested-0.1.0.zip").path())?),
+        )
+        .mount(&server)
+        .await;
+
+    let parent_dir = context.temp_dir.child("parent");
+    parent_dir.create_dir_all()?;
+    parent_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["nested==0.1.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    parent_dir
+        .child("build_backend.py")
+        .write_str(&backend("parent"))?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["parent"]
+
+        [tool.uv.sources]
+        parent = { path = "parent" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--index-url")
+        .arg(&index_url), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(
+        package_section(&lock, "nested").contains("build-dependencies = ["),
+        "{lock}"
+    );
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--frozen")
+        .arg("--no-build-package")
+        .arg("trouble")
+        .arg("--index-url")
+        .arg(index_url), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + parent==0.1.0 (from file://[TEMP_DIR]/parent)
+    ");
+
+    Ok(())
+}
+
 /// Verify that lock-time metadata builds use the build dependency branch for
 /// the active marker environment instead of flattening every universal branch
 /// into one concrete build environment.
