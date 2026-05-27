@@ -95,25 +95,34 @@ pub(crate) fn main(args: &Args) -> Result<()> {
 
 fn load_scenarios() -> Result<Vec<ScenarioCase>> {
     let scenarios_dir = Path::new(ROOT_DIR).join(GENERATED_FROM);
-    let mut entries = WalkDir::new(&scenarios_dir)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file())
-        .filter(|entry| {
-            entry
+    load_scenarios_from(&scenarios_dir)
+}
+
+fn load_scenarios_from(scenarios_dir: &Path) -> Result<Vec<ScenarioCase>> {
+    let mut entries = Vec::new();
+    for entry in WalkDir::new(scenarios_dir) {
+        let entry = entry.with_context(|| {
+            format!(
+                "failed to read scenarios from directory `{}`",
+                scenarios_dir.display()
+            )
+        })?;
+        if entry.file_type().is_file()
+            && entry
                 .path()
                 .extension()
                 .is_some_and(|extension| extension == "toml")
-        })
-        .map(walkdir::DirEntry::into_path)
-        .collect::<Vec<_>>();
+        {
+            entries.push(entry.into_path());
+        }
+    }
     entries.sort();
 
     entries
         .into_iter()
         .map(|path| {
             let scenario = Scenario::from_path(&path);
-            let relative = path.strip_prefix(&scenarios_dir).with_context(|| {
+            let relative = path.strip_prefix(scenarios_dir).with_context(|| {
                 format!("scenario path was outside {}", scenarios_dir.display())
             })?;
             Ok(ScenarioCase {
@@ -799,7 +808,7 @@ fn requirement_specifiers(requirement: &Requirement) -> Option<&uv_pep440::Versi
 
 #[cfg(test)]
 mod tests {
-    use super::{TemplateKind, compile_requirements, render};
+    use super::{TemplateKind, compile_requirements, load_scenarios, load_scenarios_from, render};
 
     #[test]
     fn compile_requirements_preserve_multiple_root_entries() {
@@ -834,5 +843,20 @@ mod tests {
                 .expect("scenario suite should contain a feature gate");
             assert_eq!(gate, expected_gate);
         }
+    }
+
+    #[test]
+    fn missing_scenarios_directory_is_an_error() {
+        let temp_dir = tempfile::tempdir().expect("temporary directory should be created");
+        let directory = temp_dir.path().join("missing");
+
+        assert!(load_scenarios_from(&directory).is_err());
+    }
+
+    #[test]
+    fn vendored_scenarios_parse() {
+        let scenarios = load_scenarios().expect("vendored scenarios should parse");
+
+        assert!(!scenarios.is_empty());
     }
 }
