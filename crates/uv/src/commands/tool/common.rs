@@ -31,6 +31,7 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
     VersionRequest,
 };
+use uv_resolver::ResolutionMode;
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
@@ -183,7 +184,11 @@ impl ToolPython {
             if source_requires_python.is_some() {
                 (source_requires_python, None)
             } else {
-                let registry_requires_python = if infer_registry_requires_python {
+                // This inference selects the latest matching release, which is only consistent
+                // with the resolver's highest-version selection policy.
+                let registry_requires_python = if infer_registry_requires_python
+                    && settings.resolver.resolution == ResolutionMode::Highest
+                {
                     let registry_requirement = registry_requirement.or_else(|| {
                         requirement.and_then(|requirement| match requirement {
                             UnresolvedRequirement::Named(requirement) => Some(requirement),
