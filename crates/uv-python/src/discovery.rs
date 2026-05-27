@@ -1,5 +1,4 @@
 use itertools::{Either, Itertools};
-use owo_colors::AnsiColors;
 use regex::Regex;
 use rustc_hash::{FxBuildHasher, FxHashSet};
 use same_file::is_same_file;
@@ -21,8 +20,7 @@ use uv_pep440::{
 };
 use uv_preview::Preview;
 use uv_static::EnvVars;
-use uv_warnings::anstream;
-use uv_warnings::warn_user_once;
+use uv_warnings::{warn_user_once, write_warning_chain};
 use which::{which, which_all};
 
 use crate::downloads::{ManagedPythonDownloadList, PlatformRequest, PythonDownloadRequest};
@@ -1514,21 +1512,10 @@ pub(crate) async fn find_best_python_installation(
                     return Err(error);
                 }
 
-                let mut error_chain = String::new();
-                // Writing to a string can't fail with errors (panics on allocation failure)
                 let error = anyhow::Error::from(error).context(format!(
                     "A managed Python download is available for {request}, but an error occurred when attempting to download it."
                 ));
-                uv_errors::write_error_chain(
-                    error.as_ref(),
-                    &mut error_chain,
-                    "warning",
-                    AnsiColors::Yellow,
-                    uv_errors::Hints::none(),
-                    None,
-                )
-                .unwrap();
-                anstream::eprint!("{}", error_chain);
+                write_warning_chain(error.as_ref()).expect("writing to stderr should not fail");
                 previous_fetch_failed = true;
             }
         }

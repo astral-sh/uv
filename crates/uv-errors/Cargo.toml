@@ -10,13 +10,13 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
+anstream = { workspace = true }
 owo-colors = { workspace = true }
 terminal_size = { workspace = true }
 textwrap = { workspace = true }
 uv-static = { workspace = true }
 
 [dev-dependencies]
-anstream = { workspace = true }
 anyhow = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }

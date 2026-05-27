@@ -6227,7 +6227,6 @@ dependencies = [
  "insta",
  "itertools 0.14.0",
  "markdown",
- "owo-colors",
  "poloto",
  "pretty_assertions",
  "reqwest",
@@ -6857,7 +6856,6 @@ dependencies = [
  "glob",
  "insta",
  "itertools 0.14.0",
- "owo-colors",
  "reqwest",
  "rustc-hash",
  "serde",
@@ -7397,8 +7395,11 @@ name = "uv-warnings"
 version = "0.0.49"
 dependencies = [
  "anstream",
+ "anyhow",
+ "insta",
  "owo-colors",
  "rustc-hash",
+ "uv-errors",
 ]
 
 [[package]]
