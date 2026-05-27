@@ -262,9 +262,11 @@ async fn audit_vulnerability_found() {
 
     - PYSEC-2023-0001: A test vulnerability in iniconfig
 
-      Fixed in: 2.1.0 (pass --fix to update)
+      Fixed in: 2.1.0
 
       Advisory information: https://example.com/advisory/PYSEC-2023-0001
+
+      Fixed in: 2.1.0, pass --fix to update
 
 
     ----- stderr -----
@@ -534,7 +536,7 @@ async fn audit_multiple_vulnerabilities_same_package() {
 
     - VULN-A: First vulnerability
 
-      Fixed in: 2.1.0 (pass --fix to update)
+      Fixed in: 2.1.0
 
       Advisory information: https://example.com/advisory/VULN-A
 
@@ -543,6 +545,8 @@ async fn audit_multiple_vulnerabilities_same_package() {
       Fixed in: 2.0.1
 
       Advisory information: https://example.com/web/VULN-B
+
+      Fixed in: 2.1.0, pass --fix to update
 
 
     ----- stderr -----
@@ -849,9 +853,11 @@ async fn audit_ignore_by_id() {
 
     - PYSEC-2023-0001: A test vulnerability in iniconfig
 
-      Fixed in: 2.1.0 (pass --fix to update)
+      Fixed in: 2.1.0
 
       Advisory information: https://osv.dev/vulnerability/PYSEC-2023-0001
+
+      Fixed in: 2.1.0, pass --fix to update
 
 
     ----- stderr -----
@@ -1061,9 +1067,11 @@ async fn audit_ignore_until_fixed_with_fix() {
 
     - PYSEC-2023-0001: A test vulnerability in iniconfig
 
-      Fixed in: 2.1.0 (pass --fix to update)
+      Fixed in: 2.1.0
 
       Advisory information: https://osv.dev/vulnerability/PYSEC-2023-0001
+
+      Fixed in: 2.1.0, pass --fix to update
 
 
     ----- stderr -----
@@ -1282,9 +1290,11 @@ async fn audit_ignore_partial() {
 
     - VULN-B: Second vulnerability
 
-      Fixed in: 2.0.1 (pass --fix to update)
+      Fixed in: 2.0.1
 
       Advisory information: https://osv.dev/vulnerability/VULN-B
+
+      Fixed in: 2.0.1, pass --fix to update
 
 
     ----- stderr -----
@@ -1622,9 +1632,11 @@ async fn audit_script_vulnerability_found() {
 
     - PYSEC-2023-0001: A test vulnerability in iniconfig
 
-      Fixed in: 2.1.0 (pass --fix to update)
+      Fixed in: 2.1.0
 
       Advisory information: https://example.com/advisory/PYSEC-2023-0001
+
+      Fixed in: 2.1.0, pass --fix to update
 
 
     ----- stderr -----
@@ -2169,9 +2181,11 @@ async fn audit_vulnerability_and_project_status() {
 
     - PYSEC-2023-0001: A test vulnerability in iniconfig
 
-      Fixed in: 2.1.0 (pass --fix to update)
+      Fixed in: 2.1.0
 
       Advisory information: https://osv.dev/vulnerability/PYSEC-2023-0001
+
+      Fixed in: 2.1.0, pass --fix to update
 
 
     Adverse statuses:

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use itertools::Itertools as _;
 use uv_pep440::Version;
 
-use crate::{Vulnerability, VulnerabilityID};
+use crate::{Dependency, Vulnerability};
 
 /// Gets the version to update for a specific dependency
 fn collect_updates_for_one_dependency<'a>(
@@ -22,9 +22,9 @@ fn collect_updates_for_one_dependency<'a>(
 }
 
 /// Returns a map of version IDs to their suggested fix version
-pub fn get_fixable_vulnerabilities<'a>(
+pub fn get_fixable_dependencies<'a>(
     vulnerabilities: &[&'a Vulnerability],
-) -> HashMap<&'a VulnerabilityID, &'a Version> {
+) -> HashMap<&'a Dependency, &'a Version> {
     let groups = vulnerabilities.iter().chunk_by(|vulnerability| {
         (
             vulnerability.dependency.name(),
@@ -36,7 +36,7 @@ pub fn get_fixable_vulnerabilities<'a>(
         .into_iter()
         .filter_map(|(_, vulnerabilities)| {
             collect_updates_for_one_dependency(&vulnerabilities.copied().collect::<Vec<_>>())
-                .map(|(vulnerability, fix)| (vulnerability.best_id(), fix))
+                .map(|(vulnerability, fix)| (&vulnerability.dependency, fix))
         })
         .collect()
 }

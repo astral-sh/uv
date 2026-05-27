@@ -3,7 +3,7 @@ use owo_colors::OwoColorize;
 use serde::Serialize;
 use std::fmt::Write as _;
 use std::path::Path;
-use uv_audit::fix::get_fixable_vulnerabilities;
+use uv_audit::fix::get_fixable_dependencies;
 
 use crate::commands::ExitStatus;
 use crate::commands::diagnostics;
@@ -400,7 +400,7 @@ impl AuditResults {
         if !vulnerabilities.is_empty() {
             writeln!(self.printer.stdout_important(), "\nVulnerabilities:\n")?;
 
-            let fixable_map = get_fixable_vulnerabilities(&vulnerabilities);
+            let fixable_map = get_fixable_dependencies(&vulnerabilities);
 
             // Group vulnerabilities by (dependency name, version).
             let groups = vulnerabilities.into_iter().chunk_by(|vulnerability| {
@@ -445,18 +445,12 @@ impl AuditResults {
                     } else {
                         writeln!(
                             self.printer.stdout_important(),
-                            "\n  Fixed in: {versions}{autofixable}\n",
+                            "\n  Fixed in: {versions}\n",
                             versions = vulnerability
                                 .fix_versions
                                 .iter()
                                 .map(std::string::ToString::to_string)
                                 .join(", ")
-                                .blue(),
-                            autofixable = if fixable_map.contains_key(&vulnerability.id) {
-                                " (pass --fix to update)".green()
-                            } else {
-                                "".green()
-                            }
                         )?;
                     }
 
@@ -467,6 +461,15 @@ impl AuditResults {
                             link = link.as_str().blue()
                         )?;
                     }
+                }
+
+                if let Some(fix_version) = fixable_map.get(&vulnerabilities[0].dependency) {
+                    writeln!(
+                        self.printer.stdout_important(),
+                        "  Fixed in: {fix_version}, pass {flag} to update\n",
+                        fix_version = fix_version.to_string().blue(),
+                        flag = "--fix".blue()
+                    )?;
                 }
             }
         }
