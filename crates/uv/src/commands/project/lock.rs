@@ -1095,7 +1095,6 @@ async fn do_lock(
                     lock = lock
                         .with_build_resolutions(
                             &build_resolutions,
-                            packages,
                             build_dispatch.extra_build_requires(),
                             target.install_path(),
                             &build_database,

@@ -790,6 +790,36 @@ impl Lock {
         self
     }
 
+    /// Return statically known build requirements after lowering local source configuration.
+    async fn lowered_build_requires<Context: BuildContext>(
+        &self,
+        package: &Package,
+        root: &Path,
+        database: &DistributionDatabase<'_, Context>,
+        build_hasher: &HashStrategy,
+    ) -> Result<Option<Vec<Requirement>>, LockError> {
+        if !matches!(
+            package.id.source,
+            Source::Path(_) | Source::Directory(_) | Source::Editable(_) | Source::Virtual(_)
+        ) {
+            return Ok(None);
+        }
+        let Some(source_dist) = package.to_source_dist(root)? else {
+            return Ok(None);
+        };
+        let dist = Dist::Source(source_dist.clone());
+        database
+            .get_static_build_requires(&source_dist, build_hasher.get(&dist))
+            .await
+            .map_err(|err| {
+                LockErrorKind::Resolution {
+                    id: package.id.clone(),
+                    err,
+                }
+                .into()
+            })
+    }
+
     /// Populate build dependencies from captured build resolutions.
     ///
     /// Only **direct** build requirements are stored in `build-dependencies`,
@@ -799,7 +829,6 @@ impl Lock {
     pub async fn with_build_resolutions<Context: BuildContext>(
         mut self,
         build_resolutions: &BTreeMap<BuildPackageKey, uv_types::BuildResolutionGraph>,
-        packages: &BTreeMap<PackageName, WorkspaceMember>,
         extra_build_requires: &ExtraBuildRequires,
         root: &Path,
         database: &DistributionDatabase<'_, Context>,
@@ -890,60 +919,24 @@ impl Lock {
         // source packages that are only reachable through build graphs are validated too.
         self.packages.extend(new_packages);
 
-        // Extract the build requirements to store in metadata for satisfies() checks.
-        // Use already-loaded workspace members when available; read from disk for
-        // non-workspace source trees (e.g. path dependencies outside the workspace).
+        // Extract lowered build requirements to store in metadata for satisfies() checks.
         for package in &self.packages {
             let key = build_key_for_package(package, root);
 
-            let requires = if let Some(member) = packages.get(&package.id.name) {
-                member
-                    .pyproject_toml()
-                    .build_system
-                    .as_ref()
-                    .map(|bs| bs.requires.clone())
-            } else if let Some(source_tree) = package.id.source.as_source_tree() {
-                let path = root.join(source_tree).join("pyproject.toml");
-                fs_err::read_to_string(&path).ok().and_then(|contents| {
-                    uv_workspace::pyproject::PyProjectToml::from_string(contents, &path)
-                        .ok()?
-                        .build_system
-                        .map(|bs| bs.requires)
-                })
-            } else {
-                None
-            };
-
             let mut build_requires = BTreeSet::new();
-            for req in requires.into_iter().flatten() {
-                let requirement = match Requirement::from(req).relative_to(root) {
+            for requirement in self
+                .lowered_build_requires(package, root, database, build_hasher)
+                .await?
+                .into_iter()
+                .flatten()
+            {
+                let requirement = match requirement.relative_to(root) {
                     Ok(requirement) => requirement,
                     Err(err) => {
                         return Err(LockErrorKind::RequirementRelativePath(err).into());
                     }
                 };
                 build_requires.insert(requirement);
-            }
-            if matches!(package.id.source, Source::Path(_))
-                && let Some(source_dist) = package.to_source_dist(root)?
-            {
-                let dist = Dist::Source(source_dist.clone());
-                let requires = database
-                    .get_static_build_requires(&source_dist, build_hasher.get(&dist))
-                    .await
-                    .map_err(|err| LockErrorKind::Resolution {
-                        id: package.id.clone(),
-                        err,
-                    })?;
-                for requirement in requires.into_iter().flatten() {
-                    let requirement = match requirement.relative_to(root) {
-                        Ok(requirement) => requirement,
-                        Err(err) => {
-                            return Err(LockErrorKind::RequirementRelativePath(err).into());
-                        }
-                    };
-                    build_requires.insert(requirement);
-                }
             }
             for req in extra_build_requires
                 .get(&package.id.name)
@@ -2695,54 +2688,10 @@ impl Lock {
             // before metadata validation, since a changed build environment can otherwise
             // fail while trying to extract package metadata instead of reporting the stale lock.
             if self.supports_build_dependencies() || !package.metadata.build_requires.is_empty() {
-                let build_requires = if let Some(member) = packages.get(&package.id.name) {
-                    Some(
-                        member
-                            .pyproject_toml()
-                            .build_system
-                            .as_ref()
-                            .map(|build_system| build_system.requires.clone())
-                            .unwrap_or_default()
-                            .into_iter()
-                            .map(Requirement::from)
-                            .collect::<BTreeSet<_>>(),
-                    )
-                } else if let Some(source_tree) = package.id.source.as_source_tree() {
-                    let path = root.join(source_tree).join("pyproject.toml");
-                    match fs_err::tokio::read_to_string(&path).await {
-                        Ok(contents) => {
-                            uv_workspace::pyproject::PyProjectToml::from_string(contents, &path)
-                                .ok()
-                                .map(|pyproject| {
-                                    pyproject
-                                        .build_system
-                                        .map(|build_system| build_system.requires)
-                                        .unwrap_or_default()
-                                        .into_iter()
-                                        .map(Requirement::from)
-                                        .collect::<BTreeSet<_>>()
-                                })
-                        }
-                        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
-                        Err(err) => {
-                            return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
-                        }
-                    }
-                } else if matches!(&package.id.source, Source::Path(_))
-                    && let Some(source_dist) = package.to_source_dist(root)?
-                {
-                    let dist = Dist::Source(source_dist.clone());
-                    database
-                        .get_static_build_requires(&source_dist, hasher.get(&dist))
-                        .await
-                        .map_err(|err| LockErrorKind::Resolution {
-                            id: package.id.clone(),
-                            err,
-                        })?
-                        .map(|requires| requires.into_iter().collect())
-                } else {
-                    None
-                };
+                let build_requires = self
+                    .lowered_build_requires(package, root, database, hasher)
+                    .await?
+                    .map(|requires| requires.into_iter().collect::<BTreeSet<_>>());
 
                 let extra_build_requires = extra_build_requires.get(&package.id.name);
 

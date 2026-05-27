@@ -1731,6 +1731,112 @@ fn lock_build_dependencies_static_directory_lowers_build_sources() -> Result<()>
     Ok(())
 }
 
+/// Verify that changing only a static dependency's lowered build source
+/// invalidates its locked build environment.
+#[test]
+fn lock_build_dependencies_static_directory_lowered_sources_invalidate() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    for version in ["0.1.0", "0.2.0"] {
+        write_wheel(
+            &context
+                .temp_dir
+                .child(format!("private_builder-{version}-py3-none-any.whl")),
+            "private-builder",
+            version,
+        )?;
+    }
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    let write_dep = |version: &str| -> Result<()> {
+        dep_dir.child("pyproject.toml").write_str(&format!(
+            r#"
+            [project]
+            name = "dep"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["private-builder"]
+            build-backend = "private_builder"
+
+            [tool.uv.sources]
+            private-builder = {{ path = "../private_builder-{version}-py3-none-any.whl" }}
+            "#
+        ))?;
+        Ok(())
+    };
+    write_dep("0.1.0")?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert!(
+        package_section(&context.read("uv.lock"), "dep")
+            .contains(r#"{ name = "private-builder", version = "0.1.0" }"#)
+    );
+
+    write_dep("0.2.0")?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Updated private-builder v0.1.0 -> v0.2.0
+    ");
+    assert!(
+        package_section(&context.read("uv.lock"), "dep")
+            .contains(r#"{ name = "private-builder", version = "0.2.0" }"#)
+    );
+
+    Ok(())
+}
+
 /// Verify that static Git dependencies lower their declared build requirements
 /// through their own source configuration before locking the build environment.
 #[test]
