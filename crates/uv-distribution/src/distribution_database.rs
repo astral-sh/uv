@@ -376,12 +376,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 if wheel.git.lfs().enabled() && !fetch.lfs_ready() {
                     if GIT_LFS.is_err() {
-                        return Err(Error::MissingGitLfsArtifacts(
+                        return Err(Error::MissingWheelGitLfsArtifacts(
                             wheel.url.to_url(),
                             GitError::GitLfsNotFound,
                         ));
                     }
-                    return Err(Error::MissingGitLfsArtifacts(
+                    return Err(Error::MissingWheelGitLfsArtifacts(
                         wheel.url.to_url(),
                         GitError::GitLfsNotConfigured,
                     ));

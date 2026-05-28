@@ -132,6 +132,8 @@ pub enum Error {
     MissingSubdirectory(DisplaySafeUrl, PathBuf),
     #[error("The source distribution `{0}` is missing Git LFS artifacts.")]
     MissingGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
+    #[error("The wheel `{0}` is missing Git LFS artifacts.")]
+    MissingWheelGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
     #[error("Failed to extract static metadata from `PKG-INFO`")]
     PkgInfo(#[source] uv_pypi_types::MetadataError),
     #[error("The source distribution is missing a `pyproject.toml` file")]

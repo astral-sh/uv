@@ -382,10 +382,11 @@ impl Display for Requirement {
                 if let Some(reference) = git.reference().as_url_rev() {
                     write!(f, "@{reference}")?;
                 }
-                writeln!(f, "#path={}", install_path.display())?;
+                write!(f, "#path={}", install_path.display())?;
                 if git.lfs().enabled() {
-                    writeln!(f, "&lfs=true")?;
+                    write!(f, "&lfs=true")?;
                 }
+                writeln!(f)?;
             }
             RequirementSource::Path { url, .. } => {
                 write!(f, " @ {url}")?;
@@ -882,10 +883,11 @@ impl Display for RequirementSource {
                 if let Some(reference) = git.reference().as_url_rev() {
                     write!(f, "@{reference}")?;
                 }
-                writeln!(f, "#path={}", install_path.display())?;
+                write!(f, "#path={}", install_path.display())?;
                 if git.lfs().enabled() {
-                    writeln!(f, "&lfs=true")?;
+                    write!(f, "&lfs=true")?;
                 }
+                writeln!(f)?;
             }
             Self::Path { url, .. } => {
                 write!(f, "{url}")?;
@@ -1301,7 +1303,20 @@ mod tests {
 
         assert_eq!(
             source.to_string(),
-            " git+https://github.com/astral-sh/archive-in-git-test#path=archives/iniconfig-2.0.0-py3-none-any.whl\n&lfs=true\n"
+            " git+https://github.com/astral-sh/archive-in-git-test#path=archives/iniconfig-2.0.0-py3-none-any.whl&lfs=true\n"
+        );
+
+        let requirement = Requirement {
+            name: "iniconfig".parse().unwrap(),
+            extras: Box::new([]),
+            groups: Box::new([]),
+            marker: MarkerTree::TRUE,
+            source,
+            origin: None,
+        };
+        assert_eq!(
+            requirement.to_string(),
+            "iniconfig @ git+https://github.com/astral-sh/archive-in-git-test#path=archives/iniconfig-2.0.0-py3-none-any.whl&lfs=true\n"
         );
     }
 }

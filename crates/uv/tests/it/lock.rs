@@ -1257,7 +1257,7 @@ fn lock_wheel_git_archive_missing_lfs() -> Result<()> {
 
     ----- stderr -----
       × Failed to download `iniconfig @ git+https://github.com/astral-sh/archive-in-git-test#lfs=true&path=archives/iniconfig-2.0.0-py3-none-any.whl`
-      ├─▶ The source distribution `git+https://github.com/astral-sh/archive-in-git-test#lfs=true&path=archives/iniconfig-2.0.0-py3-none-any.whl` is missing Git LFS artifacts.
+      ├─▶ The wheel `git+https://github.com/astral-sh/archive-in-git-test#lfs=true&path=archives/iniconfig-2.0.0-py3-none-any.whl` is missing Git LFS artifacts.
       ╰─▶ Git LFS extension not found. Ensure that Git LFS is installed and available.
     "###
     );
