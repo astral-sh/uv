@@ -949,13 +949,28 @@ impl Lock {
             let mut deps = Vec::new();
             for root_dep in &info.direct_dependencies {
                 let resolved_dist = &root_dep.dist;
-                let marker = &root_dep.marker;
-
                 let Ok(package_id) = package_id_from_resolved_dist(resolved_dist, root) else {
                     continue;
                 };
 
-                let simplified = SimplifiedMarkerTree::new(&self.requires_python, *marker);
+                let mut match_runtime_marker = MarkerTree::FALSE;
+                let mut match_runtime = false;
+                if let Some(requirements) = extra_build_requires.get(&parent_key.name) {
+                    for requirement in requirements {
+                        if requirement.match_runtime
+                            && requirement.requirement.name == *resolved_dist.name()
+                        {
+                            match_runtime = true;
+                            match_runtime_marker.or(requirement.requirement.marker);
+                        }
+                    }
+                }
+                let marker = if match_runtime {
+                    match_runtime_marker
+                } else {
+                    root_dep.marker
+                };
+                let simplified = SimplifiedMarkerTree::new(&self.requires_python, marker);
                 let marker_opt = simplified
                     .try_to_string()
                     .map(|_| simplified.as_simplified_marker_tree());
@@ -964,6 +979,7 @@ impl Lock {
                     package_id,
                     root_dep.extras.clone(),
                     marker_opt,
+                    match_runtime,
                 ));
             }
             build_dep_refs.insert(parent_key.clone(), deps);
@@ -1284,12 +1300,14 @@ impl Lock {
         package: &Package,
         package_by_id: &FxHashMap<PackageId, &Package>,
         markers: Option<&MarkerEnvironment>,
+        runtime_package_ids: Option<&FxHashSet<PackageId>>,
     ) -> Option<Vec<PackageId>> {
         self.build_dependency_package_ids_from(
             package,
             &package.build_dependencies,
             package_by_id,
             markers,
+            runtime_package_ids,
         )
     }
 
@@ -1300,6 +1318,7 @@ impl Lock {
         build_dependencies: &[BuildDependency],
         package_by_id: &FxHashMap<PackageId, &Package>,
         markers: Option<&MarkerEnvironment>,
+        runtime_package_ids: Option<&FxHashSet<PackageId>>,
     ) -> Option<Vec<PackageId>> {
         let mut dependency_ids = Vec::new();
         let mut emitted: FxHashSet<PackageId> = FxHashSet::default();
@@ -1307,6 +1326,12 @@ impl Lock {
         let mut queue: VecDeque<(PackageId, Option<ExtraName>)> = VecDeque::new();
 
         for build_dep in build_dependencies {
+            if build_dep.match_runtime()
+                && runtime_package_ids
+                    .is_some_and(|package_ids| !package_ids.contains(&build_dep.package_id))
+            {
+                continue;
+            }
             if let Some(markers) = markers
                 && let Some(marker) = build_dep.marker()
             {
@@ -1400,6 +1425,12 @@ impl Lock {
         markers: &MarkerEnvironment,
     ) -> Result<BTreeMap<BuildPackageKey, LockedBuildResolution>, LockError> {
         let package_by_id = self.package_by_id();
+        let runtime_package_ids: FxHashSet<PackageId> = resolution
+            .distributions()
+            .filter_map(|resolved_dist| {
+                package_id_from_resolved_dist(resolved_dist, workspace_root).ok()
+            })
+            .collect();
         let selected_package_ids: FxHashSet<PackageId> = resolution
             .distributions()
             .filter_map(|resolved_dist| {
@@ -1427,9 +1458,12 @@ impl Lock {
                 continue;
             }
 
-            let Some(dependency_ids) =
-                self.build_dependency_package_ids(package, &package_by_id, Some(markers))
-            else {
+            let Some(dependency_ids) = self.build_dependency_package_ids(
+                package,
+                &package_by_id,
+                Some(markers),
+                Some(&runtime_package_ids),
+            ) else {
                 continue;
             };
             for dependency_id in dependency_ids {
@@ -1462,9 +1496,12 @@ impl Lock {
             }
 
             let mut graph = petgraph::graph::DiGraph::new();
-            let Some(dependency_ids) =
-                self.build_dependency_package_ids(package, &package_by_id, Some(markers))
-            else {
+            let Some(dependency_ids) = self.build_dependency_package_ids(
+                package,
+                &package_by_id,
+                Some(markers),
+                Some(&runtime_package_ids),
+            ) else {
                 continue;
             };
 
@@ -1490,6 +1527,11 @@ impl Lock {
 
             let mut direct_dependencies = Vec::new();
             for build_dependency in &package.build_dependencies {
+                if build_dependency.match_runtime()
+                    && !runtime_package_ids.contains(&build_dependency.package_id)
+                {
+                    continue;
+                }
                 if let Some(marker) = build_dependency.marker() {
                     let complexified = self.requires_python.complexify_markers(*marker);
                     if !UniversalMarker::from_combined(complexified).evaluate_no_extras(markers) {
@@ -1513,6 +1555,7 @@ impl Lock {
                     std::slice::from_ref(build_dependency),
                     &package_by_id,
                     Some(markers),
+                    Some(&runtime_package_ids),
                 ) else {
                     continue;
                 };
@@ -1574,7 +1617,7 @@ impl Lock {
 
             let mut deps = Vec::new();
             let dependency_ids = self
-                .build_dependency_package_ids(package, &package_by_id, None)
+                .build_dependency_package_ids(package, &package_by_id, None, None)
                 .unwrap_or_default();
 
             for dep_id in dependency_ids {
@@ -3328,7 +3371,7 @@ impl Lock {
 
             if self.supports_build_dependencies()
                 && let Some(dependency_ids) =
-                    self.build_dependency_package_ids(package, &package_by_id, None)
+                    self.build_dependency_package_ids(package, &package_by_id, None, None)
             {
                 for dependency_id in dependency_ids {
                     let Some(dependency_package) = package_by_id.get(&dependency_id) else {
@@ -6634,15 +6677,22 @@ pub struct BuildDependency {
     package_id: PackageId,
     extras: BTreeSet<ExtraName>,
     marker: Option<MarkerTree>,
+    match_runtime: bool,
 }
 
 impl BuildDependency {
     /// Create a new build dependency.
-    fn new(package_id: PackageId, extras: BTreeSet<ExtraName>, marker: Option<MarkerTree>) -> Self {
+    fn new(
+        package_id: PackageId,
+        extras: BTreeSet<ExtraName>,
+        marker: Option<MarkerTree>,
+        match_runtime: bool,
+    ) -> Self {
         Self {
             package_id,
             extras,
             marker,
+            match_runtime,
         }
     }
 
@@ -6659,6 +6709,11 @@ impl BuildDependency {
     /// Returns the marker, if any.
     pub fn marker(&self) -> Option<&MarkerTree> {
         self.marker.as_ref()
+    }
+
+    /// Returns `true` if this dependency should match the selected runtime package.
+    pub fn match_runtime(&self) -> bool {
+        self.match_runtime
     }
 
     /// Returns the extras requested for this build dependency.
@@ -6691,6 +6746,9 @@ impl BuildDependency {
             if let Some(marker_str) = marker.try_to_string() {
                 table.insert("marker", value(marker_str));
             }
+        }
+        if self.match_runtime {
+            table.insert("match-runtime", value(true));
         }
         table
     }
@@ -6792,6 +6850,8 @@ struct BuildDependencyWire {
     extra: BTreeSet<ExtraName>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     marker: Option<String>,
+    #[serde(default, rename = "match-runtime")]
+    match_runtime: bool,
 }
 
 impl BuildDependencyWire {
@@ -6812,6 +6872,7 @@ impl BuildDependencyWire {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
             extras: self.extra,
             marker,
+            match_runtime: self.match_runtime,
         })
     }
 }
@@ -6822,6 +6883,7 @@ impl From<&BuildDependency> for BuildDependencyWire {
             package_id: PackageIdForDependency::from(dep.package_id.clone()),
             extra: dep.extras.clone(),
             marker: dep.marker.as_ref().and_then(|m| m.try_to_string()),
+            match_runtime: dep.match_runtime,
         }
     }
 }
