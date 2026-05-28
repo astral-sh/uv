@@ -2024,6 +2024,120 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     Ok(())
 }
 
+/// Verify that isolated build dependency edges do not affect the runtime
+/// dependency closure when a package is shared between both environments.
+#[test]
+fn lock_build_dependencies_do_not_leak_edges_into_runtime_graph() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel_with_requires(
+        &links_dir.child("builder-1.0.0-py3-none-any.whl"),
+        "builder",
+        "1.0.0",
+        &["leaf>=1"],
+    )?;
+    write_wheel(
+        &links_dir.child("leaf-1.0.0-py3-none-any.whl"),
+        "leaf",
+        "1.0.0",
+    )?;
+    write_wheel(
+        &links_dir.child("leaf-2.0.0-py3-none-any.whl"),
+        "leaf",
+        "2.0.0",
+    )?;
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["builder==1.0.0", "leaf==1.0.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    if version("leaf") != "1.0.0":
+        raise RuntimeError("unexpected build leaf version: " + version("leaf"))
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep/__init__.py", "")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["builder==1.0.0", "dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + builder==1.0.0
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+     + leaf==2.0.0
+    ");
+
+    Ok(())
+}
+
 /// Verify that `extra-build-dependencies` participate in lock freshness checks.
 #[test]
 fn lock_build_dependencies_extra_build_dependencies_invalidate() -> Result<()> {

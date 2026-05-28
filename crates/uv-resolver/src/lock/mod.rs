@@ -864,9 +864,11 @@ impl Lock {
         // Bump the revision to indicate the lockfile contains build dependencies.
         self.revision = BUILD_DEPENDENCIES_REVISION;
 
-        // Build a set of existing package IDs for source-aware deduplication.
-        let mut existing_packages: FxHashSet<PackageId> =
+        // Preserve the packages selected by the runtime resolution so isolated build edges
+        // are not appended to their application dependency graph.
+        let runtime_packages: FxHashSet<PackageId> =
             self.packages.iter().map(|p| p.id.clone()).collect();
+        let mut existing_packages = runtime_packages.clone();
 
         // Collect direct build dep refs per parent, and new packages to add.
         let mut build_dep_refs: BTreeMap<BuildPackageKey, Vec<BuildDependency>> = BTreeMap::new();
@@ -1003,11 +1005,9 @@ impl Lock {
         let package_ids: FxHashSet<PackageId> =
             self.packages.iter().map(|p| p.id.clone()).collect();
 
-        // Second pass: merge ordinary and optional dependency edges captured
-        // through build requirements into their packages. A package may
-        // already exist through runtime resolution while requiring additional
-        // dependency edges in a build-only marker region.
-        // Collect updates keyed by PackageId to apply afterward.
+        // Second pass: retain scoped ordinary and optional dependency edges captured
+        // through build requirements. Only build-only packages can safely store these
+        // edges globally; packages also selected at runtime must retain isolated edges.
         let mut dep_updates: FxHashMap<PackageId, Vec<Dependency>> = FxHashMap::default();
         let mut optional_dep_updates: FxHashMap<PackageId, BTreeMap<ExtraName, Vec<Dependency>>> =
             FxHashMap::default();
@@ -1105,6 +1105,9 @@ impl Lock {
 
         // Apply dependency updates to packages.
         for package in &mut self.packages {
+            if runtime_packages.contains(&package.id) {
+                continue;
+            }
             if let Some(mut deps) = dep_updates.remove(&package.id) {
                 package.dependencies.append(&mut deps);
                 package.dependencies.sort();
@@ -1120,8 +1123,8 @@ impl Lock {
             }
         }
 
-        // Retain a scoped graph only when walking the merged package edges
-        // introduces an additional dependency in an overlapping marker region.
+        // Retain a scoped graph only when walking globally stored package edges
+        // would differ from the isolated build resolution in an overlapping marker region.
         // Disjoint universal branches remain safely representable as global edges.
         build_dependency_packages.retain(|parent_key, graph| {
             let Some(package_markers) = build_dependency_package_markers.get(parent_key) else {
@@ -1139,29 +1142,32 @@ impl Lock {
                     .get(package_id)
                     .copied()
                     .unwrap_or(UniversalMarker::TRUE);
-                let introduces_dependency = |merged: &[Dependency],
-                                             scoped: &[Dependency]|
-                 -> bool {
-                    merged.iter().any(|merged_dependency| {
-                        !merged_dependency.complexified_marker.is_disjoint(marker)
-                            && !scoped.iter().any(|scoped_dependency| {
-                                scoped_dependency.package_id == merged_dependency.package_id
-                                    && scoped_dependency.extra == merged_dependency.extra
-                                    && !scoped_dependency.complexified_marker.is_disjoint(marker)
-                            })
-                    })
+                let has_dependency_not_in =
+                    |dependencies: &[Dependency], comparison: &[Dependency]| -> bool {
+                        dependencies.iter().any(|dependency| {
+                            !dependency.complexified_marker.is_disjoint(marker)
+                                && !comparison.iter().any(|other| {
+                                    other.package_id == dependency.package_id
+                                        && other.extra == dependency.extra
+                                        && !other.complexified_marker.is_disjoint(marker)
+                                })
+                        })
+                    };
+                let differs = |global: &[Dependency], scoped: &[Dependency]| {
+                    has_dependency_not_in(global, scoped) || has_dependency_not_in(scoped, global)
                 };
 
-                introduces_dependency(&package.dependencies, &edges.dependencies)
+                differs(&package.dependencies, &edges.dependencies)
                     || edges
                         .optional_dependencies
                         .iter()
                         .any(|(extra, scoped_dependencies)| {
                             package.optional_dependencies.get(extra).is_some_and(
                                 |merged_dependencies| {
-                                    introduces_dependency(merged_dependencies, scoped_dependencies)
+                                    differs(merged_dependencies, scoped_dependencies)
                                 },
-                            )
+                            ) || !scoped_dependencies.is_empty()
+                                && !package.optional_dependencies.contains_key(extra)
                         })
             })
         });
