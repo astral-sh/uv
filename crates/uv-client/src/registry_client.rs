@@ -65,7 +65,7 @@ impl<'a> RegistryClientBuilder<'a> {
             index_strategy: IndexStrategy::default(),
             torch_backend: None,
             cache,
-            base_client_builder,
+            base_client_builder: base_client_builder.redirect(RedirectPolicy::RetriggerMiddleware),
         }
     }
 
@@ -170,8 +170,7 @@ impl<'a> RegistryClientBuilder<'a> {
         // Build a base client
         let builder = self
             .base_client_builder
-            .indexes(Indexes::from(&self.index_locations))
-            .redirect(RedirectPolicy::RetriggerMiddleware);
+            .indexes(Indexes::from(&self.index_locations));
 
         let client = builder.build()?;
 
