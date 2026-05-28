@@ -22,6 +22,7 @@ use uv_python::managed::{
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
+use uv_warnings::warn_user_once;
 
 /// Activation scripts for the environment, with dependent paths templated out.
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
@@ -126,6 +127,27 @@ pub(crate) fn create(
                     debug!("Allowing existing {name} due to `--allow-existing`");
                 }
                 OnExisting::Remove(reason) => {
+                    if !is_virtualenv
+                        && let RemovalReason::UserRequest(clear_non_virtualenv) = reason
+                    {
+                        match clear_non_virtualenv {
+                            ClearNonVirtualenv::Allow => {}
+                            ClearNonVirtualenv::Warn => {
+                                warn_user_once!(
+                                    "The `--clear` option will remove the existing directory at `{}`. \
+                                    This will become an error in a future release. \
+                                    Use `--force` to suppress this warning, or \
+                                    `--preview-features venv-clear` to error on this now.",
+                                    location.user_display()
+                                );
+                            }
+                            ClearNonVirtualenv::Error => {
+                                return Err(Error::ClearNonVirtualenv {
+                                    path: location.to_path_buf(),
+                                });
+                            }
+                        }
+                    }
                     debug!("Removing existing {name} ({reason})");
                     // Before removing the virtual environment, we need to canonicalize the path
                     // because `Path::metadata` will follow the symlink but we're still operating on
@@ -602,9 +624,19 @@ fn confirm_clear(location: &Path, name: &'static str) -> Result<Option<bool>, io
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ClearNonVirtualenv {
+    /// Allow clearing a non-virtual environment directory.
+    Allow,
+    /// Warn before clearing a non-virtual environment directory.
+    Warn,
+    /// Refuse to clear a non-virtual environment directory.
+    Error,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum RemovalReason {
     /// The removal was explicitly requested, i.e., with `--clear`.
-    UserRequest,
+    UserRequest(ClearNonVirtualenv),
     /// The environment can be removed because it is considered temporary, e.g., a build
     /// environment.
     TemporaryEnvironment,
@@ -616,7 +648,7 @@ pub enum RemovalReason {
 impl std::fmt::Display for RemovalReason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UserRequest => f.write_str("requested with `--clear`"),
+            Self::UserRequest(_) => f.write_str("requested with `--clear`"),
             Self::ManagedEnvironment => f.write_str("environment is managed by uv"),
             Self::TemporaryEnvironment => f.write_str("environment is temporary"),
         }
@@ -640,11 +672,16 @@ pub enum OnExisting {
 }
 
 impl OnExisting {
-    pub fn from_args(allow_existing: bool, clear: bool, no_clear: bool) -> Self {
+    pub fn from_args(
+        allow_existing: bool,
+        clear: bool,
+        no_clear: bool,
+        clear_non_virtualenv: ClearNonVirtualenv,
+    ) -> Self {
         if allow_existing {
             Self::Allow
         } else if clear {
-            Self::Remove(RemovalReason::UserRequest)
+            Self::Remove(RemovalReason::UserRequest(clear_non_virtualenv))
         } else if no_clear {
             Self::Fail
         } else {

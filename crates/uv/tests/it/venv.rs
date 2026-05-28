@@ -1079,9 +1079,71 @@ fn non_empty_dir_exists() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
+    warning: The `--clear` option will remove the existing directory at `.venv`. This will become an error in a future release. Use `--force` to suppress this warning, or `--preview-features venv-clear` to error on this now.
     Activate with: source .venv/[BIN]/activate
     "
     );
+
+    Ok(())
+}
+
+#[test]
+fn non_empty_dir_exists_clear_preview() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let marker = context.temp_dir.child("file");
+    marker.touch()?;
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(".")
+        .arg("--clear")
+        .arg("--preview-features")
+        .arg("venv-clear")
+        .arg("--python")
+        .arg("3.12"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .
+    error: Failed to create virtual environment
+      Caused by: The `--clear` option cannot be used with a non-virtual environment directory: .
+
+    hint: Use the `--force` flag to remove the existing directory
+    ");
+
+    marker.assert(predicates::path::is_file());
+
+    Ok(())
+}
+
+#[test]
+fn non_empty_dir_exists_clear_preview_force() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let directory = context.temp_dir.child("not-a-virtualenv");
+    directory.create_dir_all()?;
+    directory.child("file").touch()?;
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(directory.as_os_str())
+        .arg("--clear")
+        .arg("--force")
+        .arg("--preview-features")
+        .arg("venv-clear")
+        .arg("--python")
+        .arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: not-a-virtualenv
+    Activate with: source not-a-virtualenv/[BIN]/activate
+    ");
+
+    directory.child("file").assert(predicates::path::missing());
 
     Ok(())
 }
