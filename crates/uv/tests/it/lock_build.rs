@@ -3263,6 +3263,117 @@ fn lock_build_dependencies_static_git() -> Result<()> {
     Ok(())
 }
 
+/// Verify that static archives stored in Git capture dependencies returned by
+/// their backend hook before the build resolution is locked.
+#[test]
+#[cfg(feature = "test-git")]
+fn lock_build_dependencies_static_git_archive_captures_hook_requirements() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+    )?;
+
+    let repo_dir = &context.temp_dir;
+    repo_dir.child("archives").create_dir_all()?;
+    let source_dist = repo_dir.child("archives/dep-0.1.0.zip");
+    let file = File::create(source_dist.path())?;
+    let mut zip = ZipWriter::new(file);
+    let options = SimpleFileOptions::default();
+    zip.add_directory("dep-0.1.0/", options)?;
+    zip.start_file("dep-0.1.0/pyproject.toml", options)?;
+    zip.write_all(
+        br#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    zip.start_file("dep-0.1.0/build_backend.py", options)?;
+    zip.write_all(
+        br#"
+def get_requires_for_build_wheel(config_settings=None):
+    return ["helper==0.1.0"]
+        "#,
+    )?;
+    zip.finish()?;
+
+    Command::new("git")
+        .arg("init")
+        .arg("--quiet")
+        .arg(repo_dir.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .args(["-C", repo_dir.path().to_str().expect("UTF-8 temp path")])
+        .args(["config", "user.name", "uv-test"])
+        .assert()
+        .success();
+    Command::new("git")
+        .args(["-C", repo_dir.path().to_str().expect("UTF-8 temp path")])
+        .args(["config", "user.email", "uv-test@example.com"])
+        .assert()
+        .success();
+    Command::new("git")
+        .args(["-C", repo_dir.path().to_str().expect("UTF-8 temp path")])
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .args(["-C", repo_dir.path().to_str().expect("UTF-8 temp path")])
+        .args(["commit", "--quiet", "-m", "initial"])
+        .assert()
+        .success();
+
+    let repo_url = Url::from_directory_path(repo_dir.path()).expect("valid file URL");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep @ git+{repo_url}#path=archives/dep-0.1.0.zip"]
+        "#
+        ))?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(
+        dep.contains(r#"{ name = "helper", version = "0.1.0" }"#),
+        "{dep}"
+    );
+
+    Ok(())
+}
+
 /// Verify that build dependencies are captured correctly when the resolver forks
 /// due to platform-specific dependencies.
 #[test]
