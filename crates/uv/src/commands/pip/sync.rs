@@ -481,11 +481,10 @@ pub(crate) async fn pip_sync(
         {
             Ok((resolution, hasher)) => (Resolution::from(resolution), hasher),
             Err(err) => {
-                return diagnostics::OperationDiagnostic::with_system_certs(
+                return Err(diagnostics::OperationErrorContext::with_system_certs(
                     client_builder.system_certs(),
                 )
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                .into_error(err));
             }
         };
 
@@ -550,11 +549,10 @@ pub(crate) async fn pip_sync(
     {
         Ok(_) => {}
         Err(err) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
+            return Err(diagnostics::OperationErrorContext::with_system_certs(
                 client_builder.system_certs(),
             )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            .into_error(err));
         }
     }
 

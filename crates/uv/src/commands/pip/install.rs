@@ -583,11 +583,10 @@ pub(crate) async fn pip_install(
         {
             Ok((graph, hasher)) => (Resolution::from(graph), hasher),
             Err(err) => {
-                return diagnostics::OperationDiagnostic::with_system_certs(
+                return Err(diagnostics::OperationErrorContext::with_system_certs(
                     client_builder.system_certs(),
                 )
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                .into_error(err));
             }
         };
 
@@ -655,11 +654,10 @@ pub(crate) async fn pip_install(
     {
         Ok(..) => {}
         Err(err) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
+            return Err(diagnostics::OperationErrorContext::with_system_certs(
                 client_builder.system_certs(),
             )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            .into_error(err));
         }
     }
 

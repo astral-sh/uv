@@ -669,7 +669,7 @@ fn sync_json_check_outdated_environment() -> Result<()> {
     Would download 1 package
     Would install 1 package
      + iniconfig==2.0.0
-    The environment is outdated; run `uv sync` to update the environment
+    error: The environment is outdated; run `uv sync` to update the environment
     "#);
 
     Ok(())
@@ -1151,7 +1151,7 @@ fn check() -> Result<()> {
     Would download 1 package
     Would install 1 package
      + iniconfig==2.0.0
-    The environment is outdated; run `uv sync` to update the environment
+    error: The environment is outdated; run `uv sync` to update the environment
     ");
 
     // Sync the environment.

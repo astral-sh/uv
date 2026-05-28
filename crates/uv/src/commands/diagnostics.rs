@@ -14,6 +14,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_resolver::SentinelRange;
 
+use crate::commands::ExitStatus;
 use crate::commands::pip;
 use crate::commands::pip::install::ExternallyManagedError;
 use crate::commands::pip::operations::ExtrasWithoutSourceError;
@@ -22,7 +23,7 @@ use crate::commands::project::remove::DependencyNotFoundError;
 use crate::commands::project::run::RecursionLimitError;
 use crate::commands::project::version::MissingProjectVersionError;
 use crate::commands::tool::common::NoExecutablesError;
-use crate::commands::tool::run::ToolRunScriptError;
+use crate::commands::tool::run::{ToolRunCommand, ToolRunScriptError};
 
 static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::new(|| {
     let suggestions: Vec<(String, String)> =
@@ -38,16 +39,56 @@ static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::ne
         .collect()
 });
 
-/// A rich reporter for operational diagnostics, i.e., errors that occur during resolution and
-/// installation.
+/// Context used to convert recognized operation failures into user-facing errors.
 #[derive(Debug, Default)]
-pub(crate) struct OperationDiagnostic {
-    /// A caller-provided hint to render after the error output.
-    hint: Option<String>,
+pub(crate) struct OperationErrorContext {
+    /// Caller-provided context used to generate a hint after the error output.
+    hint_context: Option<OperationHintContext>,
     /// Whether system certificates are being used.
-    pub(crate) system_certs: bool,
+    system_certs: bool,
     /// The context to display to the user upon resolution failure.
-    pub(crate) context: Option<&'static str>,
+    context: Option<&'static str>,
+}
+
+#[derive(Debug)]
+enum OperationHintContext {
+    AddFrozen,
+    UvxRun {
+        arguments: String,
+    },
+    ToolVerbose {
+        verbose_flag: String,
+        target: String,
+        invocation_source: ToolRunCommand,
+    },
+}
+
+impl Hint for OperationHintContext {
+    fn hints(&self) -> Hints<'_> {
+        Hints::from(match self {
+            Self::AddFrozen => format!(
+                "If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing",
+                "--frozen".green()
+            ),
+            Self::UvxRun { arguments } => format!(
+                "`{}` invokes the `{}` package. Did you mean `{}`?",
+                format!("uvx run {arguments}").green(),
+                "run".cyan(),
+                format!("uvx {arguments}").green()
+            ),
+            Self::ToolVerbose {
+                verbose_flag,
+                target,
+                invocation_source,
+            } => format!(
+                "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
+                verbose_flag.cyan(),
+                target.cyan(),
+                invocation_source.to_string().cyan(),
+                format!("{invocation_source} {verbose_flag} {target}").green()
+            ),
+        })
+    }
 }
 
 #[derive(Debug, Error)]
@@ -59,7 +100,7 @@ enum OperationError {
         chain: DerivationChain,
         #[source]
         cause: Arc<uv_distribution::Error>,
-        hint: Option<String>,
+        hint_context: Option<OperationHintContext>,
     },
     #[error("{kind} `{dist}`")]
     RequestedDist {
@@ -68,7 +109,7 @@ enum OperationError {
         chain: DerivationChain,
         #[source]
         cause: Arc<uv_distribution::Error>,
-        hint: Option<String>,
+        hint_context: Option<OperationHintContext>,
     },
     #[error("Failed to resolve dependencies for `{name}` (v{version})")]
     Dependencies {
@@ -77,102 +118,136 @@ enum OperationError {
         chain: DerivationChain,
         #[source]
         cause: Box<uv_resolver::ResolveError>,
-        hint: Option<String>,
+        hint_context: Option<OperationHintContext>,
     },
     #[error("{header}")]
     NoSolution {
         header: uv_resolver::NoSolutionHeader,
         #[source]
         cause: Box<uv_resolver::NoSolutionError>,
-        hint: Option<String>,
+        hint_context: Option<OperationHintContext>,
     },
     #[error("Failed to resolve {context} requirement")]
     Requirements {
         context: &'static str,
         #[source]
         cause: uv_requirements::Error,
-        hint: Option<String>,
+        hint_context: Option<OperationHintContext>,
+    },
+    #[error("{cause}")]
+    SystemCerts {
+        #[source]
+        cause: uv_client::Error,
+        hint_context: Option<OperationHintContext>,
+    },
+    #[error("{cause}")]
+    OutdatedEnvironment {
+        cause: pip::operations::Error,
+        hint_context: Option<OperationHintContext>,
     },
 }
 
 impl Hint for OperationError {
     fn hints(&self) -> Hints<'_> {
-        let (mut hints, extra_hint) = match self {
+        let (mut hints, hint_context) = match self {
             Self::Dist {
                 dist,
                 chain,
                 cause,
-                hint,
+                hint_context,
                 ..
             } => (
                 dist_hints(dist.name(), dist.version(), chain, cause.hints()),
-                hint,
+                hint_context,
             ),
             Self::RequestedDist {
                 dist,
                 chain,
                 cause,
-                hint,
+                hint_context,
                 ..
             } => (
                 dist_hints(dist.name(), dist.version(), chain, cause.hints()),
-                hint,
+                hint_context,
             ),
             Self::Dependencies {
                 name,
                 version,
                 chain,
                 cause,
-                hint,
-            } => (dist_hints(name, Some(version), chain, cause.hints()), hint),
-            Self::NoSolution { cause, hint, .. } => (cause.hints().into_owned(), hint),
-            Self::Requirements { hint, .. } => (Hints::none(), hint),
+                hint_context,
+            } => (
+                dist_hints(name, Some(version), chain, cause.hints()),
+                hint_context,
+            ),
+            Self::NoSolution {
+                cause,
+                hint_context,
+                ..
+            } => (cause.hints().into_owned(), hint_context),
+            Self::Requirements { hint_context, .. } => (Hints::none(), hint_context),
+            Self::SystemCerts { hint_context, .. } => (
+                Hints::from(format!(
+                    "Consider enabling use of system TLS certificates with the `{}` command-line flag",
+                    "--system-certs".green()
+                )),
+                hint_context,
+            ),
+            Self::OutdatedEnvironment { hint_context, .. } => (Hints::none(), hint_context),
         };
-        if let Some(extra_hint) = extra_hint {
-            hints.push(extra_hint.clone());
+        if let Some(hint_context) = hint_context {
+            hints.extend(hint_context.hints());
         }
         hints
     }
 }
 
-#[derive(Debug)]
-struct SystemCertsError {
-    cause: uv_client::Error,
-    hint: Option<String>,
+trait ErrorExitStatus {
+    fn exit_status(&self) -> ExitStatus;
 }
 
-impl std::fmt::Display for SystemCertsError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.cause.fmt(f)
+impl ErrorExitStatus for OperationError {
+    fn exit_status(&self) -> ExitStatus {
+        ExitStatus::Failure
     }
 }
 
-impl std::error::Error for SystemCertsError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.cause.source()
-    }
-}
-
-impl Hint for SystemCertsError {
-    fn hints(&self) -> Hints<'_> {
-        let mut hints = Hints::from(format!(
-            "Consider enabling use of system TLS certificates with the `{}` command-line flag",
-            "--system-certs".green()
-        ));
-        if let Some(hint) = &self.hint {
-            hints.push(hint.clone());
-        }
-        hints
-    }
-}
-
-fn render_handled_error(err: &anyhow::Error) {
+/// Render an error using the standard error chain and its applicable hints.
+pub(crate) fn render_error(err: &anyhow::Error) {
     let hints = hints_for_error(err);
     write_error_chain(err.as_ref(), hints).expect("writing to stderr should not fail");
 }
 
-impl OperationDiagnostic {
-    /// Create an [`OperationDiagnostic`] with the given system certificates setting.
+/// Determine the process status for a propagated error, defaulting to unexpected failure.
+pub(crate) fn exit_status_for_error(err: &anyhow::Error) -> ExitStatus {
+    for cause in err.chain() {
+        if let Some(exit_status) = get_exit_status::<OperationError>(cause) {
+            return exit_status;
+        }
+    }
+    ExitStatus::Error
+}
+
+/// Add requirement-resolution context to a user-facing failure.
+pub(crate) fn requirements_error(
+    context: &'static str,
+    cause: uv_requirements::Error,
+) -> anyhow::Error {
+    anyhow::Error::new(OperationError::Requirements {
+        context,
+        cause,
+        hint_context: None,
+    })
+}
+
+fn get_exit_status<T: ErrorExitStatus + std::error::Error + 'static>(
+    cause: &(dyn std::error::Error + 'static),
+) -> Option<ExitStatus> {
+    cause.downcast_ref::<T>().map(ErrorExitStatus::exit_status)
+}
+
+impl OperationErrorContext {
+    /// Create an [`OperationErrorContext`] with the given system certificates setting.
     #[must_use]
     pub(crate) fn with_system_certs(system_certs: bool) -> Self {
         Self {
@@ -181,11 +256,38 @@ impl OperationDiagnostic {
         }
     }
 
-    /// Set the hint to display to the user upon resolution failure.
+    /// Include a hint about skipping lock and sync operations after an `add` failure.
     #[must_use]
-    pub(crate) fn with_hint(self, hint: String) -> Self {
+    pub(crate) fn with_add_frozen_hint(self) -> Self {
         Self {
-            hint: Some(hint),
+            hint_context: Some(OperationHintContext::AddFrozen),
+            ..self
+        }
+    }
+
+    /// Include a hint for a likely mistaken `uvx run` invocation.
+    #[must_use]
+    pub(crate) fn with_uvx_run_hint(self, arguments: String) -> Self {
+        Self {
+            hint_context: Some(OperationHintContext::UvxRun { arguments }),
+            ..self
+        }
+    }
+
+    /// Include a hint for a verbose flag passed to a tool rather than to uv.
+    #[must_use]
+    pub(crate) fn with_tool_verbose_hint(
+        self,
+        verbose_flag: String,
+        target: String,
+        invocation_source: ToolRunCommand,
+    ) -> Self {
+        Self {
+            hint_context: Some(OperationHintContext::ToolVerbose {
+                verbose_flag,
+                target,
+                invocation_source,
+            }),
             ..self
         }
     }
@@ -199,12 +301,10 @@ impl OperationDiagnostic {
         }
     }
 
-    /// Attempt to report an error with rich diagnostic context.
-    ///
-    /// Returns `Some` if the error was not handled.
-    pub(crate) fn report(self, err: pip::operations::Error) -> Option<pip::operations::Error> {
+    /// Convert recognized operation failures into errors with user-facing context.
+    pub(crate) fn into_error(self, err: pip::operations::Error) -> anyhow::Error {
         let Self {
-            hint,
+            hint_context,
             system_certs,
             context,
         } = self;
@@ -215,94 +315,83 @@ impl OperationDiagnostic {
                 } else {
                     err.header()
                 };
-                render_handled_error(&anyhow::Error::new(OperationError::NoSolution {
+                anyhow::Error::new(OperationError::NoSolution {
                     header,
                     cause: err,
-                    hint,
-                }));
-                None
+                    hint_context,
+                })
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Dist(
                 kind,
                 dist,
                 chain,
                 err,
-            )) => {
-                render_handled_error(&anyhow::Error::new(OperationError::RequestedDist {
-                    kind,
-                    dist,
-                    chain,
-                    cause: err,
-                    hint,
-                }));
-                None
-            }
+            )) => anyhow::Error::new(OperationError::RequestedDist {
+                kind,
+                dist,
+                chain,
+                cause: err,
+                hint_context,
+            }),
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Dependencies(
                 error,
                 name,
                 version,
                 chain,
-            )) => {
-                render_handled_error(&anyhow::Error::new(OperationError::Dependencies {
-                    name,
-                    version,
-                    chain,
-                    cause: error,
-                    hint,
-                }));
-                None
-            }
+            )) => anyhow::Error::new(OperationError::Dependencies {
+                name,
+                version,
+                chain,
+                cause: error,
+                hint_context,
+            }),
             pip::operations::Error::Requirements(uv_requirements::Error::Dist(kind, dist, err)) => {
-                render_handled_error(&anyhow::Error::new(OperationError::Dist {
+                anyhow::Error::new(OperationError::Dist {
                     kind,
                     dist,
                     chain: DerivationChain::default(),
                     cause: Arc::new(*err),
-                    hint,
-                }));
-                None
+                    hint_context,
+                })
             }
             pip::operations::Error::Prepare(uv_installer::PrepareError::Dist(
                 kind,
                 dist,
                 chain,
                 err,
-            )) => {
-                render_handled_error(&anyhow::Error::new(OperationError::Dist {
-                    kind,
-                    dist,
-                    chain,
-                    cause: Arc::new(*err),
-                    hint,
-                }));
-                None
-            }
+            )) => anyhow::Error::new(OperationError::Dist {
+                kind,
+                dist,
+                chain,
+                cause: Arc::new(*err),
+                hint_context,
+            }),
             pip::operations::Error::Requirements(err) => {
                 if let Some(context) = context {
-                    render_handled_error(&anyhow::Error::new(OperationError::Requirements {
+                    anyhow::Error::new(OperationError::Requirements {
                         context,
                         cause: err,
-                        hint,
-                    }));
-                    None
+                        hint_context,
+                    })
                 } else {
-                    Some(pip::operations::Error::Requirements(err))
+                    anyhow::Error::new(pip::operations::Error::Requirements(err))
                 }
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Client(err))
                 if !system_certs && err.is_ssl() =>
             {
-                render_handled_error(&anyhow::Error::new(SystemCertsError { cause: err, hint }));
-                None
+                anyhow::Error::new(OperationError::SystemCerts {
+                    cause: err,
+                    hint_context,
+                })
             }
             err @ pip::operations::Error::OutdatedEnvironment(..) => {
-                anstream::eprintln!("{}", err);
-                if let Some(hint) = hint {
-                    anstream::eprint!("{}", Hints::from(hint));
-                }
-                None
+                anyhow::Error::new(OperationError::OutdatedEnvironment {
+                    cause: err,
+                    hint_context,
+                })
             }
-            err => Some(err),
+            err => anyhow::Error::new(err),
         }
     }
 }
@@ -312,11 +401,10 @@ impl OperationDiagnostic {
 /// This is the central "hint for error" function. It walks the full error chain
 /// (via `anyhow::Error::chain`) and tries to downcast each error to known types
 /// that implement [`Hint`]. All hint rendering logic should be consolidated here.
-pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
+fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
     let mut hints = Hints::none();
     for cause in err.chain() {
         collect_hint::<OperationError>(cause, &mut hints);
-        collect_hint::<SystemCertsError>(cause, &mut hints);
         collect_hint::<Box<uv_resolver::NoSolutionError>>(cause, &mut hints);
         collect_hint::<uv_resolver::NoSolutionError>(cause, &mut hints);
         collect_hint::<uv_resolver::ResolveError>(cause, &mut hints);

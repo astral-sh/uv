@@ -22,7 +22,6 @@ use uv_distribution_types::{
     IndexCapabilities, IndexUrl, Name, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_errors::write_error_chain;
 use uv_fs::CWD;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -272,43 +271,31 @@ pub(crate) async fn run(
             // If the user ran `uvx run ...`, the `run` is likely a mistake. Show a dedicated hint.
             if from.is_none() && invocation_source == ToolRunCommand::Uvx && target == "run" {
                 let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
-                return diagnostics::OperationDiagnostic::with_system_certs(
+                return Err(diagnostics::OperationErrorContext::with_system_certs(
                     client_builder.system_certs(),
                 )
-                .with_hint(format!(
-                    "`{}` invokes the `{}` package. Did you mean `{}`?",
-                    format!("uvx run {rest}").green(),
-                    "run".cyan(),
-                    format!("uvx {rest}").green()
-                ))
+                .with_uvx_run_hint(rest)
                 .with_context("tool")
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                .into_error(err));
             }
 
-            let diagnostic =
-                diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs());
-            let diagnostic = if let Some(verbose_flag) = find_verbose_flag(args) {
-                diagnostic.with_hint(format!(
-                    "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
-                    verbose_flag.cyan(),
-                    target.cyan(),
-                    invocation_source.to_string().cyan(),
-                    format!("{invocation_source} {verbose_flag} {target}").green()
-                ))
+            let context = diagnostics::OperationErrorContext::with_system_certs(
+                client_builder.system_certs(),
+            );
+            let context = if let Some(verbose_flag) = find_verbose_flag(args) {
+                context.with_tool_verbose_hint(
+                    verbose_flag.to_string(),
+                    target.to_string(),
+                    invocation_source,
+                )
             } else {
-                diagnostic.with_context("tool")
+                context.with_context("tool")
             };
-            return diagnostic
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(context.into_error(err));
         }
 
         Err(ProjectError::Requirements(err)) => {
-            let err = anyhow::Error::from(err).context("Failed to resolve `--with` requirement");
-            let hints = diagnostics::hints_for_error(&err);
-            write_error_chain(err.as_ref(), hints).expect("writing to stderr should not fail");
-            return Ok(ExitStatus::Failure);
+            return Err(diagnostics::requirements_error("`--with`", err));
         }
         Err(err) => return Err(err.into()),
     };

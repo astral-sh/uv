@@ -609,11 +609,10 @@ pub(crate) async fn install(
         {
             Ok(update) => update.into_environment(),
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::with_system_certs(
+                return Err(diagnostics::OperationErrorContext::with_system_certs(
                     client_builder.system_certs(),
                 )
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                .into_error(err));
             }
             Err(err) => return Err(err.into()),
         };
@@ -674,11 +673,10 @@ pub(crate) async fn install(
                     .await
                     .ok()
                     .flatten() else {
-                        return diagnostics::OperationDiagnostic::with_system_certs(
+                        return Err(diagnostics::OperationErrorContext::with_system_certs(
                             client_builder.system_certs(),
                         )
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        .into_error(err));
                     };
 
                     debug!(
@@ -707,11 +705,10 @@ pub(crate) async fn install(
                     {
                         Ok(resolution) => (resolution, interpreter),
                         Err(ProjectError::Operation(err)) => {
-                            return diagnostics::OperationDiagnostic::with_system_certs(
+                            return Err(diagnostics::OperationErrorContext::with_system_certs(
                                 client_builder.system_certs(),
                             )
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                            .into_error(err));
                         }
                         Err(err) => return Err(err.into()),
                     }
@@ -752,11 +749,10 @@ pub(crate) async fn install(
         }) {
             Ok(environment) => environment,
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::with_system_certs(
+                return Err(diagnostics::OperationErrorContext::with_system_certs(
                     client_builder.system_certs(),
                 )
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                .into_error(err));
             }
             Err(err) => return Err(err.into()),
         }

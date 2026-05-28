@@ -775,9 +775,13 @@ pub(crate) async fn add(
                 let _ = snapshot.revert();
             }
             match err {
-                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs()).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing", "--frozen".green()))
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
+                ProjectError::Operation(err) => {
+                    Err(diagnostics::OperationErrorContext::with_system_certs(
+                        client_builder.system_certs(),
+                    )
+                    .with_add_frozen_hint()
+                    .into_error(err))
+                }
                 err => Err(err.into()),
             }
         }

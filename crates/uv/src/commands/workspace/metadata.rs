@@ -169,11 +169,10 @@ pub(crate) async fn metadata(
             writeln!(printer.stderr(), "{}", err.to_string().bold())?;
             Ok(ExitStatus::Failure)
         }
-        Err(ProjectError::Operation(err)) => {
-            diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
-        }
+        Err(ProjectError::Operation(err)) => Err(
+            diagnostics::OperationErrorContext::with_system_certs(client_builder.system_certs())
+                .into_error(err),
+        ),
         Err(err) => Err(err.into()),
     }
 }

@@ -2826,11 +2826,10 @@ where
         Err(err) => {
             trace!("Error trace: {err:?}");
 
-            let hints = commands::diagnostics::hints_for_error(&err);
-            uv_errors::write_error_chain(err.as_ref(), hints)
-                .expect("writing to stderr should not fail");
+            let exit_status = commands::diagnostics::exit_status_for_error(&err);
+            commands::diagnostics::render_error(&err);
 
-            ExitStatus::Error.into()
+            exit_status.into()
         }
     }
 }
