@@ -1381,15 +1381,15 @@ fn lock_wheel_url() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    // Re-run with `--offline`. This should fail: we need network access to resolve mutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
-    success: false
-    exit_code: 2
+    // Re-run with `--check --offline`. We cannot refresh direct URL metadata without network
+    // access, so preserve the metadata in the already-correct lockfile.
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--no-cache"), @"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to generate package metadata for `anyio==4.3.0 @ direct+https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl`
-      Caused by: Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl`
+    Resolved 4 packages in [TIME]
     ");
 
     // Install from the lockfile.
@@ -1525,6 +1525,17 @@ fn lock_sdist_url() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Re-run with `--check --offline`. We cannot refresh direct URL metadata without network
+    // access, so preserve the metadata in the already-correct lockfile.
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----

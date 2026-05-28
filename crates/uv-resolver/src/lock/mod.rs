@@ -1975,6 +1975,15 @@ impl Lock {
                 continue;
             }
 
+            // Validating a direct URL package requires retrieving metadata from the remote
+            // artifact. In offline mode, preserve the metadata captured in the lockfile rather
+            // than requiring that artifact to already be present in the cache.
+            if matches!(&package.id.source, Source::Direct(..))
+                && database.client().unmanaged.connectivity().is_offline()
+            {
+                continue;
+            }
+
             if let Some(version) = package.id.version.as_ref() {
                 // If the distribution is a source tree, attempt to validate it from statically
                 // available `pyproject.toml` metadata before converting it to an installable
