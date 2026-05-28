@@ -137,7 +137,7 @@ pub(crate) fn create(
                                     "The `--clear` option will remove the existing directory at `{}`. \
                                     This will become an error in a future release. \
                                     Use `--force` to suppress this warning, or \
-                                    `--preview-features venv-clear` to error on this now.",
+                                    `--preview-features venv-clear-directory` to error on this now.",
                                     location.user_display()
                                 );
                             }
