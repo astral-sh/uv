@@ -24,7 +24,7 @@ use uv_distribution_types::{
     BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
     IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
 };
-use uv_git::{GIT_LFS, GitError, GitResolver, Reporter};
+use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -269,9 +269,9 @@ impl RegistryClient {
         self.client.uncached().for_host(url)
     }
 
-    /// Returns `true` if SSL verification is disabled for the given URL.
-    pub fn disable_ssl(&self, url: &DisplaySafeUrl) -> bool {
-        self.client.uncached().disable_ssl(url)
+    /// Return the [`GitHttpSettings`] for fetching from the given URL.
+    pub fn git_http_settings(&self, url: &DisplaySafeUrl) -> GitHttpSettings {
+        self.client.uncached().git_http_settings(url)
     }
 
     /// Return the [`Connectivity`] mode used by this client.
@@ -994,8 +994,7 @@ impl RegistryClient {
                 let fetch = git
                     .fetch(
                         &wheel.git,
-                        self.disable_ssl(wheel.git.url()),
-                        self.connectivity() == Connectivity::Offline,
+                        self.git_http_settings(wheel.git.url()),
                         self.cache.bucket(CacheBucket::Git),
                         reporter,
                     )
