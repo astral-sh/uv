@@ -13826,6 +13826,71 @@ fn lock_sources_url() -> Result<()> {
     Ok(())
 }
 
+/// Skip direct URL freshness checks while offline without skipping mutable transitive sources.
+#[test]
+fn lock_sources_url_offline_validates_transitive_source_tree() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["workspace @ https://github.com/user-attachments/files/16592193/workspace.zip"]
+
+        [tool.uv]
+        override-dependencies = ["anyio"]
+
+        [tool.uv.sources]
+        anyio = { path = "anyio" }
+        "#,
+    )?;
+
+    let transitive = context.temp_dir.child("anyio");
+    fs_err::create_dir_all(&transitive)?;
+    let transitive_pyproject_toml = transitive.child("pyproject.toml");
+    transitive_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "anyio"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    transitive_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "anyio"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// Lock a local archive requirement that uses `tool.uv.sources` internally (specifically, the root
 /// package `workspace` depends on `anyio`, and declares a source pointing to a local stub of
 /// `anyio`).

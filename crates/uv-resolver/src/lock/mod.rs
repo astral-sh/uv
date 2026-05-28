@@ -1981,10 +1981,11 @@ impl Lock {
             if matches!(&package.id.source, Source::Direct(..))
                 && database.client().unmanaged.connectivity().is_offline()
             {
-                continue;
-            }
-
-            if let Some(version) = package.id.version.as_ref() {
+                trace!(
+                    "Skipping metadata validation for `{}` because its direct URL cannot be refreshed while offline",
+                    package.id
+                );
+            } else if let Some(version) = package.id.version.as_ref() {
                 // If the distribution is a source tree, attempt to validate it from statically
                 // available `pyproject.toml` metadata before converting it to an installable
                 // distribution. This avoids requiring build permission for static local packages.
