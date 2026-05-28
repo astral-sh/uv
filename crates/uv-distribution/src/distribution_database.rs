@@ -24,6 +24,7 @@ use uv_distribution_types::{
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
+use uv_git::{GIT_LFS, GitError};
 use uv_install_wheel::validate_and_heal_record;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
@@ -372,6 +373,19 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         self.reporter.clone().map(<dyn Reporter>::into_git_reporter),
                     )
                     .await?;
+
+                if wheel.git.lfs().enabled() && !fetch.lfs_ready() {
+                    if GIT_LFS.is_err() {
+                        return Err(Error::MissingWheelGitLfsArtifacts(
+                            wheel.url.to_url(),
+                            GitError::GitLfsNotFound,
+                        ));
+                    }
+                    return Err(Error::MissingWheelGitLfsArtifacts(
+                        wheel.url.to_url(),
+                        GitError::GitLfsNotConfigured,
+                    ));
+                }
 
                 let git_sha = fetch.git().precise().expect("Exact commit after checkout");
                 let cache_entry = self.build_context.cache().entry(

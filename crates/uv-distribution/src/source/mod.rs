@@ -1607,6 +1607,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
     ) -> Result<RevisionHashes, Error> {
+        // Validate that LFS artifacts were fully initialized.
+        if resource.git.lfs().enabled() && !fetch.lfs_ready() {
+            if GIT_LFS.is_err() {
+                return Err(Error::MissingSourceDistGitLfsArtifacts(
+                    resource.url.to_url(),
+                    GitError::GitLfsNotFound,
+                ));
+            }
+            return Err(Error::MissingSourceDistGitLfsArtifacts(
+                resource.url.to_url(),
+                GitError::GitLfsNotConfigured,
+            ));
+        }
+
         // Verify that the archive exists.
         let install_path = fetch.path().join(&resource.path);
         if !install_path.is_file() {
@@ -1950,12 +1964,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Validate that LFS artifacts were fully initialized
         if resource.git.lfs().enabled() && !fetch.lfs_ready() {
             if GIT_LFS.is_err() {
-                return Err(Error::MissingGitLfsArtifacts(
+                return Err(Error::MissingSourceDistGitLfsArtifacts(
                     resource.url.to_url(),
                     GitError::GitLfsNotFound,
                 ));
             }
-            return Err(Error::MissingGitLfsArtifacts(
+            return Err(Error::MissingSourceDistGitLfsArtifacts(
                 resource.url.to_url(),
                 GitError::GitLfsNotConfigured,
             ));
@@ -2165,12 +2179,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Validate that LFS artifacts were fully initialized
         if resource.git.lfs().enabled() && !fetch.lfs_ready() {
             if GIT_LFS.is_err() {
-                return Err(Error::MissingGitLfsArtifacts(
+                return Err(Error::MissingSourceDistGitLfsArtifacts(
                     resource.url.to_url(),
                     GitError::GitLfsNotFound,
                 ));
             }
-            return Err(Error::MissingGitLfsArtifacts(
+            return Err(Error::MissingSourceDistGitLfsArtifacts(
                 resource.url.to_url(),
                 GitError::GitLfsNotConfigured,
             ));

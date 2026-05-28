@@ -14,6 +14,7 @@ use crate::{FlatIndexError, html};
 use uv_cache::Error as CacheError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_distribution_types::IndexUrl;
+use uv_git::GitError;
 use uv_normalize::PackageName;
 use uv_redacted::DisplaySafeUrl;
 
@@ -384,6 +385,9 @@ pub enum ErrorKind {
 
     #[error(transparent)]
     Git(#[from] uv_git::GitResolverError),
+
+    #[error("The wheel `{0}` is missing Git LFS artifacts.")]
+    MissingWheelGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
 
     #[error("Expected a file URL, but received: {0}")]
     NonFileUrl(DisplaySafeUrl),
