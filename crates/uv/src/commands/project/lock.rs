@@ -11,6 +11,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use tracing::debug;
 
 use uv_cache::{Cache, Refresh};
+use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
@@ -803,6 +804,17 @@ async fn do_lock(
         })
         .unwrap_or_default();
 
+    let build_settings = (!config_setting.is_empty()
+        || !config_settings_package.is_empty()
+        || !extra_build_variables.is_empty())
+    .then(|| {
+        cache_digest(&(
+            config_setting,
+            config_settings_package,
+            extra_build_variables,
+        ))
+    });
+
     let make_build_dispatch = |build_preferences, extra_build_requires| {
         BuildDispatch::new(
             &client,
@@ -857,6 +869,7 @@ async fn do_lock(
             &excludes,
             &build_constraints,
             &extra_build_requires,
+            build_settings.as_deref(),
             &conflicts,
             environments,
             required_environments,
@@ -1054,7 +1067,7 @@ async fn do_lock(
             // Notify the user of any resolution diagnostics.
             pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
-            let manifest = ResolverManifest::new(
+            let mut manifest = ResolverManifest::new(
                 members,
                 requirements,
                 constraints,
@@ -1065,6 +1078,11 @@ async fn do_lock(
                 dependency_metadata.values().cloned(),
             )
             .relative_to(target.install_path())?;
+            if preview.is_enabled(PreviewFeature::LockBuildDependencies)
+                && !build_options.no_build_all()
+            {
+                manifest = manifest.with_build_settings(build_settings.clone());
+            }
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
             let (lock, build_markers) = Lock::from_resolution_with_build_markers(
@@ -1404,6 +1422,7 @@ impl ValidatedLock {
         excludes: &[PackageName],
         build_constraints: &[Requirement],
         extra_build_requires: &uv_distribution_types::ExtraBuildRequires,
+        build_settings: Option<&str>,
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,
         required_environments: Option<&SupportedEnvironments>,
@@ -1609,6 +1628,7 @@ impl ValidatedLock {
                 excludes,
                 build_constraints,
                 extra_build_requires,
+                build_settings,
                 dependency_groups,
                 dependency_metadata,
                 indexes,
@@ -1798,6 +1818,12 @@ impl ValidatedLock {
                         "Resolving despite existing lockfile due to mismatched `build-system.requires` for: `{name}`"
                     );
                 }
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedBuildSettings => {
+                debug!(
+                    "Resolving despite existing lockfile due to changed build configuration settings or variables"
+                );
                 Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MissingVersion(name) => {

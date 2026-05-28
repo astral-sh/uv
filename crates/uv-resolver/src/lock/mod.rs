@@ -2338,6 +2338,10 @@ impl Lock {
                 manifest_table.insert("dependency-metadata", Item::ArrayOfTables(tables));
             }
 
+            if let Some(build_settings) = &self.manifest.build_settings {
+                manifest_table.insert("build-settings", value(build_settings));
+            }
+
             if !manifest_table.is_empty() {
                 doc.insert("manifest", Item::Table(manifest_table));
             }
@@ -2585,6 +2589,7 @@ impl Lock {
         excludes: &[PackageName],
         build_constraints: &[Requirement],
         extra_build_requires: &ExtraBuildRequires,
+        build_settings: Option<&str>,
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
@@ -2784,6 +2789,12 @@ impl Lock {
             if expected != *actual {
                 return Ok(SatisfiesResult::MismatchedStaticMetadata(expected, actual));
             }
+        }
+
+        if self.supports_build_dependencies()
+            && self.manifest.build_settings.as_deref() != build_settings
+        {
+            return Ok(SatisfiesResult::MismatchedBuildSettings);
         }
 
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
@@ -3500,6 +3511,8 @@ pub enum SatisfiesResult<'lock> {
     /// A package in the lockfile contains different `build-system.requires` metadata
     /// than expected.
     MismatchedBuildRequires(&'lock PackageName, Option<&'lock Version>),
+    /// The lockfile was captured with different settings that affect build requirements.
+    MismatchedBuildSettings,
     /// The lockfile is missing a version.
     MissingVersion(&'lock PackageName),
 }
@@ -3600,6 +3613,9 @@ pub struct ResolverManifest {
     /// The static metadata provided to the resolver.
     #[serde(default)]
     dependency_metadata: BTreeSet<StaticMetadata>,
+    /// A digest of configuration settings and variables used to capture build requirements.
+    #[serde(default)]
+    build_settings: Option<String>,
 }
 
 impl ResolverManifest {
@@ -3627,7 +3643,15 @@ impl ResolverManifest {
                 .map(|(group, requirements)| (group, requirements.into_iter().collect()))
                 .collect(),
             dependency_metadata: dependency_metadata.into_iter().collect(),
+            build_settings: None,
         }
+    }
+
+    /// Store inputs that can affect hook-provided build requirements.
+    #[must_use]
+    pub fn with_build_settings(mut self, build_settings: Option<String>) -> Self {
+        self.build_settings = build_settings;
+        self
     }
 
     /// Convert the manifest to a relative form using the given workspace.
@@ -3669,6 +3693,7 @@ impl ResolverManifest {
                 })
                 .collect::<Result<BTreeMap<_, _>, _>>()?,
             dependency_metadata: self.dependency_metadata,
+            build_settings: self.build_settings,
         })
     }
 }
