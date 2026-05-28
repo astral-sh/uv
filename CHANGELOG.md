@@ -3,6 +3,43 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.17
+
+Released on 2026-05-28.
+
+### Enhancements
+
+- Add a diagnostic for `uv add` with standard library modules ([#19572](https://github.com/astral-sh/uv/pull/19572))
+- Expose `uv workspace` and its `list` subcommand in help output ([#19533](https://github.com/astral-sh/uv/pull/19533))
+- Improve the "403 forbidden" hint to suggest `ignore-error-codes` when applicable ([#19521](https://github.com/astral-sh/uv/pull/19521))
+- Skip direct URL lock freshness checks while offline ([#19596](https://github.com/astral-sh/uv/pull/19596))
+- Add `import-names` and `import-namespaces` support to `uv-build` ([PEP 794](https://peps.python.org/pep-0794/)) ([#19380](https://github.com/astral-sh/uv/pull/19380))
+- Add a `--no-editable-package` flag to various commands ([#19584](https://github.com/astral-sh/uv/pull/19584))
+- Infer Python version requests from source trees in `uv tool` invocations ([#19577](https://github.com/astral-sh/uv/pull/19577))
+
+### Preview features
+
+- Add module owners to `uv workspace metadata` ([#19122](https://github.com/astral-sh/uv/pull/19122))
+- Do not allow `uv venv --clear` to remove non-virtual environments ([#19595](https://github.com/astral-sh/uv/pull/19595))
+
+### Bug fixes
+
+- Improve the performance of large entries in `tool.uv.conflicts` ([#19538](https://github.com/astral-sh/uv/pull/19538))
+- Avoid modifying the parent process' env with `--env-file` in `uv run` ([#19567](https://github.com/astral-sh/uv/pull/19567))
+- Fix script environment creation for scripts with long filenames ([#19539](https://github.com/astral-sh/uv/pull/19539))
+- Fix transitive Git archive dependencies in lockfiles ([#19589](https://github.com/astral-sh/uv/pull/19589))
+- Preserve Git repository URLs in direct URL metadata ([#19590](https://github.com/astral-sh/uv/pull/19590))
+- Support redirects in `--check-url` ([#19594](https://github.com/astral-sh/uv/pull/19594))
+- Accept case-insensitive HTML tags in `--find-links` parsing ([#19537](https://github.com/astral-sh/uv/pull/19537))
+- Reject duplicate script metadata blocks ([#19544](https://github.com/astral-sh/uv/pull/19544))
+- Ban names like "python3" as script entry points ([#19535](https://github.com/astral-sh/uv/pull/19535), [#19536](https://github.com/astral-sh/uv/pull/19536))
+- Validate Git LFS artifacts for Git archives ([#19592](https://github.com/astral-sh/uv/pull/19592))
+- Use a relative path when creating symlinks in cache to improve relocatability ([#19033](https://github.com/astral-sh/uv/pull/19033))
+
+### Documentation
+
+- Fix malformed positional anchors in the CLI reference ([#19575](https://github.com/astral-sh/uv/pull/19575))
+
 ## 0.11.16
 
 Released on 2026-05-21.
@@ -929,4 +966,5 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+
 
