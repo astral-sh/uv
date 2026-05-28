@@ -318,6 +318,11 @@ pub(crate) async fn install(
 
     let package_name = &requirement.name;
 
+    let explicit_local_directory = match &requirement.source {
+        RequirementSource::Directory { install_path, .. } => Some(install_path.clone()),
+        _ => None,
+    };
+
     // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.
     let settings = if request.is_latest() {
         ResolverInstallerSettings {
@@ -339,6 +344,22 @@ pub(crate) async fn install(
         }
     } else {
         settings
+    };
+
+    let (settings, cache) = if let Some(install_path) = explicit_local_directory {
+        let reinstall = Reinstall::None
+            .with_path(install_path)
+            .combine(settings.reinstall);
+        let cache = cache.with_refresh_combined(Refresh::from(reinstall.clone()));
+        (
+            ResolverInstallerSettings {
+                reinstall,
+                ..settings
+            },
+            cache,
+        )
+    } else {
+        (settings, cache)
     };
 
     // Read the `--with` requirements.

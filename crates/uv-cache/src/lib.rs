@@ -204,6 +204,13 @@ impl Cache {
         Self { refresh, ..self }
     }
 
+    /// Combine the existing [`Refresh`] policy with an additional one.
+    #[must_use]
+    pub fn with_refresh_combined(self, refresh: Refresh) -> Self {
+        let refresh = self.refresh.combine(refresh);
+        Self { refresh, ..self }
+    }
+
     /// Acquire a lock that allows removing entries from the cache.
     pub async fn with_exclusive_lock(self) -> Result<Self, LockedFileError> {
         let Self {

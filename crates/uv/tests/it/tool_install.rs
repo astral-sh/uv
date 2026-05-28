@@ -1801,6 +1801,145 @@ fn tool_install_editable() {
     });
 }
 
+#[test]
+fn tool_install_editable_rebuilds_explicit_local_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let project = context.temp_dir.child("dynamic_tool");
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [build-system]
+        requires = ["setuptools>=61"]
+        build-backend = "setuptools.build_meta"
+
+        [project]
+        name = "dynamic-tool-demo"
+        dynamic = ["version", "scripts"]
+        requires-python = ">=3.11"
+        "#
+    })?;
+
+    project.child("setup.py").write_str(indoc! {r#"
+        from pathlib import Path
+        from setuptools import setup
+
+        root = Path(__file__).parent
+        version = (root / "VERSION").read_text().strip()
+        commands = [
+            line.strip()
+            for line in (root / "commands.txt").read_text().splitlines()
+            if line.strip()
+        ]
+
+        setup(
+            version=version,
+            entry_points={
+                "console_scripts": [
+                    f"dynamic-tool-{command}=dynamic_tool.commands.{command}:main"
+                    for command in commands
+                ]
+            },
+        )
+        "#
+    })?;
+
+    project.child("VERSION").write_str("0.1.0")?;
+    project.child("commands.txt").write_str("alpha")?;
+    project
+        .child("src")
+        .child("dynamic_tool")
+        .child("__init__.py")
+        .touch()?;
+    project
+        .child("src")
+        .child("dynamic_tool")
+        .child("commands")
+        .child("__init__.py")
+        .touch()?;
+    project
+        .child("src")
+        .child("dynamic_tool")
+        .child("commands")
+        .child("alpha.py")
+        .write_str(indoc! {r#"
+            def main():
+                print("alpha")
+            "#
+        })?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("-e")
+        .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dynamic-tool-demo==0.1.0 (from file://[TEMP_DIR]/dynamic_tool)
+    Installed 1 executable: dynamic-tool-alpha
+    ");
+
+    project.child("VERSION").write_str("0.2.0")?;
+    project.child("commands.txt").write_str("alpha\nbeta")?;
+    project
+        .child("src")
+        .child("dynamic_tool")
+        .child("commands")
+        .child("beta.py")
+        .write_str(indoc! {r#"
+            def main():
+                print("beta")
+            "#
+        })?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - dynamic-tool-demo==0.1.0 (from file://[TEMP_DIR]/dynamic_tool)
+     + dynamic-tool-demo==0.2.0 (from file://[TEMP_DIR]/dynamic_tool)
+    Installed 2 executables: dynamic-tool-alpha, dynamic-tool-beta
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("-e")
+        .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ dynamic-tool-demo==0.2.0 (from file://[TEMP_DIR]/dynamic_tool)
+    Installed 2 executables: dynamic-tool-alpha, dynamic-tool-beta
+    ");
+
+    Ok(())
+}
+
 /// Ensure that we remove any existing entrypoints upon error.
 #[test]
 fn tool_install_remove_on_empty() -> Result<()> {
