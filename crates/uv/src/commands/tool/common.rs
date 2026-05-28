@@ -184,10 +184,10 @@ impl ToolPython {
             if source_requires_python.is_some() {
                 (source_requires_python, None)
             } else {
-                // This inference selects the latest matching release, which is only consistent
-                // with the resolver's highest-version selection policy.
+                // This inference predicts resolution only for online registry indexes under the
+                // resolver's highest-version selection policy.
                 let registry_requires_python = if infer_registry_requires_python
-                    && settings.resolver.resolution == ResolutionMode::Highest
+                    && can_infer_registry_requires_python(client_builder, settings)
                 {
                     let registry_requirement = registry_requirement.or_else(|| {
                         requirement.and_then(|requirement| match requirement {
@@ -278,6 +278,21 @@ impl ToolPython {
     pub(crate) fn is_explicit(&self) -> bool {
         matches!(self.source, PythonRequestSource::UserRequest)
     }
+}
+
+/// Returns `true` when static registry metadata can predict the selected tool distribution.
+pub(super) fn can_infer_registry_requires_python(
+    client_builder: &BaseClientBuilder<'_>,
+    settings: &ResolverInstallerSettings,
+) -> bool {
+    client_builder.connectivity.is_online()
+        && settings
+            .resolver
+            .index_locations
+            .flat_indexes()
+            .next()
+            .is_none()
+        && settings.resolver.resolution == ResolutionMode::Highest
 }
 
 /// Infer [`RequiresPython`] from a direct source requirement by reading its `pyproject.toml`.

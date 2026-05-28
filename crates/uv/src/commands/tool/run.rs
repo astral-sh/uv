@@ -53,7 +53,9 @@ use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
+use crate::commands::tool::common::{
+    ToolPython, can_infer_registry_requires_python, matching_packages, refine_interpreter,
+};
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, project::environment::CachedEnvironment, read_env_files};
 use crate::printer::Printer;
@@ -735,6 +737,7 @@ async fn get_or_create_environment(
         RegistryPythonInference::DeferUntilReuseCheck
     ) && has_registry_target
         && python.is_none()
+        && can_infer_registry_requires_python(client_builder, settings)
         && !isolated
         && !request.is_latest()
         && constraint_sources.is_empty()

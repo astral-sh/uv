@@ -42,12 +42,19 @@ use crate::commands::project::{
     sync_environment, update_environment,
 };
 use crate::commands::tool::common::{
-    ToolPython, finalize_tool_install, refine_interpreter, remove_entrypoints,
+    ToolPython, can_infer_registry_requires_python, finalize_tool_install, refine_interpreter,
+    remove_entrypoints,
 };
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverSettings};
+
+#[derive(Debug, Clone, Copy)]
+enum RegistryPythonInference {
+    DeferUntilReuseCheck,
+    Enabled { removed_invalid_tool_receipt: bool },
+}
 
 /// Install a tool.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -56,10 +63,10 @@ pub(crate) async fn install(
     editable: bool,
     from: Option<String>,
     with: &[RequirementsSource],
-    constraint_sources: &[RequirementsSource],
-    override_sources: &[RequirementsSource],
-    exclude_sources: &[RequirementsSource],
-    build_constraint_sources: &[RequirementsSource],
+    constraints: &[RequirementsSource],
+    overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
+    build_constraints: &[RequirementsSource],
     entrypoints: &[PackageName],
     lfs: GitLfsSetting,
     python: Option<String>,
@@ -79,9 +86,68 @@ pub(crate) async fn install(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
-    defer_registry_requires_python: bool,
-    require_selected_interpreter: bool,
-    removed_invalid_tool_receipt: bool,
+) -> Result<ExitStatus> {
+    Box::pin(install_with_registry_python_inference(
+        package,
+        editable,
+        from,
+        with,
+        constraints,
+        overrides,
+        excludes,
+        build_constraints,
+        entrypoints,
+        lfs,
+        python,
+        python_platform,
+        install_mirrors,
+        force,
+        options,
+        settings,
+        client_builder,
+        python_preference,
+        python_downloads,
+        installer_metadata,
+        concurrency,
+        no_config,
+        cache,
+        workspace_cache,
+        printer,
+        preview,
+        RegistryPythonInference::DeferUntilReuseCheck,
+    ))
+    .await
+}
+
+#[expect(clippy::fn_params_excessive_bools)]
+async fn install_with_registry_python_inference(
+    package: String,
+    editable: bool,
+    from: Option<String>,
+    with: &[RequirementsSource],
+    constraints: &[RequirementsSource],
+    overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
+    build_constraints: &[RequirementsSource],
+    entrypoints: &[PackageName],
+    lfs: GitLfsSetting,
+    python: Option<String>,
+    python_platform: Option<TargetTriple>,
+    install_mirrors: PythonInstallMirrors,
+    force: bool,
+    options: ResolverInstallerOptions,
+    settings: ResolverInstallerSettings,
+    client_builder: BaseClientBuilder<'_>,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    installer_metadata: bool,
+    concurrency: Concurrency,
+    no_config: bool,
+    cache: Cache,
+    workspace_cache: &WorkspaceCache,
+    printer: Printer,
+    preview: Preview,
+    registry_python_inference: RegistryPythonInference,
 ) -> Result<ExitStatus> {
     if settings.resolver.torch_backend.is_some() {
         warn_user_once!(
@@ -139,13 +205,26 @@ pub(crate) async fn install(
                     )
                 })
             });
-    let defer_registry_requires_python = defer_registry_requires_python
-        && python.is_none()
+    let defer_registry_requires_python = matches!(
+        registry_python_inference,
+        RegistryPythonInference::DeferUntilReuseCheck
+    ) && python.is_none()
         && has_registry_target
+        && can_infer_registry_requires_python(&client_builder, &settings)
         && !force
         && settings.reinstall.is_none()
-        && constraint_sources.is_empty()
-        && override_sources.is_empty();
+        && constraints.is_empty()
+        && overrides.is_empty();
+    let require_selected_interpreter = matches!(
+        registry_python_inference,
+        RegistryPythonInference::Enabled { .. }
+    );
+    let removed_invalid_tool_receipt = match registry_python_inference {
+        RegistryPythonInference::DeferUntilReuseCheck => false,
+        RegistryPythonInference::Enabled {
+            removed_invalid_tool_receipt,
+        } => removed_invalid_tool_receipt,
+    };
 
     let tool_python = ToolPython::from_request(
         python.as_deref().map(PythonRequest::parse),
@@ -154,9 +233,7 @@ pub(crate) async fn install(
             .and_then(|requirements| requirements.first())
             .map(|requirement| &requirement.requirement),
         registry_target_requirement.as_ref(),
-        !defer_registry_requires_python
-            && constraint_sources.is_empty()
-            && override_sources.is_empty(),
+        !defer_registry_requires_python && constraints.is_empty() && overrides.is_empty(),
         no_config,
         lfs,
         state.git(),
@@ -387,13 +464,18 @@ pub(crate) async fn install(
     // Read the `--with` requirements.
     let spec = RequirementsSpecification::from_sources(
         with,
-        constraint_sources,
-        override_sources,
-        exclude_sources,
+        constraints,
+        overrides,
+        excludes,
         None,
         &client_builder,
     )
     .await?;
+
+    let constraint_sources = constraints;
+    let override_sources = overrides;
+    let exclude_sources = excludes;
+    let build_constraint_sources = build_constraints;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
@@ -623,9 +705,9 @@ pub(crate) async fn install(
         }
     }
 
-    if defer_registry_requires_python {
+    if defer_registry_requires_python && (existing_environment.is_none() || request.is_latest()) {
         drop(_lock);
-        return Box::pin(install(
+        return Box::pin(install_with_registry_python_inference(
             package.clone(),
             editable,
             from.clone(),
@@ -652,9 +734,9 @@ pub(crate) async fn install(
             workspace_cache,
             printer,
             preview,
-            false,
-            true,
-            invalid_tool_receipt,
+            RegistryPythonInference::Enabled {
+                removed_invalid_tool_receipt: invalid_tool_receipt,
+            },
         ))
         .await;
     }
