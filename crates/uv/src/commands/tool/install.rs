@@ -92,13 +92,11 @@ pub(crate) async fn install(
 
     if locked {
         if !preview.is_enabled(PreviewFeature::LockedTool) {
-            bail!(
-                "`--locked` for tool commands is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it"
+            warn_user_once!(
+                "The `--locked` option for tool commands is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                PreviewFeature::LockedTool
             );
         }
-        warn_user_once!(
-            "The `--locked` option for tool commands is experimental and may change without warning."
-        );
         if !with.is_empty()
             || !constraints.is_empty()
             || !overrides.is_empty()

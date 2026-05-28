@@ -3974,9 +3974,9 @@ async fn tool_run_latest_keyring_auth() {
     ");
 }
 
-/// Test `--locked` requires the preview feature.
+/// Test `--locked` warns when the preview feature is not enabled.
 #[test]
-fn tool_run_locked_requires_preview() -> Result<()> {
+fn tool_run_locked_warns_without_preview() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -4008,7 +4008,7 @@ fn tool_run_locked_requires_preview() -> Result<()> {
         "#
     })?;
 
-    // Attempting `--locked` without preview should fail.
+    // Without the preview feature, `--locked` should warn before processing the lockfile.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
         .arg(foo_dir.as_os_str())
@@ -4016,13 +4016,14 @@ fn tool_run_locked_requires_preview() -> Result<()> {
         .arg("foo")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: `--locked` for tool commands is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it
+    warning: The `--locked` option for tool commands is experimental and may change without warning. Pass `--preview-features locked-tool` to disable this warning.
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
 
     Ok(())
@@ -4036,13 +4037,12 @@ fn tool_run_locked_python() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--locked")
         .arg("--preview")
-        .arg("python"), @r"
+        .arg("python"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--locked` option for tool commands is experimental and may change without warning.
     error: `--locked` requires a tool source tree with a `uv.lock` file and cannot be used when running Python directly
     ");
 }
@@ -4096,14 +4096,13 @@ fn tool_run_locked_from_directory() -> Result<()> {
         .arg("--preview")
         .arg("foo")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
     hello
 
     ----- stderr -----
-    warning: The `--locked` option for tool commands is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -4140,14 +4139,14 @@ fn tool_run_locked_missing_lockfile() -> Result<()> {
         .arg("--from")
         .arg(foo_dir.as_os_str())
         .arg("--locked")
-        .arg("--preview")
-        .arg("foo"), @r"
+        .arg("--preview-features")
+        .arg("locked-tool")
+        .arg("foo"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--locked` option for tool commands is experimental and may change without warning.
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
 
@@ -4202,13 +4201,12 @@ fn tool_run_locked_rejects_outdated_lockfile() -> Result<()> {
         .arg(foo_dir.as_os_str())
         .arg("--locked")
         .arg("--preview")
-        .arg("foo"), @r"
+        .arg("foo"), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--locked` option for tool commands is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
@@ -4228,13 +4226,12 @@ fn tool_run_locked_rejects_with() {
         .arg("--preview")
         .arg("--with")
         .arg("iniconfig")
-        .arg("foo"), @r"
+        .arg("foo"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--locked` option for tool commands is experimental and may change without warning.
     error: `--locked` cannot be used with additional requirements or constraints (`--with`, `--constraint`, `--override`, or `--build-constraint`), since they are not represented in the tool lockfile
     ");
 }

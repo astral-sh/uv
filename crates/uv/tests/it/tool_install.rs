@@ -6012,9 +6012,9 @@ fn tool_install_removed_python() {
     ");
 }
 
-/// Test `--locked` requires the preview feature.
+/// Test `--locked` warns when the preview feature is not enabled.
 #[test]
-fn tool_install_locked_requires_preview() -> Result<()> {
+fn tool_install_locked_warns_without_preview() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -6046,19 +6046,20 @@ fn tool_install_locked_requires_preview() -> Result<()> {
         "#
     })?;
 
-    // Attempting `--locked` without preview should fail.
+    // Without the preview feature, `--locked` should warn before processing the lockfile.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg(foo_dir.as_os_str())
         .arg("--locked")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: `--locked` for tool commands is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it
+    warning: The `--locked` option for tool commands is experimental and may change without warning. Pass `--preview-features locked-tool` to disable this warning.
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
 
     Ok(())
@@ -6098,20 +6099,20 @@ fn tool_install_locked_missing_lockfile() -> Result<()> {
         "#
     })?;
 
-    // Attempting `--locked` with `--preview` but no lockfile should fail.
+    // The feature-specific preview flag suppresses the warning but does not hide lock errors.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg(foo_dir.as_os_str())
         .arg("--locked")
-        .arg("--preview")
+        .arg("--preview-features")
+        .arg("locked-tool")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--locked` option for tool commands is experimental and may change without warning.
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
 
@@ -6134,13 +6135,12 @@ fn tool_install_locked_registry_package() {
         .arg("--preview")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--locked` option for tool commands is experimental and may change without warning.
     error: `--locked` requires a tool from a source tree (e.g., a Git repository or local directory), but `black` is not a source tree
     ");
 }
@@ -6196,13 +6196,12 @@ fn tool_install_locked_from_directory() -> Result<()> {
         .arg("--preview")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--locked` option for tool commands is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -6278,13 +6277,12 @@ fn tool_install_locked_rejects_outdated_lockfile() -> Result<()> {
         .arg("--preview")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--locked` option for tool commands is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
@@ -6349,13 +6347,12 @@ fn tool_install_locked_workspace_member() -> Result<()> {
         .arg("--preview")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--locked` option for tool commands is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -6415,13 +6412,12 @@ fn tool_install_locked_with_extra() -> Result<()> {
         .arg("--preview")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--locked` option for tool commands is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -6481,13 +6477,12 @@ fn tool_install_locked_checks_supported_environments() -> Result<()> {
         .arg("--preview")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--locked` option for tool commands is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     error: The current Python platform is not compatible with the lockfile's supported environments: `python_full_version < '3.11'`
     ");
@@ -6505,13 +6500,12 @@ fn tool_install_locked_rejects_with() {
         .arg("--locked")
         .arg("--preview")
         .arg("--with")
-        .arg("iniconfig"), @r"
+        .arg("iniconfig"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--locked` option for tool commands is experimental and may change without warning.
     error: `--locked` cannot be used with additional requirements or constraints (`--with`, `--constraint`, `--override`, `--exclude`, or `--build-constraint`), since they are not represented in the tool lockfile
     ");
 }
@@ -6531,13 +6525,12 @@ fn tool_install_locked_git_missing_lockfile() {
         .arg("--preview")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, path.as_os_str()), @r"
+        .env(EnvVars::PATH, path.as_os_str()), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--locked` option for tool commands is experimental and may change without warning.
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
 }
