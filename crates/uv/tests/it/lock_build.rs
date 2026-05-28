@@ -5808,6 +5808,9 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
+        [manifest]
+        build-settings = "aee6cdd85e59a835"
+
         [[package]]
         name = "dep"
         version = "0.1.0"
@@ -5953,6 +5956,118 @@ fn lock_build_dependencies_no_build_package_relocks_implicit_default_backend() -
     let dep = package_section(&lock, "dep");
     assert!(dep.contains("build-dependencies = ["), "{dep}");
     assert!(dep.contains(r#"{ name = "setuptools", version = "69.2.0" }"#));
+
+    Ok(())
+}
+
+/// Verify removing `--no-build-package` captures a skipped registry source build graph.
+#[test]
+fn lock_build_dependencies_no_build_package_relocks_find_links_sdist() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let builder_dir = context.temp_dir.child("builder");
+    builder_dir.create_dir_all()?;
+    builder_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "builder"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        build-backend = "builder"
+        "#,
+    )?;
+    let builder_url = Url::from_directory_path(builder_dir.path()).expect("valid file URL");
+
+    let artifacts = context.temp_dir.child("artifacts");
+    artifacts.create_dir_all()?;
+    write_wheel(
+        &artifacts.child("dep-0.1.0-py3-none-any.whl"),
+        "dep",
+        "0.1.0",
+    )?;
+
+    let file = File::create(artifacts.child("dep-0.1.0.zip").path())?;
+    let mut zip = ZipWriter::new(file);
+    let options = SimpleFileOptions::default();
+    zip.add_directory("dep-0.1.0/", options)?;
+    zip.start_file("dep-0.1.0/pyproject.toml", options)?;
+    zip.write_all(
+        format!(
+            r#"
+            [project]
+            name = "dep"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["builder @ {builder_url}"]
+            build-backend = "builder"
+            "#
+        )
+        .as_bytes(),
+    )?;
+    zip.finish()?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep==0.1.0"]
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--find-links")
+        .arg(artifacts.path())
+        .arg("--no-index")
+        .arg("--no-build-package")
+        .arg("dep")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(!dep.contains("build-dependencies = ["), "{dep}");
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--find-links")
+        .arg(artifacts.path())
+        .arg("--no-index")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--find-links")
+        .arg(artifacts.path())
+        .arg("--no-index")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(dep.contains("build-dependencies = ["), "{dep}");
+    assert!(dep.contains(r#"{ name = "builder", version = "0.1.0""#));
 
     Ok(())
 }

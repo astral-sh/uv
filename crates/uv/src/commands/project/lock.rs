@@ -15,7 +15,7 @@ use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExtrasSpecification, Reinstall, Upgrade,
+    ExtrasSpecification, NoBuild, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -804,14 +804,20 @@ async fn do_lock(
         })
         .unwrap_or_default();
 
+    let no_build_packages = match build_options.no_build() {
+        NoBuild::Packages(packages) => packages.iter().map(ToString::to_string).collect(),
+        NoBuild::None | NoBuild::All => BTreeSet::new(),
+    };
     let build_settings = (!config_setting.is_empty()
         || !config_settings_package.is_empty()
-        || !extra_build_variables.is_empty())
+        || !extra_build_variables.is_empty()
+        || !no_build_packages.is_empty())
     .then(|| {
         cache_digest(&(
             config_setting,
             config_settings_package,
             extra_build_variables,
+            &no_build_packages,
         ))
     });
 
@@ -1822,7 +1828,7 @@ impl ValidatedLock {
             }
             SatisfiesResult::MismatchedBuildSettings => {
                 debug!(
-                    "Resolving despite existing lockfile due to changed build configuration settings or variables"
+                    "Resolving despite existing lockfile due to changed build configuration settings, variables, or policies"
                 );
                 Ok(Self::Preferable(lock))
             }

@@ -3655,7 +3655,7 @@ pub struct ResolverManifest {
     /// The static metadata provided to the resolver.
     #[serde(default)]
     dependency_metadata: BTreeSet<StaticMetadata>,
-    /// A digest of configuration settings and variables used to capture build requirements.
+    /// A digest of settings and build policies used to capture build requirements.
     #[serde(default)]
     build_settings: Option<String>,
 }
@@ -3689,7 +3689,7 @@ impl ResolverManifest {
         }
     }
 
-    /// Store inputs that can affect hook-provided build requirements.
+    /// Store inputs that can affect captured build requirements.
     #[must_use]
     pub fn with_build_settings(mut self, build_settings: Option<String>) -> Self {
         self.build_settings = build_settings;
