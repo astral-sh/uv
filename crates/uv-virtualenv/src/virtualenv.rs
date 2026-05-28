@@ -134,7 +134,8 @@ pub(crate) fn create(
                             ClearNonVirtualenv::Allow => {}
                             ClearNonVirtualenv::Warn => {
                                 warn_user_once!(
-                                    "The `--clear` option will remove the existing directory at `{}`. \
+                                    "The `--clear` option will remove the existing directory at `{}` \
+                                    even though it is not a virtual environment. \
                                     This will become an error in a future release. \
                                     Use `--force` to suppress this warning, or \
                                     `--preview-features venv-clear-directory` to error on this now.",
