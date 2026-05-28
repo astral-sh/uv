@@ -627,10 +627,10 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
             "#
         ))?;
         parent_dir.child("build_backend.py").write_str(
-            r#"
+            r"
 def get_requires_for_build_wheel(config_settings=None):
     return []
-"#,
+",
         )?;
     }
 
@@ -1388,10 +1388,10 @@ fn lock_build_dependencies_extra_match_runtime() -> Result<()> {
         "#,
     )?;
     child_dir.child("build_backend.py").write_str(
-        r#"
+        r"
 def get_requires_for_build_wheel(config_settings=None):
     return []
-"#,
+",
     )?;
 
     context.temp_dir.child("pyproject.toml").write_str(
@@ -3015,14 +3015,13 @@ fn lock_build_dependencies_default_backend_cache_ignores_target_platform() -> Re
         let module_name = name.replace('-', "_");
         let archive_name = format!("{name}-0.1.0.zip");
         let source_dist = context.temp_dir.child(&archive_name);
-        let file = File::create(source_dist.path())?;
-        let mut zip = ZipWriter::new(file);
-        let options = SimpleFileOptions::default();
-        zip.add_directory(format!("{name}-0.1.0/"), options)?;
-        zip.start_file(format!("{name}-0.1.0/pyproject.toml"), options)?;
-        zip.write_all(
-            format!(
-                r#"
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new(
+            format!("{name}-0.1.0/pyproject.toml").into(),
+            Compression::Stored,
+        );
+        let pyproject_toml = format!(
+            r#"
                 [project]
                 name = "{name}"
                 dynamic = ["version"]
@@ -3031,13 +3030,14 @@ fn lock_build_dependencies_default_backend_cache_ignores_target_platform() -> Re
                 [tool.setuptools.dynamic]
                 version = {{attr = "{module_name}.__version__"}}
                 "#
-            )
-            .as_bytes(),
-        )?;
-        zip.add_directory(format!("{name}-0.1.0/{module_name}/"), options)?;
-        zip.start_file(format!("{name}-0.1.0/{module_name}/__init__.py"), options)?;
-        zip.write_all(b"__version__ = '0.1.0'")?;
-        zip.finish()?;
+        );
+        block_on(zip.write_entry_whole(entry, pyproject_toml.as_bytes()))?;
+        let entry = ZipEntryBuilder::new(
+            format!("{name}-0.1.0/{module_name}/__init__.py").into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(entry, b"__version__ = '0.1.0'"))?;
+        fs_err::write(source_dist.path(), block_on(zip.close())?)?;
     }
 
     context
@@ -3152,10 +3152,10 @@ fn lock_build_dependencies_explicit_empty_build_requires_invalidate() -> Result<
         "#,
     )?;
     dep_dir.child("build_backend.py").write_str(
-        r#"
+        r"
 def get_requires_for_build_wheel(config_settings=None):
     return []
-"#,
+",
     )?;
 
     context.temp_dir.child("pyproject.toml").write_str(
@@ -3516,12 +3516,10 @@ fn lock_build_dependencies_static_git_archive_captures_hook_requirements() -> Re
     let repo_dir = &context.temp_dir;
     repo_dir.child("archives").create_dir_all()?;
     let source_dist = repo_dir.child("archives/dep-0.1.0.zip");
-    let file = File::create(source_dist.path())?;
-    let mut zip = ZipWriter::new(file);
-    let options = SimpleFileOptions::default();
-    zip.add_directory("dep-0.1.0/", options)?;
-    zip.start_file("dep-0.1.0/pyproject.toml", options)?;
-    zip.write_all(
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
         br#"
         [project]
         name = "dep"
@@ -3533,15 +3531,16 @@ fn lock_build_dependencies_static_git_archive_captures_hook_requirements() -> Re
         backend-path = ["."]
         build-backend = "build_backend"
         "#,
-    )?;
-    zip.start_file("dep-0.1.0/build_backend.py", options)?;
-    zip.write_all(
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
         br#"
 def get_requires_for_build_wheel(config_settings=None):
     return ["helper==0.1.0"]
         "#,
-    )?;
-    zip.finish()?;
+    ))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
 
     Command::new("git")
         .arg("init")
@@ -4298,10 +4297,10 @@ fn lock_build_dependencies_stale_build_requires_foreign_platform() -> Result<()>
     };
     write_builder("0.1.0")?;
     builder_dir.child("build_backend.py").write_str(
-        r#"
+        r"
 def get_requires_for_build_wheel(config_settings=None):
     return []
-"#,
+",
     )?;
     let builder_url = Url::from_directory_path(builder_dir.path()).unwrap();
 
@@ -4321,10 +4320,10 @@ def get_requires_for_build_wheel(config_settings=None):
         "#
     ))?;
     dep_dir.child("build_backend.py").write_str(
-        r#"
+        r"
 def get_requires_for_build_wheel(config_settings=None):
     return []
-"#,
+",
     )?;
 
     context.temp_dir.child("pyproject.toml").write_str(
@@ -5162,7 +5161,7 @@ fn lock_build_dependencies_static_sdist() -> Result<()> {
     Ok(())
 }
 
-/// Verify that compatible uv_build archives do not resolve an unused build environment.
+/// Verify that compatible `uv_build` archives do not resolve an unused build environment.
 #[test]
 fn lock_build_dependencies_direct_build_static_sdist() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5478,10 +5477,10 @@ fn lock_build_dependencies_empty_conditional_resolution() -> Result<()> {
     let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
     block_on(zip.write_entry_whole(
         entry,
-        br#"
+        br"
 def get_requires_for_build_wheel(config_settings=None):
     return []
-"#,
+",
     ))?;
     let entry = ZipEntryBuilder::new("dep-0.1.0/dep/__init__.py".into(), Compression::Stored);
     block_on(zip.write_entry_whole(entry, b""))?;
@@ -6420,10 +6419,10 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         "#
     ))?;
     dep_dir.child("build_backend.py").write_str(
-        r#"
+        r"
 def get_requires_for_build_wheel(config_settings=None):
     return []
-"#,
+",
     )?;
 
     context.temp_dir.child("pyproject.toml").write_str(

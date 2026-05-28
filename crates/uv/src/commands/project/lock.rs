@@ -896,7 +896,8 @@ async fn do_lock(
     let existing_lock = if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
         match existing_lock {
             Some(ValidatedLock::Satisfies(lock))
-                if !build_options.no_build_all() && !lock.supports_build_dependencies() =>
+                if !build_options.no_build_requirement(None)
+                    && !lock.supports_build_dependencies() =>
             {
                 debug!(
                     "Resolving despite existing lockfile because build-dependency locking is enabled and the lockfile revision does not support build dependencies"
