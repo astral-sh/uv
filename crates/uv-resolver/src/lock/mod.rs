@@ -913,6 +913,18 @@ impl Lock {
                 };
 
                 if !existing_packages.insert(package_id.clone()) {
+                    if let Some(existing_package) = self
+                        .packages
+                        .iter_mut()
+                        .find(|existing_package| existing_package.id == package_id)
+                    {
+                        existing_package.add_artifacts(package);
+                    } else if let Some(existing_package) = new_packages
+                        .iter_mut()
+                        .find(|existing_package| existing_package.id == package_id)
+                    {
+                        existing_package.add_artifacts(package);
+                    }
                     continue;
                 }
 
@@ -3885,6 +3897,18 @@ impl Package {
                 build_requires: None,
             },
         })
+    }
+
+    /// Retain artifacts that were selected in another resolution for the same package.
+    fn add_artifacts(&mut self, package: Self) {
+        if self.sdist.is_none() {
+            self.sdist = package.sdist;
+        }
+        for wheel in package.wheels {
+            if !self.wheels.contains(&wheel) {
+                self.wheels.push(wheel);
+            }
+        }
     }
 
     /// Add the [`AnnotatedDist`] as a dependency of the [`Package`].

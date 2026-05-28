@@ -1906,6 +1906,141 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     Ok(())
 }
 
+/// Verify that build-required artifacts are retained for packages that are
+/// selected by the runtime resolution only on another platform.
+#[test]
+fn lock_build_dependencies_merge_runtime_shared_build_artifacts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let (host_wheel_tag, foreign_wheel_tag, foreign_marker) = if cfg!(target_os = "macos") {
+        (
+            "macosx_10_9_universal2",
+            "win_amd64",
+            "sys_platform == 'win32'",
+        )
+    } else if cfg!(target_os = "windows") {
+        (
+            if cfg!(target_arch = "aarch64") {
+                "win_arm64"
+            } else {
+                "win_amd64"
+            },
+            "macosx_10_9_universal2",
+            "sys_platform == 'darwin'",
+        )
+    } else {
+        (
+            if cfg!(target_arch = "aarch64") {
+                "manylinux_2_17_aarch64.manylinux2014_aarch64"
+            } else {
+                "manylinux_2_17_x86_64.manylinux2014_x86_64"
+            },
+            "win_amd64",
+            "sys_platform == 'win32'",
+        )
+    };
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child(format!("shared-0.1.0-py3-none-{host_wheel_tag}.whl")),
+        "shared",
+        "0.1.0",
+    )?;
+    write_wheel(
+        &links_dir.child(format!("shared-0.1.0-py3-none-{foreign_wheel_tag}.whl")),
+        "shared",
+        "0.1.0",
+    )?;
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["shared==0.1.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep/__init__.py", "")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "dep",
+            "shared==0.1.0 ; {foreign_marker}",
+        ]
+
+        [tool.uv.sources]
+        dep = {{ path = "dep" }}
+        "#
+        ))?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+    ");
+
+    Ok(())
+}
+
 /// Verify that build dependency edges are scoped to each isolated source build
 /// when the same build package resolves a transitive dependency differently.
 #[test]
