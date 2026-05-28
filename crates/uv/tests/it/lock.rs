@@ -13831,6 +13831,10 @@ fn lock_sources_url() -> Result<()> {
 fn lock_sources_url_offline_validates_transitive_source_tree() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
+    // The remote `workspace` archive depends on `anyio`. Override that transitive dependency to
+    // a local source tree so it remains refreshable while the direct URL parent is skipped
+    // offline; changing its version below proves that we still recurse into the parent's locked
+    // dependencies.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
