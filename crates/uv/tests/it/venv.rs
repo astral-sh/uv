@@ -1108,9 +1108,9 @@ fn non_empty_dir_exists_clear_preview() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .
     error: Failed to create virtual environment
-      Caused by: The `--clear` option cannot be used with a non-virtual environment directory: .
+      Caused by: uv will not clear a directory that is not a virtual environment
 
-    hint: Use the `--force` flag to remove the existing directory
+    hint: Use the `--force` flag to remove the existing directory anyway
     ");
 
     marker.assert(predicates::path::is_file());

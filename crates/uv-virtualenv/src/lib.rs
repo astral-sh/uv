@@ -27,10 +27,7 @@ pub enum Error {
         /// The path to the existing environment.
         path: PathBuf,
     },
-    #[error(
-        "The `--clear` option cannot be used with a non-virtual environment directory: {}",
-        path.user_display()
-    )]
+    #[error("uv will not clear a directory that is not a virtual environment")]
     ClearNonVirtualenv {
         /// The non-virtual environment directory that would have been cleared.
         path: PathBuf,
@@ -43,9 +40,9 @@ impl uv_errors::Hint for Error {
             Self::Exists { name, .. } => uv_errors::Hints::from(format!(
                 "Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing {name}",
             )),
-            Self::ClearNonVirtualenv { .. } => {
-                uv_errors::Hints::from("Use the `--force` flag to remove the existing directory")
-            }
+            Self::ClearNonVirtualenv { .. } => uv_errors::Hints::from(
+                "Use the `--force` flag to remove the existing directory anyway",
+            ),
             _ => uv_errors::Hints::none(),
         }
     }
