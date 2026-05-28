@@ -3154,6 +3154,12 @@ pub struct VenvArgs {
     #[clap(long, short, overrides_with = "allow_existing", value_parser = clap::builder::BoolishValueParser::new())]
     pub clear: bool,
 
+    /// Allow `--clear` to remove a non-virtual environment directory.
+    ///
+    /// This will remove all files and directories at the target path.
+    #[arg(long)]
+    pub force: bool,
+
     /// Fail without prompting if any existing files or directories are present at the target path.
     ///
     /// By default, when a TTY is available, `uv venv` will prompt to clear a non-empty directory.

@@ -1283,6 +1283,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.allow_existing,
                 args.clear,
                 args.no_clear,
+                if args.force {
+                    uv_virtualenv::ClearNonVirtualenv::Allow
+                } else if globals.preview.is_enabled(PreviewFeature::VenvSafeClear) {
+                    uv_virtualenv::ClearNonVirtualenv::Error
+                } else {
+                    uv_virtualenv::ClearNonVirtualenv::Warn
+                },
             );
 
             Box::pin(commands::venv(

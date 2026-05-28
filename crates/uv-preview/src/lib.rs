@@ -219,7 +219,7 @@ pub mod test {
 }
 
 #[bitflags]
-#[repr(u32)]
+#[repr(u64)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PreviewFeature {
     PythonInstallDefault = 1 << 0,
@@ -254,6 +254,7 @@ pub enum PreviewFeature {
     AzureEndpoint = 1 << 29,
     TomlBackwardsCompatibility = 1 << 30,
     MalwareCheck = 1 << 31,
+    VenvSafeClear = 1 << 32,
 }
 
 impl PreviewFeature {
@@ -292,6 +293,7 @@ impl PreviewFeature {
             Self::AzureEndpoint => "azure-endpoint",
             Self::TomlBackwardsCompatibility => "toml-backwards-compatibility",
             Self::MalwareCheck => "malware-check",
+            Self::VenvSafeClear => "venv-safe-clear",
         }
     }
 }
@@ -343,6 +345,7 @@ impl FromStr for PreviewFeature {
             "azure-endpoint" => Self::AzureEndpoint,
             "toml-backwards-compatibility" => Self::TomlBackwardsCompatibility,
             "malware-check" => Self::MalwareCheck,
+            "venv-safe-clear" => Self::VenvSafeClear,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -602,6 +605,7 @@ mod tests {
             "toml-backwards-compatibility"
         );
         assert_eq!(PreviewFeature::MalwareCheck.as_str(), "malware-check");
+        assert_eq!(PreviewFeature::VenvSafeClear.as_str(), "venv-safe-clear");
     }
 
     #[test]

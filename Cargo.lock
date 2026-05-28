@@ -7388,6 +7388,7 @@ dependencies = [
  "uv-python",
  "uv-shell",
  "uv-version",
+ "uv-warnings",
 ]
 
 [[package]]
