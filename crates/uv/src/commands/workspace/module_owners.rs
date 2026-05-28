@@ -121,7 +121,7 @@ pub(crate) async fn collect_module_owners(
         };
         // TODO: Editable installs often only record a `.pth` file; we'll
         // need to handle them specially.
-        for module in dist.read_modules()? {
+        for module in dist.read_modules(venv.interpreter().extension_suffixes())? {
             owners.entry(module).or_default().insert(package_id.clone());
         }
     }

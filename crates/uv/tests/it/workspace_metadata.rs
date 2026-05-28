@@ -122,6 +122,7 @@ fn workspace_metadata_module_owners_from_locked_wheels() -> Result<()> {
         &[
             ("typing_extensions.py", ""),
             ("café.py", ""),
+            ("bogus.pypynonsense.so", ""),
             ("bytecode/__pycache__/compiled.cpython-312.pyc", ""),
         ],
     )?;

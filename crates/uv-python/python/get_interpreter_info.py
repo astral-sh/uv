@@ -4,13 +4,13 @@ Queries information about the current Python interpreter and prints it as JSON.
 The script will exit with status 0 on known error that are turned into rust errors.
 """
 
-import site
-import sys
-
+import importlib.machinery
 import json
 import os
 import platform
+import site
 import struct
+import sys
 import sysconfig
 
 
@@ -682,6 +682,7 @@ def main() -> None:
         "sys_path": sys.path[1:],
         "site_packages": site.getsitepackages(),
         "stdlib": sysconfig.get_path("stdlib"),
+        "extension_suffixes": importlib.machinery.EXTENSION_SUFFIXES,
         # Prior to the introduction of `sysconfig` patching, python-build-standalone installations would always use
         # "/install" as the prefix. With `sysconfig` patching, we rewrite the prefix to match the actual installation
         # location. So in newer versions, we also write a dedicated flag to indicate standalone builds.

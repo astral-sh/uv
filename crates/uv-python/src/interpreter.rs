@@ -54,6 +54,7 @@ pub struct Interpreter {
     sys_executable: PathBuf,
     site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
+    extension_suffixes: Vec<Box<str>>,
     standalone: bool,
     tags: OnceLock<Tags>,
     target: Option<Target>,
@@ -90,6 +91,7 @@ impl Interpreter {
             sys_executable: info.sys_executable,
             site_packages: info.site_packages,
             stdlib: info.stdlib,
+            extension_suffixes: info.extension_suffixes,
             standalone: info.standalone,
             tags: OnceLock::new(),
             target: None,
@@ -456,6 +458,11 @@ impl Interpreter {
     /// Return the `sys.executable` path for this Python interpreter.
     pub fn sys_executable(&self) -> &Path {
         &self.sys_executable
+    }
+
+    /// Return the recognized native extension module suffixes for this Python interpreter.
+    pub fn extension_suffixes(&self) -> &[Box<str>] {
+        &self.extension_suffixes
     }
 
     /// Return the "real" queried executable path for this Python interpreter.
@@ -954,6 +961,7 @@ struct InterpreterInfo {
     sys_path: Vec<PathBuf>,
     site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
+    extension_suffixes: Vec<Box<str>>,
     standalone: bool,
     pointer_size: PointerSize,
     gil_disabled: bool,
@@ -1384,6 +1392,7 @@ mod tests {
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
             ],
             "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12",
+            "extension_suffixes": [".cpython-312-x86_64-linux-gnu.so", ".abi3.so", ".so"],
             "scheme": {
                 "data": "/home/ferris/.pyenv/versions/3.12.0",
                 "include": "/home/ferris/.pyenv/versions/3.12.0/include",
