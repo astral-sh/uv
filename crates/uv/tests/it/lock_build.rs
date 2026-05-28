@@ -1906,6 +1906,124 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     Ok(())
 }
 
+/// Verify that build dependency edges are scoped to each isolated source build
+/// when the same build package resolves a transitive dependency differently.
+#[test]
+fn lock_build_dependencies_isolates_shared_build_dependency_edges() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel_with_requires(
+        &links_dir.child("builder-1.0.0-py3-none-any.whl"),
+        "builder",
+        "1.0.0",
+        &["helper>=1"],
+    )?;
+    write_wheel(
+        &links_dir.child("helper-1.0.0-py3-none-any.whl"),
+        "helper",
+        "1.0.0",
+    )?;
+    write_wheel(
+        &links_dir.child("helper-2.0.0-py3-none-any.whl"),
+        "helper",
+        "2.0.0",
+    )?;
+
+    for (name, helper_version) in [("dep-a", "1.0.0"), ("dep-b", "2.0.0")] {
+        let module_name = name.replace('-', "_");
+        let dep_dir = context.temp_dir.child(name);
+        dep_dir.create_dir_all()?;
+        dep_dir.child("pyproject.toml").write_str(&format!(
+            r#"
+            [project]
+            name = "{name}"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["builder==1.0.0", "helper=={helper_version}"]
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#
+        ))?;
+        dep_dir.child("build_backend.py").write_str(&format!(
+            r#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    if version("helper") != "{helper_version}":
+        raise RuntimeError("unexpected helper version: " + version("helper"))
+    filename = "{module_name}-0.1.0-py3-none-any.whl"
+    dist_info = "{module_name}-0.1.0.dist-info"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("{module_name}/__init__.py", "")
+        wheel.writestr(
+            dist_info + "/METADATA",
+            "Metadata-Version: 2.3\nName: {name}\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            dist_info + "/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr(dist_info + "/RECORD", "")
+    return filename
+"#
+        ))?;
+    }
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep-a", "dep-b"]
+
+        [tool.uv.sources]
+        dep-a = { path = "dep-a" }
+        dep-b = { path = "dep-b" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + dep-a==0.1.0 (from file://[TEMP_DIR]/dep-a)
+     + dep-b==0.1.0 (from file://[TEMP_DIR]/dep-b)
+    ");
+
+    Ok(())
+}
+
 /// Verify that `extra-build-dependencies` participate in lock freshness checks.
 #[test]
 fn lock_build_dependencies_extra_build_dependencies_invalidate() -> Result<()> {

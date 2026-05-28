@@ -849,9 +849,10 @@ impl Lock {
     /// Populate build dependencies from captured build resolutions.
     ///
     /// Only **direct** build requirements are stored in `build-dependencies`,
-    /// consistent with how regular `dependencies` work. The build dep packages
-    /// are added to the lock with their `dependencies` populated so that
-    /// transitive deps can be walked at sync time via BFS.
+    /// consistent with how regular `dependencies` work. Transitive build
+    /// dependency edges are normally shared with package dependencies, but
+    /// are recorded on the source package when separate isolated builds
+    /// select incompatible closures for the same package.
     pub async fn with_build_resolutions<Context: BuildContext>(
         mut self,
         build_resolutions: &BTreeMap<BuildPackageKey, uv_types::BuildResolutionGraph>,
@@ -1010,14 +1011,36 @@ impl Lock {
         let mut dep_updates: FxHashMap<PackageId, Vec<Dependency>> = FxHashMap::default();
         let mut optional_dep_updates: FxHashMap<PackageId, BTreeMap<ExtraName, Vec<Dependency>>> =
             FxHashMap::default();
+        let mut build_dependency_packages: BTreeMap<
+            BuildPackageKey,
+            BTreeMap<PackageId, BuildDependencyEdges>,
+        > = BTreeMap::new();
+        let mut build_dependency_package_markers: BTreeMap<
+            BuildPackageKey,
+            BTreeMap<PackageId, UniversalMarker>,
+        > = BTreeMap::new();
 
-        for info in build_resolutions.values() {
+        for (parent_key, info) in build_resolutions {
             for entry in &info.packages {
                 let resolved_dist = &entry.dist;
                 let Ok(key) = package_id_from_resolved_dist(resolved_dist, root) else {
                     continue;
                 };
 
+                let scoped_edges = build_dependency_packages
+                    .entry(parent_key.clone())
+                    .or_default()
+                    .entry(key.clone())
+                    .or_default();
+                let simplified = SimplifiedMarkerTree::new(&self.requires_python, entry.marker);
+                let complexified = simplified.into_marker(&self.requires_python);
+                let marker = UniversalMarker::from_combined(complexified);
+                build_dependency_package_markers
+                    .entry(parent_key.clone())
+                    .or_default()
+                    .entry(key.clone())
+                    .and_modify(|existing| existing.or(marker))
+                    .or_insert(marker);
                 let deps = dep_updates.entry(key.clone()).or_default();
                 for dep_edge in &entry.dependencies {
                     let Ok(dep_id) = package_id_from_resolved_dist(&dep_edge.dist, root) else {
@@ -1029,17 +1052,23 @@ impl Lock {
                     let simplified =
                         SimplifiedMarkerTree::new(&self.requires_python, dep_edge.marker);
                     let complexified = simplified.into_marker(&self.requires_python);
-                    deps.push(Dependency {
+                    let dependency = Dependency {
                         package_id: dep_id,
                         extra: dep_edge.extras.clone(),
                         simplified_marker: simplified,
                         complexified_marker: UniversalMarker::from_combined(complexified),
-                    });
+                    };
+                    deps.push(dependency.clone());
+                    scoped_edges.dependencies.push(dependency);
                 }
 
                 let optional_updates = optional_dep_updates.entry(key).or_default();
                 for (extra, dependencies) in &entry.optional_dependencies {
                     let deps = optional_updates.entry(extra.clone()).or_default();
+                    let scoped_deps = scoped_edges
+                        .optional_dependencies
+                        .entry(extra.clone())
+                        .or_default();
                     for dep_edge in dependencies {
                         let Ok(dep_id) = package_id_from_resolved_dist(&dep_edge.dist, root) else {
                             continue;
@@ -1050,13 +1079,26 @@ impl Lock {
                         let simplified =
                             SimplifiedMarkerTree::new(&self.requires_python, dep_edge.marker);
                         let complexified = simplified.into_marker(&self.requires_python);
-                        deps.push(Dependency {
+                        let dependency = Dependency {
                             package_id: dep_id,
                             extra: dep_edge.extras.clone(),
                             simplified_marker: simplified,
                             complexified_marker: UniversalMarker::from_combined(complexified),
-                        });
+                        };
+                        deps.push(dependency.clone());
+                        scoped_deps.push(dependency);
                     }
+                }
+            }
+        }
+
+        for graph in build_dependency_packages.values_mut() {
+            for edges in graph.values_mut() {
+                edges.dependencies.sort();
+                edges.dependencies.dedup();
+                for dependencies in edges.optional_dependencies.values_mut() {
+                    dependencies.sort();
+                    dependencies.dedup();
                 }
             }
         }
@@ -1078,12 +1120,60 @@ impl Lock {
             }
         }
 
+        // Retain a scoped graph only when walking the merged package edges
+        // introduces an additional dependency in an overlapping marker region.
+        // Disjoint universal branches remain safely representable as global edges.
+        build_dependency_packages.retain(|parent_key, graph| {
+            let Some(package_markers) = build_dependency_package_markers.get(parent_key) else {
+                return false;
+            };
+            graph.iter().any(|(package_id, edges)| {
+                let Some(package) = self
+                    .packages
+                    .iter()
+                    .find(|package| package.id == *package_id)
+                else {
+                    return true;
+                };
+                let marker = package_markers
+                    .get(package_id)
+                    .copied()
+                    .unwrap_or(UniversalMarker::TRUE);
+                let introduces_dependency = |merged: &[Dependency],
+                                             scoped: &[Dependency]|
+                 -> bool {
+                    merged.iter().any(|merged_dependency| {
+                        !merged_dependency.complexified_marker.is_disjoint(marker)
+                            && !scoped.iter().any(|scoped_dependency| {
+                                scoped_dependency.package_id == merged_dependency.package_id
+                                    && scoped_dependency.extra == merged_dependency.extra
+                                    && !scoped_dependency.complexified_marker.is_disjoint(marker)
+                            })
+                    })
+                };
+
+                introduces_dependency(&package.dependencies, &edges.dependencies)
+                    || edges
+                        .optional_dependencies
+                        .iter()
+                        .any(|(extra, scoped_dependencies)| {
+                            package.optional_dependencies.get(extra).is_some_and(
+                                |merged_dependencies| {
+                                    introduces_dependency(merged_dependencies, scoped_dependencies)
+                                },
+                            )
+                        })
+            })
+        });
+
         // Set build-dependencies references and build-requires metadata on parent packages.
         for package in &mut self.packages {
             if let Some(deps) = lookup_build_key_value(&build_dep_refs, package, root) {
                 package.build_dependencies.clone_from(deps);
                 package.build_dependencies_resolved = true;
             }
+            package.build_dependency_packages =
+                lookup_build_key_value(&build_dependency_packages, package, root).cloned();
 
             // Store the original build-system.requires in metadata for satisfies() checks.
             if let Some(build_requires) = lookup_build_key_value(&build_requires_map, package, root)
@@ -1234,7 +1324,20 @@ impl Lock {
                 continue;
             };
 
-            let dependencies = if let Some(extra) = extra {
+            let dependencies = if let Some(scoped_packages) = &package.build_dependency_packages {
+                let Some(scoped_edges) = scoped_packages.get(&dep_id) else {
+                    continue;
+                };
+                if let Some(extra) = extra {
+                    scoped_edges
+                        .optional_dependencies
+                        .get(&extra)
+                        .map(Vec::as_slice)
+                        .unwrap_or_default()
+                } else {
+                    scoped_edges.dependencies.as_slice()
+                }
+            } else if let Some(extra) = extra {
                 dep_package
                     .optional_dependencies
                     .get(&extra)
@@ -3676,6 +3779,11 @@ pub struct Package {
     /// The resolved build dependencies of the package (packages needed to build this
     /// package from a source distribution).
     build_dependencies: Vec<BuildDependency>,
+    /// Scoped transitive dependency edges for this package's isolated build environment.
+    ///
+    /// This is set only when using the globally stored package edges would merge distinct
+    /// isolated build environments.
+    build_dependency_packages: Option<BTreeMap<PackageId, BuildDependencyEdges>>,
     /// Whether the build dependency resolution was captured, including an empty resolution.
     build_dependencies_resolved: bool,
     /// The exact requirements from the package metadata.
@@ -3715,6 +3823,7 @@ impl Package {
             optional_dependencies: BTreeMap::default(),
             dependency_groups: BTreeMap::default(),
             build_dependencies: vec![],
+            build_dependency_packages: None,
             build_dependencies_resolved: false,
             metadata,
         })
@@ -3761,6 +3870,7 @@ impl Package {
             optional_dependencies: BTreeMap::default(),
             dependency_groups: BTreeMap::default(),
             build_dependencies: vec![],
+            build_dependency_packages: None,
             build_dependencies_resolved: false,
             metadata: PackageMetadata {
                 requires_dist: BTreeSet::default(),
@@ -4431,6 +4541,17 @@ impl Package {
             table.insert("build-dependencies", value(deps));
         }
 
+        if let Some(build_dependency_packages) = &self.build_dependency_packages {
+            let packages = each_element_on_its_line_array(build_dependency_packages.iter().map(
+                |(package_id, edges)| {
+                    edges
+                        .to_toml(package_id, requires_python, dist_count_by_name)
+                        .into_inline_table()
+                },
+            ));
+            table.insert("build-dependency-packages", value(packages));
+        }
+
         if let Some(ref sdist) = self.sdist {
             table.insert("sdist", value(sdist.to_toml()?));
         }
@@ -4728,6 +4849,8 @@ struct PackageWire {
     dependency_groups: BTreeMap<GroupName, Vec<DependencyWire>>,
     #[serde(default, rename = "build-dependencies")]
     build_dependencies: Option<Vec<BuildDependencyWire>>,
+    #[serde(default, rename = "build-dependency-packages")]
+    build_dependency_packages: Option<Vec<BuildDependencyEdgesWire>>,
 }
 
 #[derive(Clone, Default, Debug, Eq, PartialEq, serde::Deserialize)]
@@ -4814,6 +4937,15 @@ impl PackageWire {
             .into_iter()
             .map(|dep| dep.unwire(unambiguous_package_ids))
             .collect::<Result<_, _>>()?;
+        let build_dependency_packages = self
+            .build_dependency_packages
+            .map(|packages| {
+                packages
+                    .into_iter()
+                    .map(|package| package.unwire(requires_python, unambiguous_package_ids))
+                    .collect::<Result<BTreeMap<_, _>, _>>()
+            })
+            .transpose()?;
 
         Ok(Package {
             id: self.id,
@@ -4838,6 +4970,7 @@ impl PackageWire {
                 .map(|(group, deps)| Ok((group, unwire_deps(deps)?)))
                 .collect::<Result<_, LockError>>()?,
             build_dependencies,
+            build_dependency_packages,
             build_dependencies_resolved,
         })
     }
@@ -6508,6 +6641,93 @@ impl BuildDependency {
     }
 }
 
+/// Dependency edges for a package in one isolated build environment.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct BuildDependencyEdges {
+    dependencies: Vec<Dependency>,
+    optional_dependencies: BTreeMap<ExtraName, Vec<Dependency>>,
+}
+
+impl BuildDependencyEdges {
+    fn to_toml(
+        &self,
+        package_id: &PackageId,
+        requires_python: &RequiresPython,
+        dist_count_by_name: &FxHashMap<PackageName, u64>,
+    ) -> Table {
+        let mut table = Table::new();
+        package_id.to_toml(Some(dist_count_by_name), &mut table);
+
+        if !self.dependencies.is_empty() {
+            let dependencies =
+                each_element_on_its_line_array(self.dependencies.iter().map(|dependency| {
+                    dependency
+                        .to_toml(requires_python, dist_count_by_name)
+                        .into_inline_table()
+                }));
+            table.insert("dependencies", value(dependencies));
+        }
+
+        if !self.optional_dependencies.is_empty() {
+            let mut optional_dependencies = Table::new();
+            for (extra, dependencies) in &self.optional_dependencies {
+                let dependencies =
+                    each_element_on_its_line_array(dependencies.iter().map(|dependency| {
+                        dependency
+                            .to_toml(requires_python, dist_count_by_name)
+                            .into_inline_table()
+                    }));
+                if !dependencies.is_empty() {
+                    optional_dependencies.insert(extra.as_ref(), value(dependencies));
+                }
+            }
+            if !optional_dependencies.is_empty() {
+                table.insert("optional-dependencies", Item::Table(optional_dependencies));
+            }
+        }
+
+        table
+    }
+}
+
+/// Wire format for dependency edges scoped to one isolated build environment.
+#[derive(Clone, Debug, serde::Deserialize)]
+struct BuildDependencyEdgesWire {
+    #[serde(flatten)]
+    package_id: PackageIdForDependency,
+    #[serde(default)]
+    dependencies: Vec<DependencyWire>,
+    #[serde(default, rename = "optional-dependencies")]
+    optional_dependencies: BTreeMap<ExtraName, Vec<DependencyWire>>,
+}
+
+impl BuildDependencyEdgesWire {
+    fn unwire(
+        self,
+        requires_python: &RequiresPython,
+        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+    ) -> Result<(PackageId, BuildDependencyEdges), LockError> {
+        let unwire_dependencies =
+            |dependencies: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
+                dependencies
+                    .into_iter()
+                    .map(|dependency| dependency.unwire(requires_python, unambiguous_package_ids))
+                    .collect()
+            };
+        Ok((
+            self.package_id.unwire(unambiguous_package_ids)?,
+            BuildDependencyEdges {
+                dependencies: unwire_dependencies(self.dependencies)?,
+                optional_dependencies: self
+                    .optional_dependencies
+                    .into_iter()
+                    .map(|(extra, dependencies)| Ok((extra, unwire_dependencies(dependencies)?)))
+                    .collect::<Result<_, LockError>>()?,
+            },
+        ))
+    }
+}
+
 /// The wire format for a build dependency.
 #[derive(Clone, Debug, serde::Deserialize)]
 struct BuildDependencyWire {
@@ -8141,6 +8361,7 @@ mod tests {
         ($expr:expr) => {{
             let expr = format!("{:#?}", $expr)
                 .replace("                build_dependencies: [],\n", "")
+                .replace("                build_dependency_packages: None,\n", "")
                 .replace("                build_dependencies_resolved: false,\n", "")
                 .replace("                    build_requires: None,\n", "");
             insta::assert_snapshot!(expr);
