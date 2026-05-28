@@ -367,8 +367,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .git()
                     .fetch(
                         &wheel.git,
-                        self.client.unmanaged.disable_ssl(wheel.git.url()),
-                        self.client.unmanaged.connectivity() == Connectivity::Offline,
+                        self.client.unmanaged.git_http_settings(wheel.git.url()),
                         self.build_context.cache().bucket(CacheBucket::Git),
                         self.reporter.clone().map(<dyn Reporter>::into_git_reporter),
                     )

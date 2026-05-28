@@ -37,7 +37,7 @@ use uv_distribution_types::{
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry, write_atomic};
-use uv_git::{Fetch, GIT_LFS, GitError, GitResolver};
+use uv_git::{Fetch, GIT_LFS, GitError, GitHttpSettings, GitResolver};
 use uv_git_types::{GitHubRepository, GitOid, GitUrl};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
@@ -116,8 +116,7 @@ impl<'a, 'client> StaticMetadataDatabase<'a, 'client> {
                     git,
                     url.to_url(),
                     subdirectory.as_deref(),
-                    client.disable_ssl(git.url()),
-                    client.connectivity(),
+                    client.git_http_settings(git.url()),
                     self.cache,
                     None,
                 )
@@ -178,19 +177,12 @@ async fn fetch_git_source_tree(
     git: &GitUrl,
     url: DisplaySafeUrl,
     subdirectory: Option<&Path>,
-    disable_ssl: bool,
-    connectivity: Connectivity,
+    http_settings: GitHttpSettings,
     cache: &Cache,
     reporter: Option<Arc<dyn uv_git::Reporter>>,
 ) -> Result<Fetch, Error> {
     let fetch = git_resolver
-        .fetch(
-            git,
-            disable_ssl,
-            connectivity == Connectivity::Offline,
-            cache.bucket(CacheBucket::Git),
-            reporter,
-        )
+        .fetch(git, http_settings, cache.bucket(CacheBucket::Git), reporter)
         .await?;
 
     if let Some(subdirectory) = subdirectory
@@ -1826,8 +1818,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client.unmanaged.disable_ssl(resource.git.url()),
-                client.unmanaged.connectivity() == Connectivity::Offline,
+                client.unmanaged.git_http_settings(resource.git.url()),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
                     .clone()
@@ -1934,8 +1925,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client.unmanaged.disable_ssl(resource.git.url()),
-                client.unmanaged.connectivity() == Connectivity::Offline,
+                client.unmanaged.git_http_settings(resource.git.url()),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
                     .clone()
@@ -2099,8 +2089,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             resource.git,
             resource.url.to_url(),
             resource.subdirectory,
-            client.unmanaged.disable_ssl(resource.git.url()),
-            client.unmanaged.connectivity(),
+            client.unmanaged.git_http_settings(resource.git.url()),
             self.build_context.cache(),
             self.reporter
                 .clone()
@@ -2289,8 +2278,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             resource.git,
             resource.url.to_url(),
             resource.subdirectory,
-            client.unmanaged.disable_ssl(resource.git.url()),
-            client.unmanaged.connectivity(),
+            client.unmanaged.git_http_settings(resource.git.url()),
             self.build_context.cache(),
             self.reporter
                 .clone()
@@ -2540,8 +2528,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 git,
-                client.unmanaged.disable_ssl(git.url()),
-                client.unmanaged.connectivity() == Connectivity::Offline,
+                client.unmanaged.git_http_settings(git.url()),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
                     .clone()
