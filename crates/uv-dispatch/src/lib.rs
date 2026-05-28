@@ -74,10 +74,18 @@ impl uv_errors::Hint for BuildDispatchError {
             Self::Resolve(err) => err.hints(),
             Self::Anyhow(err) => {
                 // Walk the anyhow error chain to find hint-bearing errors
-                // (e.g., ResolveError wrapped via `with_context`).
+                // (e.g., resolution errors wrapped via `with_context`).
                 for cause in err.chain() {
                     if let Some(resolve_err) = cause.downcast_ref::<uv_resolver::ResolveError>() {
                         let hints = resolve_err.hints();
+                        if !hints.is_empty() {
+                            return hints;
+                        }
+                    }
+                    if let Some(no_solution_error) =
+                        cause.downcast_ref::<uv_resolver::NoSolutionError>()
+                    {
+                        let hints = uv_errors::Hint::hints(no_solution_error);
                         if !hints.is_empty() {
                             return hints;
                         }
@@ -340,15 +348,28 @@ impl BuildContext for BuildDispatch<'_> {
             )
             .with_build_stack(build_stack),
         )?;
-        let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
-            format!(
-                "No solution found when resolving: {}",
-                requirements
-                    .iter()
-                    .map(|requirement| format!("`{requirement}`"))
-                    .join(", ")
-            )
-        })?);
+        let resolution = Resolution::from(
+            resolver
+                .resolve()
+                .await
+                .map_err(|error| match error {
+                    // This requirement-specific context replaces the generic top-level
+                    // no-solution heading for a nested build resolution.
+                    uv_resolver::ResolveError::NoSolution { cause, .. } => {
+                        anyhow::Error::new(cause)
+                    }
+                    error => anyhow::Error::new(error),
+                })
+                .with_context(|| {
+                    format!(
+                        "No solution found when resolving: {}",
+                        requirements
+                            .iter()
+                            .map(|requirement| format!("`{requirement}`"))
+                            .join(", ")
+                    )
+                })?,
+        );
         Ok(ResolvedRequirements::new(resolution, hasher))
     }
 

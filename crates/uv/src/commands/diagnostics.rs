@@ -17,12 +17,12 @@ use crate::commands::pip;
 use crate::commands::pip::install::ExternallyManagedError;
 use crate::commands::pip::operations::ExtrasWithoutSourceError;
 use crate::commands::project::ProjectError;
-use crate::commands::project::add::AddFrozenHintError;
+use crate::commands::project::add::AddDependencyError;
 use crate::commands::project::remove::DependencyNotFoundError;
 use crate::commands::project::run::RecursionLimitError;
 use crate::commands::project::version::MissingProjectVersionError;
 use crate::commands::tool::common::NoExecutablesError;
-use crate::commands::tool::run::{ToolRunHintError, ToolRunScriptError};
+use crate::commands::tool::run::{ToolRunScriptError, ToolRunUsageError};
 
 static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::new(|| {
     let suggestions: Vec<(String, String)> =
@@ -60,8 +60,8 @@ pub(crate) fn exit_status_for_error(err: &anyhow::Error) -> ExitStatus {
             || cause
                 .downcast_ref::<uv_client::Error>()
                 .is_some_and(uv_client::Error::suggests_system_certs)
-            || cause.downcast_ref::<AddFrozenHintError>().is_some()
-            || cause.downcast_ref::<ToolRunHintError>().is_some()
+            || cause.downcast_ref::<AddDependencyError>().is_some()
+            || cause.downcast_ref::<ToolRunUsageError>().is_some()
             || cause
                 .downcast_ref::<pip::operations::Error>()
                 .is_some_and(pip::operations::Error::is_user_failure)
@@ -90,15 +90,15 @@ fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
     let mut command_hints = Hints::none();
     for cause in err.chain() {
         collect_operation_hints(cause, &mut hints);
-        if let Some(error) = cause.downcast_ref::<AddFrozenHintError>() {
-            collect_operation_hints(error.inner(), &mut hints);
+        if let Some(error) = cause.downcast_ref::<AddDependencyError>() {
+            collect_operation_hints(error.operation(), &mut hints);
         }
-        if let Some(error) = cause.downcast_ref::<ToolRunHintError>() {
-            collect_operation_hints(error.inner(), &mut hints);
+        if let Some(error) = cause.downcast_ref::<ToolRunUsageError>() {
+            collect_operation_hints(error.cause(), &mut hints);
         }
         collect_hint::<uv_client::Error>(cause, &mut hints);
-        collect_hint::<AddFrozenHintError>(cause, &mut command_hints);
-        collect_hint::<ToolRunHintError>(cause, &mut command_hints);
+        collect_hint::<AddDependencyError>(cause, &mut command_hints);
+        collect_hint::<ToolRunUsageError>(cause, &mut command_hints);
         collect_hint::<Box<uv_resolver::NoSolutionError>>(cause, &mut hints);
         collect_hint::<uv_resolver::NoSolutionError>(cause, &mut hints);
         collect_hint::<uv_resolver::ResolveError>(cause, &mut hints);

@@ -1651,6 +1651,36 @@ fn install_no_editable() {
 }
 
 #[test]
+fn install_no_editable_package() {
+    let context = uv_test::test_context!("3.12");
+    let executable_file = context.workspace_root.join("test/packages/executable_file");
+    let black = context.workspace_root.join("test/packages/black_editable");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg(&executable_file)
+        .arg("-e")
+        .arg(&black)
+        .arg("--no-editable-package")
+        .arg("executable-file"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     + executable-file==1.0.0 (from file://[WORKSPACE]/test/packages/executable_file)
+    "
+    );
+
+    assert!(context.site_packages().join("black.pth").is_file());
+    assert!(!context.site_packages().join("executable_file.pth").exists());
+}
+
+#[test]
 fn install_no_editable_requirements_txt() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let package = context.workspace_root.join("test/packages/executable_file");

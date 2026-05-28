@@ -77,9 +77,9 @@ impl Display for ToolRunCommand {
     }
 }
 
-/// Context for hints that are specific to `uv tool run` and `uvx`.
+/// Context for invocation mistakes that are specific to `uv tool run` and `uvx`.
 #[derive(Debug)]
-enum ToolRunHint {
+enum ToolRunUsageContext {
     UvxRun {
         arguments: String,
     },
@@ -90,45 +90,45 @@ enum ToolRunHint {
     },
 }
 
-/// Decorate an operation failure with a command-specific `uv tool run` hint.
+/// A tool resolution failure with context for correcting a likely invocation mistake.
 #[derive(Debug)]
-pub(crate) struct ToolRunHintError {
+pub(crate) struct ToolRunUsageError {
     cause: anyhow::Error,
-    hint: ToolRunHint,
+    context: ToolRunUsageContext,
 }
 
-impl ToolRunHintError {
-    fn new(cause: anyhow::Error, hint: ToolRunHint) -> Self {
-        Self { cause, hint }
+impl ToolRunUsageError {
+    fn new(cause: anyhow::Error, context: ToolRunUsageContext) -> Self {
+        Self { cause, context }
     }
 
-    pub(crate) fn inner(&self) -> &(dyn std::error::Error + 'static) {
+    pub(crate) fn cause(&self) -> &(dyn std::error::Error + 'static) {
         self.cause.as_ref()
     }
 }
 
-impl Display for ToolRunHintError {
+impl Display for ToolRunUsageError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.cause.fmt(formatter)
     }
 }
 
-impl std::error::Error for ToolRunHintError {
+impl std::error::Error for ToolRunUsageError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         self.cause.source()
     }
 }
 
-impl uv_errors::Hint for ToolRunHintError {
+impl uv_errors::Hint for ToolRunUsageError {
     fn hints(&self) -> uv_errors::Hints<'_> {
-        uv_errors::Hints::from(match &self.hint {
-            ToolRunHint::UvxRun { arguments } => format!(
+        uv_errors::Hints::from(match &self.context {
+            ToolRunUsageContext::UvxRun { arguments } => format!(
                 "`{}` invokes the `{}` package. Did you mean `{}`?",
                 format!("uvx run {arguments}").green(),
                 "run".cyan(),
                 format!("uvx {arguments}").green()
             ),
-            ToolRunHint::Verbose {
+            ToolRunUsageContext::Verbose {
                 verbose_flag,
                 target,
                 invocation_source,
@@ -336,7 +336,7 @@ pub(crate) async fn run(
             // If the user ran `uvx run ...`, the `run` is likely a mistake. Show a dedicated hint.
             if from.is_none() && invocation_source == ToolRunCommand::Uvx && target == "run" {
                 let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
-                let hint = err.is_user_failure();
+                let user_failure = err.is_user_failure();
                 let err = match err {
                     operations::Error::Resolve(err) => anyhow::Error::new(
                         operations::Error::Resolve(err.with_resolution_context("tool")),
@@ -349,20 +349,21 @@ pub(crate) async fn run(
                     }
                     err => anyhow::Error::new(err),
                 };
-                return Err(if hint {
-                    ToolRunHintError::new(err, ToolRunHint::UvxRun { arguments: rest }).into()
+                return Err(if user_failure {
+                    ToolRunUsageError::new(err, ToolRunUsageContext::UvxRun { arguments: rest })
+                        .into()
                 } else {
                     err
                 });
             }
 
             if let Some(verbose_flag) = find_verbose_flag(args) {
-                let hint = err.is_user_failure();
+                let user_failure = err.is_user_failure();
                 let err = anyhow::Error::new(err);
-                return Err(if hint {
-                    ToolRunHintError::new(
+                return Err(if user_failure {
+                    ToolRunUsageError::new(
                         err,
-                        ToolRunHint::Verbose {
+                        ToolRunUsageContext::Verbose {
                             verbose_flag: verbose_flag.to_string(),
                             target: target.to_string(),
                             invocation_source,

@@ -635,6 +635,7 @@ impl RunSettings {
             only_dev,
             editable,
             no_editable,
+            no_editable_package,
             inexact,
             exact,
             script: _,
@@ -725,7 +726,10 @@ impl RunSettings {
                 only_group,
                 all_groups,
             ),
-            editable: flag(editable.into(), no_editable.into(), "editable").map(EditableMode::from),
+            editable: EditableMode::from_args(
+                flag(editable.into(), no_editable.into(), "editable"),
+                no_editable_package,
+            ),
             modifications: if flag(exact, inexact, "inexact").unwrap_or(false) {
                 Modifications::Exact
             } else {
@@ -1718,6 +1722,7 @@ impl SyncSettings {
             all_groups,
             editable,
             no_editable,
+            no_editable_package,
             inexact,
             exact,
             no_install_project,
@@ -1819,7 +1824,10 @@ impl SyncSettings {
                 only_group,
                 all_groups,
             ),
-            editable: flag(editable.into(), no_editable.into(), "editable").map(EditableMode::from),
+            editable: EditableMode::from_args(
+                flag(editable.into(), no_editable.into(), "editable"),
+                no_editable_package,
+            ),
             install_options: InstallOptions::new(
                 no_install_project,
                 only_install_project,
@@ -1996,7 +2004,7 @@ pub(crate) struct AddSettings {
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) marker: Option<MarkerTree>,
     pub(crate) dependency_type: DependencyType,
-    pub(crate) editable: Option<bool>,
+    pub(crate) editable: Option<EditableMode>,
     pub(crate) extras: Vec<ExtraName>,
     pub(crate) raw: bool,
     pub(crate) bounds: Option<AddBoundsKind>,
@@ -2040,6 +2048,7 @@ impl AddSettings {
             group,
             editable,
             no_editable,
+            no_editable_package,
             extra,
             raw,
             bounds,
@@ -2203,7 +2212,10 @@ impl AddSettings {
             only_install_local,
             no_install_package,
             only_install_package,
-            editable: flag(editable.into(), no_editable.into(), "editable"),
+            editable: EditableMode::from_args(
+                flag(editable.into(), no_editable.into(), "editable"),
+                no_editable_package,
+            ),
             extras: extra.unwrap_or_default(),
             refresh: Refresh::from(refresh),
             indexes,
@@ -2581,6 +2593,7 @@ impl ExportSettings {
             no_header,
             editable,
             no_editable,
+            no_editable_package,
             hashes,
             no_hashes,
             output_file,
@@ -2657,7 +2670,10 @@ impl ExportSettings {
                 only_group,
                 all_groups,
             ),
-            editable: flag(editable.into(), no_editable.into(), "editable").map(EditableMode::from),
+            editable: EditableMode::from_args(
+                flag(editable.into(), no_editable.into(), "editable"),
+                no_editable_package,
+            ),
             hashes: flag(hashes, no_hashes, "hashes").unwrap_or(true),
             install_options: InstallOptions::new(
                 no_emit_project,
@@ -3205,6 +3221,7 @@ impl PipInstallSettings {
             requirements,
             editable,
             no_editable,
+            no_editable_package,
             constraints,
             overrides,
             excludes,
@@ -3324,11 +3341,14 @@ impl PipInstallSettings {
             } else {
                 Modifications::Sufficient
             },
-            editable: if no_editable || environment.no_editable.value == Some(true) {
-                Some(EditableMode::NonEditable)
-            } else {
-                None
-            },
+            editable: EditableMode::from_args(
+                if no_editable || environment.no_editable.value == Some(true) {
+                    Some(false)
+                } else {
+                    None
+                },
+                no_editable_package,
+            ),
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {

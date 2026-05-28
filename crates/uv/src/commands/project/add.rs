@@ -17,7 +17,8 @@ use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting, InstallOptions, NoSources,
+    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting,
+    InstallOptions, NoSources,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -36,6 +37,7 @@ use uv_requirements::{NamedRequirementsResolver, RequirementsSource, Requirement
 use uv_resolver::FlatIndex;
 use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
+use uv_static::is_known_standard_library_package;
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{
@@ -60,34 +62,54 @@ use crate::commands::{ExitStatus, ScriptPath, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
-/// Add a recovery hint when `uv add` fails during dependency operations.
+/// A failed dependency addition, with `uv add`-specific recovery context.
 #[derive(Debug)]
-pub(crate) struct AddFrozenHintError(anyhow::Error);
+pub(crate) struct AddDependencyError {
+    cause: crate::commands::pip::operations::Error,
+    standard_library_package: Option<PackageName>,
+}
 
-impl AddFrozenHintError {
-    pub(crate) fn inner(&self) -> &(dyn std::error::Error + 'static) {
-        self.0.as_ref()
+impl AddDependencyError {
+    fn new(
+        cause: crate::commands::pip::operations::Error,
+        standard_library_package: Option<PackageName>,
+    ) -> Self {
+        Self {
+            cause,
+            standard_library_package,
+        }
+    }
+
+    pub(crate) fn operation(&self) -> &crate::commands::pip::operations::Error {
+        &self.cause
     }
 }
 
-impl std::fmt::Display for AddFrozenHintError {
+impl std::fmt::Display for AddDependencyError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(formatter)
+        self.cause.fmt(formatter)
     }
 }
 
-impl std::error::Error for AddFrozenHintError {
+impl std::error::Error for AddDependencyError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.0.source()
+        std::error::Error::source(&self.cause)
     }
 }
 
-impl uv_errors::Hint for AddFrozenHintError {
+impl uv_errors::Hint for AddDependencyError {
     fn hints(&self) -> uv_errors::Hints<'_> {
-        uv_errors::Hints::from(format!(
+        let mut hints = uv_errors::Hints::none();
+        if let Some(package) = &self.standard_library_package {
+            hints.push(format!(
+                "The module `{package}` is included in the Python standard library and usually should not be added as a dependency"
+            ));
+        }
+        hints.push(format!(
             "If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing",
             "--frozen".green()
-        ))
+        ));
+        hints
     }
 }
 
@@ -110,7 +132,7 @@ pub(crate) async fn add(
     requirements: Vec<RequirementsSource>,
     constraints: Vec<RequirementsSource>,
     marker: Option<MarkerTree>,
-    editable: Option<bool>,
+    editable: Option<EditableMode>,
     dependency_type: DependencyType,
     raw: bool,
     bounds: Option<AddBoundsKind>,
@@ -666,7 +688,7 @@ pub(crate) async fn add(
     let edits = edits(
         requirements,
         &target,
-        editable,
+        editable.as_ref(),
         &dependency_type,
         raw,
         rev.as_deref(),
@@ -767,6 +789,7 @@ pub(crate) async fn add(
     // Use separate state for locking and syncing.
     let lock_state = state.fork();
     let sync_state = state;
+    let python_minor = target.interpreter().python_minor();
 
     match Box::pin(lock_and_sync(
         target,
@@ -807,12 +830,12 @@ pub(crate) async fn add(
             }
             match err {
                 ProjectError::Operation(err) => {
-                    let add_frozen_hint = err.is_user_failure();
-                    let err = anyhow::Error::new(err);
-                    if add_frozen_hint {
-                        Err(AddFrozenHintError(err).into())
+                    let standard_library_package =
+                        standard_library_package(&err, &edits, python_minor);
+                    if err.is_user_failure() {
+                        Err(AddDependencyError::new(err, standard_library_package).into())
                     } else {
-                        Err(err)
+                        Err(anyhow::Error::new(err))
                     }
                 }
                 err => Err(err.into()),
@@ -821,10 +844,40 @@ pub(crate) async fn add(
     }
 }
 
+fn standard_library_package(
+    operation_error: &crate::commands::pip::operations::Error,
+    edits: &[DependencyEdit],
+    python_minor: u8,
+) -> Option<PackageName> {
+    let crate::commands::pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution {
+        cause: no_solution_error,
+        ..
+    }) = operation_error
+    else {
+        return None;
+    };
+
+    edits.iter().find_map(|edit| {
+        if edit
+            .source
+            .as_ref()
+            .is_none_or(|source| matches!(source, Source::Registry { .. }))
+            && is_known_standard_library_package(python_minor, edit.requirement.name.as_ref())
+            && no_solution_error
+                .packages()
+                .any(|package| package == &edit.requirement.name)
+        {
+            Some(edit.requirement.name.clone())
+        } else {
+            None
+        }
+    })
+}
+
 fn edits(
     requirements: Vec<Requirement>,
     target: &AddTarget,
-    editable: Option<bool>,
+    editable: Option<&EditableMode>,
     dependency_type: &DependencyType,
     raw: bool,
     rev: Option<&str>,
@@ -837,6 +890,8 @@ fn edits(
 ) -> Result<Vec<DependencyEdit>> {
     let mut edits = Vec::<DependencyEdit>::with_capacity(requirements.len());
     for mut requirement in requirements {
+        let editable = editable.and_then(|editable| editable.for_package(&requirement.name));
+
         // Add the specified extras.
         let mut ex = requirement.extras.to_vec();
         ex.extend(extras.iter().cloned());
