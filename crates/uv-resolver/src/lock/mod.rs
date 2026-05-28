@@ -752,6 +752,16 @@ impl Lock {
                 }
             }
 
+            for dependency in &dist.build_dependencies {
+                if !by_id.contains_key(&dependency.package_id) {
+                    return Err(LockErrorKind::UnrecognizedBuildDependency {
+                        id: dist.id.clone(),
+                        dependency: dependency.clone(),
+                    }
+                    .into());
+                }
+            }
+
             // Perform the same validation for optional dependencies.
             for dependencies in dist.optional_dependencies.values() {
                 for dep in dependencies {
@@ -6753,6 +6763,28 @@ impl BuildDependency {
     }
 }
 
+impl Display for BuildDependency {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match (self.extras.is_empty(), self.package_id.version.as_ref()) {
+            (true, Some(version)) => write!(f, "{}=={}", self.package_id.name, version),
+            (true, None) => write!(f, "{}", self.package_id.name),
+            (false, Some(version)) => write!(
+                f,
+                "{}[{}]=={}",
+                self.package_id.name,
+                self.extras.iter().join(","),
+                version
+            ),
+            (false, None) => write!(
+                f,
+                "{}[{}]",
+                self.package_id.name,
+                self.extras.iter().join(",")
+            ),
+        }
+    }
+}
+
 /// Dependency edges for a package in one isolated build environment.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 struct BuildDependencyEdges {
@@ -7866,6 +7898,16 @@ enum LockErrorKind {
         /// The ID of the dependency that doesn't have a corresponding package
         /// entry.
         dependency: Dependency,
+    },
+    /// An error that occurs when there's an unrecognized build dependency.
+    ///
+    /// That is, a build dependency for a package that isn't in the lockfile.
+    #[error("For package `{id}`, found build dependency `{dependency}` with no locked package", id = id.cyan(), dependency = dependency.cyan())]
+    UnrecognizedBuildDependency {
+        /// The ID of the package that has an unrecognized build dependency.
+        id: PackageId,
+        /// The build dependency that doesn't have a corresponding package entry.
+        dependency: BuildDependency,
     },
     /// An error that occurs when a hash is expected (or not) for a particular
     /// artifact, but one was not found (or was).

@@ -188,6 +188,74 @@ fn lock_build_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// Verify that dangling build dependency references invalidate a lockfile.
+#[test]
+fn lock_build_dependencies_rejects_dangling_build_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock").replacen(
+        r#"{ name = "setuptools", version = "69.2.0" }"#,
+        r#"{ name = "setuptools", version = "69.2.0", source = { registry = "https://pypi.org/simple" } }"#,
+        1,
+    );
+    let missing_package = package_section(&lock, "setuptools");
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.replacen(missing_package, "", 1))?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      Caused by: For package `dep==0.1.0 @ directory+dep`, found build dependency `setuptools==69.2.0` with no locked package
+    ");
+
+    Ok(())
+}
+
 /// Verify that build dependencies are resolved universally (for all platforms)
 /// by using platform-specific markers on build requirements.
 #[test]
