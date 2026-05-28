@@ -1388,6 +1388,8 @@ fn build_with_all_metadata() -> Result<()> {
       "download_url": null,
       "dynamic": [],
       "home_page": null,
+      "import_names": [],
+      "import_namespaces": [],
       "keywords": [
         "example",
         "test",
