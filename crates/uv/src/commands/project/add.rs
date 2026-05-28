@@ -58,43 +58,17 @@ use crate::commands::project::{
     UniversalState, WorkspacePython, default_dependency_groups, init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{ExitStatus, ScriptPath, project};
+use crate::commands::{ExitStatus, ScriptPath, UvFailure, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// A failed dependency addition, with `uv add`-specific recovery context.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("Failed to add dependencies")]
 pub(crate) struct AddDependencyError {
+    #[source]
     cause: crate::commands::pip::operations::Error,
     standard_library_package: Option<PackageName>,
-}
-
-impl AddDependencyError {
-    fn new(
-        cause: crate::commands::pip::operations::Error,
-        standard_library_package: Option<PackageName>,
-    ) -> Self {
-        Self {
-            cause,
-            standard_library_package,
-        }
-    }
-
-    pub(crate) fn operation(&self) -> &crate::commands::pip::operations::Error {
-        &self.cause
-    }
-}
-
-impl std::fmt::Display for AddDependencyError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.cause.fmt(formatter)
-    }
-}
-
-impl std::error::Error for AddDependencyError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        std::error::Error::source(&self.cause)
-    }
 }
 
 impl uv_errors::Hint for AddDependencyError {
@@ -833,9 +807,13 @@ pub(crate) async fn add(
                     let standard_library_package =
                         standard_library_package(&err, &edits, python_minor);
                     if err.is_user_failure() {
-                        Err(AddDependencyError::new(err, standard_library_package).into())
+                        Err(UvFailure::user(AddDependencyError {
+                            cause: err,
+                            standard_library_package,
+                        })
+                        .into())
                     } else {
-                        Err(anyhow::Error::new(err))
+                        Err(UvFailure::from(err).into())
                     }
                 }
                 err => Err(err.into()),

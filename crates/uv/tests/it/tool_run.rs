@@ -3247,7 +3247,8 @@ fn tool_run_verbose_hint() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies
+    error: Failed to run tool
+      Caused by: No solution found when resolving dependencies
       Caused by: Because nonexistent-package-foo was not found in the package registry and you require nonexistent-package-foo, we can conclude that your requirements are unsatisfiable.
 
     hint: You provided `--verbose` to `nonexistent-package-foo`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run --verbose nonexistent-package-foo`
@@ -3264,7 +3265,8 @@ fn tool_run_verbose_hint() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies
+    error: Failed to run tool
+      Caused by: No solution found when resolving dependencies
       Caused by: Because nonexistent-package-bar was not found in the package registry and you require nonexistent-package-bar, we can conclude that your requirements are unsatisfiable.
 
     hint: You provided `-v` to `nonexistent-package-bar`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -v nonexistent-package-bar`
@@ -3281,7 +3283,8 @@ fn tool_run_verbose_hint() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No solution found when resolving dependencies
+    error: Failed to run tool
+      Caused by: No solution found when resolving dependencies
       Caused by: Because nonexistent-package-baz was not found in the package registry and you require nonexistent-package-baz, we can conclude that your requirements are unsatisfiable.
 
     hint: You provided `-vv` to `nonexistent-package-baz`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -vv nonexistent-package-baz`

@@ -74,7 +74,7 @@ use crate::commands::project::{
     update_environment, validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics, project, read_env_files};
+use crate::commands::{ExitStatus, UvFailure, diagnostics, project, read_env_files};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, GlobalSettings, LockCheck, LockCheckSource, ResolverInstallerSettings,
@@ -262,15 +262,18 @@ pub(crate) async fn run(
             {
                 Ok(result) => result.into_lock(),
                 Err(ProjectError::Operation(operations::Error::Resolve(err))) => {
-                    return Err(
-                        operations::Error::Resolve(err.with_resolution_context("script")).into(),
-                    );
+                    return Err(UvFailure::from(operations::Error::Resolve(
+                        err.with_resolution_context("script"),
+                    ))
+                    .into());
                 }
                 Err(ProjectError::Operation(operations::Error::Requirements(err))) => {
-                    return Err(diagnostics::requirements_error("script", err));
+                    return Err(
+                        UvFailure::user(diagnostics::requirements_error("script", err)).into(),
+                    );
                 }
                 Err(ProjectError::Operation(err)) => {
-                    return Err(err.into());
+                    return Err(UvFailure::from(err).into());
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -313,15 +316,18 @@ pub(crate) async fn run(
             {
                 Ok(_) => {}
                 Err(ProjectError::Operation(operations::Error::Resolve(err))) => {
-                    return Err(
-                        operations::Error::Resolve(err.with_resolution_context("script")).into(),
-                    );
+                    return Err(UvFailure::from(operations::Error::Resolve(
+                        err.with_resolution_context("script"),
+                    ))
+                    .into());
                 }
                 Err(ProjectError::Operation(operations::Error::Requirements(err))) => {
-                    return Err(diagnostics::requirements_error("script", err));
+                    return Err(
+                        UvFailure::user(diagnostics::requirements_error("script", err)).into(),
+                    );
                 }
                 Err(ProjectError::Operation(err)) => {
-                    return Err(err.into());
+                    return Err(UvFailure::from(err).into());
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -456,16 +462,19 @@ pub(crate) async fn run(
                 {
                     Ok(update) => Some(update.into_environment().into_interpreter()),
                     Err(ProjectError::Operation(operations::Error::Resolve(err))) => {
-                        return Err(operations::Error::Resolve(
+                        return Err(UvFailure::from(operations::Error::Resolve(
                             err.with_resolution_context("script"),
-                        )
+                        ))
                         .into());
                     }
                     Err(ProjectError::Operation(operations::Error::Requirements(err))) => {
-                        return Err(diagnostics::requirements_error("script", err));
+                        return Err(UvFailure::user(diagnostics::requirements_error(
+                            "script", err,
+                        ))
+                        .into());
                     }
                     Err(ProjectError::Operation(err)) => {
-                        return Err(err.into());
+                        return Err(UvFailure::from(err).into());
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -783,7 +792,7 @@ pub(crate) async fn run(
                 {
                     Ok(result) => result,
                     Err(ProjectError::Operation(err)) => {
-                        return Err(err.into());
+                        return Err(UvFailure::from(err).into());
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -868,7 +877,7 @@ pub(crate) async fn run(
                 {
                     Ok(_) => {}
                     Err(ProjectError::Operation(err)) => {
-                        return Err(err.into());
+                        return Err(UvFailure::from(err).into());
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -1019,16 +1028,18 @@ pub(crate) async fn run(
             let environment = match result {
                 Ok(resolution) => resolution,
                 Err(ProjectError::Operation(operations::Error::Resolve(err))) => {
-                    return Err(operations::Error::Resolve(
+                    return Err(UvFailure::from(operations::Error::Resolve(
                         err.with_resolution_context("`--with`"),
-                    )
+                    ))
                     .into());
                 }
                 Err(ProjectError::Operation(operations::Error::Requirements(err))) => {
-                    return Err(diagnostics::requirements_error("`--with`", err));
+                    return Err(
+                        UvFailure::user(diagnostics::requirements_error("`--with`", err)).into(),
+                    );
                 }
                 Err(ProjectError::Operation(err)) => {
-                    return Err(err.into());
+                    return Err(UvFailure::from(err).into());
                 }
                 Err(err) => return Err(err.into()),
             };

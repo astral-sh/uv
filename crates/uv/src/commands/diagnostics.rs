@@ -12,7 +12,6 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_resolver::SentinelRange;
 
-use crate::commands::ExitStatus;
 use crate::commands::pip;
 use crate::commands::pip::install::ExternallyManagedError;
 use crate::commands::pip::operations::ExtrasWithoutSourceError;
@@ -53,25 +52,6 @@ pub(crate) fn render_error(err: &anyhow::Error) {
     write_error_chain(err.as_ref(), hints).expect("writing to stderr should not fail");
 }
 
-/// Determine the process status for a propagated error, defaulting to unexpected failure.
-pub(crate) fn exit_status_for_error(err: &anyhow::Error) -> ExitStatus {
-    for cause in err.chain() {
-        if cause.downcast_ref::<RequirementsError>().is_some()
-            || cause
-                .downcast_ref::<uv_client::Error>()
-                .is_some_and(uv_client::Error::suggests_system_certs)
-            || cause.downcast_ref::<AddDependencyError>().is_some()
-            || cause.downcast_ref::<ToolRunUsageError>().is_some()
-            || cause
-                .downcast_ref::<pip::operations::Error>()
-                .is_some_and(pip::operations::Error::is_user_failure)
-        {
-            return ExitStatus::Failure;
-        }
-    }
-    ExitStatus::Error
-}
-
 /// Add requirement-resolution context to a user-facing failure.
 pub(crate) fn requirements_error(
     context: &'static str,
@@ -90,12 +70,6 @@ fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
     let mut command_hints = Hints::none();
     for cause in err.chain() {
         collect_operation_hints(cause, &mut hints);
-        if let Some(error) = cause.downcast_ref::<AddDependencyError>() {
-            collect_operation_hints(error.operation(), &mut hints);
-        }
-        if let Some(error) = cause.downcast_ref::<ToolRunUsageError>() {
-            collect_operation_hints(error.cause(), &mut hints);
-        }
         collect_hint::<uv_client::Error>(cause, &mut hints);
         collect_hint::<AddDependencyError>(cause, &mut command_hints);
         collect_hint::<ToolRunUsageError>(cause, &mut command_hints);

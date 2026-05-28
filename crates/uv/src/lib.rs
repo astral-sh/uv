@@ -2824,9 +2824,11 @@ where
     match result {
         Ok(code) => code.into(),
         Err(err) => {
+            let (err, exit_status) = match err.downcast::<commands::UvFailure>() {
+                Ok(failure) => failure.into_error_and_status(),
+                Err(err) => (err, commands::ExitStatus::Error),
+            };
             trace!("Error trace: {err:?}");
-
-            let exit_status = commands::diagnostics::exit_status_for_error(&err);
             commands::diagnostics::render_error(&err);
 
             exit_status.into()

@@ -40,7 +40,7 @@ use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
 use crate::child::run_to_completion;
-use crate::commands::ExitStatus;
+use crate::commands::{ExitStatus, UvFailure};
 
 use crate::commands::pip;
 use crate::commands::pip::latest::LatestClient;
@@ -91,32 +91,12 @@ enum ToolRunUsageContext {
 }
 
 /// A tool resolution failure with context for correcting a likely invocation mistake.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("Failed to run tool")]
 pub(crate) struct ToolRunUsageError {
+    #[source]
     cause: anyhow::Error,
     context: ToolRunUsageContext,
-}
-
-impl ToolRunUsageError {
-    fn new(cause: anyhow::Error, context: ToolRunUsageContext) -> Self {
-        Self { cause, context }
-    }
-
-    pub(crate) fn cause(&self) -> &(dyn std::error::Error + 'static) {
-        self.cause.as_ref()
-    }
-}
-
-impl Display for ToolRunUsageError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.cause.fmt(formatter)
-    }
-}
-
-impl std::error::Error for ToolRunUsageError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.cause.source()
-    }
 }
 
 impl uv_errors::Hint for ToolRunUsageError {
@@ -336,7 +316,8 @@ pub(crate) async fn run(
             // If the user ran `uvx run ...`, the `run` is likely a mistake. Show a dedicated hint.
             if from.is_none() && invocation_source == ToolRunCommand::Uvx && target == "run" {
                 let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
-                let user_failure = err.is_user_failure();
+                let user_failure =
+                    err.is_user_failure() || matches!(&err, operations::Error::Requirements(..));
                 let err = match err {
                     operations::Error::Resolve(err) => anyhow::Error::new(
                         operations::Error::Resolve(err.with_resolution_context("tool")),
@@ -350,10 +331,13 @@ pub(crate) async fn run(
                     err => anyhow::Error::new(err),
                 };
                 return Err(if user_failure {
-                    ToolRunUsageError::new(err, ToolRunUsageContext::UvxRun { arguments: rest })
-                        .into()
+                    UvFailure::user(ToolRunUsageError {
+                        cause: err,
+                        context: ToolRunUsageContext::UvxRun { arguments: rest },
+                    })
+                    .into()
                 } else {
-                    err
+                    UvFailure::unexpected(err).into()
                 });
             }
 
@@ -361,36 +345,37 @@ pub(crate) async fn run(
                 let user_failure = err.is_user_failure();
                 let err = anyhow::Error::new(err);
                 return Err(if user_failure {
-                    ToolRunUsageError::new(
-                        err,
-                        ToolRunUsageContext::Verbose {
+                    UvFailure::user(ToolRunUsageError {
+                        cause: err,
+                        context: ToolRunUsageContext::Verbose {
                             verbose_flag: verbose_flag.to_string(),
                             target: target.to_string(),
                             invocation_source,
                         },
-                    )
+                    })
                     .into()
                 } else {
-                    err
+                    UvFailure::unexpected(err).into()
                 });
             }
 
             return Err(match err {
-                operations::Error::Resolve(err) => anyhow::Error::new(operations::Error::Resolve(
+                operations::Error::Resolve(err) => UvFailure::from(operations::Error::Resolve(
                     err.with_resolution_context("tool"),
-                )),
+                ))
+                .into(),
                 operations::Error::Requirements(err @ uv_requirements::Error::Dist(..)) => {
-                    anyhow::Error::new(operations::Error::Requirements(err))
+                    UvFailure::from(operations::Error::Requirements(err)).into()
                 }
                 operations::Error::Requirements(err) => {
-                    diagnostics::requirements_error("tool", err)
+                    UvFailure::user(diagnostics::requirements_error("tool", err)).into()
                 }
-                err => anyhow::Error::new(err),
+                err => UvFailure::from(err).into(),
             });
         }
 
         Err(ProjectError::Requirements(err)) => {
-            return Err(diagnostics::requirements_error("`--with`", err));
+            return Err(UvFailure::user(diagnostics::requirements_error("`--with`", err)).into());
         }
         Err(err) => return Err(err.into()),
     };

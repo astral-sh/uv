@@ -14,13 +14,13 @@ use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState, WorkspacePython,
 };
+use crate::commands::{ExitStatus, UvFailure};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
@@ -169,7 +169,7 @@ pub(crate) async fn metadata(
             writeln!(printer.stderr(), "{}", err.to_string().bold())?;
             Ok(ExitStatus::Failure)
         }
-        Err(ProjectError::Operation(err)) => Err(err.into()),
+        Err(ProjectError::Operation(err)) => Err(UvFailure::from(err).into()),
         Err(err) => Err(err.into()),
     }
 }

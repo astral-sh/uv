@@ -4,7 +4,6 @@ use serde::Serialize;
 use std::fmt::Write as _;
 use std::path::Path;
 
-use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
 use crate::commands::project::default_dependency_groups;
@@ -14,6 +13,7 @@ use crate::commands::project::{
     ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
 };
 use crate::commands::reporters::AuditReporter;
+use crate::commands::{ExitStatus, UvFailure};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
@@ -191,7 +191,7 @@ pub(crate) async fn audit(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return Err(err.into());
+            return Err(UvFailure::from(err).into());
         }
         Err(err) => return Err(err.into()),
     };
