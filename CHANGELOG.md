@@ -3,6 +3,47 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.17
+
+Released on 2026-05-28.
+
+### Enhancements
+
+- Add a diagnostic for `uv add` with standard library modules ([#19572](https://github.com/astral-sh/uv/pull/19572))
+- Add module owners to workspace metadata ([#19122](https://github.com/astral-sh/uv/pull/19122))
+- Improve the 403 forbidden hint to suggest `ignore-error-codes` when applicable ([#19521](https://github.com/astral-sh/uv/pull/19521))
+- Skip direct URL lock freshness checks while offline ([#19596](https://github.com/astral-sh/uv/pull/19596))
+- Support PEP 794/Core Metadata 2.5: Import names and import namespaces ([#19380](https://github.com/astral-sh/uv/pull/19380))
+- Use relative path when creating symlinks in cache. ([#19033](https://github.com/astral-sh/uv/pull/19033))
+- Validate Git LFS artifacts for Git archives ([#19592](https://github.com/astral-sh/uv/pull/19592))
+
+### Preview features
+
+- Do not allow `uv venv --clear` to remove non-virtual environments ([#19595](https://github.com/astral-sh/uv/pull/19595))
+
+### Bug fixes
+
+- Avoid conflict set combinatorial explosion ([#19538](https://github.com/astral-sh/uv/pull/19538))
+- Avoid modifying process with `--env-file` in `uv run` ([#19567](https://github.com/astral-sh/uv/pull/19567))
+- Fix scroll environment creation for scrolls with long filenames ([#19539](https://github.com/astral-sh/uv/pull/19539))
+- Fix transitive Git archive dependencies in lockfiles ([#19589](https://github.com/astral-sh/uv/pull/19589))
+- Preserve Git repository URLs in direct URL metadata ([#19590](https://github.com/astral-sh/uv/pull/19590))
+- Support redirects in `--check-url` ([#19594](https://github.com/astral-sh/uv/pull/19594))
+
+### Documentation
+
+- Fix malformed positional anchors in the CLI reference ([#19575](https://github.com/astral-sh/uv/pull/19575))
+
+### Other changes
+
+- Accept case-insensitive HTML tags in `--find-links` parsing ([#19537](https://github.com/astral-sh/uv/pull/19537))
+- Add `--no-editable-package` ([#19584](https://github.com/astral-sh/uv/pull/19584))
+- Ban CPython venv entry points in wheel installs ([#19535](https://github.com/astral-sh/uv/pull/19535))
+- Ban graalpy and pypy as script/gui entry point names ([#19536](https://github.com/astral-sh/uv/pull/19536))
+- Expose `uv workspace` and its `list` subcommand in help output ([#19533](https://github.com/astral-sh/uv/pull/19533))
+- Infer Python version requests from source trees in `uv tool` invocations ([#19577](https://github.com/astral-sh/uv/pull/19577))
+- Reject duplicate PEP 723 script blocks ([#19544](https://github.com/astral-sh/uv/pull/19544))
+
 ## 0.11.16
 
 Released on 2026-05-21.
@@ -929,4 +970,5 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+
 
