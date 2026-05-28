@@ -5,6 +5,8 @@ use std::ffi::OsString;
 use std::process::Command;
 
 use anyhow::Result;
+#[cfg(feature = "test-git")]
+use anyhow::anyhow;
 use assert_cmd::assert::OutputAssertExt;
 #[cfg(feature = "test-git")]
 use assert_fs::fixture::ChildPath;
@@ -15,6 +17,8 @@ use assert_fs::{
 use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
+#[cfg(feature = "test-git")]
+use url::Url;
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
@@ -6508,6 +6512,123 @@ fn tool_install_locked_rejects_with() {
     ----- stderr -----
     error: `--locked` cannot be used with additional requirements or constraints (`--with`, `--constraint`, `--override`, `--exclude`, or `--build-constraint`), since they are not represented in the tool lockfile
     ");
+}
+
+/// Test `--locked` reads a fetched workspace lockfile for a Git source subdirectory.
+#[test]
+#[cfg(feature = "test-git")]
+fn tool_install_locked_git_workspace_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let repository = context.temp_dir.child("repository");
+    let path = tool_install_git_path(&bin_dir);
+
+    repository.child("pyproject.toml").write_str(indoc! { r#"
+        [tool.uv.workspace]
+        members = ["foo"]
+        "#
+    })?;
+    let foo_dir = repository.child("foo");
+    foo_dir.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+    let foo_module = foo_dir.child("src").child("foo");
+    foo_module.child("__init__.py").write_str("")?;
+    foo_module.child("main.py").write_str(indoc! { r#"
+        def run():
+            print("hello")
+        "#
+    })?;
+    context
+        .lock()
+        .current_dir(repository.path())
+        .assert()
+        .success();
+    repository
+        .child("uv.lock")
+        .assert(predicate::path::exists());
+    foo_dir.child("uv.lock").assert(predicate::path::missing());
+
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("add")
+        .arg(".")
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("-c")
+        .arg("user.name=Example")
+        .arg("-c")
+        .arg("user.email=example@example.com")
+        .arg("commit")
+        .arg("-m")
+        .arg("Initial commit")
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+
+    let repository_url = Url::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    let mut filters = context.filters();
+    filters.push((
+        r"git-v0/checkouts/[0-9a-f]+/[0-9a-f]+",
+        "git-v0/checkouts/[CHECKOUT]/[COMMIT]",
+    ));
+    uv_snapshot!(filters, context.tool_install()
+        .arg(format!("git+{repository_url}#subdirectory=foo"))
+        .arg("--locked")
+        .arg("--preview")
+        .env("GIT_ALLOW_PROTOCOL", "file:ext:http:https:ssh")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, path.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==0.1.0 (from file://[CACHE_DIR]/git-v0/checkouts/[CHECKOUT]/[COMMIT]/foo)
+    Installed 1 executable: foo
+    ");
+
+    uv_snapshot!(context.filters(), Command::new("foo")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello
+
+    ----- stderr -----
+    ");
+
+    Ok(())
 }
 
 /// Test `--locked` errors for a Git source without a lockfile.
