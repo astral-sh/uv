@@ -10618,11 +10618,11 @@ fn cyclic_build_dependency() {
 
 #[test]
 #[cfg(feature = "test-git")]
-fn direct_url_json_git_default() -> Result<()> {
+fn direct_url_json_git_preserves_repository_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
-        "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage",
+        "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git",
     )?;
 
     uv_snapshot!(context.pip_install()
@@ -10637,7 +10637,7 @@ fn direct_url_json_git_default() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "
     );
 
@@ -10649,7 +10649,7 @@ fn direct_url_json_git_default() -> Result<()> {
     direct_url.assert(predicates::path::is_file());
 
     let direct_url_content = fs_err::read_to_string(direct_url.path())?;
-    insta::assert_snapshot!(direct_url_content, @r#"{"url":"https://github.com/astral-test/uv-public-pypackage","vcs_info":{"vcs":"git","commit_id":"b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"}}"#);
+    insta::assert_snapshot!(direct_url_content, @r#"{"url":"https://github.com/astral-test/uv-public-pypackage.git","vcs_info":{"vcs":"git","commit_id":"b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"}}"#);
 
     Ok(())
 }
