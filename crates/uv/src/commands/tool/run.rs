@@ -23,14 +23,11 @@ use uv_distribution_types::{
     IndexCapabilities, IndexUrl, Name, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_fs::CWD;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_preview::Preview;
-use uv_python::PythonVersionFile;
-use uv_python::VersionFileDiscoveryOptions;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest,
@@ -56,7 +53,7 @@ use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::{matching_packages, refine_interpreter};
+use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, project::environment::CachedEnvironment, read_env_files};
 use crate::printer::Printer;
@@ -701,6 +698,17 @@ async fn get_or_create_environment(
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
     let reporter = PythonDownloadReporter::single(printer);
 
+    // Initialize any shared state.
+    let state = PlatformState::default();
+
+    let unresolved_target_requirement = match request {
+        ToolRequest::Package {
+            target: Target::Unspecified(requirement),
+            ..
+        } => Some(RequirementsSpecification::parse_package(requirement)?),
+        _ => None,
+    };
+
     // Determine explicit Python version requests
     let explicit_python_request = python.map(PythonRequest::parse);
     let tool_python_request = match request {
@@ -708,7 +716,7 @@ async fn get_or_create_environment(
         ToolRequest::Package { .. } => None,
     };
 
-    // Resolve Python request with version file lookup when no explicit request
+    // Resolve an argument-derived Python request, if any.
     let python_request = match (explicit_python_request, tool_python_request) {
         // e.g., `uvx --python 3.10 python3.12`
         (Some(explicit), Some(tool_request)) if tool_request != PythonRequest::Default => {
@@ -723,17 +731,23 @@ async fn get_or_create_environment(
         // e.g, `uvx --python 3.10 ...`
         (Some(explicit), _) => Some(explicit),
         // e.g., `uvx python` or `uvx <tool>`
-        (None, Some(PythonRequest::Default) | None) => PythonVersionFile::discover(
-            &*CWD,
-            &VersionFileDiscoveryOptions::default()
-                .with_no_config(false)
-                .with_no_local(true),
-        )
-        .await?
-        .and_then(PythonVersionFile::into_version),
+        (None, Some(PythonRequest::Default) | None) => None,
         // e.g., `uvx python3.12`
         (None, Some(tool_request)) => Some(tool_request),
     };
+    let python_request = ToolPython::from_request(
+        python_request,
+        unresolved_target_requirement
+            .as_ref()
+            .map(|requirement| &requirement.requirement),
+        false,
+        lfs,
+        state.git(),
+        client_builder,
+        cache,
+    )
+    .await?
+    .python_request;
 
     // Discover an interpreter.
     let interpreter = PythonInstallation::find_or_download(
@@ -752,9 +766,6 @@ async fn get_or_create_environment(
     .await?
     .into_interpreter();
 
-    // Initialize any shared state.
-    let state = PlatformState::default();
-
     let from = match request {
         ToolRequest::Python {
             executable: request_executable,
@@ -769,7 +780,11 @@ async fn get_or_create_environment(
             let (executable, requirement) = match target {
                 // Ex) `ruff>=0.6.0`
                 Target::Unspecified(requirement) => {
-                    let spec = RequirementsSpecification::parse_package(requirement)?;
+                    let spec = unresolved_target_requirement.clone().ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "Expected parsed requirement for unresolved target `{requirement}`"
+                        )
+                    })?;
 
                     // Extract the verbatim executable name, if possible.
                     let name = match &spec.requirement {

@@ -50,6 +50,8 @@ pub enum Error {
     Reqwest(#[from] WrappedReqwestError),
     #[error(transparent)]
     Client(#[from] uv_client::Error),
+    #[error(transparent)]
+    ClientBuild(#[from] uv_client::ClientBuildError),
 
     // Cache writing error
     #[error("Failed to read from the distribution cache")]

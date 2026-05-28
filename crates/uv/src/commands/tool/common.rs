@@ -12,18 +12,24 @@ use thiserror::Error;
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_distribution_types::{InstalledDist, Name, Requirement};
+use uv_configuration::GitLfsSetting;
+use uv_distribution::StaticMetadataDatabase;
+use uv_distribution_types::{
+    InstalledDist, Name, Requirement, RequiresPython, UnresolvedRequirement,
+};
 use uv_errors::{ErrorWithHints, Hint, Hints};
-use uv_fs::Simplified;
 #[cfg(unix)]
 use uv_fs::replace_symlink;
+use uv_fs::{CWD, Simplified};
+use uv_git::GitResolver;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, VersionRequest,
+    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
+    VersionRequest,
 };
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
@@ -90,7 +96,7 @@ impl Hint for NoExecutablesError {
         hints
     }
 }
-use crate::commands::project::ProjectError;
+use crate::commands::project::{ProjectError, PythonRequestSource};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 
@@ -129,6 +135,122 @@ pub(crate) fn remove_entrypoints(tool: &Tool) {
                 "Failed to remove executable: `{}`: {err}",
                 executable.simplified_display()
             );
+        }
+    }
+}
+
+/// The resolved Python request for a tool invocation.
+#[derive(Debug, Clone)]
+pub(crate) struct ToolPython {
+    /// The source of the Python request.
+    source: PythonRequestSource,
+    /// The selected Python request, computed by considering an explicit request, a global
+    /// version file, and static `requires-python` metadata from the source requirement.
+    pub(crate) python_request: Option<PythonRequest>,
+}
+
+impl ToolPython {
+    /// Determine the [`ToolPython`] request for a tool invocation.
+    pub(crate) async fn from_request(
+        python_request: Option<PythonRequest>,
+        requirement: Option<&UnresolvedRequirement>,
+        no_config: bool,
+        lfs: GitLfsSetting,
+        git_resolver: &GitResolver,
+        client_builder: &BaseClientBuilder<'_>,
+        cache: &Cache,
+    ) -> Result<Self, ProjectError> {
+        let requires_python = if python_request.is_none() {
+            match requirement {
+                Some(requirement) => {
+                    infer_requires_python_from_requirement(
+                        requirement,
+                        lfs,
+                        git_resolver,
+                        client_builder,
+                        cache,
+                    )
+                    .await
+                }
+                None => None,
+            }
+        } else {
+            None
+        };
+
+        let (source, python_request) = if let Some(request) = python_request {
+            (PythonRequestSource::UserRequest, Some(request))
+        } else if let Some(file) = PythonVersionFile::discover(
+            &*CWD,
+            &VersionFileDiscoveryOptions::default()
+                .with_no_config(no_config)
+                .with_no_local(true),
+        )
+        .await?
+        .filter(|file| match (file.version(), requires_python.as_ref()) {
+            (Some(request), Some(requires_python)) => {
+                request.intersects_requires_python(requires_python)
+            }
+            _ => true,
+        }) {
+            (
+                PythonRequestSource::DotPythonVersion(file.clone()),
+                file.version().cloned(),
+            )
+        } else {
+            (
+                PythonRequestSource::RequiresPython,
+                requires_python
+                    .as_ref()
+                    .and_then(PythonRequest::from_requires_python),
+            )
+        };
+
+        if let Some(python_request) = python_request.as_ref() {
+            debug!(
+                "Using Python request `{}` from {source}",
+                python_request.to_canonical_string()
+            );
+        }
+
+        Ok(Self {
+            source,
+            python_request,
+        })
+    }
+
+    /// Returns `true` if the selected request was explicitly provided by the user.
+    pub(crate) fn is_explicit(&self) -> bool {
+        matches!(self.source, PythonRequestSource::UserRequest)
+    }
+}
+
+/// Infer [`RequiresPython`] from a direct source requirement by reading its `pyproject.toml`.
+///
+/// Returns `None` when the requirement is not a directory or Git source, its metadata is not
+/// statically available, or the Git source cannot be fetched.
+async fn infer_requires_python_from_requirement(
+    requirement: &UnresolvedRequirement,
+    lfs: GitLfsSetting,
+    git_resolver: &GitResolver,
+    client_builder: &BaseClientBuilder<'_>,
+    cache: &Cache,
+) -> Option<RequiresPython> {
+    let requirement = requirement
+        .clone()
+        .augment_requirement(None, None, None, lfs.into(), None);
+    let source = requirement.source();
+
+    match StaticMetadataDatabase::new(client_builder, git_resolver, cache)
+        .requires_python(source.as_ref())
+        .await
+    {
+        Ok(requires_python) => requires_python,
+        Err(err) => {
+            debug!(
+                "Failed to infer `requires-python` from source requirement (`{requirement}`): {err}"
+            );
+            None
         }
     }
 }
