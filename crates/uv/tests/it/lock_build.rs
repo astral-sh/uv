@@ -2041,6 +2041,114 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     Ok(())
 }
 
+/// Verify that source distributions selected for a cross-target sync retain
+/// their locked build environment on the host performing the build.
+#[test]
+fn lock_build_dependencies_replay_cross_target_source_builds() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let (target_platform, target_marker) = if cfg!(target_os = "windows") {
+        ("linux", "sys_platform == 'linux'")
+    } else {
+        ("windows", "sys_platform == 'win32'")
+    };
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("builder-0.1.0-py3-none-any.whl"),
+        "builder",
+        "0.1.0",
+    )?;
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["builder==0.1.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+import builder
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep/__init__.py", "")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep ; {target_marker}"]
+
+        [tool.uv.sources]
+        dep = {{ path = "dep" }}
+        "#
+        ))?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--python-platform")
+        .arg(target_platform)
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+    ");
+
+    Ok(())
+}
+
 /// Verify that build dependency edges are scoped to each isolated source build
 /// when the same build package resolves a transitive dependency differently.
 #[test]
@@ -2890,10 +2998,10 @@ fn lock_build_dependencies_default_backend_cache_records_each_package() -> Resul
     Ok(())
 }
 
-/// Verify that shared default-backend versions retain the marker region for
-/// each conditional source package that reuses the cache.
+/// Verify that target platform markers do not constrain cached implicit
+/// backend build roots, which must be usable by the build host.
 #[test]
-fn lock_build_dependencies_default_backend_cache_preserves_markers() -> Result<()> {
+fn lock_build_dependencies_default_backend_cache_ignores_target_platform() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let (host_marker, foreign_marker) = if cfg!(target_os = "macos") {
         ("sys_platform == 'darwin'", "sys_platform == 'linux'")
@@ -2961,19 +3069,11 @@ fn lock_build_dependencies_default_backend_cache_preserves_markers() -> Result<(
 
     let lock = context.read("uv.lock");
     let dep_a = package_section(&lock, "dep-a");
-    assert!(
-        dep_a.contains(&format!(r#"marker = "{host_marker}""#)),
-        "{dep_a}"
-    );
+    assert!(dep_a.contains(r#"{ name = "setuptools","#), "{dep_a}");
+    assert!(!dep_a.contains("marker ="), "{dep_a}");
     let dep_b = package_section(&lock, "dep-b");
-    assert!(
-        dep_b.contains(&format!(r#"marker = "{foreign_marker}""#)),
-        "{dep_b}"
-    );
-    assert!(
-        !dep_b.contains(&format!(r#"marker = "{host_marker}""#)),
-        "{dep_b}"
-    );
+    assert!(dep_b.contains(r#"{ name = "setuptools","#), "{dep_b}");
+    assert!(!dep_b.contains("marker ="), "{dep_b}");
 
     Ok(())
 }

@@ -27,7 +27,7 @@ use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -1218,7 +1218,7 @@ async fn resolve_all_possible_builds(
         .into_iter()
         .filter(|(key, _)| !build_options.no_build_package(&key.name))
         .map(|(key, source_dist)| {
-            let marker = build_markers.get(&key).copied();
+            let marker = build_markers.get(&key).copied().map(source_python_marker);
             (key, source_dist, marker)
         })
         .collect();
@@ -1343,6 +1343,35 @@ async fn resolve_all_possible_builds(
     }
 
     Ok(())
+}
+
+/// Restrict a source build solve to Python versions where the source can be
+/// selected without applying target platform markers to the build host.
+fn source_python_marker(marker: MarkerTree) -> MarkerTree {
+    if marker.is_true() || marker.is_false() {
+        return marker;
+    }
+
+    let mut python_marker = MarkerTree::FALSE;
+    for clause in marker.to_dnf() {
+        let mut python_clause = MarkerTree::TRUE;
+        for expression in clause {
+            if matches!(
+                &expression,
+                MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonVersion | MarkerValueVersion::PythonFullVersion,
+                    ..
+                } | MarkerExpression::VersionIn {
+                    key: MarkerValueVersion::PythonVersion | MarkerValueVersion::PythonFullVersion,
+                    ..
+                }
+            ) {
+                python_clause.and(MarkerTree::expression(expression));
+            }
+        }
+        python_marker.or(python_clause);
+    }
+    python_marker
 }
 
 #[derive(Debug)]
