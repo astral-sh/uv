@@ -138,7 +138,7 @@ pub(crate) fn create(
                                     even though it is not a virtual environment. \
                                     This will become an error in a future release. \
                                     Use `--force` to suppress this warning, or \
-                                    `--preview-features venv-clear-directory` to error on this now.",
+                                    `--preview-features venv-safe-clear` to error on this now.",
                                     location.user_display()
                                 );
                             }

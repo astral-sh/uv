@@ -254,7 +254,7 @@ pub enum PreviewFeature {
     AzureEndpoint = 1 << 29,
     TomlBackwardsCompatibility = 1 << 30,
     MalwareCheck = 1 << 31,
-    VenvClearDirectory = 1 << 32,
+    VenvSafeClear = 1 << 32,
 }
 
 impl PreviewFeature {
@@ -293,7 +293,7 @@ impl PreviewFeature {
             Self::AzureEndpoint => "azure-endpoint",
             Self::TomlBackwardsCompatibility => "toml-backwards-compatibility",
             Self::MalwareCheck => "malware-check",
-            Self::VenvClearDirectory => "venv-clear-directory",
+            Self::VenvSafeClear => "venv-safe-clear",
         }
     }
 }
@@ -345,7 +345,7 @@ impl FromStr for PreviewFeature {
             "azure-endpoint" => Self::AzureEndpoint,
             "toml-backwards-compatibility" => Self::TomlBackwardsCompatibility,
             "malware-check" => Self::MalwareCheck,
-            "venv-clear-directory" => Self::VenvClearDirectory,
+            "venv-safe-clear" => Self::VenvSafeClear,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -605,10 +605,7 @@ mod tests {
             "toml-backwards-compatibility"
         );
         assert_eq!(PreviewFeature::MalwareCheck.as_str(), "malware-check");
-        assert_eq!(
-            PreviewFeature::VenvClearDirectory.as_str(),
-            "venv-clear-directory"
-        );
+        assert_eq!(PreviewFeature::VenvSafeClear.as_str(), "venv-safe-clear");
     }
 
     #[test]
