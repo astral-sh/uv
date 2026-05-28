@@ -36,7 +36,7 @@ use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
 use uv_warnings::warn_user_once;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
+use uv_workspace::{VirtualProject, WorkspaceCache};
 
 use crate::commands::pip;
 use crate::commands::pip::loggers::DefaultResolveLogger;
@@ -591,8 +591,8 @@ pub(crate) async fn locked_tool_project(
     printer: Printer,
     preview: Preview,
 ) -> Result<(VirtualProject, Lock), ProjectError> {
-    let source_tree = StaticMetadataDatabase::new(client_builder, state.git(), cache)
-        .materialize_source_tree(&requirement.source)
+    let project = StaticMetadataDatabase::new(client_builder, state.git(), cache)
+        .source_tree_project(&requirement.source, workspace_cache)
         .await
         .map_err(|err| ProjectError::Anyhow(err.into()))?
         .ok_or_else(|| {
@@ -602,12 +602,6 @@ pub(crate) async fn locked_tool_project(
             ))
         })?;
 
-    let project = VirtualProject::discover(
-        source_tree.path(),
-        &DiscoveryOptions::default(),
-        workspace_cache,
-    )
-    .await?;
     let universal_state = state.fork();
     let lock = LockOperation::new(
         LockMode::Locked(interpreter, LockCheckSource::LockedCli),

@@ -47,10 +47,11 @@ use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, Resol
 use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildKey, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::distribution_database::ManagedClient;
 use crate::error::Error;
-use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
+use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata, MetadataError};
 use crate::source::built_wheel_metadata::{BuiltWheelFile, BuiltWheelMetadata};
 use crate::source::revision::Revision;
 use crate::{Reporter, RequiresDist};
@@ -70,11 +71,11 @@ pub struct StaticMetadataDatabase<'a, 'client> {
 
 /// A direct source tree materialized on disk for static metadata inspection.
 #[derive(Debug)]
-pub struct MaterializedSourceTree(Box<Path>);
+struct MaterializedSourceTree(Box<Path>);
 
 impl MaterializedSourceTree {
     /// Return the on-disk path for this source tree.
-    pub fn path(&self) -> &Path {
+    fn path(&self) -> &Path {
         &self.0
     }
 }
@@ -97,7 +98,7 @@ impl<'a, 'client> StaticMetadataDatabase<'a, 'client> {
     ///
     /// Directory requirements are already materialized. Git source trees are fetched into the
     /// Git cache and returned at the requested subdirectory.
-    pub async fn materialize_source_tree(
+    async fn materialize_source_tree(
         &self,
         source: &RequirementSource,
     ) -> Result<Option<MaterializedSourceTree>, Error> {
@@ -168,6 +169,28 @@ impl<'a, 'client> StaticMetadataDatabase<'a, 'client> {
             return Ok(None);
         };
         self.source_tree_requires_python(&source_tree).await
+    }
+
+    /// Discover a [`VirtualProject`] from a direct source-tree requirement.
+    ///
+    /// Git source trees are materialized into the Git cache before project discovery. Returns
+    /// `None` when the requirement does not identify a source tree.
+    pub async fn source_tree_project(
+        &self,
+        source: &RequirementSource,
+        workspace_cache: &WorkspaceCache,
+    ) -> Result<Option<VirtualProject>, Error> {
+        let Some(source_tree) = self.materialize_source_tree(source).await? else {
+            return Ok(None);
+        };
+        let project = VirtualProject::discover(
+            source_tree.path(),
+            &DiscoveryOptions::default(),
+            workspace_cache,
+        )
+        .await
+        .map_err(MetadataError::from)?;
+        Ok(Some(project))
     }
 }
 
