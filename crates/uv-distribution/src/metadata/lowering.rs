@@ -533,11 +533,13 @@ impl LoweredRequirement {
             return Ok(Self(Requirement::from(requirement)));
         };
 
-        let ParsedUrl::Directory(directory) = &url.parsed_url else {
-            return Ok(Self(Requirement::from(requirement)));
+        let (install_path, is_archive) = match &url.parsed_url {
+            ParsedUrl::Directory(directory) => (directory.install_path.as_ref(), false),
+            ParsedUrl::Path(path) => (path.install_path.as_ref(), true),
+            _ => return Ok(Self(Requirement::from(requirement))),
         };
 
-        let install_path = git_path(&directory.install_path)?;
+        let install_path = git_path(install_path)?;
         let fetch_root = git_path(git_member.fetch_root)?;
         if !install_path.starts_with(&fetch_root) {
             return Ok(Self(Requirement::from(requirement)));
@@ -548,7 +550,11 @@ impl LoweredRequirement {
             groups: Box::new([]),
             extras: requirement.extras,
             marker: requirement.marker,
-            source: git_source_from_path(&install_path, git_member)?,
+            source: if is_archive {
+                git_archive_source_from_path(&install_path, git_member)?
+            } else {
+                git_directory_source_from_path(&install_path, git_member)?
+            },
             origin: requirement.origin,
         }))
     }
@@ -834,7 +840,7 @@ fn path_source(
     };
     if is_dir {
         if let Some(git_member) = git_member {
-            return git_source_from_path(install_path, git_member);
+            return git_directory_source_from_path(install_path, git_member);
         }
 
         if editable == Some(true) {
@@ -870,7 +876,7 @@ fn path_source(
         }
     } else {
         if let Some(git_member) = git_member {
-            return git_path_source_from_path(install_path, git_member);
+            return git_archive_source_from_path(install_path, git_member);
         }
         if editable == Some(true) {
             return Err(LoweringError::EditableFile(url.to_string()));
@@ -887,7 +893,7 @@ fn path_source(
     }
 }
 
-fn git_source_from_path(
+fn git_directory_source_from_path(
     install_path: impl AsRef<Path>,
     git_member: &GitWorkspaceMember,
 ) -> Result<RequirementSource, LoweringError> {
@@ -913,7 +919,7 @@ fn git_source_from_path(
     })
 }
 
-fn git_path_source_from_path(
+fn git_archive_source_from_path(
     install_path: impl AsRef<Path>,
     git_member: &GitWorkspaceMember,
 ) -> Result<RequirementSource, LoweringError> {
