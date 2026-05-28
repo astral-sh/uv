@@ -40,13 +40,13 @@ use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 
 /// Install a set of locked requirements into the current Python environment.
@@ -481,10 +481,7 @@ pub(crate) async fn pip_sync(
         {
             Ok((resolution, hasher)) => (Resolution::from(resolution), hasher),
             Err(err) => {
-                return Err(diagnostics::OperationErrorContext::with_system_certs(
-                    client_builder.system_certs(),
-                )
-                .into_error(err));
+                return Err(err.into());
             }
         };
 
@@ -549,10 +546,7 @@ pub(crate) async fn pip_sync(
     {
         Ok(_) => {}
         Err(err) => {
-            return Err(diagnostics::OperationErrorContext::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .into_error(err));
+            return Err(err.into());
         }
     }
 

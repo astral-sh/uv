@@ -56,9 +56,40 @@ use crate::commands::project::{
     UniversalState, WorkspacePython, default_dependency_groups, init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
+use crate::commands::{ExitStatus, ScriptPath, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
+
+/// Add a recovery hint when `uv add` fails during dependency operations.
+#[derive(Debug)]
+pub(crate) struct AddFrozenHintError(anyhow::Error);
+
+impl AddFrozenHintError {
+    pub(crate) fn inner(&self) -> &(dyn std::error::Error + 'static) {
+        self.0.as_ref()
+    }
+}
+
+impl std::fmt::Display for AddFrozenHintError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
+impl std::error::Error for AddFrozenHintError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.source()
+    }
+}
+
+impl uv_errors::Hint for AddFrozenHintError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::from(format!(
+            "If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing",
+            "--frozen".green()
+        ))
+    }
+}
 
 /// Add one or more packages to the project requirements.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -776,11 +807,13 @@ pub(crate) async fn add(
             }
             match err {
                 ProjectError::Operation(err) => {
-                    Err(diagnostics::OperationErrorContext::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .with_add_frozen_hint()
-                    .into_error(err))
+                    let add_frozen_hint = err.is_user_failure();
+                    let err = anyhow::Error::new(err);
+                    if add_frozen_hint {
+                        Err(AddFrozenHintError(err).into())
+                    } else {
+                        Err(err)
+                    }
                 }
                 err => Err(err.into()),
             }

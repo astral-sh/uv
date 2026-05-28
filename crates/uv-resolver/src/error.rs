@@ -37,7 +37,7 @@ use crate::{InMemoryIndex, Options};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
-    #[error("Failed to resolve dependencies for package `{1}=={2}`")]
+    #[error("Failed to resolve dependencies for `{1}` (v{2})")]
     Dependencies(#[source] Box<Self>, PackageName, Version, DerivationChain),
 
     #[error(transparent)]
@@ -109,8 +109,12 @@ pub enum ResolveError {
         #[source] Arc<uv_distribution::Error>,
     ),
 
-    #[error(transparent)]
-    NoSolution(#[from] Box<NoSolutionError>),
+    #[error("{header}")]
+    NoSolution {
+        header: NoSolutionHeader,
+        #[source]
+        cause: Box<NoSolutionError>,
+    },
 
     #[error("Attempted to construct an invalid version specifier")]
     InvalidVersion(#[from] uv_pep440::VersionSpecifierBuildError),
@@ -151,8 +155,22 @@ pub enum ResolveError {
 impl uv_errors::Hint for ResolveError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
-            Self::NoSolution(no_solution) => uv_errors::Hint::hints(no_solution.as_ref()),
+            Self::NoSolution { cause, .. } => uv_errors::Hint::hints(cause.as_ref()),
             _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
+impl ResolveError {
+    /// Add command-specific context to a no-solution resolution failure.
+    #[must_use]
+    pub fn with_resolution_context(self, context: &'static str) -> Self {
+        match self {
+            Self::NoSolution { header, cause } => Self::NoSolution {
+                header: header.with_context(context),
+                cause,
+            },
+            error => error,
         }
     }
 }

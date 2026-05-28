@@ -62,7 +62,7 @@ struct GistFile {
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
-use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::project::environment::{CachedEnvironment, EphemeralEnvironment};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
@@ -261,12 +261,16 @@ pub(crate) async fn run(
             .await
             {
                 Ok(result) => result.into_lock(),
+                Err(ProjectError::Operation(operations::Error::Resolve(err))) => {
+                    return Err(
+                        operations::Error::Resolve(err.with_resolution_context("script")).into(),
+                    );
+                }
+                Err(ProjectError::Operation(operations::Error::Requirements(err))) => {
+                    return Err(diagnostics::requirements_error("script", err));
+                }
                 Err(ProjectError::Operation(err)) => {
-                    return Err(diagnostics::OperationErrorContext::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .with_context("script")
-                    .into_error(err));
+                    return Err(err.into());
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -308,12 +312,16 @@ pub(crate) async fn run(
             .await
             {
                 Ok(_) => {}
+                Err(ProjectError::Operation(operations::Error::Resolve(err))) => {
+                    return Err(
+                        operations::Error::Resolve(err.with_resolution_context("script")).into(),
+                    );
+                }
+                Err(ProjectError::Operation(operations::Error::Requirements(err))) => {
+                    return Err(diagnostics::requirements_error("script", err));
+                }
                 Err(ProjectError::Operation(err)) => {
-                    return Err(diagnostics::OperationErrorContext::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .with_context("script")
-                    .into_error(err));
+                    return Err(err.into());
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -447,12 +455,17 @@ pub(crate) async fn run(
                 .await
                 {
                     Ok(update) => Some(update.into_environment().into_interpreter()),
-                    Err(ProjectError::Operation(err)) => {
-                        return Err(diagnostics::OperationErrorContext::with_system_certs(
-                            client_builder.system_certs(),
+                    Err(ProjectError::Operation(operations::Error::Resolve(err))) => {
+                        return Err(operations::Error::Resolve(
+                            err.with_resolution_context("script"),
                         )
-                        .with_context("script")
-                        .into_error(err));
+                        .into());
+                    }
+                    Err(ProjectError::Operation(operations::Error::Requirements(err))) => {
+                        return Err(diagnostics::requirements_error("script", err));
+                    }
+                    Err(ProjectError::Operation(err)) => {
+                        return Err(err.into());
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -770,10 +783,7 @@ pub(crate) async fn run(
                 {
                     Ok(result) => result,
                     Err(ProjectError::Operation(err)) => {
-                        return Err(diagnostics::OperationErrorContext::with_system_certs(
-                            client_builder.system_certs(),
-                        )
-                        .into_error(err));
+                        return Err(err.into());
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -858,10 +868,7 @@ pub(crate) async fn run(
                 {
                     Ok(_) => {}
                     Err(ProjectError::Operation(err)) => {
-                        return Err(diagnostics::OperationErrorContext::with_system_certs(
-                            client_builder.system_certs(),
-                        )
-                        .into_error(err));
+                        return Err(err.into());
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -1011,12 +1018,17 @@ pub(crate) async fn run(
 
             let environment = match result {
                 Ok(resolution) => resolution,
-                Err(ProjectError::Operation(err)) => {
-                    return Err(diagnostics::OperationErrorContext::with_system_certs(
-                        client_builder.system_certs(),
+                Err(ProjectError::Operation(operations::Error::Resolve(err))) => {
+                    return Err(operations::Error::Resolve(
+                        err.with_resolution_context("`--with`"),
                     )
-                    .with_context("`--with`")
-                    .into_error(err));
+                    .into());
+                }
+                Err(ProjectError::Operation(operations::Error::Requirements(err))) => {
+                    return Err(diagnostics::requirements_error("`--with`", err));
+                }
+                Err(ProjectError::Operation(err)) => {
+                    return Err(err.into());
                 }
                 Err(err) => return Err(err.into()),
             };

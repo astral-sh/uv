@@ -519,7 +519,14 @@ impl CachedClient {
             .execute(req)
             .instrument(info_span!("revalidation_request", url = %url))
             .await
-            .map_err(|err| Error::from_reqwest_middleware(url.clone(), err, start))?;
+            .map_err(|err| {
+                Error::from_reqwest_middleware(
+                    url.clone(),
+                    err,
+                    start,
+                    self.0.suggest_system_certs(),
+                )
+            })?;
         trace!(
             "Received response for revalidation request with status {} for: {}",
             response.status(),
@@ -533,6 +540,7 @@ impl CachedClient {
                 url.clone(),
                 status_error,
                 problem_details,
+                self.0.suggest_system_certs(),
             )
             .into());
         }
@@ -578,11 +586,9 @@ impl CachedClient {
         debug!("Sending fresh {} request for: {}", req.method(), url);
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let start = Instant::now();
-        let mut response = self
-            .0
-            .execute(req)
-            .await
-            .map_err(|err| Error::from_reqwest_middleware(url.clone(), err, start))?;
+        let mut response = self.0.execute(req).await.map_err(|err| {
+            Error::from_reqwest_middleware(url.clone(), err, start, self.0.suggest_system_certs())
+        })?;
         trace!(
             "Received response for fresh request with status {} for: {}",
             response.status(),
@@ -604,7 +610,12 @@ impl CachedClient {
         if let Err(status_error) = response.error_for_status_ref() {
             let problem_details = ProblemDetails::try_from_response(response).await;
             return Err(Error::new(
-                ErrorKind::from_reqwest_with_problem_details(url, status_error, problem_details),
+                ErrorKind::from_reqwest_with_problem_details(
+                    url,
+                    status_error,
+                    problem_details,
+                    self.0.suggest_system_certs(),
+                ),
                 retry_count.unwrap_or_default(),
                 start.elapsed(),
             ));

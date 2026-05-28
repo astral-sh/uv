@@ -17,6 +17,7 @@ use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
@@ -27,7 +28,6 @@ use crate::commands::project::{
     default_dependency_groups,
 };
 use crate::commands::reporters::LatestVersionReporter;
-use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::FrozenSource;
 use crate::settings::LockCheck;
@@ -167,10 +167,7 @@ pub(crate) async fn tree(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return Err(diagnostics::OperationErrorContext::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .into_error(err));
+            return Err(err.into());
         }
         Err(err) => return Err(err.into()),
     };

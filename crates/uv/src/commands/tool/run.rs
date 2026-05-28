@@ -22,7 +22,6 @@ use uv_distribution_types::{
     IndexCapabilities, IndexUrl, Name, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_fs::CWD;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -75,6 +74,72 @@ impl Display for ToolRunCommand {
             Self::Uvx => write!(f, "uvx"),
             Self::ToolRun => write!(f, "uv tool run"),
         }
+    }
+}
+
+/// Context for hints that are specific to `uv tool run` and `uvx`.
+#[derive(Debug)]
+enum ToolRunHint {
+    UvxRun {
+        arguments: String,
+    },
+    Verbose {
+        verbose_flag: String,
+        target: String,
+        invocation_source: ToolRunCommand,
+    },
+}
+
+/// Decorate an operation failure with a command-specific `uv tool run` hint.
+#[derive(Debug)]
+pub(crate) struct ToolRunHintError {
+    cause: anyhow::Error,
+    hint: ToolRunHint,
+}
+
+impl ToolRunHintError {
+    fn new(cause: anyhow::Error, hint: ToolRunHint) -> Self {
+        Self { cause, hint }
+    }
+
+    pub(crate) fn inner(&self) -> &(dyn std::error::Error + 'static) {
+        self.cause.as_ref()
+    }
+}
+
+impl Display for ToolRunHintError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.cause.fmt(formatter)
+    }
+}
+
+impl std::error::Error for ToolRunHintError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.cause.source()
+    }
+}
+
+impl uv_errors::Hint for ToolRunHintError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::from(match &self.hint {
+            ToolRunHint::UvxRun { arguments } => format!(
+                "`{}` invokes the `{}` package. Did you mean `{}`?",
+                format!("uvx run {arguments}").green(),
+                "run".cyan(),
+                format!("uvx {arguments}").green()
+            ),
+            ToolRunHint::Verbose {
+                verbose_flag,
+                target,
+                invocation_source,
+            } => format!(
+                "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
+                verbose_flag.cyan(),
+                target.cyan(),
+                invocation_source.to_string().cyan(),
+                format!("{invocation_source} {verbose_flag} {target}").green()
+            ),
+        })
     }
 }
 
@@ -271,27 +336,56 @@ pub(crate) async fn run(
             // If the user ran `uvx run ...`, the `run` is likely a mistake. Show a dedicated hint.
             if from.is_none() && invocation_source == ToolRunCommand::Uvx && target == "run" {
                 let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
-                return Err(diagnostics::OperationErrorContext::with_system_certs(
-                    client_builder.system_certs(),
-                )
-                .with_uvx_run_hint(rest)
-                .with_context("tool")
-                .into_error(err));
+                let hint = err.is_user_failure();
+                let err = match err {
+                    operations::Error::Resolve(err) => anyhow::Error::new(
+                        operations::Error::Resolve(err.with_resolution_context("tool")),
+                    ),
+                    operations::Error::Requirements(err @ uv_requirements::Error::Dist(..)) => {
+                        anyhow::Error::new(operations::Error::Requirements(err))
+                    }
+                    operations::Error::Requirements(err) => {
+                        diagnostics::requirements_error("tool", err)
+                    }
+                    err => anyhow::Error::new(err),
+                };
+                return Err(if hint {
+                    ToolRunHintError::new(err, ToolRunHint::UvxRun { arguments: rest }).into()
+                } else {
+                    err
+                });
             }
 
-            let context = diagnostics::OperationErrorContext::with_system_certs(
-                client_builder.system_certs(),
-            );
-            let context = if let Some(verbose_flag) = find_verbose_flag(args) {
-                context.with_tool_verbose_hint(
-                    verbose_flag.to_string(),
-                    target.to_string(),
-                    invocation_source,
-                )
-            } else {
-                context.with_context("tool")
-            };
-            return Err(context.into_error(err));
+            if let Some(verbose_flag) = find_verbose_flag(args) {
+                let hint = err.is_user_failure();
+                let err = anyhow::Error::new(err);
+                return Err(if hint {
+                    ToolRunHintError::new(
+                        err,
+                        ToolRunHint::Verbose {
+                            verbose_flag: verbose_flag.to_string(),
+                            target: target.to_string(),
+                            invocation_source,
+                        },
+                    )
+                    .into()
+                } else {
+                    err
+                });
+            }
+
+            return Err(match err {
+                operations::Error::Resolve(err) => anyhow::Error::new(operations::Error::Resolve(
+                    err.with_resolution_context("tool"),
+                )),
+                operations::Error::Requirements(err @ uv_requirements::Error::Dist(..)) => {
+                    anyhow::Error::new(operations::Error::Requirements(err))
+                }
+                operations::Error::Requirements(err) => {
+                    diagnostics::requirements_error("tool", err)
+                }
+                err => anyhow::Error::new(err),
+            });
         }
 
         Err(ProjectError::Requirements(err)) => {

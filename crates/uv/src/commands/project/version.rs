@@ -39,7 +39,7 @@ use crate::commands::project::{
     ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState, WorkspacePython,
     default_dependency_groups,
 };
-use crate::commands::{ExitStatus, diagnostics, project};
+use crate::commands::{ExitStatus, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -534,10 +534,7 @@ async fn print_frozen_version(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return Err(diagnostics::OperationErrorContext::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .into_error(err));
+            return Err(err.into());
         }
         Err(err) => return Err(err.into()),
     };
@@ -683,10 +680,7 @@ async fn lock_and_sync(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return Err(diagnostics::OperationErrorContext::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .into_error(err));
+            return Err(err.into());
         }
         Err(err) => return Err(err.into()),
     };
@@ -744,10 +738,7 @@ async fn lock_and_sync(
     {
         Ok(_) => {}
         Err(ProjectError::Operation(err)) => {
-            return Err(diagnostics::OperationErrorContext::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .into_error(err));
+            return Err(err.into());
         }
         Err(err) => return Err(err.into()),
     }

@@ -37,6 +37,7 @@ use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
+use crate::commands::ExitStatus;
 use crate::commands::editable::apply_editable_mode;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::{ChangedDist, Changelog, Modifications};
@@ -50,7 +51,6 @@ use crate::commands::project::{
     ScriptEnvironment, UniversalState, default_dependency_groups, detect_conflicts,
     script_extra_build_requires, script_specification, update_environment,
 };
-use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings,
@@ -309,16 +309,10 @@ pub(crate) async fn sync(
                         output_format,
                         printer,
                     )?;
-                    return Err(diagnostics::OperationErrorContext::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .into_error(operations::Error::OutdatedEnvironment(changelog)));
+                    return Err(operations::Error::OutdatedEnvironment(changelog).into());
                 }
                 Err(ProjectError::Operation(err)) => {
-                    return Err(diagnostics::OperationErrorContext::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .into_error(err));
+                    return Err(err.into());
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -363,10 +357,7 @@ pub(crate) async fn sync(
     {
         Ok(result) => Outcome::Success(result),
         Err(ProjectError::Operation(err)) => {
-            return Err(diagnostics::OperationErrorContext::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .into_error(err));
+            return Err(err.into());
         }
         Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
             if dry_run.enabled() {
@@ -450,16 +441,10 @@ pub(crate) async fn sync(
                 output_format,
                 printer,
             )?;
-            return Err(diagnostics::OperationErrorContext::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .into_error(operations::Error::OutdatedEnvironment(changelog)));
+            return Err(operations::Error::OutdatedEnvironment(changelog).into());
         }
         Err(ProjectError::Operation(err)) => {
-            return Err(diagnostics::OperationErrorContext::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .into_error(err));
+            return Err(err.into());
         }
         Err(err) => return Err(err.into()),
     };

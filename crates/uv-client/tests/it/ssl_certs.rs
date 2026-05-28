@@ -12,6 +12,8 @@ use url::Url;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_client::RegistryClientBuilder;
+use uv_distribution_types::IndexUrl;
+use uv_errors::Hint;
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
@@ -194,6 +196,42 @@ impl TestClient {
         self.run_https(cert, |response, server_task| async move {
             assert_connection_error(&response);
             // Server may or may not have errored — just ensure no panic.
+            let _ = server_task.await;
+        })
+        .await;
+    }
+
+    /// Assert whether a client TLS failure suggests enabling system certificate roots.
+    async fn expect_index_fetch_system_certs_hint(
+        &self,
+        cert: &TestCertificate,
+        expected_hint: bool,
+    ) {
+        let vars = self.ssl_vars();
+        let system_certs = self.system_certs;
+        async_with_vars(vars, async {
+            let (server_task, addr) = start_https_user_agent_server(&cert.server).await.unwrap();
+            let cache = Cache::temp().unwrap().init().await.unwrap();
+            let client = RegistryClientBuilder::new(
+                BaseClientBuilder::default()
+                    .retries(0)
+                    .no_retry_delay(true)
+                    .with_system_certs(system_certs),
+                cache,
+            )
+            .build()
+            .unwrap();
+            let index = IndexUrl::from_str(&format!("https://{addr}/simple")).unwrap();
+            let error = client
+                .fetch_simple_index(&index)
+                .await
+                .expect_err("self-signed certificate should fail");
+            assert_eq!(
+                error.suggests_system_certs(),
+                expected_hint,
+                "unexpected system certificate hint for {error:?}"
+            );
+            assert_eq!(!error.hints().is_empty(), expected_hint);
             let _ = server_task.await;
         })
         .await;
@@ -398,6 +436,19 @@ fn assert_connection_error(res: &Result<reqwest::Response, reqwest_middleware::E
 async fn test_no_custom_certs_rejects_self_signed() -> Result<()> {
     let cert = TestCertificate::new()?;
     client().expect_https_connect_fails(&cert).await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_tls_failure_suggests_system_certs_only_when_disabled() -> Result<()> {
+    let cert = TestCertificate::new()?;
+    client()
+        .expect_index_fetch_system_certs_hint(&cert, true)
+        .await;
+    client()
+        .system_certs(true)
+        .expect_index_fetch_system_certs_hint(&cert, false)
+        .await;
     Ok(())
 }
 
