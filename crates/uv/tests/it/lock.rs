@@ -1064,6 +1064,46 @@ fn lock_sdist_git_archive() -> Result<()> {
     Ok(())
 }
 
+/// Reject a Git source archive when Git LFS was requested but could not be initialized.
+#[test]
+#[cfg(feature = "test-git")]
+fn lock_sdist_git_archive_missing_lfs() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = { git = "https://github.com/astral-sh/archive-in-git-test", path = "archives/iniconfig-2.0.0.tar.gz", lfs = true }
+        "#,
+    )?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .lock()
+            .env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1"),
+        @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `iniconfig @ git+https://github.com/astral-sh/archive-in-git-test#lfs=true&path=archives/iniconfig-2.0.0.tar.gz`
+      ├─▶ The source distribution `git+https://github.com/astral-sh/archive-in-git-test#lfs=true&path=archives/iniconfig-2.0.0.tar.gz` is missing Git LFS artifacts.
+      ╰─▶ Git LFS extension not found. Ensure that Git LFS is installed and available.
+    "###
+    );
+
+    Ok(())
+}
+
 /// Lock a Git requirement that points to a pre-built wheel within a repository.
 #[test]
 #[cfg(feature = "test-git")]
@@ -1181,6 +1221,46 @@ fn lock_wheel_git_archive() -> Result<()> {
      + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl)
      + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
+
+    Ok(())
+}
+
+/// Reject a Git wheel archive when Git LFS was requested but could not be initialized.
+#[test]
+#[cfg(feature = "test-git")]
+fn lock_wheel_git_archive_missing_lfs() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = { git = "https://github.com/astral-sh/archive-in-git-test", path = "archives/iniconfig-2.0.0-py3-none-any.whl", lfs = true }
+        "#,
+    )?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .lock()
+            .env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1"),
+        @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `iniconfig @ git+https://github.com/astral-sh/archive-in-git-test#lfs=true&path=archives/iniconfig-2.0.0-py3-none-any.whl`
+      ├─▶ The source distribution `git+https://github.com/astral-sh/archive-in-git-test#lfs=true&path=archives/iniconfig-2.0.0-py3-none-any.whl` is missing Git LFS artifacts.
+      ╰─▶ Git LFS extension not found. Ensure that Git LFS is installed and available.
+    "###
+    );
 
     Ok(())
 }

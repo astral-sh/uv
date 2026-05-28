@@ -11025,6 +11025,80 @@ fn sync_git_path_archive() -> Result<()> {
     Ok(())
 }
 
+/// Reject a locked Git wheel archive when Git LFS was requested but could not be initialized.
+#[test]
+#[cfg(feature = "test-git")]
+fn sync_git_path_archive_missing_lfs() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = { git = "https://github.com/astral-sh/archive-in-git-test", path = "archives/iniconfig-2.0.0-py3-none-any.whl", lfs = true }
+        "#,
+    )?;
+
+    let lock = context.temp_dir.child("uv.lock");
+    lock.write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.13"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "foo"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", git = "https://github.com/astral-sh/archive-in-git-test?path=archives%2Finiconfig-2.0.0-py3-none-any.whl&lfs=true" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { git = "https://github.com/astral-sh/archive-in-git-test?path=archives%2Finiconfig-2.0.0-py3-none-any.whl&lfs=true#bb7ce6abf9f90544767701de5b7b0c7802dc642b" }
+        wheels = [
+            { filename = "iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .sync()
+            .arg("--frozen")
+            .env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1"),
+        @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `iniconfig @ git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl&lfs=true`
+      ├─▶ The source distribution `git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl&lfs=true` is missing Git LFS artifacts.
+      ╰─▶ Git LFS extension not found. Ensure that Git LFS is installed and available.
+
+    hint: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
+    "###
+    );
+
+    Ok(())
+}
+
 /// The project itself is marked as an editable dependency, but under the wrong name. The project
 /// is a package.
 #[test]

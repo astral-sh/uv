@@ -883,6 +883,9 @@ impl Display for RequirementSource {
                     write!(f, "@{reference}")?;
                 }
                 writeln!(f, "#path={}", install_path.display())?;
+                if git.lfs().enabled() {
+                    writeln!(f, "&lfs=true")?;
+                }
             }
             Self::Path { url, .. } => {
                 write!(f, "{url}")?;
@@ -1287,5 +1290,18 @@ mod tests {
         let raw = toml::to_string(&requirement).unwrap();
         let deserialized: Requirement = toml::from_str(&raw).unwrap();
         assert_eq!(requirement, deserialized);
+    }
+
+    #[test]
+    fn display_git_path_lfs() {
+        let source: RequirementSource = toml::from_str(
+            r#"git = "https://github.com/astral-sh/archive-in-git-test?lfs=true&path=archives%2Finiconfig-2.0.0-py3-none-any.whl""#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            source.to_string(),
+            " git+https://github.com/astral-sh/archive-in-git-test#path=archives/iniconfig-2.0.0-py3-none-any.whl\n&lfs=true\n"
+        );
     }
 }

@@ -24,7 +24,7 @@ use uv_distribution_types::{
     BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
     IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
 };
-use uv_git::{GitResolver, Reporter};
+use uv_git::{GIT_LFS, GitError, GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -1001,6 +1001,21 @@ impl RegistryClient {
                     )
                     .await
                     .map_err(ErrorKind::Git)?;
+
+                if wheel.git.lfs().enabled() && !fetch.lfs_ready() {
+                    if GIT_LFS.is_err() {
+                        return Err(ErrorKind::MissingGitLfsArtifacts(
+                            wheel.url.to_url(),
+                            GitError::GitLfsNotFound,
+                        )
+                        .into());
+                    }
+                    return Err(ErrorKind::MissingGitLfsArtifacts(
+                        wheel.url.to_url(),
+                        GitError::GitLfsNotConfigured,
+                    )
+                    .into());
+                }
 
                 // Read the metadata.
                 let file = fs_err::tokio::File::open(fetch.path().join(&wheel.install_path))
