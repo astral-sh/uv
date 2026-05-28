@@ -2123,6 +2123,10 @@ pub struct PipInstallArgs {
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_editable: bool,
 
+    /// Install the specified editable packages as non-editable.
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    pub no_editable_package: Vec<PackageName>,
+
     /// Constrain versions using the given requirements files.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
@@ -3618,6 +3622,10 @@ pub struct RunArgs {
     #[arg(long, overrides_with = "editable", value_parser = clap::builder::BoolishValueParser::new())]
     pub no_editable: bool,
 
+    /// Install the specified editable packages as non-editable.
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    pub no_editable_package: Vec<PackageName>,
+
     /// Do not remove extraneous packages present in the environment.
     #[arg(long, overrides_with("exact"), alias = "no-exact", hide = true)]
     pub inexact: bool,
@@ -3947,6 +3955,10 @@ pub struct SyncArgs {
     /// non-editable [env: UV_NO_EDITABLE=]
     #[arg(long, overrides_with = "editable", value_parser = clap::builder::BoolishValueParser::new())]
     pub no_editable: bool,
+
+    /// Install the specified editable packages as non-editable.
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    pub no_editable_package: Vec<PackageName>,
 
     /// Do not remove extraneous packages present in the environment.
     ///
@@ -4325,6 +4337,10 @@ pub struct AddArgs {
     /// Don't add the requirements as editable [env: UV_NO_EDITABLE=]
     #[arg(long, overrides_with = "editable", hide = true, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_editable: bool,
+
+    /// Don't add the specified requirements as editable.
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other, hide = true)]
+    pub no_editable_package: Vec<PackageName>,
 
     /// Add a dependency as provided.
     ///
@@ -4952,6 +4968,10 @@ pub struct ExportArgs {
     /// non-editable [env: UV_NO_EDITABLE=]
     #[arg(long, overrides_with = "editable", value_parser = clap::builder::BoolishValueParser::new())]
     pub no_editable: bool,
+
+    /// Export the specified editable packages as non-editable.
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    pub no_editable_package: Vec<PackageName>,
 
     /// Include hashes for all dependencies.
     #[arg(long, overrides_with("no_hashes"), hide = true)]

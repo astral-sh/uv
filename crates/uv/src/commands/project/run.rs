@@ -285,7 +285,7 @@ pub(crate) async fn run(
                 &environment,
                 &extras.with_defaults(DefaultExtras::default()),
                 &groups.with_defaults(DefaultGroups::default()),
-                editable,
+                editable.clone(),
                 install_options,
                 modifications,
                 python_platform.as_ref(),

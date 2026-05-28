@@ -676,7 +676,7 @@ impl<'lock> PylockToml {
         extras: &ExtrasSpecificationWithDefaults,
         dev: &DependencyGroupsWithDefaults,
         annotate: bool,
-        editable: Option<EditableMode>,
+        editable: Option<&EditableMode>,
         install_options: &'lock InstallOptions,
     ) -> Result<Self, PylockTomlErrorKind> {
         // Extract the packages from the lock file.
@@ -794,10 +794,12 @@ impl<'lock> PylockToml {
                             .unwrap_or_else(|| sdist.install_path.to_path_buf())
                             .into_boxed_path(),
                     ),
-                    editable: match editable {
+                    editable: match editable
+                        .and_then(|editable| editable.for_package(&package.id.name))
+                    {
                         None => sdist.editable,
-                        Some(EditableMode::NonEditable) => None,
-                        Some(EditableMode::Editable) => Some(true),
+                        Some(false) => None,
+                        Some(true) => Some(true),
                     },
                     subdirectory: None,
                 }),

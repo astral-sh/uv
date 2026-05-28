@@ -3224,6 +3224,20 @@ fn run_editable() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
+    uv_snapshot!(context.filters(), context.run().arg("--no-editable-package").arg("foo").arg("main.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+    ");
+
     Ok(())
 }
 
