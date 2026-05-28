@@ -16,6 +16,10 @@ The specifics of uv's caching semantics vary based on the nature of the dependen
 - **For local dependencies**, uv caches based on the last-modified time of the source archive (i.e.,
   the local `.whl` or `.tar.gz` file). For directories, uv caches based on the last-modified time of
   the `pyproject.toml`, `setup.py`, or `setup.cfg` file.
+- **For flat indexes** (i.e., `--find-links` locations), uv assumes the index contents are
+  immutable, caching each file by name. As such, replacing a file with new contents under the same
+  name (e.g., rebuilding a wheel into a `--find-links` directory) will not be picked up until the
+  cache is refreshed.
 
 If you're running into caching issues, uv includes a few escape hatches:
 
