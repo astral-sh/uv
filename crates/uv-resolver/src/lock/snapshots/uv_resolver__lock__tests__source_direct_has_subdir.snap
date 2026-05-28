@@ -61,6 +61,7 @@ Ok(
                             subdirectory: Some(
                                 "wat/foo/bar",
                             ),
+                            immutable: false,
                         },
                     ),
                 },
@@ -93,6 +94,7 @@ Ok(
                         subdirectory: Some(
                             "wat/foo/bar",
                         ),
+                        immutable: false,
                     },
                 ),
             }: 0,

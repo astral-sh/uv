@@ -1228,6 +1228,8 @@ pub enum Source {
         /// For source distributions, the path to the directory with the `pyproject.toml`, if it's
         /// not in the archive root.
         subdirectory: Option<PortablePathBuf>,
+        /// Whether to trust that the contents at this URL will not change.
+        immutable: Option<bool>,
         #[serde(
             skip_serializing_if = "uv_pep508::marker::ser::is_empty",
             serialize_with = "uv_pep508::marker::ser::serialize",
@@ -1307,6 +1309,7 @@ impl<'de> Deserialize<'de> for Source {
             branch: Option<String>,
             lfs: Option<bool>,
             url: Option<DisplaySafeUrl>,
+            immutable: Option<bool>,
             path: Option<PortablePathBuf>,
             editable: Option<bool>,
             package: Option<bool>,
@@ -1331,6 +1334,7 @@ impl<'de> Deserialize<'de> for Source {
             branch,
             lfs,
             url,
+            immutable,
             path,
             editable,
             package,
@@ -1345,6 +1349,11 @@ impl<'de> Deserialize<'de> for Source {
         if extra.is_some() && group.is_some() {
             return Err(serde::de::Error::custom(
                 "cannot specify both `extra` and `group`",
+            ));
+        }
+        if immutable.is_some() && url.is_none() {
+            return Err(serde::de::Error::custom(
+                "`immutable` is only supported for URL sources",
             ));
         }
 
@@ -1466,6 +1475,7 @@ impl<'de> Deserialize<'de> for Source {
             return Ok(Self::Url {
                 url,
                 subdirectory,
+                immutable,
                 marker,
                 extra,
                 group,
@@ -1848,10 +1858,12 @@ impl Source {
             RequirementSource::Url {
                 location,
                 subdirectory,
+                immutable,
                 ..
             } => Self::Url {
                 url: location,
                 subdirectory: subdirectory.map(PortablePathBuf::from),
+                immutable: immutable.then_some(true),
                 marker: MarkerTree::TRUE,
                 extra: None,
                 group: None,

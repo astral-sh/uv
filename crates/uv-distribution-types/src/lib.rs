@@ -284,6 +284,8 @@ pub struct DirectUrlBuiltDist {
     pub location: Box<DisplaySafeUrl>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
+    /// Whether to trust that the contents at this URL will not change.
+    pub immutable: bool,
 }
 
 /// A built distribution (wheel) that exists in a local directory.
@@ -341,6 +343,8 @@ pub struct DirectUrlSourceDist {
     pub ext: SourceDistExtension,
     /// The URL as it was provided by the user, including the subdirectory fragment.
     pub url: VerbatimUrl,
+    /// Whether to trust that the contents at this URL will not change.
+    pub immutable: bool,
 }
 
 /// A source distribution that exists at the root or in a subdirectory of a Git repository.
@@ -405,6 +409,7 @@ impl Dist {
         url: VerbatimUrl,
         location: DisplaySafeUrl,
         subdirectory: Option<Box<Path>>,
+        immutable: bool,
         ext: DistExtension,
     ) -> Result<Self, Error> {
         match ext {
@@ -423,6 +428,7 @@ impl Dist {
                     filename,
                     location: Box::new(location),
                     url,
+                    immutable,
                 })))
             }
             DistExtension::Source(ext) => {
@@ -432,6 +438,7 @@ impl Dist {
                     subdirectory,
                     ext,
                     url,
+                    immutable,
                 })))
             }
         }
@@ -595,6 +602,7 @@ impl Dist {
                 url.verbatim,
                 archive.url,
                 archive.subdirectory,
+                archive.immutable,
                 archive.ext,
             ),
             ParsedUrl::Path(file) => {
@@ -828,6 +836,7 @@ impl DirectUrlBuiltDist {
         ParsedUrl::Archive(ParsedArchiveUrl::from_source(
             (*self.location).clone(),
             None,
+            self.immutable,
             DistExtension::Wheel,
         ))
     }
@@ -861,6 +870,7 @@ impl DirectUrlSourceDist {
         ParsedUrl::Archive(ParsedArchiveUrl::from_source(
             (*self.location).clone(),
             self.subdirectory.clone(),
+            self.immutable,
             DistExtension::Source(self.ext),
         ))
     }

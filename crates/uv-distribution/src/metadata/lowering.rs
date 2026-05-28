@@ -195,11 +195,16 @@ impl LoweredRequirement {
                         Source::Url {
                             url,
                             subdirectory,
+                            immutable,
                             marker,
                             ..
                         } => {
-                            let source =
-                                url_source(&requirement, url, subdirectory.map(Box::<Path>::from))?;
+                            let source = url_source(
+                                &requirement,
+                                url,
+                                subdirectory.map(Box::<Path>::from),
+                                immutable.unwrap_or(false),
+                            )?;
                             (source, marker)
                         }
                         Source::Path {
@@ -443,11 +448,16 @@ impl LoweredRequirement {
                         Source::Url {
                             url,
                             subdirectory,
+                            immutable,
                             marker,
                             ..
                         } => {
-                            let source =
-                                url_source(&requirement, url, subdirectory.map(Box::<Path>::from))?;
+                            let source = url_source(
+                                &requirement,
+                                url,
+                                subdirectory.map(Box::<Path>::from),
+                                immutable.unwrap_or(false),
+                            )?;
                             (source, marker)
                         }
                         Source::Path {
@@ -748,6 +758,7 @@ fn url_source(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
     url: DisplaySafeUrl,
     subdirectory: Option<Box<Path>>,
+    immutable: bool,
 ) -> Result<RequirementSource, LoweringError> {
     let mut verbatim_url = url.clone();
     if verbatim_url.fragment().is_some() {
@@ -777,6 +788,7 @@ fn url_source(
     Ok(RequirementSource::Url {
         location: url,
         subdirectory,
+        immutable,
         ext,
         url: verbatim_url,
     })

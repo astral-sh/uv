@@ -229,12 +229,14 @@ impl From<Requirement> for uv_pep508::Requirement<VerbatimParsedUrl> {
                 RequirementSource::Url {
                     location,
                     subdirectory,
+                    immutable,
                     ext,
                     url,
                 } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
                     parsed_url: ParsedUrl::Archive(ParsedArchiveUrl {
                         url: location,
                         subdirectory,
+                        immutable,
                         ext,
                     }),
                     verbatim: url,
@@ -445,6 +447,7 @@ impl CacheKey for Requirement {
             RequirementSource::Url {
                 location,
                 subdirectory,
+                immutable,
                 ext,
                 url,
             } => {
@@ -458,6 +461,7 @@ impl CacheKey for Requirement {
                 }
                 ext.name().cache_key(state);
                 url.cache_key(state);
+                immutable.cache_key(state);
             }
             RequirementSource::GitDirectory {
                 git,
@@ -550,6 +554,8 @@ pub enum RequirementSource {
         /// For source distributions, the path to the distribution if it is not in the archive
         /// root.
         subdirectory: Option<Box<Path>>,
+        /// Whether to trust that the contents at this URL will not change.
+        immutable: bool,
         /// The file extension, e.g. `tar.gz`, `zip`, etc.
         ext: DistExtension,
         /// The PEP 508 style URL in the format
@@ -636,6 +642,7 @@ impl RequirementSource {
                 url,
                 location: archive.url,
                 subdirectory: archive.subdirectory,
+                immutable: archive.immutable,
                 ext: archive.ext,
             },
         }
@@ -648,12 +655,14 @@ impl RequirementSource {
             Self::Url {
                 location,
                 subdirectory,
+                immutable,
                 ext,
                 url,
             } => Some(VerbatimParsedUrl {
                 parsed_url: ParsedUrl::Archive(ParsedArchiveUrl::from_source(
                     location.clone(),
                     subdirectory.clone(),
+                    *immutable,
                     *ext,
                 )),
                 verbatim: url.clone(),
@@ -904,6 +913,7 @@ enum RequirementSourceWire {
     Direct {
         url: DisplaySafeUrl,
         subdirectory: Option<PortablePathBuf>,
+        immutable: Option<bool>,
     },
     /// Ex) `source = { path = "/home/ferris/iniconfig-2.0.0-py3-none-any.whl" }`
     Path { path: PortablePathBuf },
@@ -943,11 +953,13 @@ impl From<RequirementSource> for RequirementSourceWire {
             RequirementSource::Url {
                 subdirectory,
                 location,
+                immutable,
                 ext: _,
                 url: _,
             } => Self::Direct {
                 url: location,
                 subdirectory: subdirectory.map(PortablePathBuf::from),
+                immutable: immutable.then_some(true),
             },
             RequirementSource::GitDirectory {
                 git,
@@ -1172,7 +1184,11 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                     })
                 }
             }
-            RequirementSourceWire::Direct { url, subdirectory } => {
+            RequirementSourceWire::Direct {
+                url,
+                subdirectory,
+                immutable,
+            } => {
                 let location = url.clone();
 
                 // Create a PEP 508-compatible URL.
@@ -1184,6 +1200,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 Ok(Self::Url {
                     location,
                     subdirectory: subdirectory.map(Box::<Path>::from),
+                    immutable: immutable.unwrap_or(false),
                     ext: DistExtension::from_path(url.path())
                         .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?,
                     url: VerbatimUrl::from_url(url.clone()),

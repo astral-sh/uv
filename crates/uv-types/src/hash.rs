@@ -504,6 +504,7 @@ mod tests {
                     .parse()
                     .unwrap(),
                 subdirectory: None,
+                immutable: false,
                 ext: DistExtension::Wheel,
                 url: url.parse().unwrap(),
             },

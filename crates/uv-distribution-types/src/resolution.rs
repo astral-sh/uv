@@ -232,6 +232,7 @@ impl From<&ResolvedDist> for RequirementSource {
                         url: wheel.url.clone(),
                         location,
                         subdirectory: None,
+                        immutable: wheel.immutable,
                         ext: DistExtension::Wheel,
                     }
                 }
@@ -260,6 +261,7 @@ impl From<&ResolvedDist> for RequirementSource {
                         url: sdist.url.clone(),
                         location,
                         subdirectory: sdist.subdirectory.clone(),
+                        immutable: sdist.immutable,
                         ext: DistExtension::Source(sdist.ext),
                     }
                 }

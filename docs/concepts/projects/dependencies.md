@@ -401,6 +401,10 @@ URL dependencies can also be manually added or edited in the `pyproject.toml` wi
 `{ url = <url> }` syntax. A `subdirectory` may be specified if the source distribution isn't in the
 archive root.
 
+Set `immutable = true` on a URL source to assert that its contents will not change. This permits
+operations such as `uv lock --check --offline` to validate an existing lockfile without accessing
+the URL. uv will not detect changes made at a URL marked as immutable.
+
 ### Path
 
 To add a path source, provide the path of a wheel (ending in `.whl`), a source distribution

@@ -101,6 +101,7 @@ impl RequirementSatisfaction {
                 // records `"url": "https://github.com/tqdm/tqdm"` in `direct_url.json`.
                 location: requested_url,
                 subdirectory: requested_subdirectory,
+                immutable: _,
                 ext: _,
                 url: _,
             } => {

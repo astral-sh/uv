@@ -272,12 +272,14 @@ impl PubGrubRequirement {
             RequirementSource::Url {
                 subdirectory,
                 location,
+                immutable,
                 ext,
                 url,
             } => {
                 let parsed_url = ParsedUrl::Archive(ParsedArchiveUrl::from_source(
                     location.clone(),
                     subdirectory.clone(),
+                    *immutable,
                     *ext,
                 ));
                 (url, parsed_url)

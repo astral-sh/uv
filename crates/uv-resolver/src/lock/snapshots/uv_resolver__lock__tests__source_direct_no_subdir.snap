@@ -59,6 +59,7 @@ Ok(
                         ),
                         DirectSource {
                             subdirectory: None,
+                            immutable: false,
                         },
                     ),
                 },
@@ -89,6 +90,7 @@ Ok(
                     ),
                     DirectSource {
                         subdirectory: None,
+                        immutable: false,
                     },
                 ),
             }: 0,

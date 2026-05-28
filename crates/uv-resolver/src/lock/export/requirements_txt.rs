@@ -117,6 +117,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     let url = DisplaySafeUrl::from(ParsedArchiveUrl {
                         url: url.to_url().map_err(|_| std::fmt::Error)?,
                         subdirectory: direct.subdirectory.clone(),
+                        immutable: direct.immutable,
                         ext: DistExtension::Source(SourceDistExtension::TarGz),
                     });
                     write!(

@@ -64,6 +64,7 @@ pub(crate) fn required_dist(
         RequirementSource::Url {
             subdirectory,
             location,
+            immutable,
             ext,
             url,
         } => Dist::from_http_url(
@@ -71,6 +72,7 @@ pub(crate) fn required_dist(
             url.clone(),
             location.clone(),
             subdirectory.clone(),
+            *immutable,
             *ext,
         )?,
         RequirementSource::GitDirectory {

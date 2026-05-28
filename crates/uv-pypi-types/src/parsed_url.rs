@@ -364,6 +364,7 @@ impl TryFrom<DisplaySafeUrl> for ParsedGitPathUrl {
 pub struct ParsedArchiveUrl {
     pub url: DisplaySafeUrl,
     pub subdirectory: Option<Box<Path>>,
+    pub immutable: bool,
     pub ext: DistExtension,
 }
 
@@ -372,11 +373,13 @@ impl ParsedArchiveUrl {
     pub fn from_source(
         location: DisplaySafeUrl,
         subdirectory: Option<Box<Path>>,
+        immutable: bool,
         ext: DistExtension,
     ) -> Self {
         Self {
             url: location,
             subdirectory,
+            immutable,
             ext,
         }
     }
@@ -402,6 +405,7 @@ impl TryFrom<DisplaySafeUrl> for ParsedArchiveUrl {
         Ok(Self {
             url,
             subdirectory,
+            immutable: false,
             ext,
         })
     }

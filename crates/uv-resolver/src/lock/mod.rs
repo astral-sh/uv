@@ -2985,12 +2985,14 @@ impl Package {
                         let url = DisplaySafeUrl::from(ParsedArchiveUrl {
                             url: url.to_url().map_err(LockErrorKind::InvalidUrl)?,
                             subdirectory: direct.subdirectory.clone(),
+                            immutable: direct.immutable,
                             ext: DistExtension::Wheel,
                         });
                         let direct_dist = DirectUrlBuiltDist {
                             filename,
                             location: Box::new(url.clone()),
                             url: VerbatimUrl::from_url(url),
+                            immutable: direct.immutable,
                         };
                         let built_dist = BuiltDist::DirectUrl(direct_dist);
                         Dist::Built(built_dist)
@@ -3273,6 +3275,7 @@ impl Package {
                 let url = DisplaySafeUrl::from(ParsedArchiveUrl {
                     url: location.clone(),
                     subdirectory: direct.subdirectory.clone(),
+                    immutable: direct.immutable,
                     ext: DistExtension::Source(ext),
                 });
                 let direct_dist = DirectUrlSourceDist {
@@ -3281,6 +3284,7 @@ impl Package {
                     subdirectory: direct.subdirectory.clone(),
                     ext,
                     url: VerbatimUrl::from_url(url),
+                    immutable: direct.immutable,
                 };
                 uv_distribution_types::SourceDist::DirectUrl(direct_dist)
             }
@@ -4034,7 +4038,10 @@ impl Source {
     fn from_direct_built_dist(direct_dist: &DirectUrlBuiltDist) -> Self {
         Self::Direct(
             normalize_url(direct_dist.url.to_url()),
-            DirectSource { subdirectory: None },
+            DirectSource {
+                subdirectory: None,
+                immutable: direct_dist.immutable,
+            },
         )
     }
 
@@ -4043,6 +4050,7 @@ impl Source {
             normalize_url(direct_dist.url.to_url()),
             DirectSource {
                 subdirectory: direct_dist.subdirectory.clone(),
+                immutable: direct_dist.immutable,
             },
         )
     }
@@ -4190,7 +4198,18 @@ impl Source {
     ///
     /// We also assume that Git sources are immutable, since a Git source encodes a specific commit.
     fn is_immutable(&self) -> bool {
-        matches!(self, Self::Registry(..) | Self::Git(_, _))
+        matches!(
+            self,
+            Self::Registry(..)
+                | Self::Git(_, _)
+                | Self::Direct(
+                    _,
+                    DirectSource {
+                        immutable: true,
+                        ..
+                    }
+                )
+        )
     }
 
     /// Returns `true` if the source is that of a wheel.
@@ -4249,13 +4268,22 @@ impl Source {
             Self::Git(url, _) => {
                 source_table.insert("git", Value::from(url.as_ref()));
             }
-            Self::Direct(url, DirectSource { subdirectory }) => {
+            Self::Direct(
+                url,
+                DirectSource {
+                    subdirectory,
+                    immutable,
+                },
+            ) => {
                 source_table.insert("url", Value::from(url.as_ref()));
                 if let Some(ref subdirectory) = *subdirectory {
                     source_table.insert(
                         "subdirectory",
                         Value::from(PortablePath::from(subdirectory).to_string()),
                     );
+                }
+                if *immutable {
+                    source_table.insert("immutable", Value::from(true));
                 }
             }
             Self::Path(path) => {
@@ -4348,6 +4376,7 @@ enum SourceWire {
     Direct {
         url: UrlString,
         subdirectory: Option<PortablePathBuf>,
+        immutable: Option<bool>,
     },
     Path {
         path: PortablePathBuf,
@@ -4388,10 +4417,15 @@ impl TryFrom<SourceWire> for Source {
 
                 Ok(Self::Git(UrlString::from(url), git_source))
             }
-            Direct { url, subdirectory } => Ok(Self::Direct(
+            Direct {
+                url,
+                subdirectory,
+                immutable,
+            } => Ok(Self::Direct(
                 url,
                 DirectSource {
                     subdirectory: subdirectory.map(Box::<std::path::Path>::from),
+                    immutable: immutable.unwrap_or(false),
                 },
             )),
             Path { path } => Ok(Self::Path(path.into())),
@@ -4481,6 +4515,7 @@ impl From<RegistrySourceWire> for RegistrySource {
 #[serde(rename_all = "kebab-case")]
 struct DirectSource {
     subdirectory: Option<Box<Path>>,
+    immutable: bool,
 }
 
 /// NOTE: Care should be taken when adding variants to this enum. Namely, new
@@ -5867,6 +5902,7 @@ fn normalize_requirement(
         RequirementSource::Url {
             mut location,
             subdirectory,
+            immutable,
             ext,
             url: _,
         } => {
@@ -5880,6 +5916,7 @@ fn normalize_requirement(
             let url = DisplaySafeUrl::from(ParsedArchiveUrl {
                 url: location.clone(),
                 subdirectory: subdirectory.clone(),
+                immutable,
                 ext,
             });
 
@@ -5891,6 +5928,7 @@ fn normalize_requirement(
                 source: RequirementSource::Url {
                     location,
                     subdirectory,
+                    immutable,
                     ext,
                     url: VerbatimUrl::from_url(url),
                 },

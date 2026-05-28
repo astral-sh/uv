@@ -24,6 +24,7 @@ async fn remote_metadata_with_and_without_cache() -> Result<()> {
             filename,
             location: Box::new(DisplaySafeUrl::parse(url)?),
             url: VerbatimUrl::from_str(url)?,
+            immutable: false,
         });
         let resolver = GitResolver::default();
         let capabilities = IndexCapabilities::default();

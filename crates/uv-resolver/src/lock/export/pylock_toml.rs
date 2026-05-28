@@ -1623,6 +1623,7 @@ impl PylockTomlArchive {
                         filename,
                         location: Box::new(url.clone()),
                         url: VerbatimUrl::from_url(url.clone()),
+                        immutable: false,
                     })))
                 }
                 DistExtension::Source(ext) => {
@@ -1632,6 +1633,7 @@ impl PylockTomlArchive {
                         subdirectory: self.subdirectory.clone().map(Box::<Path>::from),
                         ext,
                         url: VerbatimUrl::from_url(url.clone()),
+                        immutable: false,
                     })))
                 }
             }

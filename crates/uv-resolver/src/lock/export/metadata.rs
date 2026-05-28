@@ -328,6 +328,8 @@ enum MetadataSource {
     Direct {
         url: UrlString,
         subdirectory: Option<PortablePathBuf>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        immutable: Option<bool>,
     },
     Path {
         path: PortablePathBuf,
@@ -395,10 +397,17 @@ impl MetadataSource {
                 },
             },
             Source::Git(url, _) => Self::Git { git: url },
-            Source::Direct(url, DirectSource { subdirectory }) => Self::Direct {
+            Source::Direct(
+                url,
+                DirectSource {
+                    subdirectory,
+                    immutable,
+                },
+            ) => Self::Direct {
                 url,
                 subdirectory: subdirectory
                     .map(|path| normalize_workspace_relative_path(workspace_root, &path)),
+                immutable: immutable.then_some(true),
             },
             Source::Path(path) => Self::Path {
                 path: normalize_workspace_relative_path(workspace_root, &path),
