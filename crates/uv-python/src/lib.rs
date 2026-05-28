@@ -360,6 +360,7 @@ mod tests {
                         "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/site-packages"
                     ],
                     "stdlib": "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}",
+                    "extension_suffixes": [".cpython-{VERSION}-x86_64-linux-gnu.so", ".abi3.so", ".so"],
                     "scheme": {
                         "data": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
                         "include": "/home/ferris/.pyenv/versions/{FULL_VERSION}/include",
@@ -455,6 +456,7 @@ mod tests {
                         "/lib/python{VERSION}/site-packages"
                     ],
                     "stdlib": "//lib/python{VERSION}",
+                    "extension_suffixes": [".cpython-{VERSION}-wasm32-emscripten.so", ".so"],
                     "scheme": {
                         "platlib": "//lib/python{VERSION}/site-packages",
                         "purelib": "//lib/python{VERSION}/site-packages",

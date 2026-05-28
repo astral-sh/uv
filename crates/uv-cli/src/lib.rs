@@ -8029,7 +8029,12 @@ pub struct MetadataArgs {
     ///
     /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
     /// changes, but will not write the lockfile to disk.
-    #[arg(long, conflicts_with = "frozen", conflicts_with = "locked")]
+    #[arg(
+        long,
+        conflicts_with = "frozen",
+        conflicts_with = "locked",
+        conflicts_with = "sync"
+    )]
     pub dry_run: bool,
 
     #[command(flatten)]
@@ -8040,6 +8045,13 @@ pub struct MetadataArgs {
 
     #[command(flatten)]
     pub refresh: RefreshArgs,
+
+    /// Sync the environment to include module ownership metadata in the output.
+    ///
+    /// This adds a mapping from importable module names to references to the package nodes
+    /// that provide them. To do this, the venv will be synced in inexact mode.
+    #[arg(long)]
+    pub sync: bool,
 
     /// The Python interpreter to use during resolution.
     ///

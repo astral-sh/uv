@@ -2,23 +2,25 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 
 use uv_distribution_filename::WheelFilename;
-use uv_distribution_types::{RequiresPython, UrlString};
+use uv_distribution_types::{Name, RequiresPython, ResolvedDist, UrlString};
 use uv_fs::PortablePathBuf;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
+use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts, ModuleName};
 use uv_workspace::Workspace;
 
-use crate::Lock;
 use crate::lock::{
     Dependency, DirectSource, PackageId, RegistrySource, Source, SourceDist, SourceDistMetadata,
     Wheel, WheelWireSource, ZstdWheel,
 };
+use crate::{Lock, LockError};
 
 #[derive(Debug, thiserror::Error)]
 enum MetadataErrorKind {
     #[error(transparent)]
     Serialize(#[from] serde_json::error::Error),
+    #[error(transparent)]
+    Lock(#[from] LockError),
 }
 
 #[derive(Debug)]
@@ -66,6 +68,9 @@ pub struct Metadata {
     requires_python: RequiresPython,
     /// Info about conflicting packages
     conflicts: MetadataConflicts,
+    /// A mapping from importable module names to the package nodes that provide them
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    module_owners: BTreeMap<ModuleName, Vec<MetadataModuleOwner>>,
     /// An index of which nodes are workspace members
     ///
     /// These entries are often what you should use as the entry-points into the `resolve` graph.
@@ -101,6 +106,13 @@ struct MetadataWorkspaceMember {
     path: PortablePathBuf,
     /// Key for the package's node in the `resolve` graph
     id: MetadataNodeIdFlat,
+}
+
+/// An installed distribution that provides an importable module.
+#[derive(Debug, serde::Serialize)]
+struct MetadataModuleOwner {
+    /// Key for the package node in the `resolution` graph.
+    package_id: MetadataNodeIdFlat,
 }
 
 /// A node in the dependency graph
@@ -818,11 +830,42 @@ impl Metadata {
                 version: SchemaVersion::Preview,
             },
             conflicts,
+            module_owners: BTreeMap::new(),
             workspace_root,
             requires_python: lock.requires_python.clone(),
             members,
             resolution: resolve,
         })
+    }
+
+    pub fn package_node_id(
+        workspace_root: &PortablePathBuf,
+        dist: &ResolvedDist,
+    ) -> Result<String, MetadataError> {
+        let source = Source::from_resolved_dist(dist, workspace_root.as_ref())?;
+        Ok(MetadataNodeId {
+            name: dist.name().clone(),
+            version: dist.version().cloned(),
+            source: MetadataSource::from_source(workspace_root, source),
+            kind: MetadataNodeKind::Package,
+        }
+        .to_flat())
+    }
+
+    #[must_use]
+    pub fn with_module_owners(mut self, module_owners: BTreeMap<ModuleName, Vec<String>>) -> Self {
+        self.module_owners = module_owners
+            .into_iter()
+            .filter_map(|(module, owners)| {
+                let owners = owners
+                    .into_iter()
+                    .filter(|package_id| self.resolution.contains_key(package_id))
+                    .map(|package_id| MetadataModuleOwner { package_id })
+                    .collect::<Vec<_>>();
+                (!owners.is_empty()).then_some((module, owners))
+            })
+            .collect();
+        self
     }
 
     pub fn to_json(&self) -> Result<String, MetadataError> {

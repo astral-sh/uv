@@ -1923,10 +1923,12 @@ pub(crate) struct MetadataSettings {
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
     pub(crate) dry_run: DryRun,
+    pub(crate) sync: bool,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
+    pub(crate) malware_settings: MalwareCheckSettings,
 }
 
 impl MetadataSettings {
@@ -1943,6 +1945,7 @@ impl MetadataSettings {
             resolver,
             build,
             refresh,
+            sync,
             python,
         } = *args;
 
@@ -1958,10 +1961,13 @@ impl MetadataSettings {
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
 
+        let malware_settings = MalwareCheckSettings::from(&environment);
+
         Self {
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
             dry_run: DryRun::from_args(dry_run),
+            sync,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(
@@ -1972,6 +1978,7 @@ impl MetadataSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
+            malware_settings,
         }
     }
 }
