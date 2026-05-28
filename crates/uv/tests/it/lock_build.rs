@@ -5869,6 +5869,94 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
     Ok(())
 }
 
+/// Verify removing `--no-build-package` captures an implicit default backend.
+#[test]
+fn lock_build_dependencies_no_build_package_relocks_implicit_default_backend() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    let dep2_dir = context.temp_dir.child("dep2");
+    dep2_dir.create_dir_all()?;
+    dep2_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep2"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep", "dep2"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        dep2 = { path = "dep2" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-build-package")
+        .arg("dep")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(!dep.contains("build-dependencies = ["), "{dep}");
+    assert!(!dep.contains("build-requires = ["), "{dep}");
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(dep.contains("build-dependencies = ["), "{dep}");
+    assert!(dep.contains(r#"{ name = "setuptools", version = "69.2.0" }"#));
+
+    Ok(())
+}
+
 /// Verify that sync only reconstructs locked build resolutions for selected
 /// packages, not unselected optional dependencies.
 #[test]

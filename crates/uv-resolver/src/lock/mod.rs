@@ -1250,8 +1250,7 @@ impl Lock {
         Ok(sources)
     }
 
-    /// Return source distributions whose build requirements are known, but whose
-    /// locked build dependencies are missing.
+    /// Return source distributions whose locked build dependencies are missing.
     pub fn source_distributions_missing_build_dependencies(
         &self,
         workspace_root: &Path,
@@ -1269,14 +1268,14 @@ impl Lock {
             if build_options.no_build_package(&package.id.name) {
                 continue;
             }
-            if package.metadata.build_requires.is_none()
+            if matches!(package.id.source, Source::Registry(_))
+                && package.metadata.build_requires.is_none()
                 && extra_build_requires
                     .get(&package.id.name)
                     .is_none_or(Vec::is_empty)
             {
                 continue;
             }
-
             let Some(source_dist) = package.to_source_dist(workspace_root)? else {
                 continue;
             };
