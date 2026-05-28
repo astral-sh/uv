@@ -1381,15 +1381,15 @@ fn lock_wheel_url() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    // Re-run with `--offline`. This should fail: we need network access to resolve mutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
-    success: false
-    exit_code: 2
+    // Re-run with `--check --offline`. We cannot refresh direct URL metadata without network
+    // access, so preserve the metadata in the already-correct lockfile.
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--no-cache"), @"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to generate package metadata for `anyio==4.3.0 @ direct+https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl`
-      Caused by: Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl`
+    Resolved 4 packages in [TIME]
     ");
 
     // Install from the lockfile.
@@ -1525,6 +1525,17 @@ fn lock_sdist_url() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Re-run with `--check --offline`. We cannot refresh direct URL metadata without network
+    // access, so preserve the metadata in the already-correct lockfile.
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13810,6 +13821,75 @@ fn lock_sources_url() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
      + workspace==0.1.0 (from https://github.com/user-attachments/files/16592193/workspace.zip)
+    ");
+
+    Ok(())
+}
+
+/// Skip direct URL freshness checks while offline without skipping mutable transitive sources.
+#[test]
+fn lock_sources_url_offline_validates_transitive_source_tree() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // The remote `workspace` archive depends on `anyio`. Override that transitive dependency to
+    // a local source tree so it remains refreshable while the direct URL parent is skipped
+    // offline; changing its version below proves that we still recurse into the parent's locked
+    // dependencies.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["workspace @ https://github.com/user-attachments/files/16592193/workspace.zip"]
+
+        [tool.uv]
+        override-dependencies = ["anyio"]
+
+        [tool.uv.sources]
+        anyio = { path = "anyio" }
+        "#,
+    )?;
+
+    let transitive = context.temp_dir.child("anyio");
+    fs_err::create_dir_all(&transitive)?;
+    let transitive_pyproject_toml = transitive.child("pyproject.toml");
+    transitive_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "anyio"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    transitive_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "anyio"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
