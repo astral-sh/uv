@@ -1004,13 +1004,13 @@ impl RegistryClient {
 
                 if wheel.git.lfs().enabled() && !fetch.lfs_ready() {
                     if GIT_LFS.is_err() {
-                        return Err(ErrorKind::MissingGitLfsArtifacts(
+                        return Err(ErrorKind::MissingWheelGitLfsArtifacts(
                             wheel.url.to_url(),
                             GitError::GitLfsNotFound,
                         )
                         .into());
                     }
-                    return Err(ErrorKind::MissingGitLfsArtifacts(
+                    return Err(ErrorKind::MissingWheelGitLfsArtifacts(
                         wheel.url.to_url(),
                         GitError::GitLfsNotConfigured,
                     )

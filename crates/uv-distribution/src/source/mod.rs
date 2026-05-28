@@ -1610,12 +1610,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Validate that LFS artifacts were fully initialized.
         if resource.git.lfs().enabled() && !fetch.lfs_ready() {
             if GIT_LFS.is_err() {
-                return Err(Error::MissingGitLfsArtifacts(
+                return Err(Error::MissingSourceDistGitLfsArtifacts(
                     resource.url.to_url(),
                     GitError::GitLfsNotFound,
                 ));
             }
-            return Err(Error::MissingGitLfsArtifacts(
+            return Err(Error::MissingSourceDistGitLfsArtifacts(
                 resource.url.to_url(),
                 GitError::GitLfsNotConfigured,
             ));
@@ -1964,12 +1964,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Validate that LFS artifacts were fully initialized
         if resource.git.lfs().enabled() && !fetch.lfs_ready() {
             if GIT_LFS.is_err() {
-                return Err(Error::MissingGitLfsArtifacts(
+                return Err(Error::MissingSourceDistGitLfsArtifacts(
                     resource.url.to_url(),
                     GitError::GitLfsNotFound,
                 ));
             }
-            return Err(Error::MissingGitLfsArtifacts(
+            return Err(Error::MissingSourceDistGitLfsArtifacts(
                 resource.url.to_url(),
                 GitError::GitLfsNotConfigured,
             ));
@@ -2179,12 +2179,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Validate that LFS artifacts were fully initialized
         if resource.git.lfs().enabled() && !fetch.lfs_ready() {
             if GIT_LFS.is_err() {
-                return Err(Error::MissingGitLfsArtifacts(
+                return Err(Error::MissingSourceDistGitLfsArtifacts(
                     resource.url.to_url(),
                     GitError::GitLfsNotFound,
                 ));
             }
-            return Err(Error::MissingGitLfsArtifacts(
+            return Err(Error::MissingSourceDistGitLfsArtifacts(
                 resource.url.to_url(),
                 GitError::GitLfsNotConfigured,
             ));

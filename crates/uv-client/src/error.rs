@@ -387,7 +387,7 @@ pub enum ErrorKind {
     Git(#[from] uv_git::GitResolverError),
 
     #[error("The wheel `{0}` is missing Git LFS artifacts.")]
-    MissingGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
+    MissingWheelGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
 
     #[error("Expected a file URL, but received: {0}")]
     NonFileUrl(DisplaySafeUrl),
