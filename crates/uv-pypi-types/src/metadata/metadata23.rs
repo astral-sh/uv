@@ -162,7 +162,8 @@ impl Metadata23 {
         let provides_extra = headers.get_all_values("Provides-Extra").collect();
         let import_names: Vec<String> = headers.get_all_values("Import-Name").collect();
         let import_namespaces: Vec<String> = headers.get_all_values("Import-Namespace").collect();
-        // PEP 794 requires rejecting overlapping import names and namespaces.
+        // PEP 794 requires rejecting modules that are used both in import names and import
+        // namespaces. (Nesting is allowed, only exact matches are forbidden.)
         validate_import_name_overlap(&import_names, &import_namespaces)?;
         let description_content_type = headers.get_first_value("Description-Content-Type");
         let dynamic = headers.get_all_values("Dynamic").collect();

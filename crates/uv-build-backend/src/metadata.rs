@@ -180,6 +180,10 @@ fn parse_import_namespaces(
     Ok(Some(import_namespaces))
 }
 
+/// Parse `Import-Name` and `Import-Namespace` entries.
+///
+/// An import name(space) is a module path, consisting of identifiers with dots in between, and
+/// an optional `; private` suffix, e.g., `tqdm` or `foo.bar.baz ; private`.
 fn parse_import_entry(value: &str, field: &'static str) -> Result<ImportEntry, ValidationError> {
     let (name_part, suffix_part) = match value.split_once(';') {
         Some((name, suffix)) => (name.trim_end(), Some(suffix.trim())),
