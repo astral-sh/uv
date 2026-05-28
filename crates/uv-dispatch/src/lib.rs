@@ -664,16 +664,6 @@ impl BuildContext for BuildDispatch<'_> {
         })
     }
 
-    fn record_build_resolution(
-        &self,
-        package: &BuildPackageKey,
-        graph: uv_types::BuildResolutionGraph,
-    ) {
-        if self.universal_build_resolution {
-            self.build_resolutions.insert(package.clone(), graph);
-        }
-    }
-
     #[instrument(
         skip(self, requirements, venv),
         fields(

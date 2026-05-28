@@ -2641,6 +2641,94 @@ fn lock_build_dependencies_default_backend_cache_records_each_package() -> Resul
     Ok(())
 }
 
+/// Verify that shared default-backend versions retain the marker region for
+/// each conditional source package that reuses the cache.
+#[test]
+fn lock_build_dependencies_default_backend_cache_preserves_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (host_marker, foreign_marker) = if cfg!(target_os = "macos") {
+        ("sys_platform == 'darwin'", "sys_platform == 'linux'")
+    } else if cfg!(target_os = "windows") {
+        ("sys_platform == 'win32'", "sys_platform == 'linux'")
+    } else {
+        ("sys_platform == 'linux'", "sys_platform == 'darwin'")
+    };
+
+    for name in ["dep-a", "dep-b"] {
+        let module_name = name.replace('-', "_");
+        let archive_name = format!("{name}-0.1.0.zip");
+        let source_dist = context.temp_dir.child(&archive_name);
+        let file = File::create(source_dist.path())?;
+        let mut zip = ZipWriter::new(file);
+        let options = SimpleFileOptions::default();
+        zip.add_directory(format!("{name}-0.1.0/"), options)?;
+        zip.start_file(format!("{name}-0.1.0/pyproject.toml"), options)?;
+        zip.write_all(
+            format!(
+                r#"
+                [project]
+                name = "{name}"
+                dynamic = ["version"]
+                requires-python = ">=3.12"
+
+                [tool.setuptools.dynamic]
+                version = {{attr = "{module_name}.__version__"}}
+                "#
+            )
+            .as_bytes(),
+        )?;
+        zip.add_directory(format!("{name}-0.1.0/{module_name}/"), options)?;
+        zip.start_file(format!("{name}-0.1.0/{module_name}/__init__.py"), options)?;
+        zip.write_all(b"__version__ = '0.1.0'")?;
+        zip.finish()?;
+    }
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "dep-a ; {host_marker}",
+            "dep-b ; {foreign_marker}",
+        ]
+
+        [tool.uv.sources]
+        dep-a = {{ path = "dep-a-0.1.0.zip" }}
+        dep-b = {{ path = "dep-b-0.1.0.zip" }}
+        "#
+        ))?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let dep_a = package_section(&lock, "dep-a");
+    assert!(
+        dep_a.contains(&format!(r#"marker = "{host_marker}""#)),
+        "{dep_a}"
+    );
+    let dep_b = package_section(&lock, "dep-b");
+    assert!(
+        dep_b.contains(&format!(r#"marker = "{foreign_marker}""#)),
+        "{dep_b}"
+    );
+    assert!(
+        !dep_b.contains(&format!(r#"marker = "{host_marker}""#)),
+        "{dep_b}"
+    );
+
+    Ok(())
+}
+
 /// Verify that a static source package without an explicit build system still
 /// records PEP 517's implicit setuptools build requirement.
 #[test]

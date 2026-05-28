@@ -19,9 +19,7 @@ use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
 
-use crate::{
-    BuildArena, BuildIsolation, BuildPackageKey, BuildResolutionGraph, ResolvedRequirements,
-};
+use crate::{BuildArena, BuildIsolation, BuildPackageKey, ResolvedRequirements};
 
 /// Controls how source tree requirements influence workspace-member editability during lowering.
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
@@ -163,9 +161,6 @@ pub trait BuildContext {
         build_stack: &'a BuildStack,
         validate_locked_requirements: Option<&'a [Requirement]>,
     ) -> impl Future<Output = Result<ResolvedRequirements, impl IsBuildBackendError>> + 'a;
-
-    /// Record a build resolution graph that was reused from a cache.
-    fn record_build_resolution(&self, _package: &BuildPackageKey, _graph: BuildResolutionGraph) {}
 
     /// Install the given set of package versions into the virtual environment. The environment must
     /// use the same base Python as [`BuildContext::interpreter`]

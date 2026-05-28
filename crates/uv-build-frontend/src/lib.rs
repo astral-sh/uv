@@ -542,12 +542,20 @@ impl SourceBuild {
             {
                 let mut resolution = source_build_context.default_resolution.lock().await;
                 if let Some(resolved_requirements) = &*resolution {
-                    if let (Some(package), Some(graph)) =
-                        (package, resolved_requirements.build_resolution_graph())
-                    {
-                        build_context.record_build_resolution(package, graph.clone());
+                    if Self::can_reuse_cached_default_resolution(resolved_requirements, package) {
+                        resolved_requirements.clone()
+                    } else {
+                        // A graph captured for another source package can have different
+                        // marker reachability. Recording it unchanged would attribute the
+                        // first package's marker region to later builds.
+                        drop(resolution);
+                        build_context
+                            .resolve(&DEFAULT_BACKEND.requirements, package, build_stack, None)
+                            .await
+                            .map_err(|err| {
+                                Error::RequirementsResolve("`setup.py` build", err.into())
+                            })?
                     }
-                    resolved_requirements.clone()
                 } else {
                     let resolved_requirements = build_context
                         .resolve(&DEFAULT_BACKEND.requirements, package, build_stack, None)
@@ -580,6 +588,13 @@ impl SourceBuild {
                     .map_err(|err| Error::RequirementsResolve(dependency_sources, err.into()))?
             },
         )
+    }
+
+    fn can_reuse_cached_default_resolution(
+        resolution: &ResolvedRequirements,
+        package: Option<&BuildPackageKey>,
+    ) -> bool {
+        package.is_none() || resolution.build_resolution_graph().is_none()
     }
 
     /// Extract the PEP 517 backend from the `pyproject.toml` or `setup.py` file.
@@ -1318,6 +1333,38 @@ impl Write for Printer {
             }
             Self::Quiet => {}
         }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use uv_distribution_types::Resolution;
+    use uv_types::{BuildResolutionGraph, HashStrategy};
+
+    use super::*;
+
+    #[test]
+    fn marker_restricted_default_resolution_is_not_reused_for_another_package()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let package = BuildPackageKey::new(PackageName::from_str("dep")?, None);
+        let resolution = ResolvedRequirements::new(Resolution::default(), HashStrategy::default())
+            .with_build_resolution_graph(BuildResolutionGraph::default());
+        let graphless_resolution =
+            ResolvedRequirements::new(Resolution::default(), HashStrategy::default());
+
+        assert!(!SourceBuild::can_reuse_cached_default_resolution(
+            &resolution,
+            Some(&package)
+        ));
+        assert!(SourceBuild::can_reuse_cached_default_resolution(
+            &graphless_resolution,
+            Some(&package)
+        ));
+        assert!(SourceBuild::can_reuse_cached_default_resolution(
+            &resolution,
+            None
+        ));
         Ok(())
     }
 }
