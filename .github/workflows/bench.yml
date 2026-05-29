@@ -96,7 +96,7 @@ jobs:
 
   benchmarks-simulated:
     name: "simulated"
-    runs-on: namespace-profile-ubuntu-24-04-4
+    runs-on: namespace-profile-ubuntu-24-04-4;container.privileged=true
     if: ${{ github.repository == 'astral-sh/uv' }}
     timeout-minutes: 20
     steps:
