@@ -607,6 +607,13 @@ mod tests {
         .to_vec()
     }
 
+    fn cloud_sdk_credentials_path() -> String {
+        PathBuf::from("/cloud-sdk")
+            .join("application_default_credentials.json")
+            .to_string_lossy()
+            .into_owned()
+    }
+
     #[tokio::test]
     async fn test_artifact_registry_credentials_from_adc() {
         let provider = ArtifactRegistryProvider::with_signer(
@@ -691,7 +698,7 @@ mod tests {
                 home_dir: None,
             })
             .with_file_read(TestFileRead::new(HashMap::from([(
-                "/cloud-sdk/application_default_credentials.json".to_string(),
+                cloud_sdk_credentials_path(),
                 service_account_credentials(),
             )])));
 
@@ -714,7 +721,7 @@ mod tests {
                 home_dir: None,
             })
             .with_file_read(TestFileRead::new(HashMap::from([(
-                "/cloud-sdk/application_default_credentials.json".to_string(),
+                cloud_sdk_credentials_path(),
                 service_account_credentials(),
             )])));
 
