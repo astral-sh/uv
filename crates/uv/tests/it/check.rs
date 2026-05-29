@@ -61,11 +61,31 @@ fn check_missing_pyproject_toml() -> Result<()> {
 fn check_no_project() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
 
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=4.0"
+        dependencies = []
+    "#})?;
+
     let main_py = context.temp_dir.child("main.py");
     main_py.write_str(indoc! {r"
         x: int = 1
     "})?;
 
+    uv_snapshot!(context.filters(), context.check(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    error: No interpreter found for Python >=4.0 in managed installations or search path
+    ");
+
+    // The unavailable project environment is not initialized when project discovery is disabled.
     uv_snapshot!(context.filters(), context.check().arg("--no-project"), @"
     success: true
     exit_code: 0
@@ -80,6 +100,41 @@ fn check_no_project() -> Result<()> {
 }
 
 #[test]
+fn check_type_error() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r#"
+        name: str = "project"
+        version: int = name
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    error[invalid-assignment]: Object of type `Literal["project"]` is not assignable to `int`
+     --> main.py:2:10
+      |
+    1 | name: str = "project"
+    2 | version: int = name
+      |          ---   ^^^^ Incompatible value of type `Literal["project"]`
+      |          |
+      |          Declared type
+      |
+    info: rule `invalid-assignment` is enabled by default
+
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
 fn check_with_declared_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
