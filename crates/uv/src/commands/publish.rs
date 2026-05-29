@@ -470,8 +470,13 @@ fn trusted_publishing_for_registry(
     }
 }
 
-fn should_skip_prompt(token_store_credentials: bool, artifact_registry_credentials: bool) -> bool {
-    token_store_credentials || artifact_registry_credentials
+fn should_skip_prompt(
+    token_store_credentials: bool,
+    artifact_registry_credentials: bool,
+    keyring_provider: KeyringProviderType,
+) -> bool {
+    token_store_credentials
+        || (artifact_registry_credentials && keyring_provider == KeyringProviderType::Disabled)
 }
 
 async fn gather_credentials(
@@ -525,6 +530,7 @@ async fn gather_credentials(
             &trusted_publishing_token,
             TrustedPublishResult::Configured(..)
         )
+        && keyring_provider == KeyringProviderType::Disabled
         && ArtifactRegistryProvider::is_artifact_registry(&publish_url)
     {
         ArtifactRegistryProvider::default()
@@ -544,6 +550,7 @@ async fn gather_credentials(
                 if should_skip_prompt(
                     token_store.is_known_url(&publish_url),
                     artifact_registry_credentials,
+                    keyring_provider,
                 ) {
                     (None, None)
                 } else {
@@ -773,7 +780,25 @@ mod tests {
 
     #[test]
     fn artifact_registry_only_skips_prompt_with_credentials() {
-        assert!(!should_skip_prompt(false, false));
-        assert!(should_skip_prompt(false, true));
+        assert!(!should_skip_prompt(
+            false,
+            false,
+            KeyringProviderType::Disabled
+        ));
+        assert!(should_skip_prompt(
+            false,
+            true,
+            KeyringProviderType::Disabled
+        ));
+        assert!(!should_skip_prompt(
+            false,
+            true,
+            KeyringProviderType::Subprocess
+        ));
+        assert!(should_skip_prompt(
+            true,
+            true,
+            KeyringProviderType::Subprocess
+        ));
     }
 }

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+#[cfg(not(windows))]
 use std::process::Stdio;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
@@ -7,7 +8,9 @@ use http::header::AUTHORIZATION;
 use reqsign::aws::DefaultSigner as AwsDefaultSigner;
 use reqsign::azure::DefaultSigner as AzureDefaultSigner;
 use reqsign::google::DefaultSigner as GoogleDefaultSigner;
+#[cfg(not(windows))]
 use serde::Deserialize;
+#[cfg(not(windows))]
 use tokio::process::Command;
 use tokio::sync::Mutex;
 use tracing::debug;
@@ -32,6 +35,7 @@ const GOOGLE_ARTIFACT_REGISTRY_CACHE_DURATION: Duration = Duration::from_mins(1)
 const GOOGLE_ARTIFACT_REGISTRY_ADC_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Avoid waiting indefinitely for credentials from the `gcloud` CLI.
+#[cfg(not(windows))]
 const GOOGLE_ARTIFACT_REGISTRY_GCLOUD_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// A provider for authentication credentials for Google Artifact Registry.
@@ -43,15 +47,17 @@ pub struct ArtifactRegistryProvider {
 
 #[derive(Clone, Debug)]
 struct CachedArtifactRegistryCredentials {
-    credentials: Credentials,
+    credentials: Option<Credentials>,
     expires_at: Instant,
 }
 
+#[cfg(not(windows))]
 #[derive(Debug, Deserialize)]
 struct GcloudConfig {
     credential: Option<GcloudCredential>,
 }
 
+#[cfg(not(windows))]
 #[derive(Debug, Deserialize)]
 struct GcloudCredential {
     access_token: Option<String>,
@@ -87,8 +93,8 @@ impl ArtifactRegistryProvider {
 
     /// Returns credentials for Google Artifact Registry, if available.
     ///
-    /// This mirrors the behavior of Google's `keyrings.google-artifactregistry-auth` package:
-    /// Application Default Credentials are preferred, then the active `gcloud` credentials.
+    /// This follows the lookup order of Google's `keyrings.google-artifactregistry-auth` package:
+    /// Application Default Credentials are preferred, then active `gcloud` credentials on Unix.
     pub(crate) async fn credentials_for(&self, url: &Url) -> Option<Credentials> {
         if !Self::is_artifact_registry(url) {
             return None;
@@ -99,7 +105,7 @@ impl ArtifactRegistryProvider {
             .as_ref()
             .filter(|credentials| credentials.expires_at > Instant::now())
         {
-            return Some(credentials.credentials.clone());
+            return credentials.credentials.clone();
         }
 
         let (credentials, cache_duration) = if let Some(credentials) =
@@ -117,13 +123,10 @@ impl ArtifactRegistryProvider {
             (None, GOOGLE_ARTIFACT_REGISTRY_CACHE_DURATION)
         };
 
-        *cached_credentials =
-            credentials
-                .clone()
-                .map(|credentials| CachedArtifactRegistryCredentials {
-                    credentials,
-                    expires_at: Instant::now() + cache_duration,
-                });
+        *cached_credentials = Some(CachedArtifactRegistryCredentials {
+            credentials: credentials.clone(),
+            expires_at: Instant::now() + cache_duration,
+        });
 
         credentials
     }
@@ -167,6 +170,7 @@ impl ArtifactRegistryProvider {
         Self::credentials_from_token(token.to_string())
     }
 
+    #[cfg(not(windows))]
     async fn credentials_from_gcloud() -> Option<(Credentials, Duration)> {
         let mut command = Command::new("gcloud");
         command
@@ -197,6 +201,15 @@ impl ArtifactRegistryProvider {
         Self::credentials_from_gcloud_output(&output.stdout)
     }
 
+    #[cfg(windows)]
+    fn credentials_from_gcloud() -> std::future::Ready<Option<(Credentials, Duration)>> {
+        // The Google Cloud SDK launcher on Windows is a `.cmd` script, which requires shell
+        // execution. Keep Application Default Credentials support, but skip this fallback for now.
+        debug!("Skipping Google Artifact Registry credentials from `gcloud` on Windows");
+        std::future::ready(None)
+    }
+
+    #[cfg(not(windows))]
     fn credentials_from_gcloud_output(output: &[u8]) -> Option<(Credentials, Duration)> {
         let config = serde_json::from_slice::<GcloudConfig>(output)
             .inspect_err(|err| {
@@ -481,6 +494,29 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_artifact_registry_credentials_caches_missing_credentials() {
+        let provider = ArtifactRegistryProvider::with_signer(
+            reqsign::google::default_signer("artifactregistry.googleapis.com")
+                .with_credential_provider(reqsign::google::TokenCredentialProvider::new(
+                    "test-token",
+                )),
+        );
+        *provider.credentials.lock().await = Some(CachedArtifactRegistryCredentials {
+            credentials: None,
+            expires_at: Instant::now() + GOOGLE_ARTIFACT_REGISTRY_CACHE_DURATION,
+        });
+
+        assert_eq!(
+            provider
+                .credentials_for(
+                    &Url::parse("https://us-central1-python.pkg.dev/project/index/simple").unwrap()
+                )
+                .await,
+            None
+        );
+    }
+
     #[test]
     fn test_artifact_registry_credentials_supports_username() {
         assert!(ArtifactRegistryProvider::supports_username(None));
@@ -490,6 +526,7 @@ mod tests {
         assert!(!ArtifactRegistryProvider::supports_username(Some("user")));
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn test_artifact_registry_credentials_from_gcloud_output() {
         assert_eq!(
@@ -514,6 +551,15 @@ mod tests {
             ArtifactRegistryProvider::credentials_from_gcloud_output(
                 br#"{"credential":{"access_token":"test-token","token_expiry":"2000-05-29T00:00:00Z"}}"#
             ),
+            None
+        );
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn test_artifact_registry_credentials_from_gcloud_unsupported_on_windows() {
+        assert_eq!(
+            ArtifactRegistryProvider::credentials_from_gcloud().await,
             None
         );
     }
