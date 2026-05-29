@@ -76,8 +76,48 @@ name = "it"
 path = "tests/it/main.rs"
 
 [[test]]
+name = "build"
+path = "tests/build.rs"
+
+[[test]]
+name = "lock"
+path = "tests/lock.rs"
+
+[[test]]
+name = "lock_scenarios"
+path = "tests/lock_scenarios.rs"
+
+[[test]]
+name = "pip"
+path = "tests/pip.rs"
+
+[[test]]
+name = "pip_compile"
+path = "tests/pip_compile.rs"
+
+[[test]]
+name = "pip_install"
+path = "tests/pip_install.rs"
+
+[[test]]
+name = "project"
+path = "tests/project.rs"
+
+[[test]]
+name = "python"
+path = "tests/python.rs"
+
+[[test]]
+name = "sync"
+path = "tests/sync.rs"
+
+[[test]]
 name = "tool"
 path = "tests/tool.rs"
+
+[[test]]
+name = "workspace"
+path = "tests/workspace.rs"
 
 [features]
 default = ["test-defaults"]
