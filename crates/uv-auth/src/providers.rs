@@ -41,7 +41,7 @@ const GOOGLE_ARTIFACT_REGISTRY_GCLOUD_TIMEOUT: Duration = Duration::from_secs(10
 /// A provider for authentication credentials for Google Artifact Registry.
 #[derive(Clone, Debug)]
 pub struct ArtifactRegistryProvider {
-    signer: GoogleDefaultSigner,
+    signer: Option<GoogleDefaultSigner>,
     credentials: Arc<Mutex<Option<CachedArtifactRegistryCredentials>>>,
 }
 
@@ -67,9 +67,13 @@ struct GcloudCredential {
 /// The shared Google Artifact Registry provider.
 static GOOGLE_ARTIFACT_REGISTRY_PROVIDER: LazyLock<ArtifactRegistryProvider> =
     LazyLock::new(|| ArtifactRegistryProvider {
-        signer: reqsign::google::default_signer("artifactregistry.googleapis.com"),
+        signer: None,
         credentials: Arc::new(Mutex::new(None)),
     });
+
+/// The shared Google Artifact Registry signer.
+static GOOGLE_ARTIFACT_REGISTRY_SIGNER: LazyLock<GoogleDefaultSigner> =
+    LazyLock::new(|| reqsign::google::default_signer("artifactregistry.googleapis.com"));
 
 impl Default for ArtifactRegistryProvider {
     fn default() -> Self {
@@ -146,7 +150,10 @@ impl ArtifactRegistryProvider {
         let (mut parts, ()) = request.into_parts();
         let Ok(result) = tokio::time::timeout(
             GOOGLE_ARTIFACT_REGISTRY_ADC_TIMEOUT,
-            self.signer.sign(&mut parts, None),
+            self.signer
+                .as_ref()
+                .unwrap_or(&GOOGLE_ARTIFACT_REGISTRY_SIGNER)
+                .sign(&mut parts, None),
         )
         .await
         else {
@@ -253,7 +260,7 @@ impl ArtifactRegistryProvider {
     #[cfg(test)]
     pub(crate) fn with_signer(signer: GoogleDefaultSigner) -> Self {
         Self {
-            signer,
+            signer: Some(signer),
             credentials: Arc::new(Mutex::new(None)),
         }
     }
