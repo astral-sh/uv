@@ -15,7 +15,7 @@ license = { workspace = true }
 workspace = true
 
 [package.metadata.cargo-shear]
-# Mirrors uv's self-update feature for integration test cfg gates.
+# The self-update integration tests enable this optional dependency.
 ignored = ["axoupdater"]
 
 [dependencies]
@@ -121,11 +121,8 @@ path = "tests/workspace.rs"
 
 [features]
 default = ["test-defaults"]
-axoupdater = ["dep:axoupdater"]
 native-auth = []
-performance = []
-performance-memory-allocator = []
-self-update = ["axoupdater"]
+self-update = ["dep:axoupdater"]
 tracing-durations-export = ["uv-test/tracing-durations-export"]
 test-defaults = [
   "test-crates-io",
@@ -151,4 +148,3 @@ test-python-managed = []
 test-slow = []
 test-ecosystem = []
 test-windows-registry = []
-windows-gui-bin = []
