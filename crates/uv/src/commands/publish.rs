@@ -6,7 +6,7 @@ use console::Term;
 use owo_colors::OwoColorize;
 use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
-use uv_auth::{Credentials, PyxTokenStore};
+use uv_auth::{ArtifactRegistryProvider, Credentials, PyxTokenStore};
 use uv_cache::Cache;
 use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
@@ -457,6 +457,23 @@ enum Prompt {
 /// otherwise errors without sending the request.
 ///
 /// Returns the publish URL, the username and the password.
+fn trusted_publishing_for_registry(
+    publish_url: &DisplaySafeUrl,
+    trusted_publishing: TrustedPublishing,
+) -> TrustedPublishing {
+    if ArtifactRegistryProvider::is_artifact_registry(publish_url)
+        && matches!(trusted_publishing, TrustedPublishing::Automatic)
+    {
+        TrustedPublishing::Never
+    } else {
+        trusted_publishing
+    }
+}
+
+fn should_skip_prompt(token_store_credentials: bool, artifact_registry_credentials: bool) -> bool {
+    token_store_credentials || artifact_registry_credentials
+}
+
 async fn gather_credentials(
     mut publish_url: DisplaySafeUrl,
     mut username: Option<String>,
@@ -496,19 +513,38 @@ async fn gather_credentials(
         password.as_deref(),
         keyring_provider,
         token_store,
-        trusted_publishing,
+        trusted_publishing_for_registry(&publish_url, trusted_publishing),
         &publish_url,
         oidc_client,
     )
     .await?;
+
+    let artifact_registry_credentials = if username.is_none()
+        && password.is_none()
+        && !matches!(
+            &trusted_publishing_token,
+            TrustedPublishResult::Configured(..)
+        )
+        && ArtifactRegistryProvider::is_artifact_registry(&publish_url)
+    {
+        ArtifactRegistryProvider::default()
+            .has_credentials_for(&publish_url)
+            .await
+    } else {
+        false
+    };
 
     let (username, mut password) =
         if let TrustedPublishResult::Configured(password) = &trusted_publishing_token {
             (Some("__token__".to_string()), Some(password.to_string()))
         } else {
             if username.is_none() && password.is_none() {
-                // Skip prompting for pyx URLs; the auth middleware will handle authentication.
-                if token_store.is_known_url(&publish_url) {
+                // Skip prompting when a built-in provider has credentials; the auth middleware
+                // will handle authentication.
+                if should_skip_prompt(
+                    token_store.is_known_url(&publish_url),
+                    artifact_registry_credentials,
+                ) {
                     (None, None)
                 } else {
                     match prompt {
@@ -533,6 +569,7 @@ async fn gather_credentials(
         && password.is_none()
         && keyring_provider == KeyringProviderType::Disabled
         && !token_store.is_known_url(&publish_url)
+        && !artifact_registry_credentials
     {
         if let TrustedPublishResult::Ignored(err) = trusted_publishing_token {
             // The user has configured something incorrectly:
@@ -712,5 +749,31 @@ mod tests {
             err.to_string(),
             @"The password can't be set both in the publish URL and in the CLI"
         );
+    }
+
+    #[test]
+    fn artifact_registry_skips_automatic_trusted_publishing() {
+        let artifact_registry =
+            DisplaySafeUrl::from_str("https://us-central1-python.pkg.dev/project/index").unwrap();
+        let other_registry = DisplaySafeUrl::from_str("https://example.com").unwrap();
+
+        assert_eq!(
+            trusted_publishing_for_registry(&artifact_registry, TrustedPublishing::Automatic),
+            TrustedPublishing::Never
+        );
+        assert_eq!(
+            trusted_publishing_for_registry(&artifact_registry, TrustedPublishing::Always),
+            TrustedPublishing::Always
+        );
+        assert_eq!(
+            trusted_publishing_for_registry(&other_registry, TrustedPublishing::Automatic),
+            TrustedPublishing::Automatic
+        );
+    }
+
+    #[test]
+    fn artifact_registry_only_skips_prompt_with_credentials() {
+        assert!(!should_skip_prompt(false, false));
+        assert!(should_skip_prompt(false, true));
     }
 }

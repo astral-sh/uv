@@ -1,9 +1,15 @@
 use std::borrow::Cow;
-use std::sync::LazyLock;
+use std::process::Stdio;
+use std::sync::{Arc, LazyLock};
+use std::time::{Duration, Instant};
 
+use http::header::AUTHORIZATION;
 use reqsign::aws::DefaultSigner as AwsDefaultSigner;
 use reqsign::azure::DefaultSigner as AzureDefaultSigner;
-use reqsign::google::DefaultSigner as GcsDefaultSigner;
+use reqsign::google::DefaultSigner as GoogleDefaultSigner;
+use serde::Deserialize;
+use tokio::process::Command;
+use tokio::sync::Mutex;
 use tracing::debug;
 use url::Url;
 
@@ -15,6 +21,230 @@ use crate::Credentials;
 use crate::credentials::Token;
 use crate::index::is_path_prefix;
 use crate::realm::{Realm, RealmRef};
+
+/// The username expected by Google Artifact Registry when using an `OAuth2` access token.
+const GOOGLE_ARTIFACT_REGISTRY_USERNAME: &str = "oauth2accesstoken";
+
+/// Refresh Google Artifact Registry credentials periodically, since access tokens are short-lived.
+const GOOGLE_ARTIFACT_REGISTRY_CACHE_DURATION: Duration = Duration::from_mins(1);
+
+/// Avoid waiting indefinitely for Application Default Credentials from the metadata server.
+const GOOGLE_ARTIFACT_REGISTRY_ADC_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Avoid waiting indefinitely for credentials from the `gcloud` CLI.
+const GOOGLE_ARTIFACT_REGISTRY_GCLOUD_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// A provider for authentication credentials for Google Artifact Registry.
+#[derive(Clone, Debug)]
+pub struct ArtifactRegistryProvider {
+    signer: GoogleDefaultSigner,
+    credentials: Arc<Mutex<Option<CachedArtifactRegistryCredentials>>>,
+}
+
+#[derive(Clone, Debug)]
+struct CachedArtifactRegistryCredentials {
+    credentials: Credentials,
+    expires_at: Instant,
+}
+
+#[derive(Debug, Deserialize)]
+struct GcloudConfig {
+    credential: Option<GcloudCredential>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GcloudCredential {
+    access_token: Option<String>,
+    token_expiry: Option<String>,
+}
+
+/// The shared Google Artifact Registry provider.
+static GOOGLE_ARTIFACT_REGISTRY_PROVIDER: LazyLock<ArtifactRegistryProvider> =
+    LazyLock::new(|| ArtifactRegistryProvider {
+        signer: reqsign::google::default_signer("artifactregistry.googleapis.com"),
+        credentials: Arc::new(Mutex::new(None)),
+    });
+
+impl Default for ArtifactRegistryProvider {
+    fn default() -> Self {
+        GOOGLE_ARTIFACT_REGISTRY_PROVIDER.clone()
+    }
+}
+
+impl ArtifactRegistryProvider {
+    /// Returns `true` if the URL is for Google Artifact Registry.
+    pub fn is_artifact_registry(url: &Url) -> bool {
+        url.scheme() == "https"
+            && url
+                .host_str()
+                .is_some_and(|host| host.ends_with(".pkg.dev"))
+    }
+
+    /// Returns `true` if the username is compatible with Google Artifact Registry credentials.
+    pub(crate) fn supports_username(username: Option<&str>) -> bool {
+        username.is_none_or(|username| username == GOOGLE_ARTIFACT_REGISTRY_USERNAME)
+    }
+
+    /// Returns credentials for Google Artifact Registry, if available.
+    ///
+    /// This mirrors the behavior of Google's `keyrings.google-artifactregistry-auth` package:
+    /// Application Default Credentials are preferred, then the active `gcloud` credentials.
+    pub(crate) async fn credentials_for(&self, url: &Url) -> Option<Credentials> {
+        if !Self::is_artifact_registry(url) {
+            return None;
+        }
+
+        let mut cached_credentials = self.credentials.lock().await;
+        if let Some(credentials) = cached_credentials
+            .as_ref()
+            .filter(|credentials| credentials.expires_at > Instant::now())
+        {
+            return Some(credentials.credentials.clone());
+        }
+
+        let (credentials, cache_duration) = if let Some(credentials) =
+            self.credentials_from_adc(url).await
+        {
+            debug!(
+                "Found Google Artifact Registry credentials from Application Default Credentials"
+            );
+            (Some(credentials), GOOGLE_ARTIFACT_REGISTRY_CACHE_DURATION)
+        } else if let Some((credentials, cache_duration)) = Self::credentials_from_gcloud().await {
+            debug!("Found Google Artifact Registry credentials from gcloud");
+            (Some(credentials), cache_duration)
+        } else {
+            debug!("No Google Artifact Registry credentials found");
+            (None, GOOGLE_ARTIFACT_REGISTRY_CACHE_DURATION)
+        };
+
+        *cached_credentials =
+            credentials
+                .clone()
+                .map(|credentials| CachedArtifactRegistryCredentials {
+                    credentials,
+                    expires_at: Instant::now() + cache_duration,
+                });
+
+        credentials
+    }
+
+    /// Returns `true` if credentials are available for Google Artifact Registry.
+    pub async fn has_credentials_for(&self, url: &Url) -> bool {
+        self.credentials_for(url).await.is_some()
+    }
+
+    async fn credentials_from_adc(&self, url: &Url) -> Option<Credentials> {
+        let request = http::Request::get(url.as_str())
+            .body(())
+            .inspect_err(|err| {
+                debug!("Failed to build Google Artifact Registry credential request: {err}");
+            })
+            .ok()?;
+        let (mut parts, ()) = request.into_parts();
+        let Ok(result) = tokio::time::timeout(
+            GOOGLE_ARTIFACT_REGISTRY_ADC_TIMEOUT,
+            self.signer.sign(&mut parts, None),
+        )
+        .await
+        else {
+            debug!("Timed out retrieving Google Artifact Registry Application Default Credentials");
+            return None;
+        };
+        result
+            .inspect_err(|err| {
+                debug!(
+                    "Failed to retrieve Google Artifact Registry Application Default Credentials: {err}"
+                );
+            })
+            .ok()?;
+
+        let token = parts
+            .headers
+            .get(AUTHORIZATION)?
+            .to_str()
+            .ok()?
+            .strip_prefix("Bearer ")?;
+        Self::credentials_from_token(token.to_string())
+    }
+
+    async fn credentials_from_gcloud() -> Option<(Credentials, Duration)> {
+        let mut command = Command::new("gcloud");
+        command
+            .args(["config", "config-helper", "--format=json(credential)"])
+            .stdin(Stdio::null())
+            .kill_on_drop(true);
+        let output =
+            tokio::time::timeout(GOOGLE_ARTIFACT_REGISTRY_GCLOUD_TIMEOUT, command.output())
+                .await
+                .inspect_err(|_| {
+                    debug!(
+                        "Timed out retrieving Google Artifact Registry credentials from `gcloud`"
+                    );
+                })
+                .ok()?
+                .inspect_err(|err| {
+                    debug!("Failed to run `gcloud config config-helper`: {err}");
+                })
+                .ok()?;
+        if !output.status.success() {
+            debug!(
+                "`gcloud config config-helper` exited with status {}",
+                output.status
+            );
+            return None;
+        }
+
+        Self::credentials_from_gcloud_output(&output.stdout)
+    }
+
+    fn credentials_from_gcloud_output(output: &[u8]) -> Option<(Credentials, Duration)> {
+        let config = serde_json::from_slice::<GcloudConfig>(output)
+            .inspect_err(|err| {
+                debug!("Failed to parse credentials from `gcloud config config-helper`: {err}");
+            })
+            .ok()?;
+        let credential = config.credential?;
+        let token_expiry = credential
+            .token_expiry?
+            .parse::<jiff::Timestamp>()
+            .inspect_err(|err| {
+                debug!("Failed to parse credentials from `gcloud config config-helper`: {err}");
+            })
+            .ok()?;
+        let now = jiff::Timestamp::now();
+        if token_expiry <= now {
+            debug!("Ignoring expired credentials from `gcloud config config-helper`");
+            return None;
+        }
+        let cache_duration = token_expiry
+            .duration_since(now)
+            .unsigned_abs()
+            .min(GOOGLE_ARTIFACT_REGISTRY_CACHE_DURATION);
+        Some((
+            Self::credentials_from_token(credential.access_token?)?,
+            cache_duration,
+        ))
+    }
+
+    fn credentials_from_token(token: String) -> Option<Credentials> {
+        if token.is_empty() {
+            return None;
+        }
+
+        Some(Credentials::basic(
+            Some(GOOGLE_ARTIFACT_REGISTRY_USERNAME.to_string()),
+            Some(token),
+        ))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_signer(signer: GoogleDefaultSigner) -> Self {
+        Self {
+            signer,
+            credentials: Arc::new(Mutex::new(None)),
+        }
+    }
+}
 
 /// The [`Realm`] for the Hugging Face platform.
 static HUGGING_FACE_REALM: LazyLock<Realm> = LazyLock::new(|| {
@@ -141,7 +371,7 @@ impl GcsEndpointProvider {
     ///
     /// This is potentially expensive as it may invoke credential helpers, so the result
     /// should be cached.
-    pub(crate) fn create_signer() -> GcsDefaultSigner {
+    pub(crate) fn create_signer() -> GoogleDefaultSigner {
         reqsign::google::default_signer("storage.googleapis.com")
     }
 }
@@ -203,6 +433,90 @@ fn is_endpoint_url(url: &Url, endpoint_url: &Url) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn test_artifact_registry_credentials_from_adc() {
+        let provider = ArtifactRegistryProvider::with_signer(
+            reqsign::google::default_signer("artifactregistry.googleapis.com")
+                .with_credential_provider(reqsign::google::TokenCredentialProvider::new(
+                    "test-token",
+                )),
+        );
+
+        assert_eq!(
+            provider
+                .credentials_for(
+                    &Url::parse("https://us-central1-python.pkg.dev/project/index/simple").unwrap()
+                )
+                .await,
+            Some(Credentials::basic(
+                Some("oauth2accesstoken".to_string()),
+                Some("test-token".to_string())
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_artifact_registry_credentials_ignores_other_hosts() {
+        let provider = ArtifactRegistryProvider::with_signer(
+            reqsign::google::default_signer("artifactregistry.googleapis.com")
+                .with_credential_provider(reqsign::google::TokenCredentialProvider::new(
+                    "test-token",
+                )),
+        );
+
+        assert_eq!(
+            provider
+                .credentials_for(&Url::parse("https://python.pkg.dev.example.com/simple").unwrap())
+                .await,
+            None
+        );
+        assert_eq!(
+            provider
+                .credentials_for(
+                    &Url::parse("http://us-central1-python.pkg.dev/project/index/simple").unwrap()
+                )
+                .await,
+            None
+        );
+    }
+
+    #[test]
+    fn test_artifact_registry_credentials_supports_username() {
+        assert!(ArtifactRegistryProvider::supports_username(None));
+        assert!(ArtifactRegistryProvider::supports_username(Some(
+            "oauth2accesstoken"
+        )));
+        assert!(!ArtifactRegistryProvider::supports_username(Some("user")));
+    }
+
+    #[test]
+    fn test_artifact_registry_credentials_from_gcloud_output() {
+        assert_eq!(
+            ArtifactRegistryProvider::credentials_from_gcloud_output(
+                br#"{"credential":{"access_token":"test-token","token_expiry":"2099-05-29T00:00:00Z"}}"#
+            ),
+            Some((
+                Credentials::basic(
+                    Some("oauth2accesstoken".to_string()),
+                    Some("test-token".to_string())
+                ),
+                GOOGLE_ARTIFACT_REGISTRY_CACHE_DURATION
+            ))
+        );
+        assert_eq!(
+            ArtifactRegistryProvider::credentials_from_gcloud_output(
+                br#"{"credential":{"access_token":"test-token"}}"#
+            ),
+            None
+        );
+        assert_eq!(
+            ArtifactRegistryProvider::credentials_from_gcloud_output(
+                br#"{"credential":{"access_token":"test-token","token_expiry":"2000-05-29T00:00:00Z"}}"#
+            ),
+            None
+        );
+    }
 
     #[test]
     fn test_endpoint_url_matches_path_prefix() {

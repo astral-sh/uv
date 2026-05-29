@@ -991,8 +991,20 @@ jobs:
         with:
           credentials_json: "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}"
 
+      - name: "Run GCP registry test with built-in authentication"
+        run: ./uv run --no-project -p "${PYTHON_VERSION}" scripts/registries-test.py --uv ./uv --color always --auth-method ambient
+        env:
+          RUST_LOG: uv=debug
+          UV_TEST_GCP_URL: ${{ secrets.UV_TEST_GCP_URL }}
+
       - name: "Set up GCP SDK"
         uses: "google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db"
+
+      - name: "Run GCP registry test with gcloud authentication"
+        run: env -u GOOGLE_APPLICATION_CREDENTIALS ./uv run --no-project -p "${PYTHON_VERSION}" scripts/registries-test.py --uv ./uv --color always --auth-method ambient
+        env:
+          RUST_LOG: uv=debug
+          UV_TEST_GCP_URL: ${{ secrets.UV_TEST_GCP_URL }}
 
       - name: "Get GCP Artifact Registry token"
         id: get_token
