@@ -426,12 +426,35 @@ jobs:
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.target }}
+          # Match the uv wheel build above: i686 must cross-compile in a 64-bit container.
+          container: quay.io/pypa/manylinux2014
           manylinux: 2_17
           docker-options: -e CARGO
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
+            # Install the 32-bit cross target on 64-bit (noop if we're already on 64-bit)
+            rustup target add ${{ matrix.target }}
+            # If we're running on rhel centos, install needed packages.
+            if command -v yum &> /dev/null; then
+                yum update -y && yum install -y pkgconfig libatomic
+
+                # Install cross build requirements
+                if [[ "${{ matrix.target }}" == "i686-unknown-linux-gnu" ]]; then
+                  yum install -y glibc-devel.i686 libstdc++-devel.i686 libatomic.i686
+                fi
+
+                # Symlink libatomic so the linker can find it with -latomic.
+                if [[ -f "/usr/lib/libatomic.so.1" && ! -f "/usr/lib/libatomic.so" ]]; then
+                    ln -s /usr/lib/libatomic.so.1 /usr/lib/libatomic.so
+                fi
+            else
+                # If we're running on debian-based system.
+                apt update -y && apt-get install -y pkg-config
+            fi
+            # Install cargo extensions as a static musl binary so it runs in any container.
             scripts/install-cargo-extensions.sh
         env:
+          CC: ${{ matrix.cc }}
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel uv-build"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
