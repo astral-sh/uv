@@ -89,26 +89,31 @@ To run all workspace tests:
 cargo nextest run --workspace
 ```
 
-When passing Cargo compilation options such as `--features`, `--no-default-features`, or
-`--cargo-profile`, use `./scripts/run-integration-tests.sh` to apply those options to both the uv
-executable and the tests:
+When passing Cargo compilation options that affect the uv executable, set `UV_TEST_UV_BUILD_ARGS`.
+These use `cargo build` syntax, so use `--profile` instead of nextest's `--cargo-profile`. Pass test
+harness options to nextest as usual. Some options may need to be passed in both places:
 
 ```shell
-./scripts/run-integration-tests.sh --features <features>
+UV_TEST_UV_BUILD_ARGS='--no-default-features --features <uv-features>' \
+  cargo nextest run --package uv-integration --features <test-features>
 ```
+
+On Unix, the nextest setup hook reuses the previously built uv executable when its inputs are
+unchanged. Editing an integration test only rebuilds its test harness. Editing uv or one of its
+dependencies rebuilds the executable in the same nextest invocation.
 
 To run all tests and accept snapshot changes:
 
 ```shell
 cargo build --package uv --bin uv --features uv-publish/test
-UV_TEST_BIN="$PWD/target/debug/uv" cargo insta test --accept --test-runner nextest --package uv-integration
+UV_TEST_BIN="$PWD/target/debug/uv" cargo insta test --accept --test-runner nextest
 ```
 
 To update snapshots for a specific test:
 
 ```shell
 cargo build --package uv --bin uv --features uv-publish/test
-UV_TEST_BIN="$PWD/target/debug/uv" cargo insta test --accept --test-runner nextest --package uv-integration -- <test_name>
+UV_TEST_BIN="$PWD/target/debug/uv" cargo insta test --accept --test-runner nextest -- <test_name>
 ```
 
 On Windows, use `target/debug/uv.exe` for `UV_TEST_BIN`.
