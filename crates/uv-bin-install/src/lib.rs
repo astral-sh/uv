@@ -183,13 +183,14 @@ impl Binary {
                 Ok(vec![canonical_url])
             }
             Self::Ty => {
-                if let Some(astral_mirror_url) = astral_mirror_url
-                    && let Some(suffix) = canonical_url.as_str().strip_prefix(TY_GITHUB_URL_PREFIX)
-                {
-                    let mirror_base = astral_mirror_base_url(Some(astral_mirror_url));
+                if let Some(suffix) = canonical_url.as_str().strip_prefix(TY_GITHUB_URL_PREFIX) {
+                    let mirror_base = astral_mirror_base_url(astral_mirror_url);
                     let mirror = format!("{mirror_base}{TY_MIRROR_SUFFIX}{suffix}");
                     let mirror_url = parse_url(mirror)?;
-                    return Ok(vec![mirror_url]);
+                    if astral_mirror_url.is_some() {
+                        return Ok(vec![mirror_url]);
+                    }
+                    return Ok(vec![mirror_url, canonical_url]);
                 }
                 Ok(vec![canonical_url])
             }
