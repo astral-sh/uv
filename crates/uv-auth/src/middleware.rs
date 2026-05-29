@@ -718,7 +718,12 @@ impl AuthMiddleware {
         } else {
             (FetchUrl::Realm(Realm::from(&**url)), username)
         };
-        if let Some(credentials) = self.cache().fetches.register_or_wait(&key).await {
+        // Google Artifact Registry credentials have their own expiry-aware cache. Avoid storing a
+        // miss for the entire invocation so a transient ADC or `gcloud` failure can be retried.
+        let memoize_fetch = !ArtifactRegistryProvider::is_artifact_registry(url);
+        if memoize_fetch
+            && let Some(credentials) = self.cache().fetches.register_or_wait(&key).await
+        {
             if credentials.is_some() {
                 trace!("Using credentials from previous fetch for {}", key.0);
             } else {
@@ -980,7 +985,9 @@ impl AuthMiddleware {
         let credentials = credentials.map(Arc::new);
 
         // Register the fetch for this key
-        self.cache().fetches.done(key, credentials.clone());
+        if memoize_fetch {
+            self.cache().fetches.done(key, credentials.clone());
+        }
 
         credentials
     }
@@ -1524,6 +1531,39 @@ mod tests {
                 )
                 .await
                 .is_none()
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_artifact_registry_credentials_retry_missing_credentials() -> Result<(), Error> {
+        let url = Url::parse("https://us-central1-python.pkg.dev/project/index/simple")?;
+        let provider = ArtifactRegistryProvider::with_signer(
+            reqsign::google::default_signer("artifactregistry.googleapis.com")
+                .with_credential_provider(reqsign::google::TokenCredentialProvider::new(
+                    "test-token",
+                )),
+        );
+        provider.cache_missing_credentials().await;
+        let middleware = AuthMiddleware::new()
+            .with_cache(CredentialsCache::new())
+            .with_artifact_registry_provider(provider.clone());
+
+        assert!(
+            middleware
+                .fetch_credentials(None, DisplaySafeUrl::ref_cast(&url), None, AuthPolicy::Auto)
+                .await
+                .is_none()
+        );
+
+        provider.clear_cached_credentials().await;
+
+        assert!(
+            middleware
+                .fetch_credentials(None, DisplaySafeUrl::ref_cast(&url), None, AuthPolicy::Auto)
+                .await
+                .is_some()
         );
 
         Ok(())

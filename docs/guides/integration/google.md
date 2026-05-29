@@ -57,9 +57,9 @@ You can also authenticate to Artifact Registry using the
 Because these two packages are required to authenticate to Artifact Registry, they must be
 pre-installed from a source other than Artifact Registry.
 
-The `keyrings.google-artifactregistry-auth` plugin wraps
-[gcloud CLI](https://cloud.google.com/sdk/gcloud) to generate short-lived access tokens, securely
-store them in system keyring, and refresh them when they are expired.
+The `keyrings.google-artifactregistry-auth` plugin retrieves short-lived access tokens from
+Application Default Credentials or, as a fallback, active
+[`gcloud`](https://cloud.google.com/sdk/gcloud) credentials.
 
 uv only supports using the `keyring` package in
 [subprocess mode](../../reference/settings.md#keyring-provider). The `keyring` executable must be in

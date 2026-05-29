@@ -1,4 +1,6 @@
 use std::borrow::Cow;
+use std::error::Error as _;
+use std::path::PathBuf;
 #[cfg(not(windows))]
 use std::process::Stdio;
 use std::sync::{Arc, LazyLock};
@@ -7,7 +9,9 @@ use std::time::{Duration, Instant};
 use http::header::AUTHORIZATION;
 use reqsign::aws::DefaultSigner as AwsDefaultSigner;
 use reqsign::azure::DefaultSigner as AzureDefaultSigner;
+use reqsign::google::Credential as GoogleCredential;
 use reqsign::google::DefaultSigner as GoogleDefaultSigner;
+use reqsign::{Context, ProvideCredential};
 #[cfg(not(windows))]
 use serde::Deserialize;
 #[cfg(not(windows))]
@@ -27,6 +31,13 @@ use crate::realm::{Realm, RealmRef};
 
 /// The username expected by Google Artifact Registry when using an `OAuth2` access token.
 const GOOGLE_ARTIFACT_REGISTRY_USERNAME: &str = "oauth2accesstoken";
+
+/// The environment variable containing the path to explicit Google Application Default
+/// Credentials.
+const GOOGLE_APPLICATION_CREDENTIALS: &str = "GOOGLE_APPLICATION_CREDENTIALS";
+
+/// The environment variable containing the path to the Google Cloud SDK configuration directory.
+const GOOGLE_CLOUD_SDK_CONFIG: &str = "CLOUDSDK_CONFIG";
 
 /// Refresh Google Artifact Registry credentials periodically, since access tokens are short-lived.
 const GOOGLE_ARTIFACT_REGISTRY_CACHE_DURATION: Duration = Duration::from_mins(1);
@@ -72,8 +83,94 @@ static GOOGLE_ARTIFACT_REGISTRY_PROVIDER: LazyLock<ArtifactRegistryProvider> =
     });
 
 /// The shared Google Artifact Registry signer.
-static GOOGLE_ARTIFACT_REGISTRY_SIGNER: LazyLock<GoogleDefaultSigner> =
-    LazyLock::new(|| reqsign::google::default_signer("artifactregistry.googleapis.com"));
+static GOOGLE_ARTIFACT_REGISTRY_SIGNER: LazyLock<GoogleDefaultSigner> = LazyLock::new(|| {
+    reqsign::google::default_signer("artifactregistry.googleapis.com")
+        .with_credential_provider(ArtifactRegistryCredentialProvider)
+});
+
+/// A Google Application Default Credentials provider that preserves the documented lookup order.
+///
+/// Unlike the default `reqsign` provider, this provider does not fall through to another identity
+/// when a configured credentials file exists but cannot be loaded.
+#[derive(Clone, Copy, Debug)]
+struct ArtifactRegistryCredentialProvider;
+
+impl ProvideCredential for ArtifactRegistryCredentialProvider {
+    type Credential = GoogleCredential;
+
+    async fn provide_credential(
+        &self,
+        context: &Context,
+    ) -> reqsign::Result<Option<Self::Credential>> {
+        if let Some(path) = context
+            .env_var(GOOGLE_APPLICATION_CREDENTIALS)
+            .filter(|path| !path.is_empty())
+        {
+            return reqsign::google::FileCredentialProvider::new(path)
+                .provide_credential(context)
+                .await;
+        }
+
+        if let Some(path) = google_cloud_sdk_adc_path(context) {
+            match context.file_read(&path).await {
+                Ok(content) => {
+                    return reqsign::google::StaticCredentialProvider::new(
+                        String::from_utf8_lossy(&content).into_owned(),
+                    )
+                    .provide_credential(context)
+                    .await;
+                }
+                Err(err) if error_is_not_found(&err) => {}
+                Err(err) => return Err(err),
+            }
+        }
+
+        reqsign::google::VmMetadataCredentialProvider::new()
+            .provide_credential(context)
+            .await
+    }
+}
+
+fn google_cloud_sdk_adc_path(context: &Context) -> Option<String> {
+    let config_dir = if let Some(path) = context
+        .env_var(GOOGLE_CLOUD_SDK_CONFIG)
+        .filter(|path| !path.is_empty())
+    {
+        PathBuf::from(path)
+    } else if let Some(path) = context.env_var("APPDATA").filter(|path| !path.is_empty()) {
+        PathBuf::from(path).join("gcloud")
+    } else if let Some(path) = context
+        .env_var("XDG_CONFIG_HOME")
+        .filter(|path| !path.is_empty())
+    {
+        PathBuf::from(path).join("gcloud")
+    } else if let Some(path) = context.env_var("HOME").filter(|path| !path.is_empty()) {
+        PathBuf::from(path).join(".config").join("gcloud")
+    } else {
+        return None;
+    };
+
+    Some(
+        config_dir
+            .join("application_default_credentials.json")
+            .to_string_lossy()
+            .into_owned(),
+    )
+}
+
+fn error_is_not_found(err: &reqsign::Error) -> bool {
+    let mut source = err.source();
+    while let Some(err) = source {
+        if err
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound)
+        {
+            return true;
+        }
+        source = err.source();
+    }
+    false
+}
 
 impl Default for ArtifactRegistryProvider {
     fn default() -> Self {
@@ -112,6 +209,8 @@ impl ArtifactRegistryProvider {
             return credentials.credentials.clone();
         }
 
+        let explicit_adc =
+            std::env::var_os(GOOGLE_APPLICATION_CREDENTIALS).is_some_and(|path| !path.is_empty());
         let (credentials, cache_duration) = if let Some(credentials) =
             self.credentials_from_adc(url).await
         {
@@ -119,6 +218,11 @@ impl ArtifactRegistryProvider {
                 "Found Google Artifact Registry credentials from Application Default Credentials"
             );
             (Some(credentials), GOOGLE_ARTIFACT_REGISTRY_CACHE_DURATION)
+        } else if explicit_adc {
+            debug!(
+                "Skipping Google Artifact Registry credentials from gcloud because explicit Application Default Credentials are configured"
+            );
+            (None, GOOGLE_ARTIFACT_REGISTRY_CACHE_DURATION)
         } else if let Some((credentials, cache_duration)) = Self::credentials_from_gcloud().await {
             debug!("Found Google Artifact Registry credentials from gcloud");
             (Some(credentials), cache_duration)
@@ -263,6 +367,19 @@ impl ArtifactRegistryProvider {
             signer: Some(signer),
             credentials: Arc::new(Mutex::new(None)),
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn cache_missing_credentials(&self) {
+        *self.credentials.lock().await = Some(CachedArtifactRegistryCredentials {
+            credentials: None,
+            expires_at: Instant::now() + GOOGLE_ARTIFACT_REGISTRY_CACHE_DURATION,
+        });
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn clear_cached_credentials(&self) {
+        *self.credentials.lock().await = None;
     }
 }
 
@@ -452,7 +569,43 @@ fn is_endpoint_url(url: &Url, endpoint_url: &Url) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
+    use reqsign::{FileRead, StaticEnv};
+
     use super::*;
+
+    #[derive(Clone, Debug, Default)]
+    struct TestFileRead {
+        files: Arc<HashMap<String, Vec<u8>>>,
+    }
+
+    impl TestFileRead {
+        fn new(files: HashMap<String, Vec<u8>>) -> Self {
+            Self {
+                files: Arc::new(files),
+            }
+        }
+    }
+
+    impl FileRead for TestFileRead {
+        async fn file_read(&self, path: &str) -> reqsign::Result<Vec<u8>> {
+            self.files.get(path).cloned().ok_or_else(|| {
+                reqsign::Error::unexpected("test credential file not found").with_source(
+                    std::io::Error::new(std::io::ErrorKind::NotFound, "test credential file"),
+                )
+            })
+        }
+    }
+
+    fn service_account_credentials() -> Vec<u8> {
+        br#"{
+            "type": "service_account",
+            "private_key": "-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----",
+            "client_email": "test@example.iam.gserviceaccount.com"
+        }"#
+        .to_vec()
+    }
 
     #[tokio::test]
     async fn test_artifact_registry_credentials_from_adc() {
@@ -509,10 +662,7 @@ mod tests {
                     "test-token",
                 )),
         );
-        *provider.credentials.lock().await = Some(CachedArtifactRegistryCredentials {
-            credentials: None,
-            expires_at: Instant::now() + GOOGLE_ARTIFACT_REGISTRY_CACHE_DURATION,
-        });
+        provider.cache_missing_credentials().await;
 
         assert_eq!(
             provider
@@ -521,6 +671,64 @@ mod tests {
                 )
                 .await,
             None
+        );
+    }
+
+    #[tokio::test]
+    async fn test_artifact_registry_credentials_fail_closed_for_explicit_adc() {
+        let context = Context::new()
+            .with_env(StaticEnv {
+                envs: HashMap::from([
+                    (
+                        GOOGLE_APPLICATION_CREDENTIALS.to_string(),
+                        "/missing/credentials.json".to_string(),
+                    ),
+                    (
+                        GOOGLE_CLOUD_SDK_CONFIG.to_string(),
+                        "/cloud-sdk".to_string(),
+                    ),
+                ]),
+                home_dir: None,
+            })
+            .with_file_read(TestFileRead::new(HashMap::from([(
+                "/cloud-sdk/application_default_credentials.json".to_string(),
+                service_account_credentials(),
+            )])));
+
+        assert!(
+            ArtifactRegistryCredentialProvider
+                .provide_credential(&context)
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_artifact_registry_credentials_respect_cloud_sdk_config() {
+        let context = Context::new()
+            .with_env(StaticEnv {
+                envs: HashMap::from([(
+                    GOOGLE_CLOUD_SDK_CONFIG.to_string(),
+                    "/cloud-sdk".to_string(),
+                )]),
+                home_dir: None,
+            })
+            .with_file_read(TestFileRead::new(HashMap::from([(
+                "/cloud-sdk/application_default_credentials.json".to_string(),
+                service_account_credentials(),
+            )])));
+
+        let credentials = ArtifactRegistryCredentialProvider
+            .provide_credential(&context)
+            .await
+            .expect("Credentials should load")
+            .expect("Credentials should exist");
+        assert_eq!(
+            credentials
+                .service_account
+                .expect("Credentials should contain service account")
+                .client_email,
+            "test@example.iam.gserviceaccount.com"
         );
     }
 
