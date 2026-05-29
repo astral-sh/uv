@@ -281,43 +281,45 @@ impl ArtifactRegistryProvider {
         Self::credentials_from_token(token.to_string())
     }
 
-    #[cfg(not(windows))]
     async fn credentials_from_gcloud() -> Option<(Credentials, Duration)> {
-        let mut command = Command::new("gcloud");
-        command
-            .args(["config", "config-helper", "--format=json(credential)"])
-            .stdin(Stdio::null())
-            .kill_on_drop(true);
-        let output =
-            tokio::time::timeout(GOOGLE_ARTIFACT_REGISTRY_GCLOUD_TIMEOUT, command.output())
-                .await
-                .inspect_err(|_| {
-                    debug!(
-                        "Timed out retrieving Google Artifact Registry credentials from `gcloud`"
-                    );
-                })
-                .ok()?
-                .inspect_err(|err| {
-                    debug!("Failed to run `gcloud config config-helper`: {err}");
-                })
-                .ok()?;
-        if !output.status.success() {
-            debug!(
-                "`gcloud config config-helper` exited with status {}",
-                output.status
-            );
-            return None;
+        #[cfg(windows)]
+        {
+            // The Google Cloud SDK launcher on Windows is a `.cmd` script, which requires shell
+            // execution. Keep Application Default Credentials support, but skip this fallback for now.
+            debug!("Skipping Google Artifact Registry credentials from `gcloud` on Windows");
+            None
         }
 
-        Self::credentials_from_gcloud_output(&output.stdout)
-    }
+        #[cfg(not(windows))]
+        {
+            let mut command = Command::new("gcloud");
+            command
+                .args(["config", "config-helper", "--format=json(credential)"])
+                .stdin(Stdio::null())
+                .kill_on_drop(true);
+            let output = tokio::time::timeout(
+                GOOGLE_ARTIFACT_REGISTRY_GCLOUD_TIMEOUT,
+                command.output(),
+            )
+            .await
+            .inspect_err(|_| {
+                debug!("Timed out retrieving Google Artifact Registry credentials from `gcloud`");
+            })
+            .ok()?
+            .inspect_err(|err| {
+                debug!("Failed to run `gcloud config config-helper`: {err}");
+            })
+            .ok()?;
+            if !output.status.success() {
+                debug!(
+                    "`gcloud config config-helper` exited with status {}",
+                    output.status
+                );
+                return None;
+            }
 
-    #[cfg(windows)]
-    fn credentials_from_gcloud() -> std::future::Ready<Option<(Credentials, Duration)>> {
-        // The Google Cloud SDK launcher on Windows is a `.cmd` script, which requires shell
-        // execution. Keep Application Default Credentials support, but skip this fallback for now.
-        debug!("Skipping Google Artifact Registry credentials from `gcloud` on Windows");
-        std::future::ready(None)
+            Self::credentials_from_gcloud_output(&output.stdout)
+        }
     }
 
     #[cfg(not(windows))]
