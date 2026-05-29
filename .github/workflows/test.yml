@@ -59,7 +59,10 @@ jobs:
         # run gnome-keyring with 'foobar' as password for the login keyring
         # this will create a new login keyring and unlock it
         # the login password doesn't matter, but the keyring must be unlocked for the tests to work
-        run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'foobar'
+        run: |
+          export DBUS_SESSION_BUS_ADDRESS="$(dbus-daemon --session --fork --print-address=1)"
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+          gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'foobar'
 
       - name: "Create XFS filesystem"
         run: |
