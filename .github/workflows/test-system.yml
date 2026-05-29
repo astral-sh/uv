@@ -504,7 +504,7 @@ jobs:
   system-test-windows-python-310:
     timeout-minutes: 10
     name: "python3.10 on windows x86-64"
-    runs-on: windows-latest
+    runs-on: namespace-profile-windows-2022-x86-64-4
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -528,7 +528,7 @@ jobs:
   system-test-windows-x86_64-python-310:
     timeout-minutes: 10
     name: "python3.10 on windows x86"
-    runs-on: windows-latest
+    runs-on: namespace-profile-windows-2022-x86-64-4
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -553,7 +553,7 @@ jobs:
   system-test-windows-x86_64-python-313:
     timeout-minutes: 10
     name: "python3.13 on windows x86-64"
-    runs-on: windows-latest
+    runs-on: namespace-profile-windows-2022-x86-64-4
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -624,7 +624,7 @@ jobs:
   system-test-choco:
     timeout-minutes: 10
     name: "python3.9 via chocolatey"
-    runs-on: windows-latest
+    runs-on: namespace-profile-windows-2022-x86-64-4
     env:
       TEST_PYTHON_VERSION: "3.9.13"
     steps:
@@ -737,7 +737,7 @@ jobs:
           - {
               os: "windows",
               target: "windows-x86_64",
-              runner: "windows-latest",
+              runner: "namespace-profile-windows-2022-x86-64-4",
               arch: "x86-64",
             }
           - {
@@ -819,7 +819,7 @@ jobs:
   system-test-windows-embedded-python-310:
     timeout-minutes: 10
     name: "embedded python3.10 on windows x86-64"
-    runs-on: windows-latest
+    runs-on: namespace-profile-windows-2022-x86-64-4
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:

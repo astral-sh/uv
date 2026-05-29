@@ -226,7 +226,7 @@ jobs:
   integration-test-free-threaded-windows-x86_64:
     name: "free-threaded on windows"
     timeout-minutes: 10
-    runs-on: windows-latest
+    runs-on: namespace-profile-windows-2022-x86-64-4
 
     steps:
       - name: "Download binary"
@@ -358,7 +358,7 @@ jobs:
   integration-test-windows-python-install-manager:
     name: "windows python install manager"
     timeout-minutes: 10
-    runs-on: windows-latest
+    runs-on: namespace-profile-windows-2022-x86-64-4
 
     steps:
       - name: "Download binary"
@@ -382,7 +382,7 @@ jobs:
   integration-test-windows-registry:
     name: "windows registry"
     timeout-minutes: 10
-    runs-on: windows-latest
+    runs-on: namespace-profile-windows-2022-x86-64-4
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -498,7 +498,7 @@ jobs:
   integration-test-pypy-windows-x86_64:
     name: "pypy on windows"
     timeout-minutes: 10
-    runs-on: windows-latest
+    runs-on: namespace-profile-windows-2022-x86-64-4
 
     steps:
       - name: "Download binary"
@@ -627,7 +627,7 @@ jobs:
   integration-test-graalpy-windows-x86_64:
     name: "graalpy on windows"
     timeout-minutes: 10
-    runs-on: windows-latest
+    runs-on: namespace-profile-windows-2022-x86-64-4
 
     steps:
       - name: "Download binary"
@@ -733,7 +733,7 @@ jobs:
   integration-test-pyodide-windows:
     name: "pyodide on windows"
     timeout-minutes: 10
-    runs-on: windows-latest
+    runs-on: namespace-profile-windows-2022-x86-64-4
     # Github Actions Windows runner uses D drive as pwd.
     # Pyodide CLI has an issue running cross-drive,
     # So ensure that cache and Pyodide paths are on D drive as well.
@@ -896,9 +896,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: windows-2022
+          - runner: namespace-profile-windows-2022-x86-64-4
             wsl-version: 1
-          - runner: windows-2025
+          - runner: namespace-profile-windows-2022-x86-64-4
             wsl-version: 2
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

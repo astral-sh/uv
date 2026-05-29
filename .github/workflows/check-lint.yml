@@ -116,7 +116,7 @@ jobs:
     name: "clippy on windows"
     timeout-minutes: 15
     if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
-    runs-on: windows-latest
+    runs-on: namespace-profile-windows-2022-x86-64-4
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
