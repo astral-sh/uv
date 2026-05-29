@@ -22,7 +22,7 @@ use uv_cli::{
     ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs, VersionBumpSpec, VersionFormat,
 };
 use uv_cli::{
-    AuthorFrom, BuildArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
+    AuthorFrom, BuildArgs, CheckArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
     ResolverInstallerArgs, ToolUpgradeArgs,
     options::{
         Flag, FlagSource, check_conflicts, flag, resolve_flag, resolve_flag_pair,
@@ -2738,6 +2738,123 @@ impl FormatSettings {
             exclude_newer: exclude_newer.map(|v| v.timestamp()),
             no_project,
             show_version,
+        }
+    }
+}
+
+/// The resolved settings to use for a `check` invocation.
+#[derive(Debug, Clone)]
+pub(crate) struct CheckSettings {
+    pub(crate) extras: ExtrasSpecification,
+    pub(crate) groups: DependencyGroups,
+    pub(crate) lock_check: LockCheck,
+    pub(crate) frozen: Option<FrozenSource>,
+    pub(crate) no_sync: bool,
+    pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: PythonInstallMirrors,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) extra_args: Vec<String>,
+    pub(crate) version: Option<String>,
+    pub(crate) no_project: bool,
+    pub(crate) show_version: bool,
+    pub(crate) malware_settings: MalwareCheckSettings,
+}
+
+impl CheckSettings {
+    /// Resolve the [`CheckSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(
+        args: CheckArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
+        let CheckArgs {
+            extra,
+            all_extras,
+            no_extra,
+            no_all_extras,
+            dev,
+            no_dev,
+            only_dev,
+            group,
+            no_group,
+            no_default_groups,
+            only_group,
+            all_groups,
+            locked,
+            frozen,
+            no_sync,
+            python,
+            version,
+            extra_args,
+            no_project,
+            show_version,
+            installer,
+            build,
+            refresh,
+        } = args;
+
+        let filesystem_install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
+        check_conflicts(locked, frozen);
+
+        let (dev, no_dev) = resolve_flag_pair(
+            dev,
+            no_dev,
+            "dev",
+            "no-dev",
+            Some(environment.dev),
+            Some(environment.no_dev),
+        );
+        let settings = ResolverInstallerSettings::combine(
+            resolver_installer_options(installer, build),
+            filesystem,
+            &environment,
+        );
+        let malware_settings = MalwareCheckSettings::from(&environment);
+
+        Self {
+            extras: ExtrasSpecification::from_args(
+                extra.unwrap_or_default(),
+                no_extra,
+                false,
+                vec![],
+                flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
+            ),
+            groups: DependencyGroups::from_args(
+                dev.into(),
+                no_dev.into(),
+                only_dev,
+                group,
+                if no_group.is_empty() {
+                    environment.no_group.clone().unwrap_or_default()
+                } else {
+                    no_group
+                },
+                no_default_groups,
+                only_group,
+                all_groups,
+            ),
+            lock_check: resolve_lock_check(locked),
+            frozen: resolve_frozen(frozen),
+            no_sync: no_sync.is_enabled(),
+            python: python.and_then(Maybe::into_option),
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
+            refresh: Refresh::from(refresh),
+            settings,
+            extra_args,
+            version,
+            no_project,
+            show_version,
+            malware_settings,
         }
     }
 }

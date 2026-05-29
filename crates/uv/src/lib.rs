@@ -2687,6 +2687,51 @@ async fn run_project(
             ))
             .await
         }
+        ProjectCommand::Check(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::CheckSettings::resolve(args, filesystem, environment);
+            show_settings!(args);
+
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
+
+            // Initialize the cache.
+            let cache = cache.init().await?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
+            );
+
+            Box::pin(commands::check(
+                project_dir,
+                args.lock_check,
+                args.frozen,
+                args.no_sync,
+                args.extras,
+                args.groups,
+                args.python,
+                args.install_mirrors,
+                args.settings,
+                args.extra_args,
+                args.version,
+                args.show_version,
+                client_builder.subcommand(vec!["check".to_owned()]),
+                globals.python_preference,
+                globals.python_downloads,
+                globals.installer_metadata,
+                globals.concurrency,
+                &cache,
+                workspace_cache,
+                printer,
+                globals.preview,
+                args.no_project,
+                no_config,
+                args.malware_settings,
+            ))
+            .await
+        }
         ProjectCommand::Audit(audit_args) => {
             let args = settings::AuditSettings::resolve(audit_args, filesystem, environment);
             show_settings!(args);

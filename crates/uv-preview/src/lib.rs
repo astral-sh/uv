@@ -255,6 +255,7 @@ pub enum PreviewFeature {
     TomlBackwardsCompatibility = 1 << 30,
     MalwareCheck = 1 << 31,
     VenvSafeClear = 1 << 32,
+    Check = 1 << 33,
 }
 
 impl PreviewFeature {
@@ -294,6 +295,7 @@ impl PreviewFeature {
             Self::TomlBackwardsCompatibility => "toml-backwards-compatibility",
             Self::MalwareCheck => "malware-check",
             Self::VenvSafeClear => "venv-safe-clear",
+            Self::Check => "check",
         }
     }
 }
@@ -346,6 +348,7 @@ impl FromStr for PreviewFeature {
             "toml-backwards-compatibility" => Self::TomlBackwardsCompatibility,
             "malware-check" => Self::MalwareCheck,
             "venv-safe-clear" => Self::VenvSafeClear,
+            "check" => Self::Check,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -606,6 +609,7 @@ mod tests {
         );
         assert_eq!(PreviewFeature::MalwareCheck.as_str(), "malware-check");
         assert_eq!(PreviewFeature::VenvSafeClear.as_str(), "venv-safe-clear");
+        assert_eq!(PreviewFeature::Check.as_str(), "check");
     }
 
     #[test]
