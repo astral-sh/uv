@@ -112,6 +112,8 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          # Fold identical functions with Rust's bundled Mach-O LLD in optimized artifacts.
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -145,6 +147,8 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          # Fold identical functions with Rust's bundled Mach-O LLD in optimized artifacts.
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -179,6 +183,8 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          # Fold identical functions with Rust's bundled Mach-O LLD in optimized artifacts.
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
@@ -218,6 +224,8 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          # Fold identical functions with Rust's bundled Mach-O LLD in optimized artifacts.
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
@@ -360,7 +368,7 @@ jobs:
           # from 64-bit version of the container, breaking the pattern from other builds.
           container: quay.io/pypa/manylinux2014
           manylinux: 2_17
-          docker-options: -e CARGO
+          docker-options: -e CARGO -e RUSTFLAGS
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             # Install the 32-bit cross target on 64-bit (noop if we're already on 64-bit)
@@ -387,6 +395,8 @@ jobs:
         env:
           CC: ${{ matrix.cc }}
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          # Fold identical functions where the release container opts into mold.
+          RUSTFLAGS: ${{ matrix.target == 'x86_64-unknown-linux-gnu' && '-C link-arg=-B/usr/local/libexec/mold -C link-arg=-Wl,--icf=safe' || '' }}
       - name: "Test wheel"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
@@ -427,12 +437,14 @@ jobs:
           maturin-version: v1.13.1
           target: ${{ matrix.target }}
           manylinux: 2_17
-          docker-options: -e CARGO
+          docker-options: -e CARGO -e RUSTFLAGS
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          # Fold identical functions where the release container opts into mold.
+          RUSTFLAGS: ${{ matrix.target == 'x86_64-unknown-linux-gnu' && '-C link-arg=-B/usr/local/libexec/mold -C link-arg=-Wl,--icf=safe' || '' }}
       - name: "Test wheel uv-build"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
