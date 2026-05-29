@@ -36,7 +36,7 @@ fn check_project() -> Result<()> {
 }
 
 #[test]
-fn check_rejects_tool_arguments() -> Result<()> {
+fn check_rejects_tool_arguments() {
     let context = uv_test::test_context_with_versions!(&[]);
 
     uv_snapshot!(context.filters(), context.check().arg("--").arg("main.py"), @"
@@ -51,12 +51,10 @@ fn check_rejects_tool_arguments() -> Result<()> {
 
     For more information, try '--help'.
     ");
-
-    Ok(())
 }
 
 #[test]
-fn check_ty_version_no_match() -> Result<()> {
+fn check_ty_version_no_match() {
     let context = uv_test::test_context_with_versions!(&[]);
     let context = context.with_filter((
         r"\b[a-z0-9_]+-(?:apple|pc|unknown)-[a-z0-9_]+(?:-[a-z0-9_]+)?\b",
@@ -77,8 +75,6 @@ fn check_ty_version_no_match() -> Result<()> {
       Caused by: No version of ty found matching `>=999.0.0` for platform `[PLATFORM]`
     "###
     );
-
-    Ok(())
 }
 
 #[test]

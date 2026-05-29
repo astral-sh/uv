@@ -253,7 +253,6 @@ pub(crate) async fn check(
         .resolver
         .exclude_newer
         .global
-        .as_ref()
         .map(|value| value.timestamp());
 
     ty::run(
