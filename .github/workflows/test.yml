@@ -102,7 +102,7 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo nextest run \
+          ./scripts/run-integration-tests.sh \
             --cargo-profile fast-build \
             --features test-python-patch,native-auth,secret-service \
             --workspace \
@@ -177,7 +177,7 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo nextest run \
+          ./scripts/run-integration-tests.sh \
             --cargo-profile fast-build \
             --no-default-features \
             --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
@@ -272,7 +272,7 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         shell: bash
         run: |
-          cargo nextest run \
+          ./scripts/run-integration-tests.sh \
             --cargo-profile fast-build \
             --no-default-features \
             --features test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native \

@@ -66,25 +66,43 @@ used when NASM is found, you can guarantee this behavior by setting `AWS_LC_SYS_
 
 ## Testing
 
-For running tests, we recommend [nextest](https://nexte.st/).
+For running tests, we recommend [nextest](https://nexte.st/). The uv integration tests run against
+a pre-built uv executable. The integration test runner builds the executable, then invokes nextest
+with its path:
 
 To run a specific test by name:
 
 ```shell
-cargo nextest run -E 'test(test_name)'
+./scripts/run-integration-tests.sh -E 'test(test_name)'
+```
+
+To run all uv integration tests:
+
+```shell
+./scripts/run-integration-tests.sh
+```
+
+To run all workspace tests:
+
+```shell
+./scripts/run-integration-tests.sh --workspace
 ```
 
 To run all tests and accept snapshot changes:
 
 ```shell
-cargo insta test --accept --test-runner nextest
+cargo build --package uv --bin uv --features uv-publish/test
+UV_TEST_BIN="$PWD/target/debug/uv" cargo insta test --accept --test-runner nextest --package uv-integration
 ```
 
 To update snapshots for a specific test:
 
 ```shell
-cargo insta test --accept --test-runner nextest -- <test_name>
+cargo build --package uv --bin uv --features uv-publish/test
+UV_TEST_BIN="$PWD/target/debug/uv" cargo insta test --accept --test-runner nextest --package uv-integration -- <test_name>
 ```
+
+On Windows, use `target/debug/uv.exe` for `UV_TEST_BIN`.
 
 ### Python
 
@@ -116,7 +134,8 @@ fn test_add() {
 To run and review a specific snapshot test:
 
 ```shell
-cargo test --package <package> --test <test> -- <test_name> -- --exact
+cargo build --package uv --bin uv --features uv-publish/test
+UV_TEST_BIN="$PWD/target/debug/uv" cargo test --package uv-integration --test it <test_name> -- --exact
 cargo insta review
 ```
 

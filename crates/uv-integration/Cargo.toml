@@ -1,0 +1,106 @@
+[package]
+name = "uv-integration"
+version = "0.11.19"
+description = "Integration tests for uv"
+publish = false
+autotests = false
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[package.metadata.cargo-shear]
+# Mirrors uv's self-update feature for integration test cfg gates.
+ignored = ["axoupdater"]
+
+[dependencies]
+axoupdater = { workspace = true, features = ["github_releases", "tokio"], optional = true }
+
+[dev-dependencies]
+uv-cache = { workspace = true }
+uv-cache-key = { workspace = true }
+uv-client = { workspace = true }
+uv-extract = { workspace = true }
+uv-fs = { workspace = true }
+uv-platform = { workspace = true }
+uv-python = { workspace = true }
+uv-static = { workspace = true }
+uv-test = { workspace = true }
+uv-trampoline-builder = { workspace = true }
+uv-version = { workspace = true }
+
+anyhow = { workspace = true }
+assert_cmd = { workspace = true }
+assert_fs = { workspace = true }
+async_zip = { workspace = true }
+backon = { workspace = true }
+base64 = { workspace = true }
+byteorder = { workspace = true }
+bytes = { workspace = true }
+dunce = { workspace = true }
+filetime = { workspace = true }
+flate2 = { workspace = true, default-features = false }
+fs-err = { workspace = true, features = ["tokio"] }
+futures = { workspace = true }
+http = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+indoc = { workspace = true }
+insta = { workspace = true }
+predicates = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true, features = ["blocking"], default-features = false }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+astral-tokio-tar = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+tokio-util = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+walkdir = { workspace = true }
+which = { workspace = true }
+wiremock = { workspace = true }
+
+[[test]]
+name = "it"
+path = "tests/it/main.rs"
+
+[features]
+default = ["test-defaults"]
+native-auth = []
+self-update = ["dep:axoupdater"]
+tracing-durations-export = ["uv-test/tracing-durations-export"]
+test-defaults = [
+  "test-crates-io",
+  "test-git",
+  "test-git-lfs",
+  "test-pypi",
+  "test-r2",
+  "test-python",
+  "test-python-managed",
+  "test-python-eol",
+  "test-slow",
+  "test-ecosystem",
+]
+test-crates-io = []
+test-git = ["uv-test/git"]
+test-git-lfs = ["test-git"]
+test-pypi = ["uv-client/test-pypi"]
+test-r2 = []
+test-python = []
+test-python-patch = []
+test-python-eol = []
+test-python-managed = []
+test-slow = []
+test-ecosystem = []
+test-windows-registry = []

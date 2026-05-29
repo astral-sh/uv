@@ -1,4 +1,4 @@
-# This file is used to test `uv run <url>` in ../crates/uv/tests/run.rs
+# This file is used to test `uv run <url>` in ../crates/uv-integration/tests/it/run.rs
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
