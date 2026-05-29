@@ -343,8 +343,14 @@ jobs:
     strategy:
       matrix:
         include:
-          - { target: "i686-unknown-linux-gnu", cc: "gcc -m32" }
-          - { target: "x86_64-unknown-linux-gnu", cc: "gcc" }
+          - target: "i686-unknown-linux-gnu"
+            cc: "gcc -m32"
+            rustflags: ""
+          - target: "x86_64-unknown-linux-gnu"
+            cc: "gcc"
+            # GNU ld.bfd does not support safe ICF. Use the installed mold
+            # linker for identical code folding in release artifacts.
+            rustflags: "-C link-arg=-B/usr/local/libexec/mold -C link-arg=-Wl,--icf=safe"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -395,8 +401,7 @@ jobs:
         env:
           CC: ${{ matrix.cc }}
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          # Fold identical functions where the release container opts into mold.
-          RUSTFLAGS: ${{ matrix.target == 'x86_64-unknown-linux-gnu' && '-C link-arg=-B/usr/local/libexec/mold -C link-arg=-Wl,--icf=safe' || '' }}
+          RUSTFLAGS: ${{ matrix.rustflags }}
       - name: "Test wheel"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
@@ -443,8 +448,7 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          # Fold identical functions where the release container opts into mold.
-          RUSTFLAGS: ${{ matrix.target == 'x86_64-unknown-linux-gnu' && '-C link-arg=-B/usr/local/libexec/mold -C link-arg=-Wl,--icf=safe' || '' }}
+          RUSTFLAGS: ${{ matrix.rustflags }}
       - name: "Test wheel uv-build"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
