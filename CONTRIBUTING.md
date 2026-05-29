@@ -66,8 +66,8 @@ used when NASM is found, you can guarantee this behavior by setting `AWS_LC_SYS_
 
 ## Testing
 
-For running tests, we recommend [nextest](https://nexte.st/). The uv integration tests run against
-a pre-built uv executable. The nextest setup hook builds the executable and exposes its path to the
+For running tests, we recommend [nextest](https://nexte.st/). The uv integration tests run against a
+pre-built uv executable. The nextest setup hook builds the executable and exposes its path to the
 tests. Integration tests are grouped into harnesses by command area, so editing a test only relinks
 its corresponding harness:
 

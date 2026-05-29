@@ -121,8 +121,11 @@ path = "tests/workspace.rs"
 
 [features]
 default = ["test-defaults"]
+axoupdater = ["dep:axoupdater"]
 native-auth = []
-self-update = ["dep:axoupdater"]
+performance = []
+performance-memory-allocator = []
+self-update = ["axoupdater"]
 tracing-durations-export = ["uv-test/tracing-durations-export"]
 test-defaults = [
   "test-crates-io",
@@ -148,3 +151,4 @@ test-python-managed = []
 test-slow = []
 test-ecosystem = []
 test-windows-registry = []
+windows-gui-bin = []

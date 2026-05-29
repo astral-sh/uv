@@ -2405,7 +2405,7 @@ fn build_list_files_errors() -> Result<()> {
     // Not a uv build backend package, we can't list it.
     let anyio_local = current_dir()?.join("../../test/packages/anyio_local");
     // Windows normalization
-    let context = context.with_filter(("/crates/uv/../../", "/"));
+    let context = context.with_filter(("/crates/uv-integration/../../", "/"));
     uv_snapshot!(context.filters(), context.build()
         .arg(&anyio_local)
         .arg("--out-dir")

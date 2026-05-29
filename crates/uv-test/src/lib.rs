@@ -866,7 +866,8 @@ impl TestContext {
             .expect("CARGO_MANIFEST_DIR should be nested in workspace")
             .parent()
             .expect("CARGO_MANIFEST_DIR should be doubly nested in workspace")
-            .to_path_buf();
+            .canonicalize()
+            .expect("Failed to create canonical workspace root");
 
         let download_list = ManagedPythonDownloadList::new_only_embedded().unwrap();
 
