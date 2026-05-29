@@ -1436,7 +1436,7 @@ impl TestContext {
         let mut command = self.new_command();
         command.arg("check");
         self.add_shared_options(&mut command, false);
-        // Override to a more recent date for ty version resolution
+        // Override to a more recent date for check tool resolution.
         command.env(EnvVars::UV_EXCLUDE_NEWER, "2026-02-15T00:00:00Z");
         command
     }

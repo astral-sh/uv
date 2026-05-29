@@ -36,6 +36,52 @@ fn check_project() -> Result<()> {
 }
 
 #[test]
+fn check_rejects_tool_arguments() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    uv_snapshot!(context.filters(), context.check().arg("--").arg("main.py"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: unexpected argument 'main.py' found
+
+    Usage: uv check [OPTIONS]
+
+    For more information, try '--help'.
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_ty_version_no_match() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let context = context.with_filter((
+        r"\b[a-z0-9_]+-(?:apple|pc|unknown)-[a-z0-9_]+(?:-[a-z0-9_]+)?\b",
+        "[PLATFORM]",
+    ));
+
+    uv_snapshot!(
+        context.filters(),
+        context.check().arg("--ty-version").arg(">=999.0.0"),
+        @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    error: Failed to find ty version matching: >=999.0.0
+      Caused by: No version of ty found matching `>=999.0.0` for platform `[PLATFORM]`
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
 fn check_missing_pyproject_toml() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
 
@@ -193,7 +239,7 @@ fn check_with_declared_dependency() -> Result<()> {
         import iniconfig
     "})?;
 
-    // ty should resolve the import via the synced virtual environment.
+    // The check should resolve the import via the synced virtual environment.
     uv_snapshot!(context.filters(), context.check(), @"
     success: true
     exit_code: 0
@@ -241,7 +287,7 @@ fn check_with_undeclared_dependency() -> Result<()> {
         )])
         .collect::<Vec<_>>();
 
-    // ty should report a diagnostic for the unresolvable import.
+    // The check should report a diagnostic for the unresolvable import.
     uv_snapshot!(filters, context.check(), @"
     success: false
     exit_code: 1
