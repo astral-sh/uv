@@ -2804,8 +2804,14 @@ impl CheckSettings {
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
         check_conflicts(locked, frozen);
 
-        let dev = dev || environment.dev.value == Some(true);
-        let no_dev = no_dev || environment.no_dev.value == Some(true);
+        let (dev, no_dev) = resolve_flag_pair(
+            dev,
+            no_dev,
+            "dev",
+            "no-dev",
+            Some(environment.dev),
+            Some(environment.no_dev),
+        );
         let settings = ResolverInstallerSettings::combine(
             resolver_installer_options(installer, build),
             filesystem,
@@ -2822,8 +2828,8 @@ impl CheckSettings {
                 flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
             ),
             groups: DependencyGroups::from_args(
-                dev,
-                no_dev,
+                dev.into(),
+                no_dev.into(),
                 only_dev,
                 group,
                 no_group,

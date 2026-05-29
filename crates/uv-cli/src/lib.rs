@@ -5334,7 +5334,11 @@ pub struct CheckArgs {
     /// Avoid discovering a project or workspace.
     ///
     /// Instead of running the type checker in the context of the current directory.
-    #[arg(long)]
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_PROJECT,
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
     pub no_project: bool,
 
     /// Display the version of ty that will be used for type checking.
