@@ -358,7 +358,8 @@ jobs:
   integration-test-windows-python-install-manager:
     name: "windows python install manager"
     timeout-minutes: 10
-    runs-on: namespace-profile-windows-2022-x86-64-4
+    # The Store package is not compatible with the Namespace Windows Server 2022 image.
+    runs-on: windows-latest
 
     steps:
       - name: "Download binary"
