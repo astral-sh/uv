@@ -46,9 +46,28 @@ keyring plugin, but does not require the plugin to be installed.
 
 ## Authenticate with `keyring` and `keyrings.google-artifactregistry-auth`
 
-To use the Google keyring plugin, pre-install it from a source other than Artifact Registry:
+!!! tip
+
+    uv supports Google Artifact Registry authentication natively, as described above. You do not
+    need to install the keyring plugin unless you want to use the subprocess keyring provider.
+
+You can also authenticate to Artifact Registry using the
+[`keyring`](https://github.com/jaraco/keyring) package with the
+[`keyrings.google-artifactregistry-auth` plugin](https://github.com/GoogleCloudPlatform/artifact-registry-python-tools).
+Because these two packages are required to authenticate to Artifact Registry, they must be
+pre-installed from a source other than Artifact Registry.
+
+The `keyrings.google-artifactregistry-auth` plugin wraps
+[gcloud CLI](https://cloud.google.com/sdk/gcloud) to generate short-lived access tokens, securely
+store them in system keyring, and refresh them when they are expired.
+
+uv only supports using the `keyring` package in
+[subprocess mode](../../reference/settings.md#keyring-provider). The `keyring` executable must be in
+the `PATH`, i.e., installed globally or in the active environment. The `keyring` CLI requires a
+username in the URL and it must be `oauth2accesstoken`.
 
 ```bash
+# Pre-install keyring and Artifact Registry plugin from the public PyPI
 uv tool install keyring --with keyrings.google-artifactregistry-auth
 
 # Enable keyring authentication
@@ -58,9 +77,12 @@ export UV_KEYRING_PROVIDER=subprocess
 export UV_INDEX_PRIVATE_REGISTRY_USERNAME=oauth2accesstoken
 ```
 
-The `keyring` executable must be in the `PATH`, i.e., installed globally or in the active
-environment. The [`tool.uv.keyring-provider`](../../reference/settings.md#keyring-provider) setting
-can also be used to enable the subprocess keyring provider in your `uv.toml` or `pyproject.toml`.
+!!! note
+
+    The [`tool.uv.keyring-provider`](../../reference/settings.md#keyring-provider)
+    setting can be used to enable keyring in your `uv.toml` or `pyproject.toml`.
+
+    Similarly, the username for the index can be added directly to the index URL.
 
 ## Authenticate with a Google access token
 
