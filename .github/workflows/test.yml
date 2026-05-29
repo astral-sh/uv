@@ -61,14 +61,14 @@ jobs:
         # the login password doesn't matter, but the keyring must be unlocked for the tests to work
         run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'foobar'
 
-      - name: "Create btrfs filesystem"
+      - name: "Create XFS filesystem"
         run: |
-          sudo apt install -y --update btrfs-progs
-          truncate -s 1G /tmp/btrfs.img
-          mkfs.btrfs /tmp/btrfs.img
-          sudo mkdir /btrfs
-          sudo mount -o loop /tmp/btrfs.img /btrfs
-          sudo chown "$(id -u):$(id -g)" /btrfs
+          sudo apt install -y --update xfsprogs
+          truncate -s 1G /tmp/xfs.img
+          mkfs.xfs -m reflink=1 /tmp/xfs.img
+          sudo mkdir /xfs
+          sudo mount -o loop /tmp/xfs.img /xfs
+          sudo chown "$(id -u):$(id -g)" /xfs
 
       - name: "Create tmpfs filesystem"
         run: |
@@ -94,7 +94,7 @@ jobs:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
           RUST_BACKTRACE: 1
-          UV_INTERNAL__TEST_COW_FS: /btrfs
+          UV_INTERNAL__TEST_COW_FS: /xfs
           UV_INTERNAL__TEST_NOCOW_FS: /tmpfs
           UV_INTERNAL__TEST_ALT_FS: /tmpfs
           UV_INTERNAL__TEST_LOWLINKS_FS: /minix
