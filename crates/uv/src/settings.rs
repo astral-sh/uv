@@ -2832,7 +2832,11 @@ impl CheckSettings {
                 no_dev.into(),
                 only_dev,
                 group,
-                no_group,
+                if no_group.is_empty() {
+                    environment.no_group.clone().unwrap_or_default()
+                } else {
+                    no_group
+                },
                 no_default_groups,
                 only_group,
                 all_groups,

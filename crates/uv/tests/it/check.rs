@@ -54,6 +54,20 @@ fn check_missing_pyproject_toml() -> Result<()> {
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
     ");
 
+    // Project-only settings are ignored without a discovered project.
+    uv_snapshot!(context.filters(), context.check().arg("--group").arg("dev").arg("--frozen").arg("--no-sync"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    warning: `--group dev` has no effect when used outside of a project
+    warning: `--frozen` has no effect when used outside of a project
+    warning: `--no-sync` has no effect when used outside of a project
+    ");
+
     Ok(())
 }
 
@@ -95,6 +109,33 @@ fn check_no_project() -> Result<()> {
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
     ");
+
+    // Project-only settings are ignored when project discovery is disabled.
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-project")
+            .arg("--extra")
+            .arg("foo")
+            .arg("--group")
+            .arg("bar")
+            .arg("--locked")
+            .arg("--no-sync"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    warning: `--extra foo` has no effect when used alongside `--no-project`
+    warning: `--group bar` has no effect when used alongside `--no-project`
+    warning: `--locked` has no effect when used alongside `--no-project`
+    warning: `--no-sync` has no effect when used alongside `--no-project`
+    "
+    );
 
     Ok(())
 }

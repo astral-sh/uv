@@ -5214,6 +5214,12 @@ pub struct CheckArgs {
     /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
+    ///
+    /// When multiple extras or groups are specified that appear in `tool.uv.conflicts`, uv will
+    /// report an error.
+    ///
+    /// Note that all optional dependencies are always included in the resolution; this option only
+    /// affects the selection of packages to install.
     #[arg(
         long,
         conflicts_with = "all_extras",
@@ -5225,6 +5231,12 @@ pub struct CheckArgs {
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
+    ///
+    /// When two or more extras are declared as conflicting in `tool.uv.conflicts`, using this flag
+    /// will always result in an error.
+    ///
+    /// Note that all optional dependencies are always included in the resolution; this option only
+    /// affects the selection of packages to install.
     #[arg(long, conflicts_with = "extra", conflicts_with = "only_group")]
     pub all_extras: bool,
 
@@ -5260,17 +5272,26 @@ pub struct CheckArgs {
 
     /// Include dependencies from the specified dependency group.
     ///
+    /// When multiple extras or groups are specified that appear in
+    /// `tool.uv.conflicts`, uv will report an error.
+    ///
     /// May be provided multiple times.
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_hint = ValueHint::Other)]
     pub group: Vec<GroupName>,
 
-    /// Disable the specified dependency group.
+    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
+    ///
+    /// This option always takes precedence over default groups,
+    /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
-    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
     pub no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
+    ///
+    /// uv includes the groups defined in `tool.uv.default-groups` by default.
+    /// This disables that option, however, specific groups can still be included with `--group`.
     #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_default_groups: bool,
 
@@ -5288,15 +5309,26 @@ pub struct CheckArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
     pub all_groups: bool,
 
-    /// Assert that the `uv.lock` will remain unchanged.
-    #[arg(long, conflicts_with = "frozen")]
+    /// Assert that the `uv.lock` will remain unchanged [env: UV_LOCKED=]
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
+    /// uv will exit with an error.
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
-    /// Sync without updating the `uv.lock` file.
-    #[arg(long, conflicts_with = "locked")]
+    /// Sync without updating the `uv.lock` file [env: UV_FROZEN=]
+    ///
+    /// Instead of checking if the lockfile is up-to-date, uses the versions in the lockfile as the
+    /// source of truth. If the lockfile is missing, uv will exit with an error. If the
+    /// `pyproject.toml` includes changes to dependencies that have not been included in the
+    /// lockfile yet, they will not be present in the environment.
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
-    /// Don't sync the project environment before type checking.
+    /// Avoid syncing the virtual environment [env: UV_NO_SYNC=]
+    ///
+    /// Implies `--frozen`, as the project dependencies will be ignored (i.e., the lockfile will not
+    /// be updated, since the environment will not be synced regardless).
     #[arg(long)]
     pub no_sync: bool,
 
@@ -5333,7 +5365,9 @@ pub struct CheckArgs {
 
     /// Avoid discovering a project or workspace.
     ///
-    /// Instead of running the type checker in the context of the current directory.
+    /// Instead of running the type checker in the context of the current project, run it in the
+    /// context of the current directory. This is useful when the current directory is not a
+    /// project.
     #[arg(
         long,
         env = EnvVars::UV_NO_PROJECT,
