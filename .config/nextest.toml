@@ -43,6 +43,22 @@ filter = 'test(/^python_install::/) + test(/^python_update::/) + test(/^python_f
 test-group = 'io-bound'
 priority = 1 # Start earlier so these can complete before the end
 
+[scripts.setup.build-test-uv-unix]
+command = "scripts/nextest-setup-build-unix.sh"
+
+[scripts.setup.build-test-uv-windows]
+command = "python scripts/nextest-setup-build.py"
+
+[[profile.default.scripts]]
+platform = { host = "cfg(unix)" }
+filter = "package(uv-integration)"
+setup = "build-test-uv-unix"
+
+[[profile.default.scripts]]
+platform = { host = "cfg(windows)" }
+filter = "package(uv-integration)"
+setup = "build-test-uv-windows"
+
 [scripts.setup.setup-hook-unix]
 command = "scripts/nextest-setup-hook-unix.sh"
 

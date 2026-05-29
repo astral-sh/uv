@@ -67,26 +67,34 @@ used when NASM is found, you can guarantee this behavior by setting `AWS_LC_SYS_
 ## Testing
 
 For running tests, we recommend [nextest](https://nexte.st/). The uv integration tests run against
-a pre-built uv executable. The integration test runner builds the executable, then invokes nextest
-with its path. Integration tests are grouped into harnesses by command area, so editing a test only
-relinks its corresponding harness:
+a pre-built uv executable. The nextest setup hook builds the executable and exposes its path to the
+tests. Integration tests are grouped into harnesses by command area, so editing a test only relinks
+its corresponding harness:
 
 To run a specific test by name:
 
 ```shell
-./scripts/run-integration-tests.sh -E 'test(test_name)'
+cargo nextest run --package uv-integration -E 'test(test_name)'
 ```
 
 To run all uv integration tests:
 
 ```shell
-./scripts/run-integration-tests.sh
+cargo nextest run --package uv-integration
 ```
 
 To run all workspace tests:
 
 ```shell
-./scripts/run-integration-tests.sh --workspace
+cargo nextest run --workspace
+```
+
+When passing Cargo compilation options such as `--features`, `--no-default-features`, or
+`--cargo-profile`, use `./scripts/run-integration-tests.sh` to apply those options to both the uv
+executable and the tests:
+
+```shell
+./scripts/run-integration-tests.sh --features <features>
 ```
 
 To run all tests and accept snapshot changes:

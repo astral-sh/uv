@@ -3,11 +3,11 @@
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
-from pathlib import Path
+
+from build_test_uv import build_uv
 
 
 def build_options(nextest_options: list[str]) -> list[str]:
@@ -61,41 +61,6 @@ def build_options(nextest_options: list[str]) -> list[str]:
     return options
 
 
-def build_uv(cargo: str, nextest_options: list[str]) -> Path:
-    command = [
-        cargo,
-        "build",
-        "--workspace",
-        "--bin",
-        "uv",
-        "--message-format=json-render-diagnostics",
-        "--features",
-        "uv-publish/test",
-        *build_options(nextest_options),
-    ]
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)
-    executable: Path | None = None
-
-    if process.stdout is None:
-        raise RuntimeError("Cargo stdout is not available")
-    for line in process.stdout:
-        message = json.loads(line)
-        if (
-            message.get("reason") == "compiler-artifact"
-            and message["target"]["name"] == "uv"
-            and "bin" in message["target"]["kind"]
-            and message.get("executable")
-        ):
-            executable = Path(message["executable"])
-
-    if process.wait() != 0:
-        raise subprocess.CalledProcessError(process.returncode, command)
-    if executable is None:
-        raise RuntimeError("Cargo did not report a uv executable")
-
-    return executable
-
-
 def main() -> int:
     cargo = os.environ.get("CARGO", "cargo")
     nextest_options = sys.argv[1:]
@@ -111,7 +76,7 @@ def main() -> int:
             *nextest_options,
         ]
 
-    executable = build_uv(cargo, nextest_options)
+    executable = build_uv(cargo, build_options(nextest_options))
     environment = os.environ.copy()
     environment["UV_TEST_BIN"] = str(executable)
     return subprocess.run(
