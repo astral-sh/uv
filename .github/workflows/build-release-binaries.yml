@@ -492,6 +492,9 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+      # run-on-arch installs binfmt handlers on local Docker, so bypass the Namespace Remote Builder for its tests.
+      - name: "Use local Docker builder for emulated tests"
+        run: docker buildx use default
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
@@ -614,6 +617,9 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
 
+      # run-on-arch installs binfmt handlers on local Docker, so bypass the Namespace Remote Builder for its tests.
+      - name: "Use local Docker builder for emulated tests"
+        run: docker buildx use default
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
@@ -841,6 +847,9 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+      # run-on-arch installs binfmt handlers on local Docker, so bypass the Namespace Remote Builder for its tests.
+      - name: "Use local Docker builder for emulated tests"
+        run: docker buildx use default
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
@@ -1071,6 +1080,9 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+      # run-on-arch installs binfmt handlers on local Docker, so bypass the Namespace Remote Builder for its tests.
+      - name: "Use local Docker builder for emulated tests"
+        run: docker buildx use default
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
