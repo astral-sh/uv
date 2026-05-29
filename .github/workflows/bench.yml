@@ -59,6 +59,7 @@ jobs:
           name: benchmarks-walltime
           path: benchmarks-walltime.tar
           retention-days: 1
+          compression-level: 0
 
   benchmarks-walltime-run:
     name: "walltime on aarch64 linux"
