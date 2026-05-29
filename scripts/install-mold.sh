@@ -19,13 +19,10 @@ fi
 
 echo "Installing mold ${MOLD_VERSION} (${arch})..."
 
-wget -O- \
-    --timeout=10 \
-    --tries=5 \
-    --waitretry=3 \
-    --retry-connrefused \
-    --retry-on-http-error=429,500,502,503,504 \
-    --progress=dot:mega \
+curl --fail --location \
+    --connect-timeout 10 \
+    --retry 5 \
+    --retry-delay 3 \
     "$url" \
     | $SUDO tar -C /usr/local --strip-components=1 --no-overwrite-dir -xzf -
 
