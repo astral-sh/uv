@@ -2720,6 +2720,7 @@ async fn run_project(
                 client_builder.subcommand(vec!["check".to_owned()]),
                 globals.python_preference,
                 globals.python_downloads,
+                globals.installer_metadata,
                 globals.concurrency,
                 &cache,
                 workspace_cache,

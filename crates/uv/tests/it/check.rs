@@ -109,6 +109,12 @@ fn check_with_declared_dependency() -> Result<()> {
     Installed 1 package in [TIME]
     ");
 
+    context
+        .assert_command(
+            "from importlib.metadata import distribution; assert distribution('iniconfig').read_text('INSTALLER') == 'uv'",
+        )
+        .success();
+
     Ok(())
 }
 
