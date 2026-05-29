@@ -34,7 +34,7 @@ jobs:
     name: sdist
     runs-on: namespace-profile-ubuntu-24-04-4
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
 
@@ -89,7 +89,7 @@ jobs:
     name: x86_64-apple-darwin
     runs-on: namespace-profile-macos-15
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
 
@@ -155,7 +155,7 @@ jobs:
     name: aarch64-apple-darwin
     runs-on: namespace-profile-macos-15
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
 
@@ -338,7 +338,7 @@ jobs:
           - { target: "i686-unknown-linux-gnu", cc: "gcc -m32" }
           - { target: "x86_64-unknown-linux-gnu", cc: "gcc" }
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
 
@@ -492,7 +492,7 @@ jobs:
             manylinux: auto
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
 
@@ -612,7 +612,7 @@ jobs:
             arch: s390x
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
 
@@ -738,7 +738,7 @@ jobs:
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
 
@@ -847,7 +847,7 @@ jobs:
             arch: riscv64
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
 
@@ -966,7 +966,7 @@ jobs:
           - x86_64-unknown-linux-musl
           - i686-unknown-linux-musl
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
 
@@ -1078,7 +1078,7 @@ jobs:
       fail-fast: false
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
 

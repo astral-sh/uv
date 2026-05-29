@@ -29,7 +29,7 @@ jobs:
     runs-on: "namespace-profile-ubuntu-24-04-16;container.privileged=true"
     name: "cargo test on linux"
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
 
@@ -134,7 +134,7 @@ jobs:
     runs-on: namespace-profile-macos-15
     name: "cargo test on macos"
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
 

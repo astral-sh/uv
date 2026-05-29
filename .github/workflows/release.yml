@@ -79,7 +79,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
           submodules: recursive
@@ -143,7 +143,7 @@ jobs:
     if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
     runs-on: "namespace-profile-ubuntu-latest-4"
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
           submodules: recursive
@@ -186,7 +186,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/global-dist-manifest.json
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
           submodules: recursive
@@ -237,7 +237,7 @@ jobs:
     outputs:
       val: ${{ steps.host.outputs.manifest }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
           submodules: recursive
@@ -322,7 +322,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
           submodules: recursive

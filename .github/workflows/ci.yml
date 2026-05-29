@@ -33,7 +33,7 @@ jobs:
       build-docker: ${{ steps.plan.outputs.build_docker }}
       push-docker: ${{ steps.plan.outputs.push_docker }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           fetch-depth: 0
           persist-credentials: false
