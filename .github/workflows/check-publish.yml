@@ -18,8 +18,8 @@ jobs:
       - uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: namespacelabs/nscloud-cache-action@15799a6b54e5765f85b2aac25b3f0df43ed571c0 # v1.4.3
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache: rust
       - name: "cargo publish dry-run"
         run: cargo publish --workspace --dry-run

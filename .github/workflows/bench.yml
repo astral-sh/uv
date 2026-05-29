@@ -27,9 +27,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: namespacelabs/nscloud-cache-action@15799a6b54e5765f85b2aac25b3f0df43ed571c0 # v1.4.3
         with:
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
+          cache: rust
 
       - name: "Install Rust toolchain"
         run: rustup show
@@ -105,9 +105,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: namespacelabs/nscloud-cache-action@15799a6b54e5765f85b2aac25b3f0df43ed571c0 # v1.4.3
         with:
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
+          cache: rust
 
       - name: "Install Rust toolchain"
         run: rustup show
