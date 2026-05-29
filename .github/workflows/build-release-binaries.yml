@@ -32,7 +32,7 @@ permissions: {}
 jobs:
   sdist:
     name: sdist
-    runs-on: depot-ubuntu-24.04-4
+    runs-on: namespace-profile-ubuntu-24-04-4
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -87,7 +87,7 @@ jobs:
 
   macos-x86_64:
     name: x86_64-apple-darwin
-    runs-on: depot-macos-15
+    runs-on: namespace-profile-macos-15
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -153,7 +153,7 @@ jobs:
 
   macos-aarch64:
     name: aarch64-apple-darwin
-    runs-on: depot-macos-15
+    runs-on: namespace-profile-macos-15
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -331,7 +331,7 @@ jobs:
 
   linux:
     name: ${{ matrix.target }}
-    runs-on: depot-ubuntu-latest-4
+    runs-on: namespace-profile-ubuntu-latest-4
     strategy:
       matrix:
         include:
@@ -447,7 +447,7 @@ jobs:
 
   linux-arm:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-24.04-8
+    runs-on: namespace-profile-ubuntu-24-04-8
     timeout-minutes: 30
     strategy:
       matrix:
@@ -578,7 +578,7 @@ jobs:
   linux-s390x:
     name: ${{ matrix.platform.target }}
     timeout-minutes: 30
-    runs-on: depot-ubuntu-latest-4
+    runs-on: namespace-profile-ubuntu-latest-4
     strategy:
       matrix:
         platform:
@@ -699,7 +699,7 @@ jobs:
   # Like `linux-arm`, but install the `gcc-powerpc64-linux-gnu` package.
   linux-powerpc:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-24.04-4
+    runs-on: namespace-profile-ubuntu-24-04-4
     strategy:
       matrix:
         platform:
@@ -810,7 +810,7 @@ jobs:
   linux-riscv64:
     name: ${{ matrix.platform.target }}
     timeout-minutes: 30
-    runs-on: depot-ubuntu-latest-4
+    runs-on: namespace-profile-ubuntu-latest-4
     strategy:
       matrix:
         platform:
@@ -927,7 +927,7 @@ jobs:
 
   musllinux:
     name: ${{ matrix.target }}
-    runs-on: depot-ubuntu-24.04-4
+    runs-on: namespace-profile-ubuntu-24-04-4
     strategy:
       matrix:
         target:
@@ -1030,7 +1030,7 @@ jobs:
 
   musllinux-cross:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-24.04-8
+    runs-on: namespace-profile-ubuntu-24-04-8
     env:
       CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-C target-feature=+crt-static"
     strategy:

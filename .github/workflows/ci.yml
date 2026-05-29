@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   plan:
-    runs-on: depot-ubuntu-24.04
+    runs-on: namespace-profile-ubuntu-24-04
     outputs:
       test-code: ${{ steps.plan.outputs.test_code }}
       check-schema: ${{ steps.plan.outputs.check_schema }}
