@@ -504,8 +504,7 @@ impl Lock {
         // check for duplicates.
         for package in &mut packages {
             package.dependencies.sort();
-            for windows in package.dependencies.windows(2) {
-                let (dep1, dep2) = (&windows[0], &windows[1]);
+            for [dep1, dep2] in package.dependencies.array_windows() {
                 if dep1 == dep2 {
                     return Err(LockErrorKind::DuplicateDependency {
                         id: package.id.clone(),
@@ -518,8 +517,7 @@ impl Lock {
             // Perform the same validation for optional dependencies.
             for (extra, dependencies) in &mut package.optional_dependencies {
                 dependencies.sort();
-                for windows in dependencies.windows(2) {
-                    let (dep1, dep2) = (&windows[0], &windows[1]);
+                for [dep1, dep2] in dependencies.array_windows() {
                     if dep1 == dep2 {
                         return Err(LockErrorKind::DuplicateOptionalDependency {
                             id: package.id.clone(),
@@ -534,8 +532,7 @@ impl Lock {
             // Perform the same validation for dev dependencies.
             for (group, dependencies) in &mut package.dependency_groups {
                 dependencies.sort();
-                for windows in dependencies.windows(2) {
-                    let (dep1, dep2) = (&windows[0], &windows[1]);
+                for [dep1, dep2] in dependencies.array_windows() {
                     if dep1 == dep2 {
                         return Err(LockErrorKind::DuplicateDevDependency {
                             id: package.id.clone(),
