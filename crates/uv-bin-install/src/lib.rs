@@ -113,13 +113,15 @@ impl Binary {
             }
             Self::Ty => {
                 let suffix = format!("{version}/ty-{platform}.{}", format.extension());
-                if let Some(astral_mirror_url) = astral_mirror_url {
-                    let mirror_base = astral_mirror_base_url(Some(astral_mirror_url));
-                    let mirror = format!("{mirror_base}{TY_MIRROR_SUFFIX}{suffix}");
-                    return Ok(vec![parse_url(mirror)?]);
+                let mirror_base = astral_mirror_base_url(astral_mirror_url);
+                let mirror = format!("{mirror_base}{TY_MIRROR_SUFFIX}{suffix}");
+                let mut urls = vec![parse_url(mirror)?];
+                // When using the default mirror, also fall back to GitHub.
+                if astral_mirror_url.is_none() {
+                    let canonical = format!("{TY_GITHUB_URL_PREFIX}{suffix}");
+                    urls.push(parse_url(canonical)?);
                 }
-                let canonical = format!("{TY_GITHUB_URL_PREFIX}{suffix}");
-                Ok(vec![parse_url(canonical)?])
+                Ok(urls)
             }
             Self::Uv => {
                 let canonical = format!(
