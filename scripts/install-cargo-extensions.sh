@@ -17,6 +17,10 @@ CARGO_AUDITABLE_INSTALL="cargo install cargo-auditable \
     --locked \
     --version 0.7.4"
 
+if [ "$(uname -s 2>/dev/null)" = "Linux" ]; then
+    scripts/install-mold.sh
+fi
+
 # In Linux containers running on x86_64, build a static musl binary so the installed tool works in
 # musl-based environments (Alpine, etc.).
 #
