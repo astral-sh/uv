@@ -239,7 +239,7 @@ fn check_with_declared_dependency() -> Result<()> {
         import iniconfig
     "})?;
 
-    // The check should resolve the import via the synced virtual environment.
+    // ty should resolve the import via the synced virtual environment.
     uv_snapshot!(context.filters(), context.check(), @"
     success: true
     exit_code: 0
@@ -287,7 +287,7 @@ fn check_with_undeclared_dependency() -> Result<()> {
         )])
         .collect::<Vec<_>>();
 
-    // The check should report a diagnostic for the unresolvable import.
+    // ty should report a diagnostic for the unresolvable import.
     uv_snapshot!(filters, context.check(), @"
     success: false
     exit_code: 1

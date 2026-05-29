@@ -26,8 +26,6 @@ use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
-use self::ty::TyCheck;
-
 mod ty;
 
 /// Run project checks.
@@ -257,57 +255,15 @@ pub(crate) async fn check(
         .global
         .as_ref()
         .map(|value| value.timestamp());
-    let checks = [CheckTask::Ty(TyCheck::new(ty_version))];
 
-    for check in checks {
-        // Each tool returns its process status; continue to later checks after an exit code of 0.
-        match check
-            .run(
-                &target_dir,
-                venv_path.as_deref(),
-                exclude_newer,
-                &client_builder,
-                cache,
-                printer,
-            )
-            .await?
-        {
-            ExitStatus::Success | ExitStatus::External(0) => {}
-            status => return Ok(status),
-        }
-    }
-
-    Ok(ExitStatus::Success)
-}
-
-/// A check to execute against the prepared project environment.
-enum CheckTask {
-    Ty(TyCheck),
-}
-
-impl CheckTask {
-    async fn run(
-        self,
-        target_dir: &Path,
-        venv_path: Option<&Path>,
-        exclude_newer: Option<jiff::Timestamp>,
-        client_builder: &BaseClientBuilder<'_>,
-        cache: &Cache,
-        printer: Printer,
-    ) -> Result<ExitStatus> {
-        match self {
-            Self::Ty(check) => {
-                check
-                    .run(
-                        target_dir,
-                        venv_path,
-                        exclude_newer,
-                        client_builder,
-                        cache,
-                        printer,
-                    )
-                    .await
-            }
-        }
-    }
+    ty::run(
+        ty_version,
+        &target_dir,
+        venv_path.as_deref(),
+        exclude_newer,
+        &client_builder,
+        cache,
+        printer,
+    )
+    .await
 }
