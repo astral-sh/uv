@@ -18,9 +18,9 @@ fn check_project() -> Result<()> {
     "#})?;
 
     let main_py = context.temp_dir.child("main.py");
-    main_py.write_str(indoc! {r#"
+    main_py.write_str(indoc! {r"
         x: int = 1
-    "#})?;
+    "})?;
 
     uv_snapshot!(context.filters(), context.check(), @"
     success: true
@@ -40,9 +40,9 @@ fn check_missing_pyproject_toml() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
 
     let main_py = context.temp_dir.child("main.py");
-    main_py.write_str(indoc! {r#"
+    main_py.write_str(indoc! {r"
         x: int = 1
-    "#})?;
+    "})?;
 
     uv_snapshot!(context.filters(), context.check(), @"
     success: true
@@ -62,9 +62,9 @@ fn check_no_project() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
 
     let main_py = context.temp_dir.child("main.py");
-    main_py.write_str(indoc! {r#"
+    main_py.write_str(indoc! {r"
         x: int = 1
-    "#})?;
+    "})?;
 
     uv_snapshot!(context.filters(), context.check().arg("--no-project"), @"
     success: true
@@ -93,9 +93,9 @@ fn check_with_declared_dependency() -> Result<()> {
     "#})?;
 
     let main_py = context.temp_dir.child("main.py");
-    main_py.write_str(indoc! {r#"
+    main_py.write_str(indoc! {r"
         import iniconfig
-    "#})?;
+    "})?;
 
     // ty should resolve the import via the synced virtual environment.
     uv_snapshot!(context.filters(), context.check(), @"
@@ -126,12 +126,21 @@ fn check_with_undeclared_dependency() -> Result<()> {
     "#})?;
 
     let main_py = context.temp_dir.child("main.py");
-    main_py.write_str(indoc! {r#"
+    main_py.write_str(indoc! {r"
         import iniconfig
-    "#})?;
+    "})?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(
+            r"info:   \d+\. \[VENV\]/lib64/python3\.12/site-packages \(site-packages\)\n",
+            "",
+        )])
+        .collect::<Vec<_>>();
 
     // ty should report a diagnostic for the unresolvable import.
-    uv_snapshot!(context.filters(), context.check(), @"
+    uv_snapshot!(filters, context.check(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -145,7 +154,6 @@ fn check_with_undeclared_dependency() -> Result<()> {
     info:   1. [TEMP_DIR]/ (first-party code)
     info:   2. vendored://stdlib (stdlib typeshed stubs vendored by ty)
     info:   3. [SITE_PACKAGES]/ (site-packages)
-    info:   4. [VENV]/lib64/python3.12/site-packages (site-packages)
     info: make sure your Python environment is properly configured: https://docs.astral.sh/ty/modules/#python-environment
     info: rule `unresolved-import` is enabled by default
 

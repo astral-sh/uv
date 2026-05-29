@@ -15,7 +15,7 @@ use uv_configuration::{
 use uv_normalize::DefaultExtras;
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
@@ -57,6 +57,7 @@ pub(crate) async fn check(
     preview: Preview,
     no_project: bool,
     no_config: bool,
+    malware_settings: MalwareCheckSettings,
 ) -> Result<ExitStatus> {
     if !preview.is_enabled(PreviewFeature::Check) {
         warn_user!(
@@ -198,6 +199,7 @@ pub(crate) async fn check(
                 DryRun::Disabled,
                 printer,
                 preview,
+                &malware_settings,
             )
             .await
             {
@@ -219,7 +221,11 @@ pub(crate) async fn check(
     };
 
     // Download and install ty.
-    let exclude_newer = settings.resolver.exclude_newer.global.map(|v| v.timestamp());
+    let exclude_newer = settings
+        .resolver
+        .exclude_newer
+        .global
+        .map(|v| v.timestamp());
     let retry_policy = client_builder.retry_policy();
     let ty_client = client_builder.clone().retries(0).build()?;
 
@@ -254,15 +260,10 @@ pub(crate) async fn check(
             ResolvedVersion::from_version(Binary::Ty, version)?
         }
         BinVersion::Latest => {
-            let resolved = find_matching_version(
-                Binary::Ty,
-                None,
-                exclude_newer,
-                &ty_client,
-                &retry_policy,
-            )
-            .await
-            .with_context(|| "Failed to find latest ty version")?;
+            let resolved =
+                find_matching_version(Binary::Ty, None, exclude_newer, &ty_client, &retry_policy)
+                    .await
+                    .with_context(|| "Failed to find latest ty version")?;
             debug!("Resolved `ty@latest` to `ty=={}`", resolved.version);
             resolved
         }

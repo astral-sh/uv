@@ -2758,6 +2758,7 @@ pub(crate) struct CheckSettings {
     pub(crate) version: Option<String>,
     pub(crate) no_project: bool,
     pub(crate) show_version: bool,
+    pub(crate) malware_settings: MalwareCheckSettings,
 }
 
 impl CheckSettings {
@@ -2805,6 +2806,12 @@ impl CheckSettings {
 
         let dev = dev || environment.dev.value == Some(true);
         let no_dev = no_dev || environment.no_dev.value == Some(true);
+        let settings = ResolverInstallerSettings::combine(
+            resolver_installer_options(installer, build),
+            filesystem,
+            &environment,
+        );
+        let malware_settings = MalwareCheckSettings::from(&environment);
 
         Self {
             extras: ExtrasSpecification::from_args(
@@ -2832,14 +2839,12 @@ impl CheckSettings {
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
             refresh: Refresh::from(refresh),
-            settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(installer, build),
-                filesystem,
-            ),
+            settings,
             extra_args,
             version,
             no_project,
             show_version,
+            malware_settings,
         }
     }
 }

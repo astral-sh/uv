@@ -2727,6 +2727,7 @@ async fn run_project(
                 globals.preview,
                 args.no_project,
                 no_config,
+                args.malware_settings,
             ))
             .await
         }
