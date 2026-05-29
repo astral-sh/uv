@@ -1093,7 +1093,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ty_download_urls_use_github_by_default() {
+    fn test_ty_download_urls_use_default_astral_mirror_then_github() {
         let default_urls = Binary::Ty
             .download_urls_with_astral_mirror(
                 &Version::new([0, 0, 1]),
@@ -1115,6 +1115,10 @@ mod tests {
         assert_eq!(
             default_urls,
             vec![
+                DisplaySafeUrl::parse(
+                    "https://releases.astral.sh/github/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz",
+                )
+                .expect("default Astral mirror ty URL should be valid"),
                 DisplaySafeUrl::parse(
                     "https://github.com/astral-sh/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz",
                 )
