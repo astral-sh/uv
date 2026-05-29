@@ -888,10 +888,18 @@ jobs:
           .venv/bin/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
 
   integration-test-wsl:
-    name: "pyenv on wsl"
+    name: "pyenv on wsl${{ matrix.wsl-version }}"
     timeout-minutes: 15
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
     if: ${{ github.event.pull_request.head.repo.fork != true }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            wsl-version: 1
+          - runner: windows-2025
+            wsl-version: 2
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -907,6 +915,7 @@ jobs:
         uses: Vampire/setup-wsl@d1da7f2c0322a5ee4f24975344f67fc0f5baf364 # v7.0.0
         with:
           distribution: Ubuntu-22.04
+          wsl-version: ${{ matrix.wsl-version }}
 
       - name: "Install pyenv-win"
         shell: pwsh
