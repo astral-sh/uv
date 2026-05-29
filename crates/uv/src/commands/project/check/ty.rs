@@ -55,7 +55,9 @@ pub(super) async fn run(
             if exclude_newer.is_some() {
                 debug!("`--exclude-newer` is ignored for pinned version `{version}`");
             }
-            ResolvedVersion::from_version(Binary::Ty, version)?
+            let resolved = ResolvedVersion::from_version(Binary::Ty, version)?;
+            debug!("Using `ty=={}`", resolved.version);
+            resolved
         }
         BinVersion::Latest => {
             let resolved =

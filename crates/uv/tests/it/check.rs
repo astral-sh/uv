@@ -2,6 +2,7 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use indoc::indoc;
 
+use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
 #[test]
@@ -75,6 +76,41 @@ fn check_ty_version_no_match() {
       Caused by: No version of ty found matching `>=999.0.0` for platform `[PLATFORM]`
     "###
     );
+}
+
+#[test]
+fn check_ty_version_pinned_verbose() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x: int = 1
+    "})?;
+
+    // Narrow verbose logging to the version selection this test exercises.
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-project")
+            .arg("--ty-version")
+            .arg("0.0.17")
+            .arg("--verbose")
+            .env(EnvVars::RUST_LOG, "uv::commands::project::check::ty=debug"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    DEBUG `--exclude-newer` is ignored for pinned version `0.0.17`
+    DEBUG Using `ty==0.0.17`
+    "
+    );
+
+    Ok(())
 }
 
 #[test]
