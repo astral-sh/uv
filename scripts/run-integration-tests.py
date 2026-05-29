@@ -108,8 +108,6 @@ def main() -> int:
         nextest_options = [
             "--package",
             "uv-integration",
-            "--test",
-            "it",
             *nextest_options,
         ]
 

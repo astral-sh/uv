@@ -135,7 +135,7 @@ To run and review a specific snapshot test:
 
 ```shell
 cargo build --package uv --bin uv --features uv-publish/test
-UV_TEST_BIN="$PWD/target/debug/uv" cargo test --package uv-integration --test it <test_name> -- --exact
+UV_TEST_BIN="$PWD/target/debug/uv" cargo test --package uv-integration --test <test> <test_name> -- --exact
 cargo insta review
 ```
 

@@ -75,6 +75,10 @@ wiremock = { workspace = true }
 name = "it"
 path = "tests/it/main.rs"
 
+[[test]]
+name = "tool"
+path = "tests/tool.rs"
+
 [features]
 default = ["test-defaults"]
 native-auth = []

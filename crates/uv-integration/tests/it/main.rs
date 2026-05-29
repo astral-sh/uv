@@ -129,24 +129,6 @@ mod show_settings;
 mod sync;
 
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
-mod tool_dir;
-
-#[cfg(all(feature = "test-python", feature = "test-pypi"))]
-mod tool_install;
-
-#[cfg(all(feature = "test-python", feature = "test-pypi"))]
-mod tool_list;
-
-#[cfg(all(feature = "test-python", feature = "test-pypi"))]
-mod tool_run;
-
-#[cfg(all(feature = "test-python", feature = "test-pypi"))]
-mod tool_uninstall;
-
-#[cfg(all(feature = "test-python", feature = "test-pypi"))]
-mod tool_upgrade;
-
-#[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod tree;
 
 #[cfg(feature = "test-python")]
