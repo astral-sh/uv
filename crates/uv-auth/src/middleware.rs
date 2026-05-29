@@ -966,7 +966,8 @@ impl AuthMiddleware {
 
         let credentials = if let Some(credentials) = credentials {
             Some(Authentication::from(credentials))
-        } else if ArtifactRegistryProvider::is_artifact_registry(url)
+        } else if self.keyring.is_none()
+            && ArtifactRegistryProvider::is_artifact_registry(url)
             && ArtifactRegistryProvider::supports_username(requested_username)
             && self
                 .artifact_registry_provider
@@ -1503,6 +1504,31 @@ mod tests {
                 Some("oauth2accesstoken".to_string()),
                 Some(password.to_string())
             ))
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_artifact_registry_credentials_skip_built_in_provider_with_keyring()
+    -> Result<(), Error> {
+        let url = Url::parse("https://us-central1-python.pkg.dev/project/index/simple")?;
+        let middleware = AuthMiddleware::new()
+            .with_cache(CredentialsCache::new())
+            .with_keyring(Some(KeyringProvider::empty()))
+            .with_artifact_registry_provider(ArtifactRegistryProvider::with_signer(
+                reqsign::google::default_signer("artifactregistry.googleapis.com")
+                    .with_credential_provider(reqsign::google::TokenCredentialProvider::new(
+                        "test-token",
+                    )),
+            ));
+
+        assert!(
+            middleware
+                .fetch_credentials(None, DisplaySafeUrl::ref_cast(&url), None, AuthPolicy::Auto)
+                .await
+                .is_none(),
+            "Built-in credentials should not override an explicitly configured keyring provider"
         );
 
         Ok(())
