@@ -59,7 +59,7 @@ fn check_missing_pyproject_toml() -> Result<()> {
 
 #[test]
 fn check_no_project() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]);
+    let context = uv_test::test_context_with_versions!(&[]).with_filtered_python_sources();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -82,7 +82,7 @@ fn check_no_project() -> Result<()> {
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
-    error: No interpreter found for Python >=4.0 in managed installations or search path
+    error: No interpreter found for Python >=4.0 in [PYTHON SOURCES]
     ");
 
     // The unavailable project environment is not initialized when project discovery is disabled.
