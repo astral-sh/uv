@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::error::Error as _;
 use std::path::PathBuf;
-#[cfg(not(windows))]
 use std::process::Stdio;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
@@ -12,9 +11,7 @@ use reqsign::azure::DefaultSigner as AzureDefaultSigner;
 use reqsign::google::Credential as GoogleCredential;
 use reqsign::google::DefaultSigner as GoogleDefaultSigner;
 use reqsign::{Context, ProvideCredential};
-#[cfg(not(windows))]
 use serde::Deserialize;
-#[cfg(not(windows))]
 use tokio::process::Command;
 use tokio::sync::Mutex;
 use tracing::debug;
@@ -46,7 +43,6 @@ const GOOGLE_ARTIFACT_REGISTRY_CACHE_DURATION: Duration = Duration::from_mins(1)
 const GOOGLE_ARTIFACT_REGISTRY_ADC_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Avoid waiting indefinitely for credentials from the `gcloud` CLI.
-#[cfg(not(windows))]
 const GOOGLE_ARTIFACT_REGISTRY_GCLOUD_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// A provider for authentication credentials for Google Artifact Registry.
@@ -62,13 +58,11 @@ struct CachedArtifactRegistryCredentials {
     expires_at: Instant,
 }
 
-#[cfg(not(windows))]
 #[derive(Debug, Deserialize)]
 struct GcloudConfig {
     credential: Option<GcloudCredential>,
 }
 
-#[cfg(not(windows))]
 #[derive(Debug, Deserialize)]
 struct GcloudCredential {
     access_token: Option<String>,
@@ -282,47 +276,42 @@ impl ArtifactRegistryProvider {
     }
 
     async fn credentials_from_gcloud() -> Option<(Credentials, Duration)> {
-        #[cfg(windows)]
-        {
+        if cfg!(windows) {
             // The Google Cloud SDK launcher on Windows is a `.cmd` script, which requires shell
             // execution. Keep Application Default Credentials support, but skip this fallback for now.
             debug!("Skipping Google Artifact Registry credentials from `gcloud` on Windows");
-            None
+            return None;
         }
 
-        #[cfg(not(windows))]
-        {
-            let mut command = Command::new("gcloud");
-            command
-                .args(["config", "config-helper", "--format=json(credential)"])
-                .stdin(Stdio::null())
-                .kill_on_drop(true);
-            let output = tokio::time::timeout(
-                GOOGLE_ARTIFACT_REGISTRY_GCLOUD_TIMEOUT,
-                command.output(),
-            )
-            .await
-            .inspect_err(|_| {
-                debug!("Timed out retrieving Google Artifact Registry credentials from `gcloud`");
-            })
-            .ok()?
-            .inspect_err(|err| {
-                debug!("Failed to run `gcloud config config-helper`: {err}");
-            })
-            .ok()?;
-            if !output.status.success() {
-                debug!(
-                    "`gcloud config config-helper` exited with status {}",
-                    output.status
-                );
-                return None;
-            }
-
-            Self::credentials_from_gcloud_output(&output.stdout)
+        let mut command = Command::new("gcloud");
+        command
+            .args(["config", "config-helper", "--format=json(credential)"])
+            .stdin(Stdio::null())
+            .kill_on_drop(true);
+        let output =
+            tokio::time::timeout(GOOGLE_ARTIFACT_REGISTRY_GCLOUD_TIMEOUT, command.output())
+                .await
+                .inspect_err(|_| {
+                    debug!(
+                        "Timed out retrieving Google Artifact Registry credentials from `gcloud`"
+                    );
+                })
+                .ok()?
+                .inspect_err(|err| {
+                    debug!("Failed to run `gcloud config config-helper`: {err}");
+                })
+                .ok()?;
+        if !output.status.success() {
+            debug!(
+                "`gcloud config config-helper` exited with status {}",
+                output.status
+            );
+            return None;
         }
+
+        Self::credentials_from_gcloud_output(&output.stdout)
     }
 
-    #[cfg(not(windows))]
     fn credentials_from_gcloud_output(output: &[u8]) -> Option<(Credentials, Duration)> {
         let config = serde_json::from_slice::<GcloudConfig>(output)
             .inspect_err(|err| {
@@ -750,7 +739,6 @@ mod tests {
         assert!(!ArtifactRegistryProvider::supports_username(Some("user")));
     }
 
-    #[cfg(not(windows))]
     #[test]
     fn test_artifact_registry_credentials_from_gcloud_output() {
         assert_eq!(
