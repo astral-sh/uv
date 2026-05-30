@@ -2,6 +2,14 @@ use std::path::Path;
 
 use tracing::debug;
 
+use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
+use crate::commands::pip::operations::Modifications;
+use crate::commands::project::{
+    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, sync_environment,
+};
+use crate::printer::Printer;
+use crate::settings::ResolverInstallerSettings;
+
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{cache_digest, hash_digest};
@@ -16,13 +24,6 @@ use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
 use uv_types::SourceTreeEditablePolicy;
 use uv_workspace::WorkspaceCache;
 
-use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
-use crate::commands::pip::operations::Modifications;
-use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, sync_environment,
-};
-use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
 /// An ephemeral [`PythonEnvironment`] for running an individual command.
 #[derive(Debug)]
 pub(crate) struct EphemeralEnvironment(PythonEnvironment);
