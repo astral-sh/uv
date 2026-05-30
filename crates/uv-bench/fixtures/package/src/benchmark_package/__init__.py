@@ -1,0 +1,2 @@
+def benchmark() -> None:
+    pass

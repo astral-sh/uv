@@ -1,6 +1,6 @@
+use std::fmt::Write;
 use std::path::Path;
 
-use anstream::print;
 use anyhow::{Error, Result};
 use futures::StreamExt;
 use uv_cache::{Cache, Refresh};
@@ -300,7 +300,7 @@ pub(crate) async fn tree(
         show_sizes,
     );
 
-    print!("{tree}");
+    write!(printer.stdout(), "{tree}")?;
 
     Ok(ExitStatus::Success)
 }

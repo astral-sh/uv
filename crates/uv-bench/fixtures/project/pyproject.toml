@@ -1,0 +1,12 @@
+[project]
+name = "benchmark-project"
+version = "0.1.0"
+requires-python = ">=3.9"
+dependencies = [
+    "idna==3.7",
+    "iniconfig==2.0.0",
+    "packaging==24.1",
+]
+
+[tool.uv]
+package = false
