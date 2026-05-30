@@ -108,6 +108,15 @@ impl RequirementsSource {
                 "The file `{}` appears to be a TOML file, but requirements must be specified in `requirements.txt` format",
                 path.user_display(),
             ));
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+        {
+            return Err(anyhow::anyhow!(
+                "The file `{}` appears to be a uv lockfile, not a `requirements.txt` file. \
+                Use `uv export --output-file requirements.txt` to generate a requirements file from the lockfile.",
+                path.user_display(),
+            ));
         }
         Ok(Self::RequirementsTxt(path))
     }
@@ -144,6 +153,15 @@ impl RequirementsSource {
                 "The file `{}` appears to be a TOML file, but constraints must be specified in `requirements.txt` format",
                 path.user_display(),
             ));
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+        {
+            return Err(anyhow::anyhow!(
+                "The file `{}` appears to be a uv lockfile, not a `requirements.txt` file. \
+                Use `uv export --output-file requirements.txt` to generate a requirements file from the lockfile.",
+                path.user_display(),
+            ));
         }
         Ok(Self::RequirementsTxt(path))
     }
@@ -178,6 +196,15 @@ impl RequirementsSource {
         {
             return Err(anyhow::anyhow!(
                 "The file `{}` appears to be a TOML file, but overrides must be specified in `requirements.txt` format",
+                path.user_display(),
+            ));
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+        {
+            return Err(anyhow::anyhow!(
+                "The file `{}` appears to be a uv lockfile, not a `requirements.txt` file. \
+                Use `uv export --output-file requirements.txt` to generate a requirements file from the lockfile.",
                 path.user_display(),
             ));
         }
