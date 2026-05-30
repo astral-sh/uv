@@ -108,6 +108,16 @@ impl RequirementsSource {
                 "The file `{}` appears to be a TOML file, but requirements must be specified in `requirements.txt` format",
                 path.user_display(),
             ));
+        } else if path
+            .file_name()
+            .and_then(OsStr::to_str)
+            .is_some_and(is_uv_lockfile)
+        {
+            return Err(anyhow::anyhow!(
+                "The file `{}` appears to be a uv lockfile, but requirements must be specified in `requirements.txt` format. \
+                Run `uv export --format requirements-txt` to generate a `requirements.txt` from the lockfile.",
+                path.user_display(),
+            ));
         }
         Ok(Self::RequirementsTxt(path))
     }
@@ -144,6 +154,16 @@ impl RequirementsSource {
                 "The file `{}` appears to be a TOML file, but constraints must be specified in `requirements.txt` format",
                 path.user_display(),
             ));
+        } else if path
+            .file_name()
+            .and_then(OsStr::to_str)
+            .is_some_and(is_uv_lockfile)
+        {
+            return Err(anyhow::anyhow!(
+                "The file `{}` appears to be a uv lockfile, but constraints must be specified in `requirements.txt` format. \
+                Run `uv export --format requirements-txt` to generate a `requirements.txt` from the lockfile.",
+                path.user_display(),
+            ));
         }
         Ok(Self::RequirementsTxt(path))
     }
@@ -178,6 +198,16 @@ impl RequirementsSource {
         {
             return Err(anyhow::anyhow!(
                 "The file `{}` appears to be a TOML file, but overrides must be specified in `requirements.txt` format",
+                path.user_display(),
+            ));
+        } else if path
+            .file_name()
+            .and_then(OsStr::to_str)
+            .is_some_and(is_uv_lockfile)
+        {
+            return Err(anyhow::anyhow!(
+                "The file `{}` appears to be a uv lockfile, but overrides must be specified in `requirements.txt` format. \
+                Run `uv export --format requirements-txt` to generate a `requirements.txt` from the lockfile.",
                 path.user_display(),
             ));
         }
@@ -332,4 +362,48 @@ impl std::fmt::Display for RequirementsSource {
 #[expect(clippy::case_sensitive_file_extension_comparisons)]
 pub fn is_pylock_toml(file_name: &str) -> bool {
     file_name.starts_with("pylock.") && file_name.ends_with(".toml")
+}
+
+/// Returns `true` if a file name matches a uv lockfile pattern.
+///
+/// uv produces two kinds of lockfiles:
+/// - `uv.lock` for workspace projects
+/// - `{script}.lock` for PEP 723 scripts, e.g., `action.py.lock`
+///
+/// Other common lockfiles (`yarn.lock`, `Cargo.lock`, `Gemfile.lock`) have no inner extension
+/// before `.lock`, so the double-extension pattern is a reliable signal for uv script lockfiles.
+fn is_uv_lockfile(file_name: &str) -> bool {
+    if file_name == "uv.lock" {
+        return true;
+    }
+    // Script lockfiles append `.lock` to the full script filename (e.g., `script.py` → `script.py.lock`).
+    // Strip `.lock` and check whether an extension remains; this matches `script.py.lock` but not `yarn.lock`.
+    let Some(stem) = file_name.strip_suffix(".lock") else {
+        return false;
+    };
+    Path::new(stem).extension().is_some()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_uv_lockfile() {
+        // uv workspace lockfile
+        assert!(is_uv_lockfile("uv.lock"));
+        // uv script lockfiles (double extension)
+        assert!(is_uv_lockfile("action.py.lock"));
+        assert!(is_uv_lockfile("script.py.lock"));
+        assert!(is_uv_lockfile("process.sh.lock"));
+        // non-uv lockfiles (single extension, no inner extension)
+        assert!(!is_uv_lockfile("yarn.lock"));
+        assert!(!is_uv_lockfile("Cargo.lock"));
+        assert!(!is_uv_lockfile("Gemfile.lock"));
+        assert!(!is_uv_lockfile("Pipfile.lock"));
+        assert!(!is_uv_lockfile("poetry.lock"));
+        // non-lockfiles
+        assert!(!is_uv_lockfile("requirements.txt"));
+        assert!(!is_uv_lockfile("uv.toml"));
+    }
 }
