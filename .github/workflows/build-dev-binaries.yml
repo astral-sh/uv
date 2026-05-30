@@ -19,6 +19,10 @@ jobs:
     name: "linux libc"
     timeout-minutes: 10
     runs-on: github-ubuntu-24.04-x86_64-8
+    env:
+      # Rust's distributed x86_64 GNU target uses bundled LLD by default; opt out
+      # so `/usr/bin/ld` resolves to the installed mold linker.
+      CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C linker-features=-lld"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:

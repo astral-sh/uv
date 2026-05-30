@@ -332,6 +332,10 @@ jobs:
   linux:
     name: ${{ matrix.target }}
     runs-on: depot-ubuntu-latest-4
+    env:
+      # Rust's distributed x86_64 GNU target uses bundled LLD by default; opt out
+      # so `/usr/bin/ld` resolves to the installed mold linker.
+      CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C linker-features=-lld"
     strategy:
       matrix:
         include:
