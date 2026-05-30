@@ -9,7 +9,8 @@ use uv_errors::ErrorWithHints;
 use uv_fs::Simplified;
 use uv_preview::Preview;
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
+    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
@@ -79,25 +80,47 @@ pub(crate) async fn find(
     .await?;
 
     let python_request = python_request.unwrap_or_default();
-    let python = PythonInstallation::find_existing(
-        &python_request,
-        environment_preference,
-        python_preference,
-        cache,
-        preview,
-    )?;
-    python
-        .download_and_warn_if_outdated_prerelease(
+
+    let project_environment = project.as_ref().and_then(|project| {
+        let root = project.workspace().venv(None);
+        match PythonEnvironment::from_root(&root, cache) {
+            Ok(environment) if python_request.satisfied(environment.interpreter(), cache) => {
+                Some(environment)
+            }
+            _ => None,
+        }
+    });
+
+    let installation = if project_environment.is_some() {
+        None
+    } else {
+        let python = PythonInstallation::find_existing(
             &python_request,
-            client_builder,
-            python_downloads_json_url,
-        )
-        .await?;
+            environment_preference,
+            python_preference,
+            cache,
+            preview,
+        )?;
+        python
+            .download_and_warn_if_outdated_prerelease(
+                &python_request,
+                client_builder,
+                python_downloads_json_url,
+            )
+            .await?;
+        Some(python)
+    };
+
+    let interpreter = project_environment
+        .as_ref()
+        .map(PythonEnvironment::interpreter)
+        .or_else(|| installation.as_ref().map(PythonInstallation::interpreter))
+        .ok_or_else(|| anyhow::anyhow!("Failed to resolve a Python interpreter"))?;
 
     // Warn if the discovered Python version is incompatible with the current workspace
     if let Some(requires_python) = requires_python {
         match validate_project_requires_python(
-            python.interpreter(),
+            interpreter,
             project.as_ref().map(VirtualProject::workspace),
             &groups,
             &requires_python,
@@ -111,16 +134,12 @@ pub(crate) async fn find(
     }
 
     if show_version {
-        writeln!(
-            printer.stdout(),
-            "{}",
-            python.interpreter().python_version()
-        )?;
+        writeln!(printer.stdout(), "{}", interpreter.python_version())?;
     } else {
         let path = if resolve_links {
-            dunce::canonicalize(python.interpreter().sys_executable())?
+            dunce::canonicalize(interpreter.sys_executable())?
         } else {
-            std::path::absolute(python.interpreter().sys_executable())?
+            std::path::absolute(interpreter.sys_executable())?
         };
         writeln!(printer.stdout(), "{}", path.simplified_display())?;
     }
