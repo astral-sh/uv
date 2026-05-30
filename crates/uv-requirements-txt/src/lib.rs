@@ -359,6 +359,24 @@ impl RequirementsTxt {
     ) -> Result<Self, RequirementsTxtParserError> {
         let mut s = Scanner::new(content);
 
+        // Detect uv lockfile format: a valid uv.lock always begins with `version = <integer>`
+        // (possibly preceded by a comment). If we see this, bail out early with a helpful error
+        // rather than a cryptic parse failure.
+        {
+            let trimmed = content.trim_start();
+            // Strip any leading comment lines (lines starting with `#`)
+            let first_non_comment = trimmed
+                .lines()
+                .find(|line| !line.trim_start().starts_with('#'))
+                .unwrap_or("");
+            if first_non_comment
+                .trim_start()
+                .starts_with("version =")
+            {
+                return Err(RequirementsTxtParserError::LooksLikeLockfile);
+            }
+        }
+
         let mut data = Self::default();
         while let Some(statement) = parse_entry(&mut s, content, working_dir, requirements_txt)? {
             match statement {
@@ -1196,6 +1214,10 @@ pub enum RequirementsTxtParserError {
         start: usize,
         end: usize,
     },
+    /// The file appears to be a uv lockfile (`uv.lock`) rather than a
+    /// requirements file. Detected by the presence of `version = <n>` at the
+    /// start of the file, which is the header of the uv lock format.
+    LooksLikeLockfile,
     Subfile {
         source: Box<RequirementsTxtFileError>,
         start: usize,
@@ -1264,6 +1286,13 @@ impl Display for RequirementsTxtParserError {
             }
             Self::ParsedUrl { start, .. } => {
                 write!(f, "Couldn't URL at position {start}")
+            }
+            Self::LooksLikeLockfile => {
+                write!(
+                    f,
+                    "The file appears to be a uv lockfile (`uv.lock`), not a requirements file. \
+                     Use `uv sync` to install from a lockfile instead of `-r`."
+                )
             }
             Self::Subfile { start, .. } => {
                 write!(f, "Error parsing included file at position {start}")
@@ -1432,6 +1461,14 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Couldn't parse URL in `{}` at position {start}",
+                    self.file.user_display(),
+                )
+            }
+            RequirementsTxtParserError::LooksLikeLockfile => {
+                write!(
+                    f,
+                    "`{}` appears to be a uv lockfile (`uv.lock`), not a requirements file. \
+                     Use `uv sync` to install from a lockfile instead of `-r`.",
                     self.file.user_display(),
                 )
             }
