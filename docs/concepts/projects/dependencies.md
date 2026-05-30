@@ -216,6 +216,34 @@ dependencies = ["foo"]
 foo = { path = "./packages/foo" }
 ```
 
+### Local development overrides with `uv.toml`
+
+Sources can also be defined in a `uv.toml` file to enable local development overrides without
+modifying the committed `pyproject.toml`. This is useful when:
+
+- Different developers have dependencies at different local paths
+- You want to temporarily override a dependency without committing the change
+- You want to use version control ignore patterns (e.g., `.gitignore`) to exclude local configuration
+
+```toml title="uv.toml"
+[sources]
+httpx = { path = "../httpx", editable = true }
+my-package = { git = "https://github.com/me/my-package", branch = "dev" }
+```
+
+!!! note
+
+    When both `uv.toml` and `pyproject.toml` define sources for the same package, the `uv.toml`
+    definition takes precedence. This allows local overrides without modifying the project
+    configuration.
+
+!!! tip
+
+    Add `uv.toml` to your `.gitignore` to maintain local-only development configurations without
+    affecting other team members.
+
+### Supported source types
+
 The following dependency sources are supported by uv:
 
 - [Index](#index): A package resolved from a specific package index.
