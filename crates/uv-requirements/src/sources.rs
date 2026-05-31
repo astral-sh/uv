@@ -228,8 +228,7 @@ impl RequirementsSource {
             }
         }
 
-        let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
-            .with_context(|| format!("Failed to parse: `{name}`"))?;
+        let requirement = parse_command_line_requirement(name, false)?;
 
         Ok(Self::Package(requirement))
     }
@@ -278,24 +277,21 @@ impl RequirementsSource {
             }
         }
 
-        let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
-            .with_context(|| format!("Failed to parse: `{name}`"))?;
+        let requirement = parse_command_line_requirement(name, false)?;
 
         Ok(Self::Package(requirement))
     }
 
     /// Parse an editable [`RequirementsSource`] (e.g., `uv pip install -e .`).
     pub fn from_editable(name: &str) -> Result<Self> {
-        let requirement = RequirementsTxtRequirement::parse(name, &*CWD, true)
-            .with_context(|| format!("Failed to parse: `{name}`"))?;
+        let requirement = parse_command_line_requirement(name, true)?;
 
         Ok(Self::Editable(requirement))
     }
 
     /// Parse a package [`RequirementsSource`] (e.g., `uv pip install ruff`).
     pub fn from_package(name: &str) -> Result<Self> {
-        let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
-            .with_context(|| format!("Failed to parse: `{name}`"))?;
+        let requirement = parse_command_line_requirement(name, false)?;
 
         Ok(Self::Package(requirement))
     }
@@ -307,6 +303,37 @@ impl RequirementsSource {
             Self::PylockToml(_) | Self::PyprojectToml(_) | Self::SetupPy(_) | Self::SetupCfg(_)
         )
     }
+}
+
+fn parse_command_line_requirement(
+    name: &str,
+    editable: bool,
+) -> Result<RequirementsTxtRequirement> {
+    match RequirementsTxtRequirement::parse(name, &*CWD, editable) {
+        Ok(requirement) => Ok(requirement),
+        Err(err) => match strip_inline_comment(name) {
+            Some(stripped) => RequirementsTxtRequirement::parse(stripped, &*CWD, editable)
+                .with_context(|| format!("Failed to parse: `{name}`")),
+            None => Err(err).with_context(|| format!("Failed to parse: `{name}`")),
+        },
+    }
+}
+
+fn strip_inline_comment(name: &str) -> Option<&str> {
+    for (index, character) in name.char_indices() {
+        if character == '#'
+            && name[..index]
+                .chars()
+                .next_back()
+                .is_some_and(|character| matches!(character, ' ' | '\t'))
+        {
+            return Some(
+                name[..index].trim_end_matches(|character| matches!(character, ' ' | '\t')),
+            );
+        }
+    }
+
+    None
 }
 
 impl std::fmt::Display for RequirementsSource {

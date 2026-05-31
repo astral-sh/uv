@@ -631,6 +631,44 @@ fn install_package() {
     context.assert_command("import flask").success();
 }
 
+/// Install a package with a requirements-style inline comment from the command line.
+#[test]
+fn install_package_with_inline_comment() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.pip_install()
+        .arg("iniconfig # optional dependency")
+        .arg("--strict"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
+    );
+
+    context.assert_command("import iniconfig").success();
+
+    uv_snapshot!(context.pip_install()
+        .arg("iniconfig#comment")
+        .arg("--strict"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `iniconfig#comment`
+      Caused by: Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `#`
+    iniconfig#comment
+             ^
+    "
+    );
+}
+
 /// Install a package from a `requirements.txt` into a virtual environment.
 #[test]
 fn install_requirements_txt() -> Result<()> {
