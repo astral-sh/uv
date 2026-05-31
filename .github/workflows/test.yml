@@ -205,48 +205,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # Avoid rebuilding the integration-test executable in every Windows partition.
-  build-test-uv-windows:
-    timeout-minutes: 10
-    runs-on: github-windows-2025-x86_64-16
-    name: "build test uv on windows"
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Setup Dev Drive
-        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
-
-      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
-      - name: Copy Git Repo to Dev Drive
-        run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
-
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          workspaces: ${{ env.UV_WORKSPACE }}
-          # Use the same cache entry as the test partitions.
-          add-job-id-key: false
-          save-if: false
-
-      - name: "Install Rust toolchain"
-        working-directory: ${{ env.UV_WORKSPACE }}
-        run: rustup show
-
-      - name: "Build test uv"
-        working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --workspace --bin uv --profile fast-build --no-default-features --features uv-publish/test,uv-keyring/native-auth
-
-      - name: "Upload test uv"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: uv-test-windows-x86_64-${{ github.sha }}
-          path: ${{ env.UV_WORKSPACE }}/target/fast-build/uv.exe
-          retention-days: 1
-
   cargo-test-windows:
-    needs: build-test-uv-windows
     timeout-minutes: 15
     runs-on: github-windows-2025-x86_64-16
     name: "cargo test on windows ${{ matrix.partition }} of 3"
@@ -298,12 +257,6 @@ jobs:
         with:
           tool: cargo-nextest
 
-      - name: "Download test uv"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: uv-test-windows-x86_64-${{ github.sha }}
-          path: ${{ env.UV_WORKSPACE }}
-
       - name: "Cargo test"
         working-directory: ${{ env.UV_WORKSPACE }}
         env:
@@ -319,7 +272,7 @@ jobs:
           # Write pending snapshots to a separate directory for artifact upload
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
-          UV_TEST_BIN: "${{ env.UV_WORKSPACE }}/uv.exe"
+          UV_TEST_UV_BUILD_ARGS: "--profile fast-build --no-default-features --features uv-keyring/native-auth"
         shell: bash
         run: |
           cargo nextest run \
