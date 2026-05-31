@@ -872,6 +872,13 @@ impl EnvVars {
     #[attr_added_in("0.2.7")]
     pub const NO_COLOR: &'static str = "NO_COLOR";
 
+    /// Equivalent to the `--no-progress` command-line argument. Disables all progress output. For
+    /// example, spinners and progress bars.
+    ///
+    /// See [no-progress.org](https://no-progress.org).
+    #[attr_added_in("0.11.17")]
+    pub const NO_PROGRESS: &'static str = "NO_PROGRESS";
+
     /// Forces colored output regardless of terminal support.
     ///
     /// See [force-color.org](https://force-color.org).

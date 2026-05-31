@@ -67,7 +67,7 @@ fn help() {
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
-              Hide all progress outputs [env: UV_NO_PROGRESS=]
+              Hide all progress outputs [env: NO_PROGRESS=,UV_NO_PROGRESS=]
           --directory <DIRECTORY>
               Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
@@ -150,7 +150,7 @@ fn help_flag() {
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
-              Hide all progress outputs [env: UV_NO_PROGRESS=]
+              Hide all progress outputs [env: NO_PROGRESS=,UV_NO_PROGRESS=]
           --directory <DIRECTORY>
               Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
@@ -233,7 +233,7 @@ fn help_short_flag() {
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
-              Hide all progress outputs [env: UV_NO_PROGRESS=]
+              Hide all progress outputs [env: NO_PROGRESS=,UV_NO_PROGRESS=]
           --directory <DIRECTORY>
               Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
@@ -296,7 +296,7 @@ fn help_flag_workspace() {
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
-              Hide all progress outputs [env: UV_NO_PROGRESS=]
+              Hide all progress outputs [env: NO_PROGRESS=,UV_NO_PROGRESS=]
           --directory <DIRECTORY>
               Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
@@ -474,7 +474,7 @@ fn help_subcommand() {
 
               For example, spinners or progress bars.
 
-              [env: UV_NO_PROGRESS=]
+              [env: NO_PROGRESS=,UV_NO_PROGRESS=]
 
           --directory <DIRECTORY>
               Change to the given directory prior to running the command.
@@ -758,7 +758,7 @@ fn help_subsubcommand() {
 
               For example, spinners or progress bars.
 
-              [env: UV_NO_PROGRESS=]
+              [env: NO_PROGRESS=,UV_NO_PROGRESS=]
 
           --directory <DIRECTORY>
               Change to the given directory prior to running the command.
@@ -856,7 +856,7 @@ fn help_flag_subcommand() {
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
-              Hide all progress outputs [env: UV_NO_PROGRESS=]
+              Hide all progress outputs [env: NO_PROGRESS=,UV_NO_PROGRESS=]
           --directory <DIRECTORY>
               Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
@@ -940,7 +940,7 @@ fn help_flag_subsubcommand() {
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
-              Hide all progress outputs [env: UV_NO_PROGRESS=]
+              Hide all progress outputs [env: NO_PROGRESS=,UV_NO_PROGRESS=]
           --directory <DIRECTORY>
               Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
@@ -1111,7 +1111,7 @@ fn help_with_global_option() {
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
-              Hide all progress outputs [env: UV_NO_PROGRESS=]
+              Hide all progress outputs [env: NO_PROGRESS=,UV_NO_PROGRESS=]
           --directory <DIRECTORY>
               Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
@@ -1236,7 +1236,7 @@ fn help_with_no_pager() {
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
-              Hide all progress outputs [env: UV_NO_PROGRESS=]
+              Hide all progress outputs [env: NO_PROGRESS=,UV_NO_PROGRESS=]
           --directory <DIRECTORY>
               Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>

@@ -711,6 +711,17 @@ impl EnvFlag {
             env_var,
         })
     }
+
+    /// Create a new [`EnvFlag`] by parsing a given environment variable and fallback.
+    pub fn coalesce(env_var: &'static str, fallback: &'static str) -> Result<Self, Error> {
+        let left = parse_boolish_environment_variable(env_var)?.unwrap_or(false);
+        let right = parse_boolish_environment_variable(fallback)?.unwrap_or(false);
+
+        Ok(Self {
+            value: Some(left || right),
+            env_var,
+        })
+    }
 }
 
 /// Options loaded from environment variables.
@@ -848,7 +859,7 @@ impl EnvironmentOptions {
             system_certs: EnvFlag::new(EnvVars::UV_SYSTEM_CERTS)?,
             preview: EnvFlag::new(EnvVars::UV_PREVIEW)?,
             isolated: EnvFlag::new(EnvVars::UV_ISOLATED)?,
-            no_progress: EnvFlag::new(EnvVars::UV_NO_PROGRESS)?,
+            no_progress: EnvFlag::coalesce(EnvVars::NO_PROGRESS, EnvVars::UV_NO_PROGRESS)?,
             no_installer_metadata: EnvFlag::new(EnvVars::UV_NO_INSTALLER_METADATA)?,
             dev: EnvFlag::new(EnvVars::UV_DEV)?,
             no_dev: EnvFlag::new(EnvVars::UV_NO_DEV)?,

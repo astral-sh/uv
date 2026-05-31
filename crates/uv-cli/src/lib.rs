@@ -345,7 +345,7 @@ pub struct GlobalArgs {
     #[arg(global = true, long, hide = true)]
     pub show_settings: bool,
 
-    /// Hide all progress outputs [env: UV_NO_PROGRESS=]
+    /// Hide all progress outputs [env: NO_PROGRESS=,UV_NO_PROGRESS=]
     ///
     /// For example, spinners or progress bars.
     #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new())]

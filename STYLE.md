@@ -100,7 +100,7 @@ The documentation is divided into:
 1. All CLI output must be interpretable and understandable _without_ the use of color and other
    styling. (For example: even if a command is rendered in green, wrap it in backticks.)
 1. `NO_COLOR` must be respected when using any colors or styling.
-1. `UV_NO_PROGRESS` must be respected when using progress-styling like bars or spinners.
+1. `NO_PROGRESS` and `UV_NO_PROGRESS` must be respected when using progress-styling like bars or spinners.
 1. In general, use:
    - Green for success.
    - Red for error.
