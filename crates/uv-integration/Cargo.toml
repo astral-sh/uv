@@ -122,7 +122,7 @@ path = "tests/workspace.rs"
 [features]
 default = ["test-defaults"]
 native-auth = []
-self-update = ["dep:axoupdater"]
+self-update = ["axoupdater"]
 tracing-durations-export = ["uv-test/tracing-durations-export"]
 test-defaults = [
   "test-crates-io",
