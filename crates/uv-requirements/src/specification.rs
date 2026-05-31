@@ -666,8 +666,7 @@ impl RequirementsSpecification {
 
     /// Parse an individual package requirement.
     pub fn parse_package(name: &str) -> Result<UnresolvedRequirementSpecification> {
-        let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
-            .with_context(|| format!("Failed to parse: `{name}`"))?;
+        let requirement = parse_command_line_requirement(name, false)?;
         Ok(UnresolvedRequirementSpecification::from(requirement))
     }
 
@@ -709,6 +708,35 @@ impl RequirementsSpecification {
     pub fn is_empty(&self) -> bool {
         self.requirements.is_empty() && self.source_trees.is_empty() && self.overrides.is_empty()
     }
+}
+
+pub(crate) fn parse_command_line_requirement(
+    name: &str,
+    editable: bool,
+) -> Result<RequirementsTxtRequirement> {
+    match RequirementsTxtRequirement::parse(name, &*CWD, editable) {
+        Ok(requirement) => Ok(requirement),
+        Err(err) => match strip_inline_comment(name) {
+            Some(stripped) => RequirementsTxtRequirement::parse(stripped, &*CWD, editable)
+                .with_context(|| format!("Failed to parse: `{name}`")),
+            None => Err(err).with_context(|| format!("Failed to parse: `{name}`")),
+        },
+    }
+}
+
+fn strip_inline_comment(name: &str) -> Option<&str> {
+    for (index, character) in name.char_indices() {
+        if character == '#'
+            && name[..index]
+                .chars()
+                .next_back()
+                .is_some_and(|character| matches!(character, ' ' | '\t'))
+        {
+            return Some(name[..index].trim_end_matches([' ', '\t']));
+        }
+    }
+
+    None
 }
 
 #[derive(Debug, Default, Clone)]

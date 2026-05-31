@@ -4,8 +4,10 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use console::Term;
 
-use uv_fs::{CWD, Simplified};
+use uv_fs::Simplified;
 use uv_requirements_txt::RequirementsTxtRequirement;
+
+use crate::specification::parse_command_line_requirement;
 
 #[derive(Debug, Clone)]
 pub enum RequirementsSource {
@@ -303,35 +305,6 @@ impl RequirementsSource {
             Self::PylockToml(_) | Self::PyprojectToml(_) | Self::SetupPy(_) | Self::SetupCfg(_)
         )
     }
-}
-
-fn parse_command_line_requirement(
-    name: &str,
-    editable: bool,
-) -> Result<RequirementsTxtRequirement> {
-    match RequirementsTxtRequirement::parse(name, &*CWD, editable) {
-        Ok(requirement) => Ok(requirement),
-        Err(err) => match strip_inline_comment(name) {
-            Some(stripped) => RequirementsTxtRequirement::parse(stripped, &*CWD, editable)
-                .with_context(|| format!("Failed to parse: `{name}`")),
-            None => Err(err).with_context(|| format!("Failed to parse: `{name}`")),
-        },
-    }
-}
-
-fn strip_inline_comment(name: &str) -> Option<&str> {
-    for (index, character) in name.char_indices() {
-        if character == '#'
-            && name[..index]
-                .chars()
-                .next_back()
-                .is_some_and(|character| matches!(character, ' ' | '\t'))
-        {
-            return Some(name[..index].trim_end_matches([' ', '\t']));
-        }
-    }
-
-    None
 }
 
 impl std::fmt::Display for RequirementsSource {
