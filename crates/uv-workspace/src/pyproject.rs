@@ -71,7 +71,7 @@ fn extract_free_threaded_selector(raw: &str) -> Option<String> {
     // Find `requires-python` in the raw TOML text.
     let after_key = raw.split("requires-python").nth(1)?;
     // Find the opening quote of the value (`=  "..."` or `= '...'`).
-    let after_eq = after_key.splitn(2, '=').nth(1)?;
+    let after_eq = after_key.split_once('=')?.1;
     let trimmed = after_eq.trim_start();
     let quote_char = trimmed.chars().next().filter(|c| *c == '"' || *c == '\'')?;
     let value_start = 1; // skip the opening quote
