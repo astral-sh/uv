@@ -327,9 +327,7 @@ fn strip_inline_comment(name: &str) -> Option<&str> {
                 .next_back()
                 .is_some_and(|character| matches!(character, ' ' | '\t'))
         {
-            return Some(
-                name[..index].trim_end_matches(|character| matches!(character, ' ' | '\t')),
-            );
+            return Some(name[..index].trim_end_matches([' ', '\t']));
         }
     }
 
