@@ -53,6 +53,46 @@ pub enum PyprojectTomlError {
         "`pyproject.toml` is using the `[project]` table, but the required `project.version` field is neither set nor present in the `project.dynamic` list"
     )]
     MissingVersion,
+    /// Occurs when `requires-python` contains a free-threaded selector like `>=3.14t`.
+    #[error(
+        "`requires-python` does not support free-threaded Python selectors (e.g. `{0}`); \
+         version specifiers must be valid PEP 440 versions"
+    )]
+    FreeThreadedSelector(String),
+}
+
+/// Check whether the raw `pyproject.toml` string contains a `requires-python` value with a
+/// free-threaded selector suffix (e.g. `>=3.14t`). Returns the offending specifier string
+/// (e.g. `"3.14t"`) if one is found.
+///
+/// This is used to provide an actionable error message when TOML deserialization fails because
+/// the PEP 440 version parser rejects the `t` suffix.
+fn extract_free_threaded_selector(raw: &str) -> Option<String> {
+    // Find `requires-python` in the raw TOML text.
+    let after_key = raw.split("requires-python").nth(1)?;
+    // Find the opening quote of the value (`=  "..."` or `= '...'`).
+    let after_eq = after_key.splitn(2, '=').nth(1)?;
+    let trimmed = after_eq.trim_start();
+    let quote_char = trimmed.chars().next().filter(|c| *c == '"' || *c == '\'')?;
+    let value_start = 1; // skip the opening quote
+    let value_end = trimmed[value_start..].find(quote_char)? + value_start;
+    let value = &trimmed[value_start..value_end];
+
+    // Scan each comma-separated specifier for a free-threaded suffix: ends with \d+t.
+    for spec in value.split(',') {
+        let spec = spec.trim();
+        // Strip leading operator characters to get to the version part.
+        let version_part = spec.trim_start_matches(|c: char| !c.is_ascii_digit());
+        if version_part.ends_with('t')
+            && version_part[..version_part.len() - 1]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_ascii_digit())
+        {
+            return Some(version_part.to_string());
+        }
+    }
+    None
 }
 
 /// Helper function to deserialize a map while ensuring all keys are unique.
@@ -137,7 +177,16 @@ impl PyProjectToml {
             .map(ToolUvSources::try_from)
             .transpose()?;
 
-        let mut pyproject: Self = toml::from_str(&raw).map_err(PyprojectTomlError::Toml)?;
+        let mut pyproject: Self = toml::from_str(&raw).map_err(|err| {
+            // If the TOML error is caused by a free-threaded selector in `requires-python`
+            // (e.g. `>=3.14t`), return a dedicated, actionable error variant instead of the
+            // generic TOML parse error, which would otherwise be cryptic.
+            if let Some(version) = extract_free_threaded_selector(&raw) {
+                PyprojectTomlError::FreeThreadedSelector(version)
+            } else {
+                PyprojectTomlError::Toml(err)
+            }
+        })?;
         if let Some(sources) = sources {
             let tool_uv = pyproject
                 .tool
@@ -1692,6 +1741,18 @@ impl uv_errors::Hint for SourceError {
             Self::OverlappingMarkers(_, rhs, replacement) => {
                 uv_errors::Hints::from(format!("replace `{rhs}` with `{replacement}`"))
             }
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
+impl uv_errors::Hint for PyprojectTomlError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::FreeThreadedSelector(version) => uv_errors::Hints::from(format!(
+                "`requires-python` cannot include a free-threaded selector; \
+                 to pin a free-threaded interpreter, use `uv python pin {version}` instead"
+            )),
             _ => uv_errors::Hints::none(),
         }
     }

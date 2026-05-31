@@ -89,43 +89,10 @@ pub enum WorkspaceError {
 
 impl uv_errors::Hint for WorkspaceError {
     fn hints(&self) -> uv_errors::Hints<'_> {
-        // When a `requires-python` field contains a free-threaded selector (e.g. `>=3.14t`),
-        // TOML parsing fails with a cryptic "not part of a valid version" message. Surface a
-        // actionable hint pointing the user toward `uv python pin` instead.
-        if let Self::Toml(_, err) = self {
-            let msg = err.to_string();
-            if msg.contains("not part of a valid version") {
-                // Try to extract the offending version string (the part before the `t` suffix).
-                // The error message contains "after parsing `<version>`, found `<remaining>`".
-                // We look for a `t` in the remaining segment to confirm it is a free-threaded
-                // selector, then reconstruct the full specifier for the hint.
-                if let Some(remaining_start) = msg.find("found `") {
-                    let after = &msg[remaining_start + "found `".len()..];
-                    let remaining = after.split('`').next().unwrap_or("");
-                    if remaining.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.') == "t"
-                        || remaining == "t"
-                    {
-                        // Extract the already-parsed version part.
-                        if let Some(version_start) = msg.find("after parsing `") {
-                            let after_v = &msg[version_start + "after parsing `".len()..];
-                            let parsed_version = after_v.split('`').next().unwrap_or("");
-                            let full_version =
-                                format!("{parsed_version}{remaining}");
-                            return uv_errors::Hints::from(format!(
-                                "`requires-python` cannot include a free-threaded selector; \
-                                 consider using `uv python pin {full_version}` instead"
-                            ));
-                        }
-                        return uv_errors::Hints::from(
-                            "`requires-python` cannot include a free-threaded selector (e.g. \
-                             `3.14t`); consider using `uv python pin 3.14t` instead"
-                                .to_string(),
-                        );
-                    }
-                }
-            }
+        match self {
+            Self::Toml(_, err) => err.hints(),
+            _ => uv_errors::Hints::none(),
         }
-        uv_errors::Hints::none()
     }
 }
 
