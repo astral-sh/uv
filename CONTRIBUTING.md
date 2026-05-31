@@ -90,8 +90,8 @@ cargo nextest run --workspace
 ```
 
 When passing Cargo compilation options that affect the uv executable, set `UV_TEST_UV_BUILD_ARGS`.
-These use `cargo build` syntax, so use `--profile` instead of nextest's `--cargo-profile`. Pass test
-harness options to nextest as usual. Some options may need to be passed in both places:
+These use Cargo syntax, so use `--profile` instead of nextest's `--cargo-profile`. Pass test harness
+options to nextest as usual. Some options may need to be passed in both places:
 
 ```shell
 UV_TEST_UV_BUILD_ARGS='--no-default-features --features <uv-features>' \
@@ -101,6 +101,9 @@ UV_TEST_UV_BUILD_ARGS='--no-default-features --features <uv-features>' \
 On Unix, the nextest setup hook reuses the previously built uv executable when its inputs are
 unchanged. Editing an integration test only rebuilds its test harness. Editing uv or one of its
 dependencies rebuilds the executable in the same nextest invocation.
+
+Workspace test runs build the uv executable as part of the initial Cargo invocation. Focused
+`uv-integration` runs build it from the setup hook when necessary.
 
 To run all tests and accept snapshot changes:
 

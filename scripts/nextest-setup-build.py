@@ -13,10 +13,11 @@ from pathlib import Path
 def build_uv() -> Path:
     command = [
         os.environ.get("CARGO", "cargo"),
-        "build",
+        "test",
         "--workspace",
-        "--bin",
-        "uv",
+        "--test",
+        "build_uv",
+        "--no-run",
         "--message-format=json-render-diagnostics",
         "--features",
         "uv-publish/test",

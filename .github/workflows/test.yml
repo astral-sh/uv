@@ -101,7 +101,7 @@ jobs:
           # Write pending snapshots to a separate directory for artifact upload
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
-          UV_TEST_UV_BUILD_ARGS: "--profile fast-build --features uv-keyring/native-auth"
+          UV_TEST_UV_BUILD_ARGS: "--profile fast-build --features uv-integration/test-python-patch,uv-integration/native-auth,uv-keyring/native-auth"
         run: |
           cargo nextest run \
             --cargo-profile fast-build \
@@ -177,12 +177,12 @@ jobs:
           # Write pending snapshots to a separate directory for artifact upload
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
-          UV_TEST_UV_BUILD_ARGS: "--profile fast-build --no-default-features --features uv/performance,uv-keyring/native-auth"
+          UV_TEST_UV_BUILD_ARGS: "--profile fast-build --no-default-features --features uv-integration/test-python,uv-integration/test-python-managed,uv-integration/test-pypi,uv-integration/test-git-lfs,uv-integration/test-crates-io,uv-integration/native-auth,uv/performance,uv-keyring/native-auth"
         run: |
           cargo nextest run \
             --cargo-profile fast-build \
             --no-default-features \
-            --features uv-integration/test-python,uv-integration/test-python-managed,uv-integration/test-pypi,uv-integration/test-git-lfs,uv-integration/test-crates-io,uv-integration/native-auth,uv-keyring/native-auth \
+            --features uv-integration/test-python,uv-integration/test-python-managed,uv-integration/test-pypi,uv-integration/test-git-lfs,uv-integration/test-crates-io,uv-integration/native-auth,uv/performance,uv-keyring/native-auth \
             --workspace \
             --profile ci-macos
 
@@ -272,7 +272,7 @@ jobs:
           # Write pending snapshots to a separate directory for artifact upload
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
-          UV_TEST_UV_BUILD_ARGS: "--profile fast-build --no-default-features --features uv-keyring/native-auth"
+          UV_TEST_UV_BUILD_ARGS: "--profile fast-build --no-default-features --features uv-integration/test-python,uv-integration/test-pypi,uv-integration/test-python-managed,uv-integration/test-windows-registry,uv-integration/native-auth,uv-keyring/native-auth"
         shell: bash
         run: |
           cargo nextest run \
