@@ -43,8 +43,12 @@ uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
+async_zip = { workspace = true }
 criterion = { version = "4.0.3", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
+fs-err = { workspace = true }
+futures = { workspace = true }
 jiff = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
 
 [package.metadata.cargo-shear]

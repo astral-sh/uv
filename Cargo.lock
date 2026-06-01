@@ -5864,8 +5864,12 @@ name = "uv-bench"
 version = "0.0.50"
 dependencies = [
  "anyhow",
+ "astral_async_zip",
  "codspeed-criterion-compat",
+ "fs-err",
+ "futures",
  "jiff",
+ "tempfile",
  "tokio",
  "uv-cache",
  "uv-client",

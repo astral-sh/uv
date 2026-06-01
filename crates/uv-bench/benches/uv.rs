@@ -1,12 +1,49 @@
 use std::hint::black_box;
 use std::str::FromStr;
 
-use criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
+use async_zip::base::write::ZipFileWriter;
+use async_zip::{Compression, ZipEntryBuilder};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main, measurement::WallTime};
+use futures::executor::block_on;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_distribution_types::Requirement;
 use uv_python::PythonEnvironment;
 use uv_resolver::Manifest;
+
+fn unzip_many_files(c: &mut Criterion<WallTime>) {
+    const FILE_COUNT: usize = 10_000;
+
+    let archive = tempfile::NamedTempFile::new().expect("Failed to create temporary archive");
+    let mut writer = ZipFileWriter::new(Vec::new());
+    for index in 0..FILE_COUNT {
+        let entry =
+            ZipEntryBuilder::new(format!("package/{index}.txt").into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, &[])).expect("Failed to write ZIP entry");
+    }
+    fs_err::write(
+        archive.path(),
+        block_on(writer.close()).expect("Failed to finish ZIP archive"),
+    )
+    .expect("Failed to write temporary archive");
+
+    c.bench_function("unzip_many_files", |b| {
+        b.iter_batched(
+            || {
+                (
+                    fs_err::File::open(archive.path()).expect("Failed to open temporary archive"),
+                    tempfile::tempdir().expect("Failed to create extraction directory"),
+                )
+            },
+            |(archive, target)| {
+                let files = uv_extract::unzip(archive, target.path())
+                    .expect("Failed to extract temporary archive");
+                black_box((files, target))
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
 
 fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
     let manifest = Manifest::simple(vec![Requirement::from(
@@ -49,6 +86,7 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
 
 criterion_group!(
     uv,
+    unzip_many_files,
     resolve_warm_jupyter,
     resolve_warm_jupyter_universal,
     resolve_warm_airflow
