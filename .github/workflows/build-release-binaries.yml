@@ -336,6 +336,7 @@ jobs:
       # Rust's distributed x86_64 GNU target uses bundled LLD by default; opt out
       # and select installed mold within the manylinux GCC linker search path.
       CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C linker-features=-lld -C link-arg=-B/usr/local/libexec/mold"
+      CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-B/usr/local/libexec/mold"
     strategy:
       matrix:
         include:
@@ -386,9 +387,6 @@ jobs:
                 # If we're running on debian-based system.
                 apt update -y && apt-get install -y pkg-config
             fi
-            if [ "${{ matrix.target }}" = "x86_64-unknown-linux-gnu" ]; then
-                scripts/install-mold.sh
-            fi
             # Install cargo extensions as a static musl binary so it runs in any container.
             scripts/install-cargo-extensions.sh
         env:
@@ -415,6 +413,7 @@ jobs:
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          scripts/check-mold-linked.sh $ARCHIVE_NAME/uv $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -437,9 +436,6 @@ jobs:
           docker-options: -e CARGO
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
-            if [ "${{ matrix.target }}" = "x86_64-unknown-linux-gnu" ]; then
-                scripts/install-mold.sh
-            fi
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
@@ -449,6 +445,8 @@ jobs:
           pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
           ${MODULE_NAME}-build --help
           python -m ${MODULE_NAME}_build --help
+      - name: "Check mold linkage uv-build"
+        run: scripts/check-mold-linked.sh crates/uv-build/dist/*.whl
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -459,6 +457,10 @@ jobs:
     name: ${{ matrix.platform.target }}
     runs-on: depot-ubuntu-24.04-8
     timeout-minutes: 30
+    env:
+      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-B/usr/local/libexec/mold"
+      CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_RUSTFLAGS: "-C link-arg=-B/usr/local/libexec/mold"
+      CARGO_TARGET_ARM_UNKNOWN_LINUX_MUSLEABIHF_RUSTFLAGS: "-C link-arg=-B/usr/local/libexec/mold"
     strategy:
       matrix:
         platform:
@@ -535,6 +537,7 @@ jobs:
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          scripts/check-mold-linked.sh $ARCHIVE_NAME/uv $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -578,6 +581,8 @@ jobs:
           env: |
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
+      - name: "Check mold linkage uv-build"
+        run: scripts/check-mold-linked.sh crates/uv-build/dist/*.whl
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -589,6 +594,8 @@ jobs:
     name: ${{ matrix.platform.target }}
     timeout-minutes: 30
     runs-on: depot-ubuntu-latest-4
+    env:
+      CARGO_TARGET_S390X_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-B/usr/local/libexec/mold"
     strategy:
       matrix:
         platform:
@@ -657,6 +664,7 @@ jobs:
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          scripts/check-mold-linked.sh $ARCHIVE_NAME/uv $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -700,6 +708,8 @@ jobs:
           env: |
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
+      - name: "Check mold linkage uv-build"
+        run: scripts/check-mold-linked.sh crates/uv-build/dist/*.whl
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -710,6 +720,8 @@ jobs:
   linux-powerpc:
     name: ${{ matrix.platform.target }}
     runs-on: depot-ubuntu-24.04-4
+    env:
+      CARGO_TARGET_POWERPC64LE_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-B/usr/local/libexec/mold"
     strategy:
       matrix:
         platform:
@@ -778,6 +790,7 @@ jobs:
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          scripts/check-mold-linked.sh $ARCHIVE_NAME/uv $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -810,6 +823,8 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       # TODO(charlie): Re-enable testing for PPC wheels.
+      - name: "Check mold linkage uv-build"
+        run: scripts/check-mold-linked.sh crates/uv-build/dist/*.whl
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -821,6 +836,8 @@ jobs:
     name: ${{ matrix.platform.target }}
     timeout-minutes: 30
     runs-on: depot-ubuntu-latest-4
+    env:
+      CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-B/usr/local/libexec/mold"
     strategy:
       matrix:
         platform:
@@ -885,6 +902,7 @@ jobs:
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          scripts/check-mold-linked.sh $ARCHIVE_NAME/uv $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -929,6 +947,8 @@ jobs:
           env: |
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
+      - name: "Check mold linkage uv-build"
+        run: scripts/check-mold-linked.sh crates/uv-build/dist/*.whl
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -938,6 +958,9 @@ jobs:
   musllinux:
     name: ${{ matrix.target }}
     runs-on: depot-ubuntu-24.04-4
+    env:
+      CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-C link-arg=-B/usr/local/libexec/mold"
+      CARGO_TARGET_I686_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-C link-arg=-B/usr/local/libexec/mold"
     strategy:
       matrix:
         target:
@@ -995,6 +1018,7 @@ jobs:
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          scripts/check-mold-linked.sh $ARCHIVE_NAME/uv $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -1032,6 +1056,8 @@ jobs:
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # .venv/bin/python -m ${MODULE_NAME}_build --help;
           "
+      - name: "Check mold linkage uv-build"
+        run: scripts/check-mold-linked.sh crates/uv-build/dist/*.whl
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -1042,7 +1068,9 @@ jobs:
     name: ${{ matrix.platform.target }}
     runs-on: depot-ubuntu-24.04-8
     env:
-      CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-C target-feature=+crt-static"
+      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-C link-arg=-B/usr/local/libexec/mold"
+      CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_RUSTFLAGS: "-C link-arg=-B/usr/local/libexec/mold"
+      CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-C target-feature=+crt-static -C link-arg=-B/usr/local/libexec/mold"
     strategy:
       matrix:
         platform:
@@ -1133,6 +1161,7 @@ jobs:
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/$PROFILE/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/$PROFILE/uvx $ARCHIVE_NAME/uvx
+          scripts/check-mold-linked.sh $ARCHIVE_NAME/uv $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -1196,6 +1225,8 @@ jobs:
           env: |
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
+      - name: "Check mold linkage uv-build"
+        run: scripts/check-mold-linked.sh crates/uv-build/dist/*.whl
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
