@@ -98,9 +98,9 @@ UV_TEST_UV_BUILD_ARGS='--no-default-features --features <uv-features>' \
   cargo nextest run --package uv-integration --features <test-features>
 ```
 
-On Unix, the nextest setup hook reuses the previously built uv executable when its inputs are
-unchanged. Editing an integration test only rebuilds its test harness. Editing uv or one of its
-dependencies rebuilds the executable in the same nextest invocation.
+The nextest setup hook reuses the previously built uv executable when its inputs are unchanged.
+Editing an integration test only rebuilds its test harness. Editing uv or one of its dependencies
+rebuilds the executable in the same nextest invocation.
 
 Workspace test runs build the uv executable as part of the initial Cargo invocation. Focused
 `uv-integration` runs build it from the setup hook when necessary.
@@ -108,18 +108,14 @@ Workspace test runs build the uv executable as part of the initial Cargo invocat
 To run all tests and accept snapshot changes:
 
 ```shell
-cargo build --package uv --bin uv --features uv-publish/test
-UV_TEST_BIN="$PWD/target/debug/uv" cargo insta test --accept --test-runner nextest
+cargo insta test --accept --test-runner nextest
 ```
 
 To update snapshots for a specific test:
 
 ```shell
-cargo build --package uv --bin uv --features uv-publish/test
-UV_TEST_BIN="$PWD/target/debug/uv" cargo insta test --accept --test-runner nextest -- <test_name>
+cargo insta test --accept --test-runner nextest -- <test_name>
 ```
-
-On Windows, use `target/debug/uv.exe` for `UV_TEST_BIN`.
 
 ### Python
 
@@ -151,8 +147,7 @@ fn test_add() {
 To run and review a specific snapshot test:
 
 ```shell
-cargo build --package uv --bin uv --features uv-publish/test
-UV_TEST_BIN="$PWD/target/debug/uv" cargo test --package uv-integration --test <test> <test_name> -- --exact
+cargo nextest run --package uv-integration --test <test> -E 'test(=<test_name>)'
 cargo insta review
 ```
 
