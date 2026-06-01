@@ -17445,13 +17445,14 @@ fn sync_frozen_workspace_member_git_credentials() -> Result<()> {
 /// the build when that group is enabled for the invocation (e.g. `uv sync --group k8s`). The same
 /// edit that triggers a rebuild under `--group k8s` is a no-op without it.
 ///
-/// The group-scoped key is paired with an always-on baseline key (`base.txt`); a package whose
-/// keys all filter out would produce an empty cache info, which uv treats as "always rebuild".
+/// The group-scoped key is paired with `{ default = true }` (the built-in default keys); a package
+/// whose keys all filter out would produce an empty cache info, which uv treats as "always
+/// rebuild". `{ default = true }` keeps the normal invalidation behavior when `k8s` is inactive.
 #[test]
 fn sync_group_conditional_cache_keys() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    // A child package with an always-on key (`base.txt`) and a `k8s`-scoped key (`trigger.txt`).
+    // A child package that keeps the default keys plus a `k8s`-scoped key (`trigger.txt`).
     context
         .temp_dir
         .child("child")
@@ -17467,18 +17468,13 @@ fn sync_group_conditional_cache_keys() -> Result<()> {
         build-backend = "hatchling.build"
 
         [tool.uv]
-        cache-keys = [{ file = "base.txt" }, { file = "trigger.txt", group = "k8s" }]
+        cache-keys = [{ default = true }, { file = "trigger.txt", group = "k8s" }]
     "#})?;
     context
         .temp_dir
         .child("child")
         .child("src/child/__init__.py")
         .touch()?;
-    context
-        .temp_dir
-        .child("child")
-        .child("base.txt")
-        .write_str("1")?;
     let trigger = context.temp_dir.child("child").child("trigger.txt");
     trigger.write_str("1")?;
 

@@ -131,29 +131,32 @@ impl CacheInfo {
             };
 
             // If no cache keys were defined, use the defaults.
-            cache_keys.unwrap_or_else(|| {
-                vec![
-                    CacheKey::Path(Cow::Borrowed("pyproject.toml")),
-                    CacheKey::Path(Cow::Borrowed("setup.py")),
-                    CacheKey::Path(Cow::Borrowed("setup.cfg")),
-                    CacheKey::Directory {
-                        dir: Cow::Borrowed("src"),
-                        group: None,
-                    },
-                ]
-            })
+            cache_keys.unwrap_or_else(CacheKey::defaults)
         };
+
+        // Filter out keys scoped to inactive dependency groups, and expand any `{ default = true }`
+        // entries to the built-in default cache keys.
+        let cache_keys = cache_keys
+            .into_iter()
+            .filter(|cache_key| cache_key.group().is_none_or(is_group_active))
+            .flat_map(|cache_key| match cache_key {
+                CacheKey::Default { default, .. } => {
+                    if default {
+                        CacheKey::defaults()
+                    } else {
+                        Vec::new()
+                    }
+                }
+                cache_key => vec![cache_key],
+            })
+            .collect::<Vec<_>>();
 
         // Incorporate timestamps from any direct filepaths.
         let mut globs = vec![];
         for cache_key in cache_keys {
-            // Skip keys scoped to a dependency group that isn't active.
-            if let Some(group) = cache_key.group() {
-                if !is_group_active(group) {
-                    continue;
-                }
-            }
             match cache_key {
+                // Group filtering and `{ default = true }` expansion happened above.
+                CacheKey::Default { .. } => {}
                 CacheKey::Path(file) | CacheKey::File { file, .. } => {
                     if file
                         .as_ref()
@@ -422,9 +425,34 @@ pub enum CacheKey {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         group: Option<GroupName>,
     },
+    /// Ex) `{ default = true }` — expands to uv's built-in default cache keys (`pyproject.toml`,
+    /// `setup.py`, `setup.cfg`, and the `src` directory).
+    ///
+    /// This is useful alongside group-scoped keys: `cache-keys = [{ default = true }, { git = {
+    /// commit = true }, group = "k8s" }]` keeps the default invalidation behavior in general, and
+    /// adds Git-commit invalidation only when the `k8s` group is enabled.
+    Default {
+        default: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<GroupName>,
+    },
 }
 
 impl CacheKey {
+    /// uv's built-in default cache keys, used when no `cache-keys` are configured and when a
+    /// `{ default = true }` entry is expanded.
+    fn defaults() -> Vec<Self> {
+        vec![
+            Self::Path(Cow::Borrowed("pyproject.toml")),
+            Self::Path(Cow::Borrowed("setup.py")),
+            Self::Path(Cow::Borrowed("setup.cfg")),
+            Self::Directory {
+                dir: Cow::Borrowed("src"),
+                group: None,
+            },
+        ]
+    }
+
     /// The dependency group this cache key is scoped to, if any.
     ///
     /// A key with a group only applies when that group is enabled for the current project; a key
@@ -435,7 +463,8 @@ impl CacheKey {
             Self::File { group, .. }
             | Self::Directory { group, .. }
             | Self::Git { group, .. }
-            | Self::Environment { group, .. } => group.as_ref(),
+            | Self::Environment { group, .. }
+            | Self::Default { group, .. } => group.as_ref(),
         }
     }
 }
@@ -609,6 +638,49 @@ mod tests {
                 .timestamp
                 .is_some(),
             "a group-scoped key should apply when its group is active"
+        );
+
+        Ok(())
+    }
+
+    /// A `{ default = true }` entry expands to uv's built-in default cache keys, and can itself be
+    /// scoped to a group. This lets a project keep default invalidation behavior while a group is
+    /// inactive, instead of producing an empty (always-rebuild) cache info.
+    #[test]
+    fn default_cache_key_expands_to_built_in_defaults() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let dir = dir.path();
+        // `pyproject.toml` is one of the built-in default keys.
+        fs_err::write(dir.join("pyproject.toml"), "")?;
+
+        let k8s = "k8s".parse::<GroupName>()?;
+
+        // An ungrouped `{ default = true }` always expands to the defaults.
+        let keys = [CacheKey::Default {
+            default: true,
+            group: None,
+        }];
+        assert!(
+            CacheInfo::from_directory_filtered(dir, Some(&keys), &|_| false)?
+                .timestamp
+                .is_some(),
+            "`{{ default = true }}` should expand to the built-in defaults"
+        );
+
+        // A group-scoped `{ default = true, group = "k8s" }` only expands when `k8s` is active.
+        let scoped = [CacheKey::Default {
+            default: true,
+            group: Some(k8s.clone()),
+        }];
+        assert!(
+            CacheInfo::from_directory_filtered(dir, Some(&scoped), &|_| false)?.is_empty(),
+            "a group-scoped default should be excluded when its group is inactive"
+        );
+        assert!(
+            CacheInfo::from_directory_filtered(dir, Some(&scoped), &|group| *group == k8s)?
+                .timestamp
+                .is_some(),
+            "a group-scoped default should expand when its group is active"
         );
 
         Ok(())
