@@ -333,10 +333,10 @@ jobs:
     name: ${{ matrix.target }}
     runs-on: depot-ubuntu-latest-4
     env:
-      # Rust's distributed x86 GNU targets use bundled LLD by default; opt out
+      # Rust's distributed x86_64 GNU target uses bundled LLD by default; opt out
       # and select installed mold within the manylinux GCC linker search path.
       CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C linker-features=-lld -C link-arg=-B/usr/local/libexec/mold"
-      CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C linker-features=-lld -C link-arg=-B/usr/local/libexec/mold"
+      CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-B/usr/local/libexec/mold"
     strategy:
       matrix:
         include:
