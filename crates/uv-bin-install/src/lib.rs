@@ -21,6 +21,7 @@ use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use url::Url;
 use uv_client::retryable_on_request_failure;
+use uv_distribution_filename::LegacySourceDistExtension;
 use uv_distribution_filename::SourceDistExtension;
 use uv_static::{astral_mirror_base_url, astral_mirror_url_from_env, custom_astral_mirror_url};
 
@@ -230,7 +231,7 @@ impl ArchiveFormat {
 impl From<ArchiveFormat> for SourceDistExtension {
     fn from(val: ArchiveFormat) -> Self {
         match val {
-            ArchiveFormat::Zip => Self::Zip,
+            ArchiveFormat::Zip => Self::Legacy(LegacySourceDistExtension::Zip),
             ArchiveFormat::TarGz => Self::TarGz,
         }
     }
