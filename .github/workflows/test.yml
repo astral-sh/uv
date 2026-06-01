@@ -158,6 +158,8 @@ jobs:
           echo "HFS_MOUNT=/Volumes/NoReflink" >> "$GITHUB_ENV"
 
       - name: "Create CI keychain"
+        # Namespace macOS runners do not start with an unlocked default user keychain. Create an
+        # empty-password keychain for native-auth tests; GitHub and Depot runners provide one.
         run: |
           security create-keychain -p "" "$RUNNER_TEMP/uv-ci.keychain-db"
           security set-keychain-settings -lut 21600 "$RUNNER_TEMP/uv-ci.keychain-db"
