@@ -13,7 +13,7 @@
 
 set -eu
 
-if [ "$(uname -s 2>/dev/null)" = "Linux" ]; then
+if [ "$(uname -s 2>/dev/null)" = "Linux" ] && [ "${UV_NO_INSTALL_MOLD:-}" != "1" ]; then
     # mold does not publish 32-bit x86 Linux binaries.
     case "$(uname -m 2>/dev/null)" in
         i?86) ;;

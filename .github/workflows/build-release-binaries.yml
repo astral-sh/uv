@@ -1071,7 +1071,7 @@ jobs:
     env:
       CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-C link-arg=-B/usr/local/libexec/mold"
       CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_RUSTFLAGS: "-C link-arg=-B/usr/local/libexec/mold"
-      CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-C target-feature=+crt-static -C link-arg=-B/usr/local/libexec/mold"
+      CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-C target-feature=+crt-static"
     strategy:
       matrix:
         platform:
@@ -1107,7 +1107,7 @@ jobs:
           docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
           before-script-linux: |
-            scripts/install-cargo-extensions.sh
+            UV_NO_INSTALL_MOLD=${{ matrix.platform.arch == 'riscv64' && '1' || '' }} scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
@@ -1162,7 +1162,9 @@ jobs:
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/$PROFILE/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/$PROFILE/uvx $ARCHIVE_NAME/uvx
-          scripts/check-mold-linked.sh $ARCHIVE_NAME/uv $ARCHIVE_NAME/uvx
+          if [[ "${{ matrix.platform.arch }}" != "riscv64" ]]; then
+            scripts/check-mold-linked.sh $ARCHIVE_NAME/uv $ARCHIVE_NAME/uvx
+          fi
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -1187,7 +1189,7 @@ jobs:
           docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
           before-script-linux: |
-            scripts/install-cargo-extensions.sh
+            UV_NO_INSTALL_MOLD=${{ matrix.platform.arch == 'riscv64' && '1' || '' }} scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
@@ -1227,6 +1229,7 @@ jobs:
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Check mold linkage uv-build"
+        if: matrix.platform.arch != 'riscv64'
         run: scripts/check-mold-linked.sh crates/uv-build/dist/*.whl
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
