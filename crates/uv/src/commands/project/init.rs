@@ -821,7 +821,7 @@ impl InitProjectKind {
         // read conditional includes that depend on the repository path.
         init_vcs(path, vcs)?;
 
-        // Do no fill in `authors` for non-packaged applications unless explicitly requested.
+        // Do not fill in `authors` for non-packaged applications unless explicitly requested.
         let author_from = author_from.unwrap_or_else(|| {
             if package {
                 AuthorFrom::default()
@@ -976,7 +976,7 @@ impl InitProjectKind {
         // read conditional includes that depend on the repository path.
         init_vcs(path, vcs)?;
 
-        // Do no fill in `authors` for non-packaged applications unless explicitly requested.
+        // Do not fill in `authors` for non-packaged applications unless explicitly requested.
         let author_from = author_from.unwrap_or_else(|| match self {
             Self::ApplicationWithLibrary | Self::Library | Self::BareWithBuildSystem => {
                 AuthorFrom::default()

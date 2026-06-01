@@ -3407,7 +3407,9 @@ pub struct InitArgs {
     ///
     /// Defines a `[build-system]` for the project.
     ///
-    /// This is the default behavior, the option exists for backwards compatibility.
+    /// This is the default behavior when using `--lib` or `--build-backend`, or when the
+    /// `packaged-init` preview feature is enabled. It will become the default unconditionally in
+    /// the future.
     ///
     /// When using `--app`, this will include a `[project.scripts]` entrypoint and use a `src/`
     /// project structure.
