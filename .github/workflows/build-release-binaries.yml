@@ -343,8 +343,13 @@ jobs:
     strategy:
       matrix:
         include:
-          - { target: "i686-unknown-linux-gnu", cc: "gcc -m32" }
-          - { target: "x86_64-unknown-linux-gnu", cc: "gcc" }
+          - target: "i686-unknown-linux-gnu"
+            cc: "gcc -m32"
+            rustflags: ""
+          - target: "x86_64-unknown-linux-gnu"
+            cc: "gcc"
+            # Rust's distributed x86_64 GNU target uses bundled LLD by default.
+            rustflags: "-C link-arg=-Wl,--icf=safe"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -368,7 +373,7 @@ jobs:
           # from 64-bit version of the container, breaking the pattern from other builds.
           container: quay.io/pypa/manylinux2014
           manylinux: 2_17
-          docker-options: -e CARGO
+          docker-options: -e CARGO -e RUSTFLAGS
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             # Install the 32-bit cross target on 64-bit (noop if we're already on 64-bit)
@@ -395,6 +400,7 @@ jobs:
         env:
           CC: ${{ matrix.cc }}
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          RUSTFLAGS: ${{ matrix.rustflags }}
       - name: "Test wheel"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
@@ -435,12 +441,13 @@ jobs:
           maturin-version: v1.13.1
           target: ${{ matrix.target }}
           manylinux: 2_17
-          docker-options: -e CARGO
+          docker-options: -e CARGO -e RUSTFLAGS
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          RUSTFLAGS: ${{ matrix.rustflags }}
       - name: "Test wheel uv-build"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
