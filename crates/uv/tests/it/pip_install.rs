@@ -5055,6 +5055,89 @@ requires-python = ">=3.8"
     Ok(())
 }
 
+/// A consuming project can override a dependency's cache keys for its own build via
+/// `tool.uv.cache-keys-package`, without modifying the dependency. The override *replaces* the
+/// dependency's own `tool.uv.cache-keys`, so the dependency's keys no longer apply for this build.
+#[test]
+fn invalidate_path_on_consumer_cache_keys_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("example @ ./dependency")?;
+
+    // The consuming project overrides the cache keys for `example`, keying only on `consumer.txt`.
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str("cache-keys-package = { example = [{ file = \"consumer.txt\" }] }\n")?;
+
+    // The dependency declares its *own* cache keys, keying on `dependency.txt`.
+    let dependency_dir = context.temp_dir.child("dependency");
+    dependency_dir.create_dir_all()?;
+    dependency_dir.child("pyproject.toml").write_str(
+        r#"[project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = ["anyio==4.0.0"]
+        requires-python = ">=3.8"
+
+        [tool.uv]
+        cache-keys = [{ file = "dependency.txt" }]
+"#,
+    )?;
+    dependency_dir.child("consumer.txt").write_str("1")?;
+    dependency_dir.child("dependency.txt").write_str("1")?;
+
+    // Initial install.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + example==0.0.0 (from file://[TEMP_DIR]/dependency)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // Modifying the dependency's *own* cache key has no effect: the consumer's override replaced
+    // it, so `dependency.txt` is no longer part of the cache key.
+    dependency_dir.child("dependency.txt").write_str("2")?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    ");
+
+    // Modifying the consumer-specified cache key triggers a rebuild.
+    dependency_dir.child("consumer.txt").write_str("2")?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ example==0.0.0 (from file://[TEMP_DIR]/dependency)
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn invalidate_path_on_cache_key() -> Result<()> {
     let context = uv_test::test_context!("3.12");

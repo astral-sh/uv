@@ -215,6 +215,7 @@ pub(crate) async fn tree(
                 dependency_metadata: _,
                 config_setting: _,
                 config_settings_package: _,
+                cache_keys_package: _,
                 build_isolation: _,
                 extra_build_dependencies: _,
                 extra_build_variables: _,

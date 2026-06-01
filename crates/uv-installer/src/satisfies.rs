@@ -5,13 +5,13 @@ use same_file::is_same_file;
 use tracing::{debug, trace};
 use url::Url;
 
-use uv_cache_info::CacheInfo;
+use uv_cache_info::{CacheInfo, CacheKey};
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
 use uv_distribution_filename::ExpandedTags;
 use uv_distribution_types::{
     BuildInfo, BuildVariables, ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires,
     ExtraBuildVariables, InstalledDirectUrlDist, InstalledDist, InstalledDistKind,
-    PackageConfigSettings, RequirementSource,
+    PackageCacheKeys, PackageConfigSettings, RequirementSource,
 };
 use uv_git_types::{GitLfs, GitOid};
 use uv_normalize::PackageName;
@@ -42,6 +42,7 @@ impl RequirementSatisfaction {
         tags: &Tags,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
+        cache_keys_package: &PackageCacheKeys,
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
     ) -> Self {
@@ -402,7 +403,16 @@ impl RequirementSatisfaction {
                 let Some(cache_info) = cache_info.as_ref() else {
                     return Self::OutOfDate;
                 };
-                match CacheInfo::from_path(requested_path) {
+                // A consuming project may override the cache keys for this package (via
+                // `tool.uv.cache-keys-package`); if so, those keys must be used here too, so the
+                // freshness check stays consistent with how the wheel was built.
+                let read_cache_info = match cache_keys_for(name, cache_keys_package) {
+                    Some(cache_keys) => {
+                        CacheInfo::from_directory_with_keys(requested_path, cache_keys)
+                    }
+                    None => CacheInfo::from_path(requested_path),
+                };
+                match read_cache_info {
                     Ok(read_cache_info) => {
                         if *cache_info != read_cache_info {
                             return Self::OutOfDate;
@@ -446,6 +456,15 @@ impl RequirementSatisfaction {
         // Otherwise, assume the requirement is up-to-date.
         Self::Satisfied
     }
+}
+
+/// Determine the cache-key override for the given package name, if the consuming project set one
+/// via `tool.uv.cache-keys-package`.
+fn cache_keys_for<'settings>(
+    name: &PackageName,
+    cache_keys_package: &'settings PackageCacheKeys,
+) -> Option<&'settings [CacheKey]> {
+    cache_keys_package.get(name)
 }
 
 /// Determine the [`ConfigSettings`] for the given package name.

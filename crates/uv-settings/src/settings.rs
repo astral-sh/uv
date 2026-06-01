@@ -8,7 +8,7 @@ use uv_configuration::{
     RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
-    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, Origin,
+    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, Origin, PackageCacheKeys,
     PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
@@ -475,6 +475,7 @@ pub struct ResolverOptions {
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
     pub config_settings_package: Option<PackageConfigSettings>,
+    pub cache_keys_package: Option<PackageCacheKeys>,
     pub exclude_newer: ExcludeNewer,
     pub link_mode: Option<LinkMode>,
     pub torch_backend: Option<TorchMode>,
@@ -507,6 +508,7 @@ pub struct ResolverInstallerOptions {
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
     pub config_settings_package: Option<PackageConfigSettings>,
+    pub cache_keys_package: Option<PackageCacheKeys>,
     pub build_isolation: Option<BuildIsolation>,
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub extra_build_variables: Option<ExtraBuildVariables>,
@@ -541,6 +543,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             dependency_metadata,
             config_settings,
             config_settings_package,
+            cache_keys_package,
             no_build_isolation,
             no_build_isolation_package,
             extra_build_dependencies,
@@ -575,6 +578,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             dependency_metadata,
             config_settings,
             config_settings_package,
+            cache_keys_package,
             build_isolation: BuildIsolation::from_args(
                 no_build_isolation,
                 no_build_isolation_package.into_iter().flatten().collect(),
@@ -870,6 +874,7 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub config_settings_package: Option<PackageConfigSettings>,
+    pub cache_keys_package: Option<PackageCacheKeys>,
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
@@ -1690,6 +1695,7 @@ pub struct PipOptions {
         "#
     )]
     pub config_settings_package: Option<PackageConfigSettings>,
+    pub cache_keys_package: Option<PackageCacheKeys>,
     /// The minimum Python version that should be supported by the resolved requirements (e.g.,
     /// `3.8` or `3.8.17`).
     ///
@@ -2052,6 +2058,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
+            cache_keys_package: value.cache_keys_package,
             exclude_newer: ExcludeNewer::from_args(
                 value.exclude_newer,
                 value
@@ -2153,6 +2160,7 @@ pub struct ToolOptions {
     dependency_metadata: Option<Vec<StaticMetadata>>,
     config_settings: Option<ConfigSettings>,
     config_settings_package: Option<PackageConfigSettings>,
+    cache_keys_package: Option<PackageCacheKeys>,
     build_isolation: Option<BuildIsolation>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
@@ -2186,6 +2194,7 @@ pub struct ToolOptionsWire {
     dependency_metadata: Option<Vec<StaticMetadata>>,
     config_settings: Option<ConfigSettings>,
     config_settings_package: Option<PackageConfigSettings>,
+    cache_keys_package: Option<PackageCacheKeys>,
     build_isolation: Option<BuildIsolation>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
@@ -2225,6 +2234,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
+            cache_keys_package: value.cache_keys_package,
             build_isolation: value.build_isolation,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
@@ -2269,6 +2279,7 @@ impl From<ToolOptionsWire> for ToolOptions {
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
+            cache_keys_package: value.cache_keys_package,
             build_isolation: value.build_isolation,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
@@ -2312,6 +2323,7 @@ impl From<ToolOptions> for ToolOptionsWire {
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
+            cache_keys_package: value.cache_keys_package,
             build_isolation: value.build_isolation,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
@@ -2347,6 +2359,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
+            cache_keys_package: value.cache_keys_package,
             build_isolation: value.build_isolation,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
@@ -2406,6 +2419,7 @@ struct OptionsWire {
     dependency_metadata: Option<Vec<StaticMetadata>>,
     config_settings: Option<ConfigSettings>,
     config_settings_package: Option<PackageConfigSettings>,
+    cache_keys_package: Option<PackageCacheKeys>,
     no_build_isolation: Option<bool>,
     no_build_isolation_package: Option<Vec<PackageName>>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
@@ -2508,6 +2522,7 @@ impl From<OptionsWire> for Options {
             dependency_metadata,
             config_settings,
             config_settings_package,
+            cache_keys_package,
             no_build_isolation,
             no_build_isolation_package,
             exclude_newer,
@@ -2586,6 +2601,7 @@ impl From<OptionsWire> for Options {
                 dependency_metadata,
                 config_settings,
                 config_settings_package,
+                cache_keys_package,
                 no_build_isolation,
                 no_build_isolation_package,
                 extra_build_dependencies,

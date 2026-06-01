@@ -2,8 +2,41 @@ use std::{
     collections::{BTreeMap, btree_map::Entry},
     str::FromStr,
 };
+use uv_cache_info::CacheKey;
 use uv_cache_key::CacheKeyHasher;
 use uv_normalize::PackageName;
+
+/// Cache keys to use for specific packages, overriding each package's own `tool.uv.cache-keys`.
+///
+/// Set by a consuming project via `tool.uv.cache-keys-package`, this mirrors
+/// [`PackageConfigSettings`] (`tool.uv.config-settings-package`): it lets a project control how a
+/// dependency's build cache is invalidated *for its own builds*, without modifying the dependency.
+/// The dependency's own behavior (e.g., for developers working within its directory) is unaffected.
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(transparent)]
+pub struct PackageCacheKeys(BTreeMap<PackageName, Vec<CacheKey>>);
+
+impl PackageCacheKeys {
+    /// Returns the overriding cache keys for a specific package, if any.
+    pub fn get(&self, package: &PackageName) -> Option<&[CacheKey]> {
+        self.0.get(package).map(Vec::as_slice)
+    }
+
+    /// Returns `true` if there are no package-specific cache keys.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Merge two sets of package cache keys, with the values in `self` taking precedence.
+    #[must_use]
+    pub fn merge(mut self, other: Self) -> Self {
+        for (package, keys) in other.0 {
+            self.0.entry(package).or_insert(keys);
+        }
+        self
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ConfigSettingEntry {

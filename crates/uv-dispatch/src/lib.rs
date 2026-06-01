@@ -24,7 +24,7 @@ use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
-    Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
+    Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name, PackageCacheKeys,
     PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
@@ -123,6 +123,7 @@ pub struct BuildDispatch<'a> {
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
     config_settings_package: &'a PackageConfigSettings,
+    cache_keys_package: &'a PackageCacheKeys,
     hasher: &'a HashStrategy,
     exclude_newer: ExcludeNewer,
     source_build_context: SourceBuildContext,
@@ -147,6 +148,7 @@ impl<'a> BuildDispatch<'a> {
         index_strategy: IndexStrategy,
         config_settings: &'a ConfigSettings,
         config_settings_package: &'a PackageConfigSettings,
+        cache_keys_package: &'a PackageCacheKeys,
         build_isolation: BuildIsolation<'a>,
         extra_build_requires: &'a ExtraBuildRequires,
         extra_build_variables: &'a ExtraBuildVariables,
@@ -172,6 +174,7 @@ impl<'a> BuildDispatch<'a> {
             index_strategy,
             config_settings,
             config_settings_package,
+            cache_keys_package,
             build_isolation,
             extra_build_requires,
             extra_build_variables,
@@ -247,6 +250,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn config_settings_package(&self) -> &PackageConfigSettings {
         self.config_settings_package
+    }
+
+    fn cache_keys_package(&self) -> &PackageCacheKeys {
+        self.cache_keys_package
     }
 
     fn sources(&self) -> &NoSources {
@@ -397,6 +404,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.index_locations,
             self.config_settings,
             self.config_settings_package,
+            self.cache_keys_package,
             self.extra_build_requires(),
             self.extra_build_variables,
             self.cache(),

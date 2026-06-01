@@ -1030,6 +1030,7 @@ async fn get_or_create_environment(
                             ResolverSettings {
                                 config_setting,
                                 config_settings_package,
+                                cache_keys_package,
                                 extra_build_dependencies,
                                 extra_build_variables,
                                 ..
@@ -1060,6 +1061,7 @@ async fn get_or_create_environment(
                             &tags,
                             config_setting,
                             config_settings_package,
+                            cache_keys_package,
                             &extra_build_requires,
                             extra_build_variables,
                         ),

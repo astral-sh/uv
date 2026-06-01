@@ -16,7 +16,7 @@ use uv_configuration::{
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildRequires, Index, IndexLocations,
-    PackageConfigSettings, Requirement,
+    PackageCacheKeys, PackageConfigSettings, Requirement,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
@@ -247,6 +247,7 @@ pub(crate) async fn venv(
         let build_hasher = HashStrategy::default();
         let config_settings = ConfigSettings::default();
         let config_settings_package = PackageConfigSettings::default();
+        let cache_keys_package = PackageCacheKeys::default();
         let sources = NoSources::All;
 
         // Do not allow builds
@@ -266,6 +267,7 @@ pub(crate) async fn venv(
             index_strategy,
             &config_settings,
             &config_settings_package,
+            &cache_keys_package,
             BuildIsolation::Isolated,
             &extra_build_requires,
             &extra_build_variables,

@@ -586,6 +586,7 @@ pub(crate) async fn install(
             build_dispatch.locations(),
             build_dispatch.config_settings(),
             build_dispatch.config_settings_package(),
+            build_dispatch.cache_keys_package(),
             build_dispatch.extra_build_requires(),
             build_dispatch.extra_build_variables(),
             cache,

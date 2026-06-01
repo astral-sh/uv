@@ -39,7 +39,7 @@ use uv_configuration::{
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
-    PackageConfigSettings, Requirement,
+    PackageCacheKeys, PackageConfigSettings, Requirement,
 };
 use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
@@ -4015,6 +4015,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) config_settings_package: &'a PackageConfigSettings,
+    pub(crate) cache_keys_package: &'a PackageCacheKeys,
     pub(crate) build_isolation: &'a BuildIsolation,
     pub(crate) extra_build_dependencies: &'a ExtraBuildDependencies,
     pub(crate) extra_build_variables: &'a ExtraBuildVariables,
@@ -4035,6 +4036,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) build_options: BuildOptions,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) config_settings_package: PackageConfigSettings,
+    pub(crate) cache_keys_package: PackageCacheKeys,
     pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) exclude_newer: ExcludeNewer,
     pub(crate) fork_strategy: ForkStrategy,
@@ -4112,6 +4114,7 @@ impl From<ResolverOptions> for ResolverSettings {
             keyring_provider: value.keyring_provider.unwrap_or_default(),
             config_setting: value.config_settings.unwrap_or_default(),
             config_settings_package: value.config_settings_package.unwrap_or_default(),
+            cache_keys_package: value.cache_keys_package.unwrap_or_default(),
             build_isolation: value.build_isolation.unwrap_or_default(),
             extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
             extra_build_variables: value.extra_build_variables.unwrap_or_default(),
@@ -4208,6 +4211,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 ),
                 config_setting: value.config_settings.unwrap_or_default(),
                 config_settings_package: value.config_settings_package.unwrap_or_default(),
+                cache_keys_package: value.cache_keys_package.unwrap_or_default(),
                 dependency_metadata: DependencyMetadata::from_entries(
                     value.dependency_metadata.into_iter().flatten(),
                 ),
@@ -4281,6 +4285,7 @@ pub(crate) struct PipSettings {
     pub(crate) generate_hashes: bool,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) config_settings_package: PackageConfigSettings,
+    pub(crate) cache_keys_package: PackageCacheKeys,
     pub(crate) python_version: Option<PythonVersion>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) universal: bool,
@@ -4357,6 +4362,7 @@ impl PipSettings {
             generate_hashes,
             config_settings,
             config_settings_package,
+            cache_keys_package,
             python_version,
             python_platform,
             universal,
@@ -4395,6 +4401,7 @@ impl PipSettings {
             dependency_metadata: top_level_dependency_metadata,
             config_settings: top_level_config_settings,
             config_settings_package: top_level_config_settings_package,
+            cache_keys_package: top_level_cache_keys_package,
             no_build_isolation: top_level_no_build_isolation,
             no_build_isolation_package: top_level_no_build_isolation_package,
             extra_build_dependencies: top_level_extra_build_dependencies,
@@ -4434,6 +4441,7 @@ impl PipSettings {
         let config_settings = config_settings.combine(top_level_config_settings);
         let config_settings_package =
             config_settings_package.combine(top_level_config_settings_package);
+        let cache_keys_package = cache_keys_package.combine(top_level_cache_keys_package);
         let no_build_isolation = no_build_isolation.combine(top_level_no_build_isolation);
         let no_build_isolation_package =
             no_build_isolation_package.combine(top_level_no_build_isolation_package);
@@ -4565,6 +4573,10 @@ impl PipSettings {
                 .config_settings_package
                 .combine(config_settings_package)
                 .unwrap_or_default(),
+            cache_keys_package: args
+                .cache_keys_package
+                .combine(cache_keys_package)
+                .unwrap_or_default(),
             torch_backend: args.torch_backend.combine(torch_backend),
             python_version: args.python_version.combine(python_version),
             python_platform: args.python_platform.combine(python_platform),
@@ -4680,6 +4692,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             dependency_metadata: &settings.resolver.dependency_metadata,
             config_setting: &settings.resolver.config_setting,
             config_settings_package: &settings.resolver.config_settings_package,
+            cache_keys_package: &settings.resolver.cache_keys_package,
             build_isolation: &settings.resolver.build_isolation,
             extra_build_dependencies: &settings.resolver.extra_build_dependencies,
             extra_build_variables: &settings.resolver.extra_build_variables,

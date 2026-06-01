@@ -24,7 +24,7 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
-    PackageConfigSettings, Requirement, SourceDist,
+    PackageCacheKeys, PackageConfigSettings, Requirement, SourceDist,
 };
 use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
@@ -231,6 +231,7 @@ async fn build_impl(
         dependency_metadata,
         config_setting,
         config_settings_package,
+        cache_keys_package,
         build_isolation,
         extra_build_dependencies,
         extra_build_variables,
@@ -392,6 +393,7 @@ async fn build_impl(
             *link_mode,
             config_setting,
             config_settings_package,
+            cache_keys_package,
             preview,
         );
         async {
@@ -508,6 +510,7 @@ async fn build_package(
     link_mode: LinkMode,
     config_setting: &ConfigSettings,
     config_settings_package: &PackageConfigSettings,
+    cache_keys_package: &PackageCacheKeys,
     preview: Preview,
 ) -> Result<Vec<BuildMessage>, Error> {
     let output_dir = if let Some(output_dir) = output_dir {
@@ -645,6 +648,7 @@ async fn build_package(
         index_strategy,
         config_setting,
         config_settings_package,
+        cache_keys_package,
         types_build_isolation,
         &extra_build_requires,
         extra_build_variables,

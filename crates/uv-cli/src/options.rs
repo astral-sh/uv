@@ -573,6 +573,8 @@ pub fn resolver_options(
                 .into_iter()
                 .collect::<PackageConfigSettings>()
         }),
+        // No CLI surface for `cache-keys-package`; it is configured via `pyproject.toml`/`uv.toml`.
+        cache_keys_package: None,
         build_isolation: BuildIsolation::from_args(
             flag(no_build_isolation, build_isolation, "build-isolation"),
             no_build_isolation_package,
@@ -707,6 +709,8 @@ pub fn resolver_installer_options(
                 .into_iter()
                 .collect::<PackageConfigSettings>()
         }),
+        // No CLI surface for `cache-keys-package`; it is configured via `pyproject.toml`/`uv.toml`.
+        cache_keys_package: None,
         build_isolation: BuildIsolation::from_args(
             flag(no_build_isolation, build_isolation, "build-isolation"),
             no_build_isolation_package,

@@ -62,40 +62,69 @@ impl CacheInfo {
 
     /// Compute the cache info for a given directory.
     pub fn from_directory(directory: &Path) -> Result<Self, CacheInfoError> {
+        Self::from_directory_impl(directory, None)
+    }
+
+    /// Like [`CacheInfo::from_directory`], but uses the provided `cache_keys` rather than reading
+    /// them from the package's own `pyproject.toml`.
+    ///
+    /// This allows a consuming project to override a dependency's cache keys for its own build
+    /// (via `tool.uv.cache-keys-package`), without modifying the dependency itself — mirroring
+    /// `tool.uv.config-settings-package`. The dependency's own behavior (e.g., for developers
+    /// working within its directory) is unaffected, since the override lives only in the
+    /// consumer's settings.
+    pub fn from_directory_with_keys(
+        directory: &Path,
+        cache_keys: &[CacheKey],
+    ) -> Result<Self, CacheInfoError> {
+        Self::from_directory_impl(directory, Some(cache_keys))
+    }
+
+    fn from_directory_impl(
+        directory: &Path,
+        overrides: Option<&[CacheKey]>,
+    ) -> Result<Self, CacheInfoError> {
         let mut commit = None;
         let mut tags = None;
         let mut last_changed: Option<(PathBuf, Timestamp)> = None;
         let mut directories = BTreeMap::new();
         let mut env = BTreeMap::new();
 
-        // Read the cache keys.
-        let pyproject_path = directory.join("pyproject.toml");
-        let cache_keys = if let Ok(contents) = fs_err::read_to_string(&pyproject_path) {
-            let result = info_span!("toml::from_str cache keys", path = %pyproject_path.display())
-                .in_scope(|| toml::from_str::<PyProjectToml>(&contents));
-            if let Ok(pyproject_toml) = result {
-                pyproject_toml
-                    .tool
-                    .and_then(|tool| tool.uv)
-                    .and_then(|tool_uv| tool_uv.cache_keys)
+        // Resolve the cache keys: a consumer-provided override takes precedence over the
+        // package's own `pyproject.toml`, which in turn falls back to the defaults.
+        let cache_keys = if let Some(overrides) = overrides {
+            overrides.to_vec()
+        } else {
+            // Read the cache keys.
+            let pyproject_path = directory.join("pyproject.toml");
+            let cache_keys = if let Ok(contents) = fs_err::read_to_string(&pyproject_path) {
+                let result =
+                    info_span!("toml::from_str cache keys", path = %pyproject_path.display())
+                        .in_scope(|| toml::from_str::<PyProjectToml>(&contents));
+                if let Ok(pyproject_toml) = result {
+                    pyproject_toml
+                        .tool
+                        .and_then(|tool| tool.uv)
+                        .and_then(|tool_uv| tool_uv.cache_keys)
+                } else {
+                    None
+                }
             } else {
                 None
-            }
-        } else {
-            None
-        };
+            };
 
-        // If no cache keys were defined, use the defaults.
-        let cache_keys = cache_keys.unwrap_or_else(|| {
-            vec![
-                CacheKey::Path(Cow::Borrowed("pyproject.toml")),
-                CacheKey::Path(Cow::Borrowed("setup.py")),
-                CacheKey::Path(Cow::Borrowed("setup.cfg")),
-                CacheKey::Directory {
-                    dir: Cow::Borrowed("src"),
-                },
-            ]
-        });
+            // If no cache keys were defined, use the defaults.
+            cache_keys.unwrap_or_else(|| {
+                vec![
+                    CacheKey::Path(Cow::Borrowed("pyproject.toml")),
+                    CacheKey::Path(Cow::Borrowed("setup.py")),
+                    CacheKey::Path(Cow::Borrowed("setup.cfg")),
+                    CacheKey::Directory {
+                        dir: Cow::Borrowed("src"),
+                    },
+                ]
+            })
+        };
 
         // Incorporate timestamps from any direct filepaths.
         let mut globs = vec![];
@@ -335,7 +364,7 @@ struct ToolUv {
     cache_keys: Option<Vec<CacheKey>>,
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(untagged, rename_all = "kebab-case", deny_unknown_fields)]
 pub enum CacheKey {
@@ -351,7 +380,7 @@ pub enum CacheKey {
     Environment { env: String },
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(untagged, rename_all = "kebab-case", deny_unknown_fields)]
 pub enum GitPattern {
@@ -359,7 +388,7 @@ pub enum GitPattern {
     Set(GitSet),
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct GitSet {
@@ -438,6 +467,55 @@ mod tests_unix {
         // symlink pointing to a directory
         write_manifest("x/*b*")?;
         assert_eq!(cache_timestamp()?, None);
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::borrow::Cow;
+
+    use anyhow::Result;
+
+    use super::{CacheInfo, CacheKey};
+
+    /// A consumer-provided cache-key override (as supplied via `tool.uv.cache-keys-package`)
+    /// replaces the package's own `cache-keys`, without the package's `pyproject.toml` being
+    /// consulted for keys. This is what lets a consumer change a dependency's invalidation
+    /// behavior for its own build without affecting the dependency itself.
+    #[test]
+    fn override_replaces_package_cache_keys() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let dir = dir.path();
+
+        // The package declares a file-based cache key and the file exists, so the default
+        // (package-driven) computation produces a timestamp.
+        fs_err::write(
+            dir.join("pyproject.toml"),
+            "[tool.uv]\ncache-keys = [\"data.txt\"]\n",
+        )?;
+        fs_err::write(dir.join("data.txt"), "")?;
+
+        assert!(
+            CacheInfo::from_directory(dir)?.timestamp.is_some(),
+            "the package's own file cache key should fire"
+        );
+
+        // An empty override replaces the package's keys entirely: no keys are evaluated, so the
+        // result is empty even though `pyproject.toml` declares a file key for an existing file.
+        assert!(
+            CacheInfo::from_directory_with_keys(dir, &[])?.is_empty(),
+            "an empty override should replace the package's own cache keys"
+        );
+
+        // A non-empty override is honored in place of the package's keys.
+        let overridden =
+            CacheInfo::from_directory_with_keys(dir, &[CacheKey::Path(Cow::Borrowed("data.txt"))])?;
+        assert!(
+            overridden.timestamp.is_some(),
+            "the overriding file cache key should fire"
+        );
 
         Ok(())
     }

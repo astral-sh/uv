@@ -8,8 +8,8 @@ use uv_configuration::{
     Reinstall, RequiredVersion, TargetTriple, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
-    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, PackageConfigSettings, PipExtraIndex,
-    PipFindLinks, PipIndex,
+    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, PackageCacheKeys, PackageConfigSettings,
+    PipExtraIndex, PipFindLinks, PipIndex,
 };
 use uv_install_wheel::LinkMode;
 use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
@@ -181,6 +181,17 @@ impl Combine for Option<ConfigSettings> {
 }
 
 impl Combine for Option<PackageConfigSettings> {
+    /// Combine two maps by merging the map in `self` with the map in `other`, if they're both
+    /// `Some`.
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.merge(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl Combine for Option<PackageCacheKeys> {
     /// Combine two maps by merging the map in `self` with the map in `other`, if they're both
     /// `Some`.
     fn combine(self, other: Self) -> Self {

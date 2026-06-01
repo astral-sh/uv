@@ -12,7 +12,7 @@ use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, DistributionId, ExtraBuildRequires,
     ExtraBuildVariables, IndexCapabilities, IndexLocations, InstalledDist, IsBuildBackendError,
-    PackageConfigSettings, Requirement, SourceDist,
+    PackageCacheKeys, PackageConfigSettings, Requirement, SourceDist,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -125,6 +125,10 @@ pub trait BuildContext {
 
     /// The [`ConfigSettings`] used to build a specific package.
     fn config_settings_package(&self) -> &PackageConfigSettings;
+
+    /// The cache-key overrides used to invalidate builds of specific packages, set by the
+    /// consuming project via `tool.uv.cache-keys-package`.
+    fn cache_keys_package(&self) -> &PackageCacheKeys;
 
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
     fn sources(&self) -> &NoSources;

@@ -15,8 +15,8 @@ use uv_distribution::{
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, ConfigSettings, Dist, Error, ExtraBuildRequires,
-    ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, Name, PackageConfigSettings,
-    RequirementSource, Resolution, ResolvedDist, SourceDist,
+    ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, Name, PackageCacheKeys,
+    PackageConfigSettings, RequirementSource, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -264,6 +264,7 @@ impl<'a> Planner<'a> {
         index_locations: &IndexLocations,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
+        cache_keys_package: &PackageCacheKeys,
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
         cache: &Cache,
@@ -287,6 +288,7 @@ impl<'a> Planner<'a> {
             hasher,
             config_settings,
             config_settings_package,
+            cache_keys_package,
             extra_build_requires,
             extra_build_variables,
         );
@@ -336,6 +338,7 @@ impl<'a> Planner<'a> {
                             tags,
                             config_settings,
                             config_settings_package,
+                            cache_keys_package,
                             extra_build_requires,
                             extra_build_variables,
                         ) {

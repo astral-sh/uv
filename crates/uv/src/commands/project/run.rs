@@ -1326,6 +1326,7 @@ fn can_skip_ephemeral(
             ResolverSettings {
                 config_setting,
                 config_settings_package,
+                cache_keys_package,
                 extra_build_dependencies,
                 extra_build_variables,
                 ..
@@ -1359,6 +1360,7 @@ fn can_skip_ephemeral(
         tags,
         config_setting,
         config_settings_package,
+        cache_keys_package,
         &extra_build_requires,
         extra_build_variables,
     ) {

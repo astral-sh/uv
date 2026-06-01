@@ -79,6 +79,7 @@ pub(crate) async fn collect_module_owners(
         dependency_metadata: &settings.dependency_metadata,
         config_setting: &settings.config_setting,
         config_settings_package: &settings.config_settings_package,
+        cache_keys_package: &settings.cache_keys_package,
         build_isolation: &settings.build_isolation,
         extra_build_dependencies: &settings.extra_build_dependencies,
         extra_build_variables: &settings.extra_build_variables,

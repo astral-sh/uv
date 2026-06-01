@@ -457,6 +457,7 @@ pub(crate) async fn add(
                 settings.resolver.index_strategy,
                 &settings.resolver.config_setting,
                 &settings.resolver.config_settings_package,
+                &settings.resolver.cache_keys_package,
                 build_isolation,
                 &extra_build_requires,
                 &extra_build_variables,

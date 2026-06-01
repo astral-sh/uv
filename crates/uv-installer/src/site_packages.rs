@@ -9,8 +9,8 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
-    InstalledDist, InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings,
-    Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    InstalledDist, InstalledDistKind, Name, NameRequirementSpecification, PackageCacheKeys,
+    PackageConfigSettings, Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -327,6 +327,7 @@ impl SitePackages {
         tags: &Tags,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
+        cache_keys_package: &PackageCacheKeys,
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
     ) -> Result<SatisfiesResult> {
@@ -418,6 +419,7 @@ impl SitePackages {
             tags,
             config_settings,
             config_settings_package,
+            cache_keys_package,
             extra_build_requires,
             extra_build_variables,
         )
@@ -434,6 +436,7 @@ impl SitePackages {
         tags: &Tags,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
+        cache_keys_package: &PackageCacheKeys,
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
     ) -> Result<SatisfiesResult> {
@@ -498,6 +501,7 @@ impl SitePackages {
                             tags,
                             config_settings,
                             config_settings_package,
+                            cache_keys_package,
                             extra_build_requires,
                             extra_build_variables,
                         ) {
@@ -522,6 +526,7 @@ impl SitePackages {
                                 tags,
                                 config_settings,
                                 config_settings_package,
+                                cache_keys_package,
                                 extra_build_requires,
                                 extra_build_variables,
                             ) {
