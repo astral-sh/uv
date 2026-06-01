@@ -2754,10 +2754,8 @@ pub(crate) struct CheckSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) extra_args: Vec<String>,
-    pub(crate) version: Option<String>,
+    pub(crate) ty_version: Option<String>,
     pub(crate) no_project: bool,
-    pub(crate) show_version: bool,
     pub(crate) malware_settings: MalwareCheckSettings,
 }
 
@@ -2785,10 +2783,8 @@ impl CheckSettings {
             frozen,
             no_sync,
             python,
-            version,
-            extra_args,
+            ty_version,
             no_project,
-            show_version,
             installer,
             build,
             refresh,
@@ -2850,10 +2846,8 @@ impl CheckSettings {
                 .combine(filesystem_install_mirrors),
             refresh: Refresh::from(refresh),
             settings,
-            extra_args,
-            version,
+            ty_version,
             no_project,
-            show_version,
             malware_settings,
         }
     }

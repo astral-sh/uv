@@ -1,12 +1,8 @@
-use std::fmt::Write;
 use std::path::Path;
-use std::str::FromStr;
 
-use anyhow::{Context, Result};
-use tokio::process::Command;
+use anyhow::Result;
 use tracing::debug;
 
-use uv_bin_install::{BinVersion, Binary, ResolvedVersion, bin_install, find_matching_version};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
@@ -19,7 +15,6 @@ use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
-use crate::child::run_to_completion;
 use crate::commands::pip::loggers::{SummaryInstallLogger, SummaryResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::install_target::InstallTarget;
@@ -27,12 +22,13 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
     ProjectEnvironment, ProjectError, UniversalState, default_dependency_groups,
 };
-use crate::commands::reporters::BinaryDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
-/// Run the type checker.
+mod ty;
+
+/// Run project checks.
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn check(
     project_dir: &Path,
@@ -44,9 +40,7 @@ pub(crate) async fn check(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
-    extra_args: Vec<String>,
-    version: Option<String>,
-    show_version: bool,
+    ty_version: Option<String>,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -123,7 +117,7 @@ pub(crate) async fn check(
         .map(|p| p.root().to_owned())
         .unwrap_or_else(|| project_dir.to_owned());
 
-    // If we found a project, sync the environment before type checking.
+    // If we found a project, sync the environment before running checks.
     let venv_path = if let Some(project) = &project {
         let default_groups = default_dependency_groups(project.pyproject_toml())?;
         let default_extras = DefaultExtras::default();
@@ -255,93 +249,20 @@ pub(crate) async fn check(
         None
     };
 
-    // Download and install ty.
     let exclude_newer = settings
         .resolver
         .exclude_newer
         .global
-        .map(|v| v.timestamp());
-    let retry_policy = client_builder.retry_policy();
-    let ty_client = client_builder.clone().retries(0).build()?;
+        .map(|value| value.timestamp());
 
-    let reporter = BinaryDownloadReporter::single(printer);
-    let bin_version = version
-        .as_deref()
-        .map(BinVersion::from_str)
-        .transpose()?
-        .unwrap_or(BinVersion::Default);
-
-    let resolved = match bin_version {
-        BinVersion::Default => {
-            let constraints = Binary::Ty.default_constraints();
-            let resolved = find_matching_version(
-                Binary::Ty,
-                Some(&constraints),
-                exclude_newer,
-                &ty_client,
-                &retry_policy,
-            )
-            .await
-            .with_context(|| {
-                format!("Failed to find ty version matching default constraints: {constraints}")
-            })?;
-            debug!("Resolved `ty@{constraints}` to `ty=={}`", resolved.version);
-            resolved
-        }
-        BinVersion::Pinned(version) => {
-            if exclude_newer.is_some() {
-                debug!("`--exclude-newer` is ignored for pinned version `{version}`");
-            }
-            ResolvedVersion::from_version(Binary::Ty, version)?
-        }
-        BinVersion::Latest => {
-            let resolved =
-                find_matching_version(Binary::Ty, None, exclude_newer, &ty_client, &retry_policy)
-                    .await
-                    .with_context(|| "Failed to find latest ty version")?;
-            debug!("Resolved `ty@latest` to `ty=={}`", resolved.version);
-            resolved
-        }
-        BinVersion::Constraint(constraints) => {
-            let resolved = find_matching_version(
-                Binary::Ty,
-                Some(&constraints),
-                exclude_newer,
-                &ty_client,
-                &retry_policy,
-            )
-            .await
-            .with_context(|| format!("Failed to find ty version matching: {constraints}"))?;
-            debug!("Resolved `ty@{constraints}` to `ty=={}`", resolved.version);
-            resolved
-        }
-    };
-
-    if show_version {
-        writeln!(printer.stderr(), "ty {}", resolved.version)?;
-    }
-
-    let ty_path = bin_install(
-        Binary::Ty,
-        &resolved,
-        &ty_client,
-        &retry_policy,
+    ty::run(
+        ty_version,
+        &target_dir,
+        venv_path.as_deref(),
+        exclude_newer,
+        &client_builder,
         cache,
-        &reporter,
+        printer,
     )
     .await
-    .with_context(|| format!("Failed to install ty {}", resolved.version))?;
-
-    let mut command = Command::new(&ty_path);
-    command.current_dir(&target_dir);
-    command.arg("check");
-
-    if let Some(venv_path) = &venv_path {
-        command.env("VIRTUAL_ENV", venv_path);
-    }
-
-    command.args(extra_args.iter());
-
-    let handle = command.spawn().context("Failed to spawn `ty check`")?;
-    run_to_completion(handle).await
 }

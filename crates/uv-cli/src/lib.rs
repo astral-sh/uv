@@ -1203,13 +1203,10 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Format(FormatArgs),
-    /// Type check the project.
+    /// Run checks on the project.
     ///
-    /// Type checks Python code using ty. By default, all Python files in the project
-    /// are checked. This command has the same behavior as running `ty check` in the project
-    /// root.
-    ///
-    /// Additional arguments can be passed to ty after `--`.
+    /// Currently, this type checks Python code using ty. By default, all Python files in the
+    /// project are checked.
     #[command(
         after_help = "Use `uv help check` for more details.",
         after_long_help = ""
@@ -5354,30 +5351,18 @@ pub struct CheckArgs {
     ///
     /// By default, a constrained version range of ty will be used (e.g., `>=0.0,<0.1`).
     #[arg(long, value_hint = ValueHint::Other)]
-    pub version: Option<String>,
-
-    /// Additional arguments to pass to ty.
-    ///
-    /// For example, use `uv check -- --warn-on error` to treat warnings as errors or
-    /// `uv check -- src/module/foo.py` to check a specific file.
-    #[arg(last = true, value_hint = ValueHint::Other)]
-    pub extra_args: Vec<String>,
+    pub ty_version: Option<String>,
 
     /// Avoid discovering a project or workspace.
     ///
-    /// Instead of running the type checker in the context of the current project, run it in the
-    /// context of the current directory. This is useful when the current directory is not a
-    /// project.
+    /// Instead of running checks in the context of the current project, run them in the context of
+    /// the current directory. This is useful when the current directory is not a project.
     #[arg(
         long,
         env = EnvVars::UV_NO_PROJECT,
         value_parser = clap::builder::BoolishValueParser::new()
     )]
     pub no_project: bool,
-
-    /// Display the version of ty that will be used for type checking.
-    #[arg(long, hide = true)]
-    pub show_version: bool,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
