@@ -787,10 +787,28 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             platform_tags
         }
         (Os::Pyodide { major, minor }, Arch::Wasm32) => {
-            vec![PlatformTag::Pyodide {
-                major: *major,
-                minor: *minor,
-            }]
+            vec![
+                PlatformTag::PyEmscripten {
+                    major: *major,
+                    minor: *minor,
+                },
+                PlatformTag::Pyodide {
+                    major: *major,
+                    minor: *minor,
+                },
+            ]
+        }
+        (Os::PyEmscripten { major, minor }, Arch::Wasm32) => {
+            vec![
+                PlatformTag::PyEmscripten {
+                    major: *major,
+                    minor: *minor,
+                },
+                PlatformTag::Pyodide {
+                    major: *major,
+                    minor: *minor,
+                },
+            ]
         }
         (
             Os::Ios {

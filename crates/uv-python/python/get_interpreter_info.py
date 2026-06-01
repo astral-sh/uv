@@ -535,8 +535,26 @@ def get_operating_system_and_architecture():
         }
         [_version, architecture, _platform] = version_arch.split("-")
     elif operating_system == "emscripten":
+        pyemscripten_platform_version = sysconfig.get_config_var(
+            "PYEMSCRIPTEN_PLATFORM_VERSION"
+        )
+        # fallback to PYODIDE_ABI_VERSION for backward compatibility
         pyodide_abi_version = sysconfig.get_config_var("PYODIDE_ABI_VERSION")
-        if not pyodide_abi_version:
+        if pyemscripten_platform_version:
+            version = pyemscripten_platform_version.split("_")
+            operating_system = {
+                "name": "pyemscripten",
+                "major": int(version[0]),
+                "minor": int(version[1]),
+            }
+        elif pyodide_abi_version:
+            version = pyodide_abi_version.split("_")
+            operating_system = {
+                "name": "pyodide",
+                "major": int(version[0]),
+                "minor": int(version[1]),
+            }
+        else:
             print(
                 json.dumps(
                     {
@@ -546,12 +564,6 @@ def get_operating_system_and_architecture():
                 )
             )
             sys.exit(0)
-        version = pyodide_abi_version.split("_")
-        operating_system = {
-            "name": "pyodide",
-            "major": int(version[0]),
-            "minor": int(version[1]),
-        }
     elif operating_system == "android":
         # Python 3.13+ supports Android. We map the Android ABIs to our standard architectures.
         #
