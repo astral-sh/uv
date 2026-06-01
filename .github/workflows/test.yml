@@ -80,6 +80,15 @@ jobs:
           sudo mount -t tmpfs -o size=256m tmpfs /tmpfs
           sudo chown "$(id -u):$(id -g)" /tmpfs
 
+      - name: "Create ext4 filesystem (low hardlink limit)"
+        run: |
+          sudo apt install -y --update e2fsprogs
+          truncate -s 128M /tmp/ext4.img
+          mkfs.ext4 -F /tmp/ext4.img
+          sudo mkdir /ext4
+          sudo mount -o loop /tmp/ext4.img /ext4
+          sudo chown "$(id -u):$(id -g)" /ext4
+
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2.79.2
         with:
@@ -93,6 +102,7 @@ jobs:
           UV_INTERNAL__TEST_COW_FS: /xfs
           UV_INTERNAL__TEST_NOCOW_FS: /tmpfs
           UV_INTERNAL__TEST_ALT_FS: /tmpfs
+          UV_INTERNAL__TEST_LOWLINKS_FS: /ext4
           # Write pending snapshots to a separate directory for artifact upload
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
