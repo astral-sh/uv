@@ -77,6 +77,9 @@ impl WorkspaceCache {
 
     /// Remove all cached workspace entries for the given workspace root. Used before modifying the
     /// workspace.
+    ///
+    /// Contract: There are no parallel workspace operations, this is the only thread operating on
+    /// workspaces.
     pub fn remove(&self, install_path: &Path) {
         if let Some(Some(workspace)) = self.workspaces.remove(install_path) {
             for member in workspace.packages.values() {
@@ -228,7 +231,7 @@ impl Workspace {
         // synchronize them after finding the workspace root and allow only one of them to perform
         // the full discovery.
         if options.members == MemberDiscovery::All
-            && let Some(workspace) = cache.get(&path)
+            && let Some(workspace) = cache.get(&project_path)
         {
             return Ok(workspace);
         }
@@ -1951,6 +1954,9 @@ impl VirtualProject {
     /// Update the `pyproject.toml` for the current project.
     ///
     /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
+    ///
+    /// Contract: There are no parallel workspace operations, this is the only thread operating on
+    /// workspaces.
     ///
     /// The [`WorkspaceCache`] is passed to ensure the caller doesn't forget to clear it.
     pub fn update_member(
