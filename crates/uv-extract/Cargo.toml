@@ -22,7 +22,7 @@ uv-pypi-types = { workspace = true }
 uv-static = { workspace = true }
 
 astral-tokio-tar = { workspace = true }
-async-compression = { workspace = true, features = ["bzip2", "gzip", "zstd", "xz"] }
+async-compression = { workspace = true, features = ["bzip2", "gzip", "zstd"] }
 async_zip = { workspace = true }
 blake2 = { workspace = true }
 flate2 = { workspace = true }
@@ -38,15 +38,12 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
-xz2 = { workspace = true }
 
 [features]
 default = []
-# Avoid a liblzma.so dependency
-static = ["xz2/static"]
 
 [package.metadata.cargo-shear]
 # NOTE: `async-compression` owns the actual Deflate codec, but we need to
 # explicitly declare `flate2` here so the workspace's `zlib-rs` backend stays
 # selected after removing the synchronous `zip` dependency.
-ignored = ["flate2", "xz2"]
+ignored = ["flate2"]

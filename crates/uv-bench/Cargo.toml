@@ -56,5 +56,5 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 
-[features]
-static = ["uv-extract/static"]
+[package.metadata.cargo-shear]
+ignored = ["uv-extract"]
