@@ -458,6 +458,7 @@ jobs:
             fi
             scripts/install-cargo-extensions.sh
         env:
+          CC: ${{ matrix.cc }}
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel uv-build"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
