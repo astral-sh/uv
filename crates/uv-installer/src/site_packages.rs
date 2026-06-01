@@ -7,12 +7,12 @@ use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
+use uv_configuration::DependencyGroupsWithDefaults;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
     InstalledDist, InstalledDistKind, Name, NameRequirementSpecification, PackageCacheKeys,
     PackageConfigSettings, Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_configuration::DependencyGroupsWithDefaults;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
