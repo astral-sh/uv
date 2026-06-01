@@ -303,4 +303,17 @@ mod tests {
 
         assert_eq!(platform.pretty(), "Linux x86_64");
     }
+
+    #[test]
+    fn platform_pretty_pyemscripten() {
+        let platform = Platform::new(
+            Os::PyEmscripten {
+                major: 2026,
+                minor: 0,
+            },
+            Arch::Wasm32,
+        );
+
+        assert_eq!(platform.pretty(), "Emscripten wasm32");
+    }
 }

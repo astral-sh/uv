@@ -1640,6 +1640,50 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_platform_tags_pyodide() {
+        let tags = compatible_tags(&Platform::new(
+            Os::Pyodide {
+                major: 2025,
+                minor: 0,
+            },
+            Arch::Wasm32,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r#"
+        [
+            "pyemscripten_2025_0_wasm32",
+            "pyodide_2025_0_wasm32",
+        ]
+        "#
+        );
+    }
+
+    #[test]
+    fn test_platform_tags_pyemscripten() {
+        let tags = compatible_tags(&Platform::new(
+            Os::PyEmscripten {
+                major: 2026,
+                minor: 0,
+            },
+            Arch::Wasm32,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r#"
+        [
+            "pyemscripten_2026_0_wasm32",
+            "pyodide_2026_0_wasm32",
+        ]
+        "#
+        );
+    }
+
     /// Ensure the tags returned do not include the `manylinux` tags
     /// when `manylinux_incompatible` is set to `false`.
     #[test]
