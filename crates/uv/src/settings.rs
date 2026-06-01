@@ -5,10 +5,10 @@ use std::process;
 use std::str::FromStr;
 use std::time::Duration;
 
+use anyhow::{Result, bail};
 use rustc_hash::FxHashSet;
-use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
 
-use crate::commands::{PythonUpgrade, PythonUpgradeSource};
+use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
 use uv_auth::Service;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
@@ -66,8 +66,10 @@ use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, ExtraBuildDependencies};
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
-use crate::commands::ToolRunCommand;
-use crate::commands::{InitKind, InitProjectKind, pip::operations::Modifications};
+use crate::commands::pip::operations::Modifications;
+use crate::commands::{
+    InitKind, InitProjectKind, PythonUpgrade, PythonUpgradeSource, ToolRunCommand,
+};
 
 /// The default publish URL.
 const PYPI_PUBLISH_URL: &str = "https://upload.pypi.org/legacy/";
@@ -442,7 +444,7 @@ impl InitSettings {
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
         preview: Preview,
-    ) -> Self {
+    ) -> Result<Self> {
         let InitArgs {
             path,
             name,
@@ -475,6 +477,13 @@ impl InitSettings {
         let no_description = no_description || (bare && description.is_none());
 
         let (kind, package) = if preview.is_enabled(PreviewFeature::PackagedInit) {
+            if r#virtual && lib {
+                bail!("`--virtual` and `--lib` are mutually exclusive");
+            }
+            if r#virtual && build_backend.is_some() {
+                bail!("`--virtual` and `--build-backend` are mutually exclusive");
+            }
+
             let package_flag = flag(
                 package || build_backend.is_some(),
                 no_package || r#virtual,
@@ -495,7 +504,7 @@ impl InitSettings {
                     (false, false) => InitProjectKind::ApplicationWithLibrary,
                     (true, false) => InitProjectKind::Application,
                     (false, true) => InitProjectKind::Library,
-                    (true, true) => unreachable!("`app` and `lib` are mutually exclusive"),
+                    (true, true) => bail!("`app` and `lib` are mutually exclusive"),
                 };
 
                 // Apply overrides from `--package`/`--no-package`.
@@ -515,7 +524,7 @@ impl InitSettings {
                     }
                     (InitProjectKind::Library, None | Some(true)) => InitProjectKind::Library,
                     (InitProjectKind::Library, Some(false)) => {
-                        unreachable!("`lib` and `no_package` are mutually exclusive")
+                        bail!("`lib` and `no_package` are mutually exclusive");
                     }
                     (InitProjectKind::Bare | InitProjectKind::BareWithBuildSystem, _) => {
                         unreachable!()
@@ -536,7 +545,7 @@ impl InitSettings {
                 (false, true, false) => InitKind::Project(InitProjectKind::LibraryOld),
                 (false, false, true) => InitKind::Script,
                 (false, false, false) => InitKind::Project(InitProjectKind::ApplicationOld),
-                (_, _, _) => unreachable!("`app`, `lib`, and `script` are mutually exclusive"),
+                (_, _, _) => bail!("`app`, `lib`, and `script` are mutually exclusive"),
             };
 
             let package = flag(
@@ -551,7 +560,7 @@ impl InitSettings {
             (kind, package)
         };
 
-        Self {
+        Ok(Self {
             path,
             name,
             package,
@@ -569,7 +578,7 @@ impl InitSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
-        }
+        })
     }
 }
 
