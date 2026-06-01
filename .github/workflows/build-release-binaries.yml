@@ -433,10 +433,29 @@ jobs:
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.target }}
+          # Cross compile i686 from the 64-bit container so the host-native mold binary can run.
+          container: quay.io/pypa/manylinux2014
           manylinux: 2_17
           docker-options: -e CARGO
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
+            # If we're running on rhel centos, install needed packages.
+            if command -v yum &> /dev/null; then
+                yum update -y && yum install -y pkgconfig libatomic
+
+                # Install cross build requirements
+                if [[ "${{ matrix.target }}" == "i686-unknown-linux-gnu" ]]; then
+                  yum install -y glibc-devel.i686 libstdc++-devel.i686 libatomic.i686
+                fi
+
+                # Symlink libatomic so the linker can find it with -latomic.
+                if [[ -f "/usr/lib/libatomic.so.1" && ! -f "/usr/lib/libatomic.so" ]]; then
+                    ln -s /usr/lib/libatomic.so.1 /usr/lib/libatomic.so
+                fi
+            else
+                # If we're running on debian-based system.
+                apt update -y && apt-get install -y pkg-config
+            fi
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
