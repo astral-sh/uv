@@ -5864,13 +5864,16 @@ name = "uv-bench"
 version = "0.0.51"
 dependencies = [
  "anyhow",
+ "astral-tokio-tar",
  "astral_async_zip",
  "codspeed-criterion-compat",
+ "flate2",
  "fs-err",
  "futures",
  "jiff",
  "tempfile",
  "tokio",
+ "tokio-util",
  "uv-cache",
  "uv-client",
  "uv-configuration",
