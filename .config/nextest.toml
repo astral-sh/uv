@@ -44,7 +44,7 @@ test-group = 'io-bound'
 priority = 1 # Start earlier so these can complete before the end
 
 [scripts.setup.build-test-uv-unix]
-command = "scripts/nextest-setup-build-unix.sh"
+command = "scripts/nextest-setup-build.py"
 
 [scripts.setup.build-test-uv-windows]
 command = "python scripts/nextest-setup-build.py"
