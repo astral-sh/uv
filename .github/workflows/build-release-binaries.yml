@@ -386,6 +386,9 @@ jobs:
                 # If we're running on debian-based system.
                 apt update -y && apt-get install -y pkg-config
             fi
+            if [ "${{ matrix.target }}" = "x86_64-unknown-linux-gnu" ]; then
+                scripts/install-mold.sh
+            fi
             # Install cargo extensions as a static musl binary so it runs in any container.
             scripts/install-cargo-extensions.sh
         env:
@@ -434,6 +437,9 @@ jobs:
           docker-options: -e CARGO
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
+            if [ "${{ matrix.target }}" = "x86_64-unknown-linux-gnu" ]; then
+                scripts/install-mold.sh
+            fi
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh

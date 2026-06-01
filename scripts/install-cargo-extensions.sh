@@ -17,14 +17,6 @@ CARGO_AUDITABLE_INSTALL="cargo install cargo-auditable \
     --locked \
     --version 0.7.4"
 
-if [ "$(uname -s 2>/dev/null)" = "Linux" ]; then
-    # mold does not publish 32-bit x86 Linux binaries.
-    case "$(uname -m 2>/dev/null)" in
-        i?86) ;;
-        *) scripts/install-mold.sh ;;
-    esac
-fi
-
 # In Linux containers running on x86_64, build a static musl binary so the installed tool works in
 # musl-based environments (Alpine, etc.).
 #
