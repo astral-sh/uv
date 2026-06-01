@@ -29,6 +29,7 @@ uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
+uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
 uv-install-wheel = { workspace = true }
@@ -50,9 +51,6 @@ futures = { workspace = true }
 jiff = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-
-[package.metadata.cargo-shear]
-ignored = ["uv-extract"]
 
 [features]
 static = ["uv-extract/static"]

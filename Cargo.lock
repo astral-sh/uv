@@ -5876,6 +5876,7 @@ dependencies = [
  "uv-configuration",
  "uv-dispatch",
  "uv-distribution",
+ "uv-distribution-filename",
  "uv-distribution-types",
  "uv-extract",
  "uv-install-wheel",
