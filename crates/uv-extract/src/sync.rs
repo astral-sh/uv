@@ -13,13 +13,16 @@ use tracing::warn;
 use uv_configuration::initialize_rayon_once;
 use uv_warnings::warn_user_once;
 
+const DEFAULT_BUF_SIZE: usize = 128 * 1024;
+const JOBS_PER_THREAD: usize = 4;
+
 /// Unzip a `.zip` archive into the target directory.
 ///
 /// Returns the list of unpacked files and their sizes.
 pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>, Error> {
     let (reader, filename) = reader.into_parts();
 
-    // Parse the central directory once, then clone the archive reader per Rayon worker so
+    // Parse the central directory once, then clone the archive reader per Rayon job so
     // extraction stays parallel for already-downloaded wheels.
     let archive = block_on(ZipFileReader::new(AllowStdIo::new(
         CloneableSeekableReader::new(reader),
@@ -28,10 +31,18 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
     let skip_validation = insecure_no_validate();
     // Initialize the threadpool with the user settings.
     initialize_rayon_once();
-    (0..archive.file().entries().len())
+    let entry_count = archive.file().entries().len();
+    let min_entries_per_job = entry_count
+        .div_ceil(rayon::current_num_threads().saturating_mul(JOBS_PER_THREAD))
+        .max(1);
+    (0..entry_count)
         .into_par_iter()
-        .map(|file_number| {
-            let mut archive = archive.clone();
+        // Cloning the async ZIP reader clones the entire central directory, so reuse one
+        // reader and copy buffer per Rayon job instead of allocating both for every entry.
+        .with_min_len(min_entries_per_job)
+        .map_init(
+            || (archive.clone(), vec![0; DEFAULT_BUF_SIZE]),
+            |(archive, buffer), file_number| {
             let entry = archive.file().entries()[file_number].clone();
             let file_name = match entry.filename().as_str() {
                 Ok(file_name) => file_name,
@@ -95,12 +106,8 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
                 let mut file = archive.reader_with_entry(file_number).await?;
                 let mut writer = AllowStdIo::new(writer);
                 let mut copied = 0;
-                let mut buffer = vec![0; 128 * 1024];
                 loop {
-                    let read = file
-                        .read(&mut buffer)
-                        .await
-                        .map_err(Error::io_or_compression)?;
+                    let read = file.read(buffer).await.map_err(Error::io_or_compression)?;
                     if read == 0 {
                         break;
                     }
@@ -151,7 +158,8 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
             }
 
             Ok(Some((enclosed_name, size)))
-        })
+            },
+        )
         // Filter out directories and skipped dangerous paths, we only want to collect the files.
         .filter_map(Result::transpose)
         .collect::<Result<_, Error>>()
