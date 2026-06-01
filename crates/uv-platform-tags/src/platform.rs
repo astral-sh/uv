@@ -55,6 +55,7 @@ impl Platform {
             Os::Manylinux { .. } | Os::Musllinux { .. } => "Linux",
             Os::Windows => "Windows",
             Os::Pyodide { .. } => "Pyodide",
+            Os::PyEmscripten { .. } => "Emscripten",
             Os::Macos { .. } => "macOS",
             Os::FreeBsd { .. } => "FreeBSD",
             Os::NetBsd { .. } => "NetBSD",
@@ -83,6 +84,10 @@ pub enum Os {
     },
     Windows,
     Pyodide {
+        major: u16,
+        minor: u16,
+    },
+    PyEmscripten {
         major: u16,
         minor: u16,
     },
@@ -134,6 +139,7 @@ impl fmt::Display for Os {
             Self::Haiku { .. } => write!(f, "haiku"),
             Self::Android { .. } => write!(f, "android"),
             Self::Pyodide { .. } => write!(f, "pyodide"),
+            Self::PyEmscripten { .. } => write!(f, "pyemscripten"),
             Self::Ios { .. } => write!(f, "ios"),
         }
     }
@@ -296,5 +302,18 @@ mod tests {
         );
 
         assert_eq!(platform.pretty(), "Linux x86_64");
+    }
+
+    #[test]
+    fn platform_pretty_pyemscripten() {
+        let platform = Platform::new(
+            Os::PyEmscripten {
+                major: 2026,
+                minor: 0,
+            },
+            Arch::Wasm32,
+        );
+
+        assert_eq!(platform.pretty(), "Emscripten wasm32");
     }
 }

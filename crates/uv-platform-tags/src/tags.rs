@@ -787,10 +787,28 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             platform_tags
         }
         (Os::Pyodide { major, minor }, Arch::Wasm32) => {
-            vec![PlatformTag::Pyodide {
-                major: *major,
-                minor: *minor,
-            }]
+            vec![
+                PlatformTag::PyEmscripten {
+                    major: *major,
+                    minor: *minor,
+                },
+                PlatformTag::Pyodide {
+                    major: *major,
+                    minor: *minor,
+                },
+            ]
+        }
+        (Os::PyEmscripten { major, minor }, Arch::Wasm32) => {
+            vec![
+                PlatformTag::PyEmscripten {
+                    major: *major,
+                    minor: *minor,
+                },
+                PlatformTag::Pyodide {
+                    major: *major,
+                    minor: *minor,
+                },
+            ]
         }
         (
             Os::Ios {
@@ -1617,6 +1635,50 @@ mod tests {
             "ios_12_2_arm64_iphoneos",
             "ios_12_1_arm64_iphoneos",
             "ios_12_0_arm64_iphoneos",
+        ]
+        "#
+        );
+    }
+
+    #[test]
+    fn test_platform_tags_pyodide() {
+        let tags = compatible_tags(&Platform::new(
+            Os::Pyodide {
+                major: 2025,
+                minor: 0,
+            },
+            Arch::Wasm32,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r#"
+        [
+            "pyemscripten_2025_0_wasm32",
+            "pyodide_2025_0_wasm32",
+        ]
+        "#
+        );
+    }
+
+    #[test]
+    fn test_platform_tags_pyemscripten() {
+        let tags = compatible_tags(&Platform::new(
+            Os::PyEmscripten {
+                major: 2026,
+                minor: 0,
+            },
+            Arch::Wasm32,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r#"
+        [
+            "pyemscripten_2026_0_wasm32",
+            "pyodide_2026_0_wasm32",
         ]
         "#
         );

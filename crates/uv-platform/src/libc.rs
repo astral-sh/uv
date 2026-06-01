@@ -143,7 +143,9 @@ impl From<&uv_platform_tags::Os> for Libc {
         match value {
             uv_platform_tags::Os::Manylinux { .. } => Self::Some(target_lexicon::Environment::Gnu),
             uv_platform_tags::Os::Musllinux { .. } => Self::Some(target_lexicon::Environment::Musl),
-            uv_platform_tags::Os::Pyodide { .. } => Self::Some(target_lexicon::Environment::Musl),
+            uv_platform_tags::Os::Pyodide { .. } | uv_platform_tags::Os::PyEmscripten { .. } => {
+                Self::Some(target_lexicon::Environment::Musl)
+            }
             _ => Self::None,
         }
     }
