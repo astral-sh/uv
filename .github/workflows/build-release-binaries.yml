@@ -480,7 +480,8 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-      # run-on-arch installs binfmt handlers on local Docker, so bypass the Namespace Remote Builder for its tests.
+      # run-on-arch installs binfmt handlers on local Docker, so bypass the Namespace Remote Builder
+      # for its tests. See https://namespace.so/docs/reference/github-actions/runner-configuration#disable-build-caching
       - name: "Use local Docker builder for emulated tests"
         run: docker buildx use default
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
@@ -605,7 +606,8 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
 
-      # run-on-arch installs binfmt handlers on local Docker, so bypass the Namespace Remote Builder for its tests.
+      # run-on-arch installs binfmt handlers on local Docker, so bypass the Namespace Remote Builder
+      # for its tests. See https://namespace.so/docs/reference/github-actions/runner-configuration#disable-build-caching
       - name: "Use local Docker builder for emulated tests"
         run: docker buildx use default
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
@@ -835,7 +837,8 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-      # run-on-arch installs binfmt handlers on local Docker, so bypass the Namespace Remote Builder for its tests.
+      # run-on-arch installs binfmt handlers on local Docker, so bypass the Namespace Remote Builder
+      # for its tests. See https://namespace.so/docs/reference/github-actions/runner-configuration#disable-build-caching
       - name: "Use local Docker builder for emulated tests"
         run: docker buildx use default
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
@@ -1068,7 +1071,8 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-      # run-on-arch installs binfmt handlers on local Docker, so bypass the Namespace Remote Builder for its tests.
+      # run-on-arch installs binfmt handlers on local Docker, so bypass the Namespace Remote Builder
+      # for its tests. See https://namespace.so/docs/reference/github-actions/runner-configuration#disable-build-caching
       - name: "Use local Docker builder for emulated tests"
         run: docker buildx use default
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
