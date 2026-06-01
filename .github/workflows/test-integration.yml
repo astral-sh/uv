@@ -198,7 +198,7 @@ jobs:
         run: |
           sudo dpkg --add-architecture armhf
           echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
-          sudo apt install -y libc6:armhf libgcc-s1:armhf
+          sudo apt install -y --update libc6:armhf libgcc-s1:armhf
 
       - name: "Prepare binary"
         run: |
