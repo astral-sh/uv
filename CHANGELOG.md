@@ -3,6 +3,26 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.18
+
+Released on 2026-06-01.
+
+### Performance
+
+- Fix performance regression in unzip of local wheels ([#19637](https://github.com/astral-sh/uv/pull/19637))
+
+### Preview
+
+- Add `uv check` to run `ty` from uv ([#19605](https://github.com/astral-sh/uv/pull/19605))
+
+### Bug fixes
+
+- Update activation scripts with upstream fixes ([#19628](https://github.com/astral-sh/uv/pull/19628))
+
+### Other changes
+
+- Bump MSRV to 1.94 ([#19600](https://github.com/astral-sh/uv/pull/19600))
+
 ## 0.11.17
 
 Released on 2026-05-28.
