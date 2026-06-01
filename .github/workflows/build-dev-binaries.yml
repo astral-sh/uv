@@ -22,7 +22,7 @@ jobs:
     env:
       # Rust's distributed x86_64 GNU target uses bundled LLD by default; opt out
       # so `/usr/bin/ld` resolves to the installed mold linker.
-      CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C linker-features=-lld"
+      CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C linker-features=-lld -C link-arg=-B/usr/local/libexec/mold"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -37,6 +37,8 @@ jobs:
 
       - name: "Build"
         run: cargo build --profile no-debug
+      - name: "Check mold linkage"
+        run: ./scripts/check-mold-linked.sh ./target/no-debug/uv ./target/no-debug/uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -51,6 +53,8 @@ jobs:
     name: "linux aarch64"
     timeout-minutes: 10
     runs-on: github-ubuntu-24.04-aarch64-4
+    env:
+      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-B/usr/local/libexec/mold"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -65,6 +69,8 @@ jobs:
 
       - name: "Build"
         run: cargo build --profile no-debug
+      - name: "Check mold linkage"
+        run: ./scripts/check-mold-linked.sh ./target/no-debug/uv ./target/no-debug/uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -100,7 +106,10 @@ jobs:
       - name: "Build"
         env:
           CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_RUSTFLAGS: "-C link-arg=-B/usr/local/libexec/mold"
         run: cargo build --profile no-debug --target armv7-unknown-linux-gnueabihf --bin uv --bin uvx
+      - name: "Check mold linkage"
+        run: ./scripts/check-mold-linked.sh ./target/armv7-unknown-linux-gnueabihf/no-debug/uv ./target/armv7-unknown-linux-gnueabihf/no-debug/uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -115,6 +124,8 @@ jobs:
     name: "linux musl"
     timeout-minutes: 10
     runs-on: github-ubuntu-24.04-x86_64-8
+    env:
+      CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-C link-arg=-B/usr/local/libexec/mold"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -134,6 +145,8 @@ jobs:
 
       - name: "Build"
         run: cargo build --profile no-debug --target x86_64-unknown-linux-musl --bin uv --bin uvx
+      - name: "Check mold linkage"
+        run: ./scripts/check-mold-linked.sh ./target/x86_64-unknown-linux-musl/no-debug/uv ./target/x86_64-unknown-linux-musl/no-debug/uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -271,7 +284,7 @@ jobs:
     env:
       # Rust 1.90+ uses bundled LLD for x86_64 GNU by default; opt out
       # so `/usr/bin/ld` resolves to the installed mold linker.
-      CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C linker-features=-lld"
+      CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C linker-features=-lld -C link-arg=-B/usr/local/libexec/mold"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -293,6 +306,7 @@ jobs:
       - run: cargo +${MSRV} build --profile no-debug
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
+      - run: ./scripts/check-mold-linked.sh ./target/no-debug/uv ./target/no-debug/uvx
       - run: ./target/no-debug/uv --version
 
   build-binary-android-aarch64:
