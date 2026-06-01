@@ -7,6 +7,7 @@ use url::Url;
 
 use uv_cache_info::{CacheInfo, CacheKey};
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
+use uv_configuration::DependencyGroupsWithDefaults;
 use uv_distribution_filename::ExpandedTags;
 use uv_distribution_types::{
     BuildInfo, BuildVariables, ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires,
@@ -43,6 +44,7 @@ impl RequirementSatisfaction {
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         cache_keys_package: &PackageCacheKeys,
+        dependency_groups: &DependencyGroupsWithDefaults,
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
     ) -> Self {
@@ -405,13 +407,13 @@ impl RequirementSatisfaction {
                 };
                 // A consuming project may override the cache keys for this package (via
                 // `tool.uv.cache-keys-package`); if so, those keys must be used here too, so the
-                // freshness check stays consistent with how the wheel was built.
-                let read_cache_info = match cache_keys_for(name, cache_keys_package) {
-                    Some(cache_keys) => {
-                        CacheInfo::from_directory_with_keys(requested_path, cache_keys)
-                    }
-                    None => CacheInfo::from_path(requested_path),
-                };
+                // freshness check stays consistent with how the wheel was built. Group-scoped keys
+                // are filtered by the dependency groups enabled for the current invocation.
+                let read_cache_info = CacheInfo::from_directory_filtered(
+                    requested_path,
+                    cache_keys_for(name, cache_keys_package),
+                    &|group| dependency_groups.contains(group),
+                );
                 match read_cache_info {
                     Ok(read_cache_info) => {
                         if *cache_info != read_cache_info {

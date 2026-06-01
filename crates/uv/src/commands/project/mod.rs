@@ -2491,6 +2491,7 @@ pub(crate) async fn update_environment(
             config_setting,
             config_settings_package,
             cache_keys_package,
+            &DependencyGroupsWithDefaults::none(),
             &extra_build_requires,
             extra_build_variables,
         )? {

@@ -8,7 +8,7 @@ use tracing::{debug, warn};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::Timestamp;
-use uv_configuration::{BuildOptions, Reinstall};
+use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, PathArchivePointer, RegistryWheelIndex,
 };
@@ -265,6 +265,7 @@ impl<'a> Planner<'a> {
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         cache_keys_package: &PackageCacheKeys,
+        dependency_groups: &DependencyGroupsWithDefaults,
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
         cache: &Cache,
@@ -289,6 +290,7 @@ impl<'a> Planner<'a> {
             config_settings,
             config_settings_package,
             cache_keys_package,
+            dependency_groups,
             extra_build_requires,
             extra_build_variables,
         );
@@ -339,6 +341,7 @@ impl<'a> Planner<'a> {
                             config_settings,
                             config_settings_package,
                             cache_keys_package,
+                            dependency_groups,
                             extra_build_requires,
                             extra_build_variables,
                         ) {

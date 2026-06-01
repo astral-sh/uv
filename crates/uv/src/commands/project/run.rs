@@ -19,8 +19,8 @@ use uv_cache::Cache;
 use uv_cli::{ExternalCommand, GlobalArgs};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile, ExtrasSpecification,
-    InstallOptions, TargetTriple,
+    Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
+    EnvFile, ExtrasSpecification, InstallOptions, TargetTriple,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::Requirement;
@@ -1361,6 +1361,7 @@ fn can_skip_ephemeral(
         config_setting,
         config_settings_package,
         cache_keys_package,
+        &DependencyGroupsWithDefaults::none(),
         &extra_build_requires,
         extra_build_variables,
     ) {

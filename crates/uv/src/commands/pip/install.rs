@@ -11,8 +11,9 @@ use uv_errors::{Hint, Hints};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, EditableMode,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
+    BuildIsolation, BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
+    EditableMode, ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Reinstall,
+    Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -338,6 +339,7 @@ pub(crate) async fn pip_install(
             config_settings,
             config_settings_package,
             cache_keys_package,
+            &DependencyGroupsWithDefaults::none(),
             &extra_build_requires,
             extra_build_variables,
         )? {

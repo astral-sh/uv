@@ -6063,6 +6063,7 @@ dependencies = [
  "toml",
  "tracing",
  "uv-fs",
+ "uv-normalize",
  "walkdir",
 ]
 

@@ -1675,12 +1675,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Determine the last-modified time of the source distribution. If the consuming project
         // overrode the cache keys for this package (via `tool.uv.cache-keys-package`), those
-        // replace the package's own `tool.uv.cache-keys` for this build.
-        let cache_info = if let Some(cache_keys) = self.cache_keys_for(source.name()) {
-            CacheInfo::from_directory_with_keys(resource.install_path, cache_keys)?
-        } else {
-            CacheInfo::from_directory(resource.install_path)?
-        };
+        // replace the package's own `tool.uv.cache-keys` for this build. Group-scoped cache keys
+        // are filtered by the dependency groups enabled for the current invocation.
+        let groups = self.build_context.dependency_groups();
+        let cache_info = CacheInfo::from_directory_filtered(
+            resource.install_path,
+            self.cache_keys_for(source.name()),
+            &|group| groups.contains(group),
+        )?;
 
         // Read the existing metadata from the cache.
         let entry = cache_shard.entry(LOCAL_REVISION);

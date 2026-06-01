@@ -859,7 +859,8 @@ pub(crate) async fn do_sync(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_dependency_groups(groups.clone());
 
     // Run a malware check against OSV before installing.
     if malware_settings.enabled {

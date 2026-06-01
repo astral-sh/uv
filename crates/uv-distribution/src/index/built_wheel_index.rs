@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use uv_cache::{Cache, CacheBucket, CacheShard, WheelCache};
 use uv_cache_info::{CacheInfo, CacheKey};
+use uv_configuration::DependencyGroupsWithDefaults;
 use uv_distribution_types::{
     BuildInfo, BuildVariables, ConfigSettings, DirectUrlSourceDist, DirectorySourceDist,
     ExtraBuildRequirement, ExtraBuildRequires, ExtraBuildVariables, GitDirectorySourceDist,
@@ -28,6 +29,7 @@ pub struct BuiltWheelIndex<'a> {
     config_settings: &'a ConfigSettings,
     config_settings_package: &'a PackageConfigSettings,
     cache_keys_package: &'a PackageCacheKeys,
+    dependency_groups: &'a DependencyGroupsWithDefaults,
     extra_build_requires: &'a ExtraBuildRequires,
     extra_build_variables: &'a ExtraBuildVariables,
 }
@@ -41,6 +43,7 @@ impl<'a> BuiltWheelIndex<'a> {
         config_settings: &'a ConfigSettings,
         config_settings_package: &'a PackageConfigSettings,
         cache_keys_package: &'a PackageCacheKeys,
+        dependency_groups: &'a DependencyGroupsWithDefaults,
         extra_build_requires: &'a ExtraBuildRequires,
         extra_build_variables: &'a ExtraBuildVariables,
     ) -> Self {
@@ -51,6 +54,7 @@ impl<'a> BuiltWheelIndex<'a> {
             config_settings,
             config_settings_package,
             cache_keys_package,
+            dependency_groups,
             extra_build_requires,
             extra_build_variables,
         }
@@ -169,12 +173,11 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // If the distribution is stale, omit it from the index. Respect any consumer-provided
         // cache-key override (`tool.uv.cache-keys-package`) so this matches how the wheel was built.
-        let cache_info = match self.cache_keys_for(&source_dist.name) {
-            Some(cache_keys) => {
-                CacheInfo::from_directory_with_keys(&source_dist.install_path, cache_keys)?
-            }
-            None => CacheInfo::from_directory(&source_dist.install_path)?,
-        };
+        let cache_info = CacheInfo::from_directory_filtered(
+            &source_dist.install_path,
+            self.cache_keys_for(&source_dist.name),
+            &|group| self.dependency_groups.contains(group),
+        )?;
         if cache_info != *pointer.cache_info() {
             return Ok(None);
         }

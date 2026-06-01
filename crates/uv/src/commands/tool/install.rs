@@ -9,7 +9,8 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DryRun, GitLfsSetting, Reinstall, TargetTriple, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, GitLfsSetting, Reinstall,
+    TargetTriple, Upgrade,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
@@ -535,6 +536,7 @@ pub(crate) async fn install(
                         config_setting,
                         config_settings_package,
                         cache_keys_package,
+                        &DependencyGroupsWithDefaults::none(),
                         &extra_build_requires,
                         extra_build_variables,
                     ),
