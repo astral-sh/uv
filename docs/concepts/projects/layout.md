@@ -67,9 +67,10 @@ installed across all possible Python markers such as operating system, architect
 version.
 
 Unlike the `pyproject.toml`, which is used to specify the broad requirements of your project, the
-lockfile contains the exact resolved versions that are installed in the project environment. This
-file should be checked into version control, allowing for consistent and reproducible installations
-across machines.
+lockfile contains the exact resolved versions that are installed in the project environment. For
+example, if a project directly depends on `fastapi`, the lockfile will also record the exact versions
+of transitive dependencies such as `starlette` and `pydantic`. This file should be checked into
+version control, allowing for consistent and reproducible installations across machines.
 
 A lockfile ensures that developers working on the project are using a consistent set of package
 versions. Additionally, it ensures when deploying the project as an application that the exact set
