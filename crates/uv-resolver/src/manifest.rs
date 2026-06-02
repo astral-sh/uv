@@ -176,7 +176,8 @@ impl Manifest {
     ///
     /// [`Self::requirements_no_overrides`] evaluates all requested extras together. For URL
     /// allow-listing, a direct URL must also remain available in a fork that activates only a
-    /// subset, such as `extra == 'alt' and extra != 'other'`.
+    /// subset, such as `extra == 'alt' and extra != 'other'`. Direct local requirements can also
+    /// be activated by a combination of separately requested extras and dependency groups.
     pub(crate) fn potential_url_requirements_no_overrides<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
@@ -196,9 +197,13 @@ impl Manifest {
                                 .evaluate_markers(env.marker_environment(), lookahead.extras())
                         })
                         .filter(move |requirement| {
-                            let marker = requirement.marker.simplify_not_extras_with(|extra| {
-                                !lookahead.extras().contains(extra)
-                            });
+                            let marker = if lookahead.direct() {
+                                requirement.marker
+                            } else {
+                                requirement.marker.simplify_not_extras_with(|extra| {
+                                    !lookahead.extras().contains(extra)
+                                })
+                            };
                             !marker.only_extras().is_false()
                         })
                 }))

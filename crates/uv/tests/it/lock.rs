@@ -26018,6 +26018,46 @@ fn lock_multiple_sources_extra_with_negative_extra_marker() -> Result<()> {
     Ok(())
 }
 
+/// An extra predicate on a group-scoped URL source must not replace the
+/// dependency group's fork scope.
+#[test]
+fn lock_multiple_sources_group_with_extra_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        alt = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", group = "alt", marker = "extra == 'foo'" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// When a dependency appears in `dependencies` and two different extras each
 /// gate a different URL source, the base dep marker should narrow to
 /// `extra != 'a' and extra != 'b'`, with two URL deps alongside.

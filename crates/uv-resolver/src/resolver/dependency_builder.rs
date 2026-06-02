@@ -402,13 +402,26 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
     /// Returns the fork scope for a source-specific requirement.
     ///
     /// URL-like sources do not carry a conflict item on their requirement source, so add one for
-    /// extra-gated sources when the declaring package's extra participates in a conflict.
+    /// extra-gated sources when the requirement does not already have a structured group scope.
     fn complementary_source_scope(&self, requirement: &Requirement) -> ForkScope {
+        Self::complementary_source_scope_for_project(
+            requirement,
+            self.package.name_no_root().or(self.state.project.as_ref()),
+        )
+    }
+
+    /// Returns the fork scope for a source-specific requirement declared by `project_name`.
+    fn complementary_source_scope_for_project(
+        requirement: &Requirement,
+        project_name: Option<&PackageName>,
+    ) -> ForkScope {
         let scope = ForkScope::from_requirement(requirement);
-        if matches!(requirement.source, RequirementSource::Registry { .. }) {
+        if matches!(requirement.source, RequirementSource::Registry { .. })
+            || scope.conflict().is_some()
+        {
             return scope;
         }
-        let Some(project_name) = self.package.name_no_root().or(self.state.project.as_ref()) else {
+        let Some(project_name) = project_name else {
             return scope;
         };
         let Some(extra) = Self::single_positive_extra(requirement.marker) else {
@@ -747,5 +760,49 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
     /// Returns the accumulated dependency edges.
     pub(super) fn finish(self) -> Vec<PubGrubDependency> {
         self.deps
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use std::str::FromStr;
+
+    use uv_pep508::{RequirementOrigin, VerbatimUrl};
+    use uv_types::EmptyInstalledPackages;
+
+    use super::*;
+
+    #[test]
+    fn complementary_source_scope_preserves_group_origin() {
+        let project_name = PackageName::from_str("project").unwrap();
+        let package_name = PackageName::from_str("demo").unwrap();
+        let group = GroupName::from_str("alt").unwrap();
+        let marker = MarkerTree::from_str("extra == 'foo'").unwrap();
+        let requirement = Requirement {
+            name: package_name,
+            extras: Box::default(),
+            groups: Box::default(),
+            marker,
+            source: RequirementSource::Directory {
+                install_path: PathBuf::from("/tmp/demo").into_boxed_path(),
+                editable: None,
+                r#virtual: None,
+                url: VerbatimUrl::parse_url("file:///tmp/demo").unwrap(),
+            },
+            origin: Some(RequirementOrigin::Group(
+                PathBuf::from("pyproject.toml"),
+                Some(project_name.clone()),
+                group.clone(),
+            )),
+        };
+
+        let scope =
+            DependencyBuilder::<EmptyInstalledPackages>::complementary_source_scope_for_project(
+                &requirement,
+                Some(&project_name),
+            );
+
+        assert_eq!(scope, ForkScope::from_group(marker, &project_name, &group));
     }
 }
