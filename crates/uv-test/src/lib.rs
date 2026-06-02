@@ -1980,6 +1980,18 @@ pub fn diff_snapshot(old: &str, new: &str) -> String {
         .into_owned()
 }
 
+/// Assert a snapshot of the diff of `old` and `new`.
+///
+/// Returns `new`, this is useful for chaining diffs.
+#[macro_export]
+macro_rules! assert_diff_snapshot {
+    ($old:expr, $new:expr, @$snapshot:literal) => {{
+        let new = $new;
+        ::insta::assert_snapshot!($crate::diff_snapshot($old, new.as_ref()), @$snapshot);
+        new
+    }};
+}
+
 pub fn site_packages_path(venv: &Path, python: &str) -> PathBuf {
     if cfg!(unix) {
         venv.join("lib").join(python).join("site-packages")

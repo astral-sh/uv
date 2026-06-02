@@ -1,7 +1,7 @@
 use anyhow::Result;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use insta::assert_snapshot;
-use uv_test::{diff_snapshot, uv_snapshot};
+use uv_test::{assert_diff_snapshot, uv_snapshot};
 
 #[test]
 fn packse_add_remove_one_package() {
@@ -202,12 +202,10 @@ fn packse_add_remove_one_package() {
     });
 
     // Back to where we started.
-    let new_lock = context.read("uv.lock");
-    let diff = diff_snapshot(&lock, &new_lock);
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(diff, @"");
+        assert_diff_snapshot!(&lock, context.read("uv.lock"), @"");
     });
 }
 
@@ -386,12 +384,10 @@ fn packse_promote_transitive_to_direct_then_remove() {
     });
 
     // Back to where we started.
-    let new_lock = context.read("uv.lock");
-    let diff = diff_snapshot(&lock, &new_lock);
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(diff, @"");
+        assert_diff_snapshot!(&lock, context.read("uv.lock"), @"");
     });
 }
 
@@ -570,12 +566,10 @@ fn jax_instability() -> Result<()> {
     //
     // See: https://github.com/astral-sh/uv/issues/6063
     // See: https://github.com/astral-sh/uv/issues/6158
-    let new_lock = context.read("uv.lock");
-    let diff = diff_snapshot(&lock, &new_lock);
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(diff, @r#"
+        assert_diff_snapshot!(&lock, context.read("uv.lock"), @r#"
         --- old
         +++ new
         @@ -9,21 +9,21 @@
