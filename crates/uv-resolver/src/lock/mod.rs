@@ -2621,18 +2621,12 @@ fn requirement_applies_to_dependency(
     if requirement.name != dep.package_id.name {
         return false;
     }
-    // When the dependency edge involves conflict extras/groups, the multiple
-    // versions are separated by the conflict mechanism rather than by
-    // environment markers alone. The pep508 projection strips the conflict
-    // encoding, so marker disjointness cannot be reliably determined. Skip
-    // these edges — correctness is guaranteed by the resolver.
-    if !dep.complexified_marker.conflict().is_true() {
-        return false;
-    }
     if !requirement.evaluate_markers(None, active_extras) {
         return false;
     }
     let marker = requirement.marker.simplify_extras(active_extras);
+    // The caller has already selected the normal, optional, or group dependency context, so the
+    // conflict marker does not change which metadata requirement applies.
     !marker.is_disjoint(dep.complexified_marker.pep508())
 }
 

@@ -16265,6 +16265,68 @@ fn check_locked_version_violates_marker_scoped_local_dependency_specifier() -> R
     Ok(())
 }
 
+/// Test that `uv lock --check` detects when a conflict-marked dependency edge points to a version
+/// that violates its `requires-dist` specifier.
+#[test]
+fn check_locked_version_violates_conflict_marked_dependency_specifier() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig<2"]
+
+        [dependency-groups]
+        dev = ["iniconfig==2.0.0"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { group = "dev" },
+            { package = "project" },
+          ],
+        ]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock").replace(
+        r#"{ name = "iniconfig", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-7-project'" }"#,
+        r#"{ name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-7-project'" }"#,
+    );
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 3 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// This checks that markers that normalize to 'false', which are serialized
 /// to the lockfile as `python_full_version < '0'`, get read back as false.
 /// Otherwise `uv lock --check` will always fail.
