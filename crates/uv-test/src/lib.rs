@@ -1980,6 +1980,40 @@ pub fn diff_snapshot(old: &str, new: &str) -> String {
         .into_owned()
 }
 
+/// Assert a snapshot of the diff between `old` and a command's output.
+///
+/// Returns the command's snapshot, this is useful for chaining diffs.
+#[macro_export]
+macro_rules! diff_uv_snapshot {
+    ($filters:expr, $old:expr, $spawnable:expr, @$snapshot:literal) => {{
+        let (new, _) = $crate::run_and_format(
+            $spawnable,
+            &$filters,
+            $crate::function_name!(),
+            Some($crate::WindowsFilters::Platform),
+            None,
+        );
+        ::insta::assert_snapshot!($crate::diff_snapshot($old, &new), @$snapshot);
+        new
+    }};
+}
+
+/// Assert and capture a snapshot of a command's output.
+#[macro_export]
+macro_rules! capture_uv_snapshot {
+    ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
+        let (snapshot, _) = $crate::run_and_format(
+            $spawnable,
+            &$filters,
+            $crate::function_name!(),
+            Some($crate::WindowsFilters::Platform),
+            None,
+        );
+        ::insta::assert_snapshot!(snapshot, @$snapshot);
+        snapshot
+    }};
+}
+
 pub fn site_packages_path(venv: &Path, python: &str) -> PathBuf {
     if cfg!(unix) {
         venv.join("lib").join(python).join("site-packages")
