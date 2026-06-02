@@ -1101,6 +1101,56 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 cache: CacheInfo::from_timestamp(modified),
                 build: None,
             })
+        } else if matches!(extension, WheelExtension::Whl) && hashes.is_none() {
+            // Otherwise, unzip the wheel and compute its content-addressed cache key.
+            let (temp_dir, files, blake3_digest) = tokio::task::spawn_blocking({
+                let path = path.to_owned();
+                let root = self.build_context.cache().root().to_path_buf();
+                let filename = filename.to_string();
+                move || -> Result<_, Error> {
+                    let temp_dir = tempfile::tempdir_in(root).map_err(Error::CacheWrite)?;
+                    let (files, blake3_digest) = uv_extract::unzip_and_hash(&path, temp_dir.path())
+                        .map_err(|err| Error::Extract(filename, err))?;
+                    Ok((temp_dir, files, blake3_digest))
+                }
+            })
+            .await??;
+
+            // Before we make the wheel accessible by persisting it, ensure that the RECORD is
+            // valid.
+            validate_and_heal_record(temp_dir.path(), files.iter(), dist)
+                .map_err(Error::InstallWheelError)?;
+
+            // Persist the temporary directory to the directory store.
+            let id = self
+                .build_context
+                .cache()
+                .persist(temp_dir.keep(), wheel_entry.path(), blake3_digest.as_str())
+                .await
+                .map_err(Error::CacheWrite)?;
+
+            // Create an archive.
+            let archive = Archive::new(id, HashDigests::empty(), filename.clone());
+
+            // Write the archive pointer to the cache.
+            let pointer = PathArchivePointer {
+                timestamp: modified,
+                archive: archive.clone(),
+            };
+            pointer.write_to(&pointer_entry).await?;
+
+            Ok(LocalWheel {
+                dist: Dist::Built(dist.clone()),
+                archive: self
+                    .build_context
+                    .cache()
+                    .archive(&archive.id)
+                    .into_boxed_path(),
+                hashes: archive.hashes,
+                filename: filename.clone(),
+                cache: CacheInfo::from_timestamp(modified),
+                build: None,
+            })
         } else {
             // Otherwise, unzip the wheel and compute the requested hashes.
             let file = fs_err::tokio::File::open(path)
