@@ -635,6 +635,8 @@ pub(crate) async fn install(
         && extraneous.is_empty()
         && !compile
     {
+        uv_installer::refresh_script_entrypoints(venv)
+            .context("Failed to refresh installed entrypoint scripts")?;
         logger.on_check(resolution.len(), start, printer, dry_run)?;
         return Ok(Changelog::default());
     }
@@ -714,6 +716,9 @@ pub(crate) async fn install(
     if compile {
         compile_bytecode(venv, concurrency, cache, printer).await?;
     }
+
+    uv_installer::refresh_script_entrypoints(venv)
+        .context("Failed to refresh installed entrypoint scripts")?;
 
     // Construct a summary of the changes made to the environment.
     let changelog = Changelog::from_local(installs, uninstalls);

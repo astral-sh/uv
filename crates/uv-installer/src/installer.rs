@@ -13,6 +13,8 @@ use uv_install_wheel::{Layout, LinkMode};
 use uv_preview::Preview;
 use uv_python::PythonEnvironment;
 
+use crate::SitePackages;
+
 pub struct Installer<'a> {
     venv: &'a PythonEnvironment,
     link_mode: LinkMode,
@@ -203,6 +205,34 @@ fn install(
     }
 
     Ok(wheels)
+}
+
+/// Refresh installed entrypoint launchers that still target a stale interpreter path.
+pub fn refresh_script_entrypoints(venv: &PythonEnvironment) -> Result<usize> {
+    if venv.relocatable() {
+        return Ok(0);
+    }
+
+    let layout = venv.interpreter().layout();
+    let site_packages = SitePackages::from_environment(venv)?;
+    let mut refreshed = 0;
+
+    for distribution in site_packages.iter() {
+        let Some(site_packages) = distribution.install_path().parent() else {
+            continue;
+        };
+
+        if uv_install_wheel::refresh_script_entrypoints(
+            &layout,
+            false,
+            site_packages,
+            distribution.install_path(),
+        )? {
+            refreshed += 1;
+        }
+    }
+
+    Ok(refreshed)
 }
 
 pub trait Reporter: Send + Sync {

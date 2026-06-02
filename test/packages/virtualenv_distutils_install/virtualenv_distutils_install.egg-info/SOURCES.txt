@@ -1,0 +1,7 @@
+setup.py
+virtualenv_distutils_install.py
+scripts/virtualenv-distutils-install
+virtualenv_distutils_install.egg-info/PKG-INFO
+virtualenv_distutils_install.egg-info/SOURCES.txt
+virtualenv_distutils_install.egg-info/dependency_links.txt
+virtualenv_distutils_install.egg-info/top_level.txt

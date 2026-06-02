@@ -1,0 +1,1 @@
+VALUE = "virtualenv-distutils-install"

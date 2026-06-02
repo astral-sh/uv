@@ -1,0 +1,2 @@
+#!python
+print("virtualenv-distutils-install")

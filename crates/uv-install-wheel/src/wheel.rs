@@ -178,6 +178,72 @@ fn entrypoint_path(entrypoint: &Script, layout: &Layout) -> PathBuf {
     }
 }
 
+/// Determine the path to an entrypoint script relative to `site-packages`.
+fn entrypoint_relative_path(
+    entrypoint: &Script,
+    layout: &Layout,
+    site_packages: &Path,
+) -> Result<PathBuf, Error> {
+    let entrypoint_absolute = entrypoint_path(entrypoint, layout);
+
+    pathdiff::diff_paths(&entrypoint_absolute, site_packages).ok_or_else(|| {
+        Error::Io(io::Error::other(format!(
+            "Could not find relative path for: {}",
+            entrypoint_absolute.simplified_display()
+        )))
+    })
+}
+
+/// Generate the platform-specific launcher contents for an entrypoint script.
+fn script_entrypoint_contents(
+    entrypoint: &Script,
+    layout: &Layout,
+    relocatable: bool,
+    is_gui: bool,
+) -> Result<Vec<u8>, Error> {
+    let launcher_executable = get_script_executable(&layout.sys_executable, is_gui);
+    let launcher_executable = get_relocatable_executable(launcher_executable, layout, relocatable)?;
+    let launcher_python_script = get_script_launcher(
+        entrypoint,
+        &format_shebang(&launcher_executable, &layout.os_name, relocatable),
+    );
+
+    if cfg!(windows) {
+        windows_script_launcher(&launcher_python_script, is_gui, &launcher_executable)
+            .map_err(Error::from)
+    } else {
+        Ok(launcher_python_script.into_bytes())
+    }
+}
+
+/// Returns `true` when an installed entrypoint script still points at a stale interpreter.
+fn script_entrypoint_needs_refresh(
+    entrypoint: &Script,
+    layout: &Layout,
+    relocatable: bool,
+    is_gui: bool,
+) -> Result<bool, Error> {
+    let entrypoint_absolute = entrypoint_path(entrypoint, layout);
+    let contents = match fs::read(&entrypoint_absolute) {
+        Ok(contents) => contents,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(true),
+        Err(err) => return Err(err.into()),
+    };
+
+    if cfg!(windows) {
+        return Ok(contents != script_entrypoint_contents(entrypoint, layout, relocatable, is_gui)?);
+    }
+
+    let launcher_executable = get_script_executable(&layout.sys_executable, is_gui);
+    let launcher_executable = get_relocatable_executable(launcher_executable, layout, relocatable)?;
+    let expected_shebang = format!(
+        "{}\n",
+        format_shebang(&launcher_executable, &layout.os_name, relocatable)
+    );
+
+    Ok(!contents.starts_with(expected_shebang.as_bytes()))
+}
+
 /// Create the wrapper scripts in the bin folder of the venv for launching console scripts.
 pub(crate) fn write_script_entrypoints(
     layout: &Layout,
@@ -207,38 +273,23 @@ pub(crate) fn write_script_entrypoints(
             return Err(Error::ReservedScriptName(entrypoint.name.clone()));
         }
 
-        let entrypoint_absolute = entrypoint_path(entrypoint, layout);
-
-        let entrypoint_relative = pathdiff::diff_paths(&entrypoint_absolute, site_packages)
-            .ok_or_else(|| {
-                Error::Io(io::Error::other(format!(
-                    "Could not find relative path for: {}",
-                    entrypoint_absolute.simplified_display()
-                )))
-            })?;
-
-        // Generate the launcher script.
-        let launcher_executable = get_script_executable(&layout.sys_executable, is_gui);
-        let launcher_executable =
-            get_relocatable_executable(launcher_executable, layout, relocatable)?;
-        let launcher_python_script = get_script_launcher(
-            entrypoint,
-            &format_shebang(&launcher_executable, &layout.os_name, relocatable),
-        );
+        let entrypoint_relative = entrypoint_relative_path(entrypoint, layout, site_packages)?;
+        let launcher_contents =
+            script_entrypoint_contents(entrypoint, layout, relocatable, is_gui)?;
 
         // If necessary, wrap the launcher script in a Windows launcher binary.
         if cfg!(windows) {
             write_file_recorded(
                 site_packages,
                 &entrypoint_relative,
-                &windows_script_launcher(&launcher_python_script, is_gui, &launcher_executable)?,
+                &launcher_contents,
                 record,
             )?;
         } else {
             write_file_recorded(
                 site_packages,
                 &entrypoint_relative,
-                &launcher_python_script,
+                &launcher_contents,
                 record,
             )?;
 
@@ -257,6 +308,85 @@ pub(crate) fn write_script_entrypoints(
         }
     }
     Ok(())
+}
+
+/// Refresh installed entrypoint launchers if they reference an outdated Python interpreter.
+pub fn refresh_script_entrypoints(
+    layout: &Layout,
+    relocatable: bool,
+    site_packages: &Path,
+    dist_info: &Path,
+) -> Result<bool, Error> {
+    let Some(dist_info_name) = dist_info.file_name().and_then(|name| name.to_str()) else {
+        return Ok(false);
+    };
+    let Some(dist_info_prefix) = dist_info_name.strip_suffix(".dist-info") else {
+        return Ok(false);
+    };
+
+    let (console_scripts, gui_scripts) = parse_scripts(
+        site_packages,
+        dist_info_prefix,
+        None,
+        layout.python_version.1,
+    )?;
+    if console_scripts.is_empty() && gui_scripts.is_empty() {
+        return Ok(false);
+    }
+
+    let needs_refresh = console_scripts
+        .iter()
+        .try_fold(false, |needs_refresh, entrypoint| {
+            Ok::<_, Error>(
+                needs_refresh
+                    || script_entrypoint_needs_refresh(entrypoint, layout, relocatable, false)?,
+            )
+        })?
+        || gui_scripts
+            .iter()
+            .try_fold(false, |needs_refresh, entrypoint| {
+                Ok::<_, Error>(
+                    needs_refresh
+                        || script_entrypoint_needs_refresh(entrypoint, layout, relocatable, true)?,
+                )
+            })?;
+    if !needs_refresh {
+        return Ok(false);
+    }
+
+    let record_path = dist_info.join("RECORD");
+    let mut record = read_record(File::open(&record_path)?)?;
+    let entrypoint_paths = console_scripts
+        .iter()
+        .chain(&gui_scripts)
+        .map(|entrypoint| entrypoint_relative_path(entrypoint, layout, site_packages))
+        .collect::<Result<Vec<_>, _>>()?;
+    record.retain(|entry| {
+        !entrypoint_paths
+            .iter()
+            .any(|path| Path::new(&entry.path) == path)
+    });
+
+    fs::create_dir_all(&layout.scheme.scripts)?;
+    write_script_entrypoints(
+        layout,
+        relocatable,
+        site_packages,
+        &console_scripts,
+        &mut record,
+        false,
+    )?;
+    write_script_entrypoints(
+        layout,
+        relocatable,
+        site_packages,
+        &gui_scripts,
+        &mut record,
+        true,
+    )?;
+    write_record(site_packages, dist_info_prefix, record)?;
+
+    Ok(true)
 }
 
 /// A parsed `WHEEL` file.

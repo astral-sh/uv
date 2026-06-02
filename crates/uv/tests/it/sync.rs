@@ -4,11 +4,12 @@ use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
+use std::path::Path;
 use std::process::Command;
 use tempfile::tempdir_in;
 use url::Url;
 
-use uv_fs::Simplified;
+use uv_fs::{Simplified, copy_dir_all};
 use uv_static::EnvVars;
 
 use uv_test::{TestContext, download_to_disk, packse_index_url, uv_snapshot, venv_bin_path};
@@ -8899,6 +8900,103 @@ fn sync_scripts_workspace_member_not_packaged_not_synced() -> Result<()> {
     Resolved 2 packages in [TIME]
     Checked in [TIME]
     ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_scripts_from_copied_environment() -> Result<()> {
+    #[cfg(unix)]
+    fn copy_virtual_environment(source: &Path, destination: &Path) -> Result<()> {
+        fs_err::create_dir_all(destination)?;
+        for entry in fs_err::read_dir(source)? {
+            let entry = entry?;
+            let source = entry.path();
+            let destination = destination.join(entry.file_name());
+            let file_type = fs_err::symlink_metadata(&source)?.file_type();
+
+            if file_type.is_dir() {
+                copy_virtual_environment(&source, &destination)?;
+            } else if file_type.is_symlink() {
+                fs_err::os::unix::fs::symlink(fs_err::read_link(&source)?, destination)?;
+            } else {
+                fs_err::copy(source, destination)?;
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn copy_virtual_environment(source: &Path, destination: &Path) -> Result<()> {
+        copy_dir_all(source, destination)?;
+        Ok(())
+    }
+
+    let context = uv_test::test_context!("3.12");
+
+    let package = context.temp_dir.child("black_editable");
+    copy_dir_all(
+        context.workspace_root.join("test/packages/black_editable"),
+        &package,
+    )?;
+
+    let project_a = context.temp_dir.child("project-a");
+    let project_b = context.temp_dir.child("project-b");
+    fs_err::create_dir_all(&project_a)?;
+    fs_err::create_dir_all(&project_b)?;
+
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["black"]
+
+        [tool.uv.sources]
+        black = { path = "../black_editable" }
+        "#;
+    project_a
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+    project_b
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    uv_snapshot!(context.filters(), context.sync().current_dir(&project_a), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[TEMP_DIR]/black_editable)
+    ");
+
+    let project_a_environment = project_a.join(".venv");
+    let project_b_environment = project_b.join(".venv");
+    copy_virtual_environment(&project_a_environment, &project_b_environment)?;
+    fs_err::remove_dir_all(project_a_environment)?;
+
+    uv_snapshot!(context.filters(), context.sync().current_dir(&project_b), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    ");
+
+    let script = venv_bin_path(project_b_environment)
+        .join(format!("black{}", std::env::consts::EXE_SUFFIX));
+    Command::new(script)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Hello world!"));
 
     Ok(())
 }

@@ -1,3 +1,5 @@
+use std::process::Command;
+
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
@@ -9,7 +11,7 @@ use uv_static::EnvVars;
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink;
 
-use uv_test::uv_snapshot;
+use uv_test::{uv_snapshot, venv_bin_path};
 
 #[test]
 fn create_venv() {
@@ -878,6 +880,101 @@ fn seed_older_python_version() {
     );
 
     context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn create_venv_ignores_distutils_install_config() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    let home = context.temp_dir.child("home");
+    home.create_dir_all()?;
+
+    let redirected = context.temp_dir.child("redirected");
+    redirected.create_dir_all()?;
+
+    home.child(".pydistutils.cfg").write_str(&format!(
+        "\
+[install]
+install_purelib = {}
+install_platlib = {}
+install_headers = {}
+install_scripts = {}
+install_data = {}
+",
+        redirected.child("purelib").path().display(),
+        redirected.child("platlib").path().display(),
+        redirected.child("headers").path().display(),
+        redirected.child("scripts").path().display(),
+        redirected.child("data").path().display(),
+    ))?;
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--seed")
+        .arg("--python")
+        .arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment with seed packages at: .venv
+     + pip==24.0
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // Python 3.12 no longer seeds `setuptools`, but `setup.py install` still
+    // exercises the distutils install-path configuration that `_virtualenv.py` patches.
+    context.pip_install().arg("setuptools").assert().success();
+
+    let venv_python = if cfg!(windows) {
+        context.venv.child("Scripts/python.exe")
+    } else {
+        context.venv.child("bin/python")
+    };
+
+    Command::new(venv_python.as_os_str())
+        .arg("setup.py")
+        .arg("install")
+        .current_dir(
+            context
+                .workspace_root
+                .join("test/packages/virtualenv_distutils_install"),
+        )
+        .env(EnvVars::HOME, home.path())
+        .assert()
+        .success();
+
+    assert!(
+        context
+            .site_packages()
+            .join("virtualenv_distutils_install-0.0.0-py3.12.egg")
+            .is_file()
+    );
+    assert!(
+        venv_bin_path(&context.venv)
+            .join("virtualenv-distutils-install")
+            .is_file()
+    );
+
+    redirected
+        .child("purelib")
+        .assert(predicates::path::missing());
+    redirected
+        .child("platlib")
+        .assert(predicates::path::missing());
+    redirected
+        .child("headers")
+        .assert(predicates::path::missing());
+    redirected
+        .child("scripts")
+        .assert(predicates::path::missing());
+    redirected.child("data").assert(predicates::path::missing());
+
+    Ok(())
 }
 
 #[test]
