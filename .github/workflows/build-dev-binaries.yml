@@ -61,8 +61,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
+      - name: "Use bundled LLD"
+        run: |
+          bundled_lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/gcc-ld"
+          test -x "${bundled_lld_dir}/ld.lld"
+          echo "RUSTFLAGS=-C link-arg=-B${bundled_lld_dir} -C link-arg=-fuse-ld=lld" >> "${GITHUB_ENV}"
 
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
@@ -144,8 +147,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
+      - name: "Use bundled LLD"
+        run: |
+          bundled_lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/gcc-ld"
+          test -x "${bundled_lld_dir}/ld.lld"
+          echo "RUSTFLAGS=-C link-arg=-B${bundled_lld_dir} -C link-arg=-fuse-ld=lld" >> "${GITHUB_ENV}"
 
       - name: "Setup musl"
         run: sudo apt-get install musl-tools
@@ -347,8 +353,6 @@ jobs:
         run: rustup default ${MSRV}
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
