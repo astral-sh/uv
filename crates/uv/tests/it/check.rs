@@ -30,7 +30,7 @@ fn check_project() -> Result<()> {
     All checks passed!
 
     ----- stderr -----
-    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     ");
 
     Ok(())
@@ -65,16 +65,16 @@ fn check_ty_version_no_match() {
     uv_snapshot!(
         context.filters(),
         context.check().arg("--ty-version").arg(">=999.0.0"),
-        @r###"
+        @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Failed to find ty version matching: >=999.0.0
       Caused by: No version of ty found matching `>=999.0.0` for platform `[PLATFORM]`
-    "###
+    "
     );
 }
 
@@ -104,7 +104,7 @@ fn check_ty_version_pinned_verbose() -> Result<()> {
     All checks passed!
 
     ----- stderr -----
-    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     DEBUG `--exclude-newer` is ignored for pinned version `0.0.17`
     DEBUG Using `ty==0.0.17`
     "
@@ -129,7 +129,7 @@ fn check_missing_pyproject_toml() -> Result<()> {
     All checks passed!
 
     ----- stderr -----
-    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     ");
 
     // Project-only settings are ignored without a discovered project.
@@ -173,7 +173,7 @@ fn check_no_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: No interpreter found for Python >=4.0 in [PYTHON SOURCES]
     ");
 
@@ -246,7 +246,7 @@ fn check_type_error() -> Result<()> {
     Found 1 diagnostic
 
     ----- stderr -----
-    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     "#);
 
     Ok(())
@@ -279,7 +279,7 @@ fn check_with_declared_dependency() -> Result<()> {
     All checks passed!
 
     ----- stderr -----
-    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     Installed 1 package in [TIME]
     ");
 
@@ -340,7 +340,7 @@ fn check_with_undeclared_dependency() -> Result<()> {
     Found 1 diagnostic
 
     ----- stderr -----
-    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     ");
 
     Ok(())
