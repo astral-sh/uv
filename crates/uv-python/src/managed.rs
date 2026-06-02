@@ -596,7 +596,7 @@ impl ManagedPythonInstallation {
 
     /// Ensure that the `sysconfig` data is patched to match the installation path.
     pub fn ensure_sysconfig_patched(&self) -> Result<(), Error> {
-        if cfg!(unix) {
+        if cfg!(unix) && !self.key.os().is_windows() {
             if self.key.os().is_emscripten() {
                 // Emscripten's stdlib is a zip file so we can't update the
                 // sysconfig directly
