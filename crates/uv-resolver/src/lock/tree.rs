@@ -171,7 +171,7 @@ impl<'env> TreeDisplay<'env> {
         {
             // Index the lockfile by name.
             let by_name: FxHashMap<_, Vec<_>> = {
-                lock.packages().iter().fold(
+                lock.runtime_packages().fold(
                     FxHashMap::with_capacity_and_hasher(lock.len(), FxBuildHasher),
                     |mut map, package| {
                         map.entry(&package.id.name).or_default().push(package);

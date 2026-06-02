@@ -2648,8 +2648,7 @@ impl Lock {
         let workspace_member_ids: FxHashSet<&PackageId> = if self.members().is_empty() {
             self.root().into_iter().map(|package| &package.id).collect()
         } else {
-            self.packages
-                .iter()
+            self.runtime_packages()
                 .filter(|package| self.members().contains(&package.id.name))
                 .map(|package| &package.id)
                 .collect()
@@ -2662,9 +2661,8 @@ impl Lock {
         // Seed from workspace members. Always queue with `None` so that we can traverse
         // their dependency groups; only queue extras when prod mode is active.
         for package in self
-            .packages
-            .iter()
-            .filter(|p| workspace_member_ids.contains(&p.id))
+            .runtime_packages()
+            .filter(|package| workspace_member_ids.contains(&package.id))
         {
             if seen.insert((&package.id, None)) {
                 queue.push_back((package, None));
@@ -2681,9 +2679,8 @@ impl Lock {
         // Seed from requirements attached directly to the lock (e.g., PEP 723 scripts).
         for requirement in self.requirements() {
             for package in self
-                .packages
-                .iter()
-                .filter(|p| p.id.name == requirement.name)
+                .runtime_packages()
+                .filter(|package| package.id.name == requirement.name)
             {
                 if seen.insert((&package.id, None)) {
                     queue.push_back((package, None));
@@ -2704,9 +2701,8 @@ impl Lock {
             }
             for requirement in requirements {
                 for package in self
-                    .packages
-                    .iter()
-                    .filter(|p| p.id.name == requirement.name)
+                    .runtime_packages()
+                    .filter(|package| package.id.name == requirement.name)
                 {
                     if seen.insert((&package.id, None)) {
                         queue.push_back((package, None));
@@ -2771,7 +2767,7 @@ impl Lock {
 
     /// Return the workspace root used to generate this lock.
     pub fn root(&self) -> Option<&Package> {
-        self.packages.iter().find(|package| {
+        self.runtime_packages().find(|package| {
             let (Source::Editable(path) | Source::Virtual(path)) = &package.id.source else {
                 return false;
             };
@@ -3258,15 +3254,12 @@ impl Lock {
         Ok(doc.to_string())
     }
 
-    /// Returns the package with the given name. If there are multiple
-    /// matching packages, then an error is returned. If there are no
-    /// matching packages, then `Ok(None)` is returned.
+    /// Returns the runtime package with the given name. If there are multiple
+    /// matching packages, then an error is returned. If there are no matching
+    /// packages, then `Ok(None)` is returned.
     pub fn find_by_name(&self, name: &PackageName) -> Result<Option<&Package>, String> {
         let mut found_dist = None;
-        for dist in &self.packages {
-            if dist.id.resolution_id.is_some() {
-                continue;
-            }
+        for dist in self.runtime_packages() {
             if &dist.id.name == name {
                 if found_dist.is_some() {
                     return Err(format!("found multiple packages matching `{name}`"));
@@ -3277,7 +3270,7 @@ impl Lock {
         Ok(found_dist)
     }
 
-    /// Returns the package with the given name.
+    /// Returns the runtime package with the given name.
     ///
     /// If there are multiple matching packages, returns the package that
     /// corresponds to the given marker tree.
@@ -3292,10 +3285,7 @@ impl Lock {
         marker_env: &MarkerEnvironment,
     ) -> Result<Option<&Package>, String> {
         let mut found_dist = None;
-        for dist in &self.packages {
-            if dist.id.resolution_id.is_some() {
-                continue;
-            }
+        for dist in self.runtime_packages() {
             if &dist.id.name == name {
                 if dist.fork_markers.is_empty()
                     || dist
@@ -3785,7 +3775,7 @@ impl Lock {
                 .map(|requirement| &requirement.name)
                 .collect::<FxHashSet<_>>();
 
-            let by_name: FxHashMap<_, Vec<_>> = self.packages.iter().fold(
+            let by_name: FxHashMap<_, Vec<_>> = self.runtime_packages().fold(
                 FxHashMap::with_capacity_and_hasher(self.packages.len(), FxBuildHasher),
                 |mut by_name, package| {
                     if names.contains(&package.id.name) {

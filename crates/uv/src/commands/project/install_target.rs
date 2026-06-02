@@ -286,8 +286,7 @@ impl<'lock> InstallTarget<'lock> {
 
                 let roots = self.roots().collect::<FxHashSet<_>>();
                 let member_packages: Vec<&Package> = lock
-                    .packages()
-                    .iter()
+                    .runtime_packages()
                     .filter(|package| roots.contains(package.name()))
                     .collect();
 
@@ -339,8 +338,7 @@ impl<'lock> InstallTarget<'lock> {
             Self::Workspace { lock, workspace } | Self::NonProjectWorkspace { lock, workspace } => {
                 let roots = self.roots().collect::<FxHashSet<_>>();
                 let member_packages: Vec<&Package> = lock
-                    .packages()
-                    .iter()
+                    .runtime_packages()
                     .filter(|package| roots.contains(package.name()))
                     .collect();
 
@@ -368,8 +366,7 @@ impl<'lock> InstallTarget<'lock> {
             Self::Project { lock, .. } | Self::Projects { lock, .. } => {
                 let roots = self.roots().collect::<FxHashSet<_>>();
                 let member_packages: Vec<&Package> = lock
-                    .packages()
-                    .iter()
+                    .runtime_packages()
                     .filter(|package| roots.contains(package.name()))
                     .collect();
 
@@ -417,8 +414,7 @@ impl<'lock> InstallTarget<'lock> {
 
                 // Collect the packages by name for efficient lookup.
                 let packages = lock
-                    .packages()
-                    .iter()
+                    .runtime_packages()
                     .map(|package| (package.name(), package))
                     .collect::<BTreeMap<_, _>>();
 
