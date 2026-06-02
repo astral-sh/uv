@@ -2025,6 +2025,137 @@ fn lock_build_dependencies_preference() -> Result<()> {
     Ok(())
 }
 
+/// Verify that packages reached only through build dependencies do not become
+/// runtime preferences, while packages shared with the runtime graph do.
+#[test]
+fn lock_build_dependencies_runtime_preferences_exclude_build_only_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("build_only-1.0.0-py3-none-any.whl"),
+        "build-only",
+        "1.0.0",
+    )?;
+    write_wheel(
+        &links_dir.child("shared-1.0.0-py3-none-any.whl"),
+        "shared",
+        "1.0.0",
+    )?;
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["build-only>=1", "shared>=1"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+"#,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep", "shared>=1"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let build_only = package_section(&lock, "build-only");
+    assert!(build_only.contains("build-only = true"), "{build_only}");
+
+    write_wheel(
+        &links_dir.child("build_only-2.0.0-py3-none-any.whl"),
+        "build-only",
+        "2.0.0",
+    )?;
+    write_wheel(
+        &links_dir.child("shared-2.0.0-py3-none-any.whl"),
+        "shared",
+        "2.0.0",
+    )?;
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["build-only>=1", "dep", "shared>=1"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let shared = package_section(&lock, "shared");
+    assert!(shared.contains("version = \"1.0.0\""), "{shared}");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(package_section(&lock, "project"), @r#"
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "build-only", version = "2.0.0", source = { registry = "[TEMP_DIR]/links" } },
+            { name = "dep" },
+            { name = "shared" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "build-only", specifier = ">=1" },
+            { name = "dep", directory = "dep" },
+            { name = "shared", specifier = ">=1" },
+        ]
+        "#);
+    });
+
+    Ok(())
+}
+
 /// Lock a project with multiple local dependencies that each require building,
 /// and verify each gets its own build-dependencies section.
 #[test]

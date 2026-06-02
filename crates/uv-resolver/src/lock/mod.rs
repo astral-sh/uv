@@ -2504,6 +2504,16 @@ impl Lock {
         &self.packages
     }
 
+    /// Returns the [`Package`] entries reachable from the runtime dependency graph.
+    ///
+    /// This includes packages reachable through any optional dependency or dependency group, but
+    /// excludes packages that are only reachable through build dependencies.
+    pub fn runtime_packages(&self) -> impl Iterator<Item = &Package> {
+        self.packages
+            .iter()
+            .filter(|package| package.id.resolution_id.is_none() && !package.build_only)
+    }
+
     /// Returns the supported Python version range for the lockfile, if present.
     pub fn requires_python(&self) -> &RequiresPython {
         &self.requires_python
@@ -5921,6 +5931,8 @@ pub struct Package {
     pub(crate) id: PackageId,
     sdist: Option<SourceDist>,
     wheels: Vec<Wheel>,
+    /// Whether this package is only reachable through build dependency graphs.
+    build_only: bool,
     /// If there are multiple versions or sources for the same package name, we add the markers of
     /// the fork(s) that contained this version or source, so we can set the correct preferences in
     /// the next resolution.
@@ -5976,6 +5988,7 @@ impl Package {
             id,
             sdist,
             wheels,
+            build_only: false,
             fork_markers,
             dependencies: vec![],
             optional_dependencies: BTreeMap::default(),
@@ -6024,6 +6037,7 @@ impl Package {
             id,
             sdist,
             wheels,
+            build_only: true,
             fork_markers: vec![],
             dependencies: vec![],
             optional_dependencies: BTreeMap::default(),
@@ -6652,6 +6666,10 @@ impl Package {
 
         self.id.to_toml(None, &mut table);
 
+        if self.build_only {
+            table.insert("build-only", value(true));
+        }
+
         if !self.fork_markers.is_empty() {
             let mut legacy_fork_markers = Vec::new();
             let selectors =
@@ -7029,6 +7047,8 @@ fn absolute_path(workspace_root: &Path, path: &Path) -> Result<PathBuf, LockErro
 struct PackageWire {
     #[serde(flatten)]
     id: PackageId,
+    #[serde(default, rename = "build-only")]
+    build_only: bool,
     #[serde(default)]
     metadata: PackageMetadata,
     #[serde(default)]
@@ -7202,6 +7222,7 @@ impl PackageWire {
             metadata: self.metadata,
             sdist: self.sdist,
             wheels: self.wheels,
+            build_only: self.build_only,
             fork_markers,
             dependencies: unwire_deps(self.dependencies)?,
             optional_dependencies: self
@@ -10756,6 +10777,7 @@ mod tests {
     macro_rules! assert_legacy_lock_debug_snapshot {
         ($expr:expr) => {{
             let expr = format!("{:#?}", $expr)
+                .replace("                build_only: false,\n", "")
                 .replace("                build_dependencies: [],\n", "")
                 .replace("                build_dependency_packages: None,\n", "")
                 .replace("                build_dependencies_resolved: false,\n", "")
