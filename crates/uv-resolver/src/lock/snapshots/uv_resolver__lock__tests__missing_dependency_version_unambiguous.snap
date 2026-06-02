@@ -60,6 +60,7 @@ Ok(
                             ),
                         ),
                     ),
+                    resolution_id: None,
                 },
                 sdist: Some(
                     Url {
@@ -110,6 +111,7 @@ Ok(
                             ),
                         ),
                     ),
+                    resolution_id: None,
                 },
                 sdist: Some(
                     Url {
@@ -150,6 +152,7 @@ Ok(
                                     ),
                                 ),
                             ),
+                            resolution_id: None,
                         },
                         extra: {},
                         simplified_marker: SimplifiedMarkerTree(
@@ -184,6 +187,7 @@ Ok(
                         ),
                     ),
                 ),
+                resolution_id: None,
             }: 0,
             PackageId {
                 name: PackageName(
@@ -199,6 +203,7 @@ Ok(
                         ),
                     ),
                 ),
+                resolution_id: None,
             }: 1,
         },
         manifest: ResolverManifest {

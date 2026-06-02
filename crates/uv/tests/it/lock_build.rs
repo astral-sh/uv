@@ -26,6 +26,26 @@ fn package_section<'a>(lock: &'a str, name: &str) -> &'a str {
     &rest[..end]
 }
 
+fn resolution_sections(lock: &str) -> String {
+    let start = lock
+        .find("[[resolution]]")
+        .expect("resolution section to exist");
+    let rest = &lock[start..];
+    let end = rest.find("\n[[package]]").unwrap_or(rest.len());
+    rest[..end]
+        .trim_end()
+        .lines()
+        .map(|line| {
+            if line.trim_start().starts_with("executor = {") {
+                "executor = { marker = \"[EXECUTOR]\", python = \"[PYTHON]\" }"
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn write_wheel(path: &ChildPath, name: &str, version: &str) -> Result<()> {
     write_wheel_with_requires(path, name, version, &[])
 }
@@ -129,6 +149,94 @@ fn lock_build_dependencies() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
 
         [[package]]
         name = "dep"
@@ -250,7 +358,7 @@ fn lock_build_dependencies_rejects_dangling_build_dependency() -> Result<()> {
 
     ----- stderr -----
     error: Failed to parse `uv.lock`
-      Caused by: For package `dep==0.1.0 @ directory+dep`, found build dependency `setuptools==69.2.0` with no locked package
+      Caused by: Dependency `setuptools` has missing `source` field but has more than one matching package
     ");
 
     Ok(())
@@ -332,6 +440,684 @@ fn lock_build_dependencies_universal() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
+        [[resolution]]
+        id = "build:anyio:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "anyio"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:anyio:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "anyio"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:calver:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "calver"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:calver:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "calver"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "anyio", version = "4.3.0", marker = "sys_platform == 'linux'" },
+            { name = "iniconfig", version = "2.0.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "anyio", version = "4.3.0", marker = "sys_platform == 'linux'" },
+            { name = "iniconfig", version = "2.0.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "flit-core"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "flit-core"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "flit-core"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "flit-core"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:hatch-vcs:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "hatch-vcs"
+        version = "0.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "hatchling", version = "1.22.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:hatch-vcs:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "hatch-vcs"
+        version = "0.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "hatchling", version = "1.22.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:hatchling:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "hatchling"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:hatchling:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "hatchling"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "packaging", version = "24.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "pathspec", version = "0.12.1", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "pluggy", version = "1.4.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "trove-classifiers", version = "2024.3.3", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:idna:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "idna"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:idna:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "idna"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:iniconfig:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "iniconfig"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "hatch-vcs", version = "0.4.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "hatchling", version = "1.22.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:iniconfig:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "iniconfig"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "hatch-vcs", version = "0.4.0", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "hatchling", version = "1.22.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:packaging:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "packaging"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:packaging:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "packaging"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:packaging:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "packaging"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:packaging:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "packaging"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:pathspec:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "pathspec"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:pathspec:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "pathspec"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:pluggy:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "pluggy"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:pluggy:wheel:bootstrap:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:pluggy:wheel:bootstrap:[BUILD-ID]", extra = ["toml"], marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:pluggy:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "pluggy"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:pluggy:wheel:build:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:pluggy:wheel:build:[BUILD-ID]", extra = ["toml"], marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools-scm:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools-scm:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools-scm:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools-scm:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:sniffio:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "sniffio"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:sniffio:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "sniffio"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:trove-classifiers:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "trove-classifiers"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "calver", version = "2022.6.26", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:trove-classifiers:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "trove-classifiers"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "calver", version = "2022.6.26", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:typing-extensions:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "typing-extensions"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:typing-extensions:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "typing-extensions"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:typing-extensions:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "typing-extensions"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:typing-extensions:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "typing-extensions"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "wheel"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "wheel"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "wheel"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "wheel"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+        ]
+
         [[package]]
         name = "anyio"
         version = "4.3.0"
@@ -342,7 +1128,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         ]
         build-dependencies = [
             { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
-            { name = "setuptools-scm", version = "8.0.4", marker = "sys_platform == 'linux'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
             { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
@@ -397,10 +1183,24 @@ fn lock_build_dependencies_universal() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
             { name = "hatchling", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
-            { name = "setuptools-scm", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:iniconfig:wheel:bootstrap:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
         ]
         build-dependencies = [
             { name = "hatchling", version = "1.22.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/f5/c9/54bb4fa27b4e4a014ef3bb17710cdf692b3aa2cbc7953da885f1bf7e06ea/hatch_vcs-0.4.0.tar.gz", hash = "sha256:093810748fe01db0d451fabcf2c1ac2688caefd232d4ede967090b1c1b07d9f7", size = 10917, upload-time = "2023-11-06T06:24:57.228Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/82/0f/6cbd9976160bc334add63bc2e7a58b1433a31b34b7cda6c5de6dd983d9a7/hatch_vcs-0.4.0-py3-none-any.whl", hash = "sha256:b8a2b6bee54cf6f9fc93762db73890017ae59c9081d1038a41f16235ceaf8b2c", size = 8412, upload-time = "2023-11-06T06:24:55.389Z" },
+        ]
+
+        [[package]]
+        name = "hatch-vcs"
+        version = "0.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]"
+        dependencies = [
+            { name = "hatchling", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/f5/c9/54bb4fa27b4e4a014ef3bb17710cdf692b3aa2cbc7953da885f1bf7e06ea/hatch_vcs-0.4.0.tar.gz", hash = "sha256:093810748fe01db0d451fabcf2c1ac2688caefd232d4ede967090b1c1b07d9f7", size = 10917, upload-time = "2023-11-06T06:24:57.228Z" }
         wheels = [
@@ -445,7 +1245,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
         build-dependencies = [
-            { name = "hatch-vcs", version = "0.4.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "hatch-vcs", version = "0.4.0", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "hatchling", version = "1.22.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
@@ -458,7 +1258,8 @@ fn lock_build_dependencies_universal() -> Result<()> {
         version = "24.0"
         source = { registry = "https://pypi.org/simple" }
         build-dependencies = [
-            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882, upload-time = "2024-03-10T09:39:28.33Z" }
         wheels = [
@@ -483,8 +1284,8 @@ fn lock_build_dependencies_universal() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
-            { name = "setuptools-scm", version = "8.0.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
-            { name = "setuptools-scm", version = "8.0.4", extra = ["toml"], marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:pluggy:wheel:build:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:pluggy:wheel:build:[BUILD-ID]", extra = ["toml"], marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/54/c6/43f9d44d92aed815e781ca25ba8c174257e27253a94630d21be8725a2b59/pluggy-1.4.0.tar.gz", hash = "sha256:8c85c2876142a764e5b7548e7d9a0e0ddb46f5185161049a79b7e974454223be", size = 65812, upload-time = "2024-01-24T13:45:15.875Z" }
@@ -509,6 +1310,8 @@ fn lock_build_dependencies_universal() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
         wheels = [
@@ -520,16 +1323,75 @@ fn lock_build_dependencies_universal() -> Result<()> {
         version = "8.0.4"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "packaging", marker = "sys_platform == 'linux'" },
-            { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", marker = "sys_platform == 'linux'" },
-            { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "typing-extensions", marker = "sys_platform == 'linux'" },
         ]
         build-dependencies = [
-            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/0e/a3/b9a8b0adfe672bf0df5901707aa929d30a97ee390ba651910186776746d2/setuptools_scm-8.0.4-py3-none-any.whl", hash = "sha256:b47844cd2a84b83b3187a5782c71128c28b4c94cad8bfb871da2784a5cb54c4f", size = 42137, upload-time = "2023-10-02T15:14:31.281Z" },
+        ]
+
+        [[package]]
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-id = "build:iniconfig:wheel:bootstrap:[BUILD-ID]"
+        dependencies = [
+            { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/0e/a3/b9a8b0adfe672bf0df5901707aa929d30a97ee390ba651910186776746d2/setuptools_scm-8.0.4-py3-none-any.whl", hash = "sha256:b47844cd2a84b83b3187a5782c71128c28b4c94cad8bfb871da2784a5cb54c4f", size = 42137, upload-time = "2023-10-02T15:14:31.281Z" },
+        ]
+
+        [[package]]
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]"
+        dependencies = [
+            { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/0e/a3/b9a8b0adfe672bf0df5901707aa929d30a97ee390ba651910186776746d2/setuptools_scm-8.0.4-py3-none-any.whl", hash = "sha256:b47844cd2a84b83b3187a5782c71128c28b4c94cad8bfb871da2784a5cb54c4f", size = 42137, upload-time = "2023-10-02T15:14:31.281Z" },
+        ]
+
+        [[package]]
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-id = "build:pluggy:wheel:bootstrap:[BUILD-ID]"
+        dependencies = [
+            { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/0e/a3/b9a8b0adfe672bf0df5901707aa929d30a97ee390ba651910186776746d2/setuptools_scm-8.0.4-py3-none-any.whl", hash = "sha256:b47844cd2a84b83b3187a5782c71128c28b4c94cad8bfb871da2784a5cb54c4f", size = 42137, upload-time = "2023-10-02T15:14:31.281Z" },
+        ]
+
+        [[package]]
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-id = "build:pluggy:wheel:build:[BUILD-ID]"
+        dependencies = [
+            { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
         wheels = [
@@ -542,7 +1404,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
-            { name = "setuptools-scm", version = "8.0.4", marker = "sys_platform == 'linux'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
             { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
@@ -569,7 +1431,8 @@ fn lock_build_dependencies_universal() -> Result<()> {
         version = "4.10.0"
         source = { registry = "https://pypi.org/simple" }
         build-dependencies = [
-            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
         wheels = [
@@ -582,6 +1445,8 @@ fn lock_build_dependencies_universal() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
@@ -602,7 +1467,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        Resolved 18 packages in [TIME]
+        Resolved 23 packages in [TIME]
         Prepared 1 package in [TIME]
         Installed 1 package in [TIME]
          + dep==0.1.0 (from file://[TEMP_DIR]/dep)
@@ -735,6 +1600,29 @@ def get_requires_for_build_wheel(config_settings=None):
     ");
 
     let lock = context.read("uv.lock");
+    let resolutions = resolution_sections(&lock);
+    assert_eq!(
+        resolutions.matches("\nname = \"builder\"").count(),
+        4,
+        "{resolutions}"
+    );
+    assert!(
+        resolutions.contains(r#"target = { marker = "sys_platform == 'linux'" }"#),
+        "{resolutions}"
+    );
+    assert!(
+        resolutions.contains(r#"target = { marker = "sys_platform == 'win32'" }"#),
+        "{resolutions}"
+    );
+    assert!(
+        resolutions.contains(r#"{ name = "seed-linux", version = "0.1.0""#),
+        "{resolutions}"
+    );
+    assert!(
+        resolutions.contains(r#"{ name = "seed-win", version = "0.1.0""#),
+        "{resolutions}"
+    );
+
     let builder = package_section(&lock, "builder");
     assert!(
         builder.contains(r#"{ name = "seed-linux", version = "0.1.0""#),
@@ -815,6 +1703,94 @@ fn lock_build_dependencies_preference() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
+        [[resolution]]
+        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
         [[package]]
         name = "dep"
         source = { directory = "dep" }
@@ -883,6 +1859,94 @@ fn lock_build_dependencies_preference() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
 
         [[package]]
         name = "dep"
@@ -1022,6 +2086,119 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
+        [[resolution]]
+        id = "build:dep-a:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep-a"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep-a:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep-a"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep-b:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep-b"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep-b:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep-b"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
         [[package]]
         name = "dep-a"
         source = { directory = "dep-a" }
@@ -1159,6 +2336,94 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
 
         [[package]]
         name = "dep"
@@ -1305,6 +2570,94 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
 
         [[package]]
         name = "dep"
@@ -1706,7 +3059,7 @@ def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
         "{dep}"
     );
     assert!(
-        dep.contains(r#"{ name = "seed", version = "1.0.0" }"#),
+        dep.contains(r#"{ name = "seed", version = "1.0.0""#),
         "{dep}"
     );
     assert!(
@@ -2524,6 +3877,75 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         .assert()
         .success();
 
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(resolution_sections(&lock), @r#"
+        [[resolution]]
+        id = "build:dep-a:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep-a"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
+            { name = "helper", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
+        ]
+
+        [[resolution]]
+        id = "build:dep-a:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep-a"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
+            { name = "helper", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
+        ]
+
+        [[resolution]]
+        id = "build:dep-b:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep-b"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" }, resolution-id = "build:dep-b:wheel:bootstrap:[BUILD-ID]" },
+            { name = "helper", version = "2.0.0", source = { registry = "[TEMP_DIR]/links" } },
+        ]
+
+        [[resolution]]
+        id = "build:dep-b:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep-b"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" }, resolution-id = "build:dep-b:wheel:build:[BUILD-ID]" },
+            { name = "helper", version = "2.0.0", source = { registry = "[TEMP_DIR]/links" } },
+        ]
+        "#);
+    });
+    assert_eq!(lock.matches("[[package]]\nname = \"builder\"").count(), 3);
+    assert!(
+        lock.contains(r#"resolution-id = "build:dep-b:wheel:bootstrap:"#),
+        "{lock}"
+    );
+    assert!(
+        lock.contains(r#"resolution-id = "build:dep-b:wheel:build:"#),
+        "{lock}"
+    );
+    assert!(!lock.contains("build-dependency-packages"), "{lock}");
+
     uv_snapshot!(context.filters(), context
         .sync()
         .arg("--find-links")
@@ -2542,6 +3964,289 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
      + dep-a==0.1.0 (from file://[TEMP_DIR]/dep-a)
      + dep-b==0.1.0 (from file://[TEMP_DIR]/dep-b)
     ");
+
+    Ok(())
+}
+
+/// Verify that every captured build graph gets a named resolution context,
+/// even when its transitive edges do not conflict with another graph.
+#[test]
+fn lock_build_dependencies_records_simple_build_resolution_context() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel_with_requires(
+        &links_dir.child("builder-1.0.0-py3-none-any.whl"),
+        "builder",
+        "1.0.0",
+        &["leaf==1.0.0"],
+    )?;
+    write_wheel(
+        &links_dir.child("leaf-1.0.0-py3-none-any.whl"),
+        "leaf",
+        "1.0.0",
+    )?;
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["builder==1.0.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    if version("leaf") != "1.0.0":
+        raise RuntimeError("unexpected build leaf version: " + version("leaf"))
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep/__init__.py", "")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(resolution_sections(&lock), @r#"
+        [[resolution]]
+        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "builder", version = "1.0.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "builder", version = "1.0.0" },
+        ]
+        "#);
+    });
+    let builder = package_section(&lock, "builder");
+    assert!(builder.contains(r#"dependencies = ["#), "{builder}");
+    assert!(builder.contains(r#"{ name = "leaf" }"#), "{builder}");
+    assert!(!builder.contains("contexts"), "{builder}");
+    assert!(!lock.contains("build-dependency-packages"), "{lock}");
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+    ");
+
+    Ok(())
+}
+
+/// Verify that build resolution records retain the target reachability of
+/// the source package whose isolated build environment they replay.
+#[test]
+fn lock_build_dependencies_build_resolution_target_reachability() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel_with_requires(
+        &links_dir.child("builder-1.0.0-py3-none-any.whl"),
+        "builder",
+        "1.0.0",
+        &["helper>=1"],
+    )?;
+    write_wheel(
+        &links_dir.child("helper-1.0.0-py3-none-any.whl"),
+        "helper",
+        "1.0.0",
+    )?;
+    write_wheel(
+        &links_dir.child("helper-2.0.0-py3-none-any.whl"),
+        "helper",
+        "2.0.0",
+    )?;
+
+    for (name, helper_version) in [("dep-a", "1.0.0"), ("dep-b", "2.0.0")] {
+        let dep_dir = context.temp_dir.child(name);
+        dep_dir.create_dir_all()?;
+        dep_dir.child("pyproject.toml").write_str(&format!(
+            r#"
+            [project]
+            name = "{name}"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["builder==1.0.0", "helper=={helper_version}"]
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#
+        ))?;
+        dep_dir.child("build_backend.py").write_str(
+            r#"
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+"#,
+        )?;
+    }
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "dep-a ; sys_platform == 'linux'",
+            "dep-b",
+        ]
+
+        [tool.uv.sources]
+        dep-a = { path = "dep-a" }
+        dep-b = { path = "dep-b" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(resolution_sections(&lock), @r#"
+        [[resolution]]
+        id = "build:dep-a:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep-a"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
+            { name = "helper", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
+        ]
+
+        [[resolution]]
+        id = "build:dep-a:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep-a"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
+            { name = "helper", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
+        ]
+
+        [[resolution]]
+        id = "build:dep-b:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep-b"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" }, resolution-id = "build:dep-b:wheel:bootstrap:[BUILD-ID]" },
+            { name = "helper", version = "2.0.0", source = { registry = "[TEMP_DIR]/links" } },
+        ]
+
+        [[resolution]]
+        id = "build:dep-b:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep-b"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" }, resolution-id = "build:dep-b:wheel:build:[BUILD-ID]" },
+            { name = "helper", version = "2.0.0", source = { registry = "[TEMP_DIR]/links" } },
+        ]
+        "#);
+    });
 
     Ok(())
 }
@@ -2636,6 +4341,50 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         .arg("lock-build-dependencies")
         .assert()
         .success();
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(resolution_sections(&lock), @r#"
+        [[resolution]]
+        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" }, resolution-id = "build:dep:wheel:bootstrap:[BUILD-ID]" },
+            { name = "leaf", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
+        ]
+
+        [[resolution]]
+        id = "build:dep:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" }, resolution-id = "build:dep:wheel:build:[BUILD-ID]" },
+            { name = "leaf", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
+        ]
+        "#);
+    });
+    let builder = package_section(&lock, "builder");
+    assert!(
+        builder.contains(r#"{ name = "leaf", version = "2.0.0""#),
+        "{builder}"
+    );
+    assert!(
+        lock.contains(r#"resolution-id = "build:dep:wheel:build:"#),
+        "{lock}"
+    );
+    assert!(!builder.contains("contexts"), "{builder}");
+    assert!(!lock.contains("build-dependency-packages"), "{lock}");
 
     uv_snapshot!(context.filters(), context
         .sync()
@@ -3154,7 +4903,11 @@ fn lock_build_dependencies_preserves_pep508_extras() -> Result<()> {
 
     let carrier = package_section(&lock, "carrier");
     assert!(carrier.contains("[package.optional-dependencies]"));
-    assert!(carrier.contains(r#"{ name = "leaf" }"#));
+    assert!(carrier.contains(r#"{ name = "leaf" }"#), "{carrier}");
+    assert!(
+        carrier.contains(r#"provides-extras = ["extra"]"#),
+        "{carrier}"
+    );
     assert!(lock.contains(r#"name = "leaf""#));
 
     Ok(())
@@ -3953,14 +5706,339 @@ fn lock_build_dependencies_fork() -> Result<()> {
         version = 1
         revision = 4
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'linux'",
-            "sys_platform == 'win32'",
-            "sys_platform != 'linux' and sys_platform != 'win32'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'win32'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'linux' and sys_platform != 'win32'" }
+
+        [[resolution]]
+        id = "build:calver:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "calver"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+        ]
+
+        [[resolution]]
+        id = "build:calver:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "calver"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:hatch-vcs:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "hatch-vcs"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "hatchling", version = "1.22.4" },
+        ]
+
+        [[resolution]]
+        id = "build:hatch-vcs:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "hatch-vcs"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "hatchling", version = "1.22.4" },
+        ]
+
+        [[resolution]]
+        id = "build:iniconfig:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "iniconfig"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "hatch-vcs", version = "0.4.0" },
+            { name = "hatchling", version = "1.22.4" },
+        ]
+
+        [[resolution]]
+        id = "build:iniconfig:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "iniconfig"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "hatch-vcs", version = "0.4.0" },
+            { name = "hatchling", version = "1.22.4" },
+        ]
+
+        [[resolution]]
+        id = "build:packaging:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "packaging"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:packaging:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "packaging"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:pathspec:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "pathspec"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:pathspec:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "pathspec"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:pluggy:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "pluggy"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "setuptools-scm", version = "8.0.4" },
+            { name = "setuptools-scm", version = "8.0.4", extra = ["toml"] },
+        ]
+
+        [[resolution]]
+        id = "build:pluggy:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "pluggy"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "setuptools-scm", version = "8.0.4" },
+            { name = "setuptools-scm", version = "8.0.4", extra = ["toml"] },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools-scm:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools-scm"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools-scm:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools-scm"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:trove-classifiers:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "trove-classifiers"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "calver", version = "2022.6.26" },
+            { name = "setuptools", version = "69.2.0" },
+        ]
+
+        [[resolution]]
+        id = "build:trove-classifiers:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "trove-classifiers"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "calver", version = "2022.6.26" },
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:typing-extensions:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "typing-extensions"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:typing-extensions:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "typing-extensions"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
 
         [[package]]
         name = "dep"
@@ -4105,6 +6183,349 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "build:calver:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "calver"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+        ]
+
+        [[resolution]]
+        id = "build:calver:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "calver"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "iniconfig", version = "2.0.0" },
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "iniconfig", version = "2.0.0" },
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:hatch-vcs:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "hatch-vcs"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "hatchling", version = "1.22.4" },
+        ]
+
+        [[resolution]]
+        id = "build:hatch-vcs:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "hatch-vcs"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "hatchling", version = "1.22.4" },
+        ]
+
+        [[resolution]]
+        id = "build:hatchling:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "hatchling"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:hatchling:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "hatchling"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "packaging", version = "24.0" },
+            { name = "pathspec", version = "0.12.1" },
+            { name = "pluggy", version = "1.4.0" },
+            { name = "trove-classifiers", version = "2024.3.3" },
+        ]
+
+        [[resolution]]
+        id = "build:iniconfig:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "iniconfig"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "hatch-vcs", version = "0.4.0" },
+            { name = "hatchling", version = "1.22.4" },
+        ]
+
+        [[resolution]]
+        id = "build:iniconfig:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "iniconfig"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "hatch-vcs", version = "0.4.0" },
+            { name = "hatchling", version = "1.22.4" },
+        ]
+
+        [[resolution]]
+        id = "build:packaging:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "packaging"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:packaging:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "packaging"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:pathspec:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "pathspec"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:pathspec:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "pathspec"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:pluggy:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "pluggy"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "setuptools-scm", version = "8.0.4" },
+            { name = "setuptools-scm", version = "8.0.4", extra = ["toml"] },
+        ]
+
+        [[resolution]]
+        id = "build:pluggy:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "pluggy"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "setuptools-scm", version = "8.0.4" },
+            { name = "setuptools-scm", version = "8.0.4", extra = ["toml"] },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools-scm:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools-scm"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools-scm:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools-scm"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:trove-classifiers:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "trove-classifiers"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "calver", version = "2022.6.26" },
+            { name = "setuptools", version = "69.2.0" },
+        ]
+
+        [[resolution]]
+        id = "build:trove-classifiers:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "trove-classifiers"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "calver", version = "2022.6.26" },
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:typing-extensions:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "typing-extensions"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:typing-extensions:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "typing-extensions"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
 
         [[package]]
         name = "dep"
@@ -4484,6 +6905,95 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
+        [[resolution]]
+        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
         [[package]]
         name = "dep"
         source = { directory = "dep" }
@@ -4740,6 +7250,684 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
+        [[resolution]]
+        id = "build:anyio:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "anyio"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:anyio:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "anyio"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:calver:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "calver"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:calver:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "calver"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "anyio", version = "4.3.0", marker = "sys_platform == 'linux'" },
+            { name = "iniconfig", version = "2.0.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "anyio", version = "4.3.0", marker = "sys_platform == 'linux'" },
+            { name = "iniconfig", version = "2.0.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "flit-core"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "flit-core"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "flit-core"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "flit-core"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:hatch-vcs:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "hatch-vcs"
+        version = "0.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "hatchling", version = "1.22.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:hatch-vcs:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "hatch-vcs"
+        version = "0.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "hatchling", version = "1.22.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:hatchling:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "hatchling"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:hatchling:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "hatchling"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "packaging", version = "24.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "pathspec", version = "0.12.1", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "pluggy", version = "1.4.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "trove-classifiers", version = "2024.3.3", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:idna:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "idna"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:idna:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "idna"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:iniconfig:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "iniconfig"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "hatch-vcs", version = "0.4.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "hatchling", version = "1.22.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:iniconfig:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "iniconfig"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "hatch-vcs", version = "0.4.0", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "hatchling", version = "1.22.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:packaging:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "packaging"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:packaging:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "packaging"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:packaging:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "packaging"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:packaging:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "packaging"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:pathspec:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "pathspec"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:pathspec:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "pathspec"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:pluggy:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "pluggy"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:pluggy:wheel:bootstrap:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:pluggy:wheel:bootstrap:[BUILD-ID]", extra = ["toml"], marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:pluggy:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "pluggy"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:pluggy:wheel:build:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:pluggy:wheel:build:[BUILD-ID]", extra = ["toml"], marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools-scm:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools-scm:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools-scm:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools-scm:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:setuptools:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:sniffio:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "sniffio"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:sniffio:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "sniffio"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:trove-classifiers:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "trove-classifiers"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "calver", version = "2022.6.26", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:trove-classifiers:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "trove-classifiers"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "calver", version = "2022.6.26", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:typing-extensions:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "typing-extensions"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:typing-extensions:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "typing-extensions"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:typing-extensions:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "typing-extensions"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:typing-extensions:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "typing-extensions"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "wheel"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "wheel"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "wheel"
+        target = { marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "wheel"
+        target = { marker = "sys_platform == 'linux'" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
+        ]
+
         [[package]]
         name = "anyio"
         version = "4.3.0"
@@ -4750,7 +7938,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         ]
         build-dependencies = [
             { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
-            { name = "setuptools-scm", version = "8.0.4", marker = "sys_platform == 'linux'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
             { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
@@ -4793,6 +7981,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         name = "flit-core"
         version = "3.9.0"
         source = { registry = "https://pypi.org/simple" }
+        build-dependencies = []
         sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
@@ -4804,10 +7993,24 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
             { name = "hatchling", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
-            { name = "setuptools-scm", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:iniconfig:wheel:bootstrap:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
         ]
         build-dependencies = [
             { name = "hatchling", version = "1.22.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/f5/c9/54bb4fa27b4e4a014ef3bb17710cdf692b3aa2cbc7953da885f1bf7e06ea/hatch_vcs-0.4.0.tar.gz", hash = "sha256:093810748fe01db0d451fabcf2c1ac2688caefd232d4ede967090b1c1b07d9f7", size = 10917, upload-time = "2023-11-06T06:24:57.228Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/82/0f/6cbd9976160bc334add63bc2e7a58b1433a31b34b7cda6c5de6dd983d9a7/hatch_vcs-0.4.0-py3-none-any.whl", hash = "sha256:b8a2b6bee54cf6f9fc93762db73890017ae59c9081d1038a41f16235ceaf8b2c", size = 8412, upload-time = "2023-11-06T06:24:55.389Z" },
+        ]
+
+        [[package]]
+        name = "hatch-vcs"
+        version = "0.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]"
+        dependencies = [
+            { name = "hatchling", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/f5/c9/54bb4fa27b4e4a014ef3bb17710cdf692b3aa2cbc7953da885f1bf7e06ea/hatch_vcs-0.4.0.tar.gz", hash = "sha256:093810748fe01db0d451fabcf2c1ac2688caefd232d4ede967090b1c1b07d9f7", size = 10917, upload-time = "2023-11-06T06:24:57.228Z" }
         wheels = [
@@ -4852,7 +8055,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
         build-dependencies = [
-            { name = "hatch-vcs", version = "0.4.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "hatch-vcs", version = "0.4.0", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "hatchling", version = "1.22.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
@@ -4865,6 +8068,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         version = "24.0"
         source = { registry = "https://pypi.org/simple" }
         build-dependencies = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882, upload-time = "2024-03-10T09:39:28.33Z" }
@@ -4890,8 +8094,8 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
-            { name = "setuptools-scm", version = "8.0.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
-            { name = "setuptools-scm", version = "8.0.4", extra = ["toml"], marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:pluggy:wheel:build:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:pluggy:wheel:build:[BUILD-ID]", extra = ["toml"], marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/54/c6/43f9d44d92aed815e781ca25ba8c174257e27253a94630d21be8725a2b59/pluggy-1.4.0.tar.gz", hash = "sha256:8c85c2876142a764e5b7548e7d9a0e0ddb46f5185161049a79b7e974454223be", size = 65812, upload-time = "2024-01-24T13:45:15.875Z" }
@@ -4916,6 +8120,8 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
         wheels = [
@@ -4927,16 +8133,75 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         version = "8.0.4"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "packaging", marker = "sys_platform == 'linux'" },
-            { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", marker = "sys_platform == 'linux'" },
-            { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "typing-extensions", marker = "sys_platform == 'linux'" },
         ]
         build-dependencies = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/0e/a3/b9a8b0adfe672bf0df5901707aa929d30a97ee390ba651910186776746d2/setuptools_scm-8.0.4-py3-none-any.whl", hash = "sha256:b47844cd2a84b83b3187a5782c71128c28b4c94cad8bfb871da2784a5cb54c4f", size = 42137, upload-time = "2023-10-02T15:14:31.281Z" },
+        ]
+
+        [[package]]
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-id = "build:iniconfig:wheel:bootstrap:[BUILD-ID]"
+        dependencies = [
+            { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/0e/a3/b9a8b0adfe672bf0df5901707aa929d30a97ee390ba651910186776746d2/setuptools_scm-8.0.4-py3-none-any.whl", hash = "sha256:b47844cd2a84b83b3187a5782c71128c28b4c94cad8bfb871da2784a5cb54c4f", size = 42137, upload-time = "2023-10-02T15:14:31.281Z" },
+        ]
+
+        [[package]]
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]"
+        dependencies = [
+            { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/0e/a3/b9a8b0adfe672bf0df5901707aa929d30a97ee390ba651910186776746d2/setuptools_scm-8.0.4-py3-none-any.whl", hash = "sha256:b47844cd2a84b83b3187a5782c71128c28b4c94cad8bfb871da2784a5cb54c4f", size = 42137, upload-time = "2023-10-02T15:14:31.281Z" },
+        ]
+
+        [[package]]
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-id = "build:pluggy:wheel:bootstrap:[BUILD-ID]"
+        dependencies = [
+            { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/0e/a3/b9a8b0adfe672bf0df5901707aa929d30a97ee390ba651910186776746d2/setuptools_scm-8.0.4-py3-none-any.whl", hash = "sha256:b47844cd2a84b83b3187a5782c71128c28b4c94cad8bfb871da2784a5cb54c4f", size = 42137, upload-time = "2023-10-02T15:14:31.281Z" },
+        ]
+
+        [[package]]
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-id = "build:pluggy:wheel:build:[BUILD-ID]"
+        dependencies = [
+            { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
         wheels = [
@@ -4949,7 +8214,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
-            { name = "setuptools-scm", version = "8.0.4", marker = "sys_platform == 'linux'" },
+            { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
             { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
@@ -4976,6 +8241,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         version = "4.10.0"
         source = { registry = "https://pypi.org/simple" }
         build-dependencies = [
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
@@ -4989,6 +8255,8 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
@@ -5008,7 +8276,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 18 packages in [TIME]
+    Resolved 23 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + dep==0.1.0 (from file://[TEMP_DIR]/dep)
@@ -5084,6 +8352,95 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
 
         [[package]]
         name = "dep"
@@ -5879,6 +9236,94 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         [manifest]
         build-settings = "aee6cdd85e59a835"
 
+        [[resolution]]
+        id = "build:dep2:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "dep2"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+        ]
+
+        [[resolution]]
+        id = "build:dep2:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "dep2"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:flit-core:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "flit-core"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+
+        [[resolution]]
+        id = "build:setuptools:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "setuptools"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
+        [[resolution]]
+        id = "build:wheel:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "wheel"
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+
         [[package]]
         name = "dep"
         version = "0.1.0"
@@ -6057,14 +9502,11 @@ fn lock_build_dependencies_no_build_package_relocks_find_links_sdist() -> Result
         "0.1.0",
     )?;
 
-    let file = File::create(artifacts.child("dep-0.1.0.zip").path())?;
-    let mut zip = ZipWriter::new(file);
-    let options = SimpleFileOptions::default();
-    zip.add_directory("dep-0.1.0/", options)?;
-    zip.start_file("dep-0.1.0/pyproject.toml", options)?;
-    zip.write_all(
-        format!(
-            r#"
+    let source_dist = artifacts.child("dep-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    let pyproject_toml = format!(
+        r#"
             [project]
             name = "dep"
             version = "0.1.0"
@@ -6074,10 +9516,9 @@ fn lock_build_dependencies_no_build_package_relocks_find_links_sdist() -> Result
             requires = ["builder @ {builder_url}"]
             build-backend = "builder"
             "#
-        )
-        .as_bytes(),
-    )?;
-    zip.finish()?;
+    );
+    block_on(zip.write_entry_whole(entry, pyproject_toml.as_bytes()))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
 
     context.temp_dir.child("pyproject.toml").write_str(
         r#"
@@ -6932,6 +10373,7 @@ def get_requires_for_build_wheel(config_settings=None):
 
     let lock = context.read("uv.lock");
     let builder = package_section(&lock, "builder");
+    assert!(!builder.contains("contexts"), "{builder}");
     assert!(builder.contains(r#"{ name = "helper" }"#), "{builder}");
     assert!(
         builder.contains(r#"requires-dist = [{ name = "helper", specifier = "==0.1.0" }]"#),

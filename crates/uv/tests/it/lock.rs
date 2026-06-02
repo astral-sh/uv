@@ -3787,7 +3787,14 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-example-foo' or extra == 'project-7-example'" },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "example", extra = "foo" } },
+        ] },
+            { all-of = [
+            { active = { package = "example" } },
+        ] },
+        ] } } },
         ]
 
         [package.metadata]
@@ -3820,7 +3827,15 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
         version = "0.1.0"
         source = { editable = "subexample" }
         dependencies = [
-            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-10-subexample' or (extra == 'extra-7-example-foo' and extra == 'project-7-example')" },
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "subexample" } },
+        ] },
+            { all-of = [
+            { active = { package = "example", extra = "foo" } },
+            { active = { package = "example" } },
+        ] },
+        ] } } },
         ]
 
         [package.metadata]
@@ -4802,20 +4817,26 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform != 'win32'",
-            "sys_platform == 'win32'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'win32'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'win32'" }
 
         [[package]]
         name = "markupsafe"
         version = "1.1.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "sys_platform != 'win32'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/64db92e53b86efccfaea71321f597fa2e1b2bd3853d8ce658568f7a13094/MarkupSafe-1.1.1.tar.gz", hash = "sha256:29872e92839765e546828bb7754a68c418d927cd064fd4708fab9fe9c8bb116b", size = 19151, upload-time = "2019-02-24T01:05:32.989Z" }
 
@@ -4823,8 +4844,8 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         name = "markupsafe"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "sys_platform == 'win32'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/67/6a/5b3ed5c122e20c33d2562df06faf895a6b91b0a6b96a4626440ffe1d5c8e/MarkupSafe-2.0.0.tar.gz", hash = "sha256:4fae0677f712ee090721d8b17f412f1cbceefbf0dc180fe91bab3232f38b4527", size = 18466, upload-time = "2021-05-11T19:47:18.499Z" }
 
@@ -12557,7 +12578,8 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
         .assert()
         .success();
     let lock = context.read("uv.lock");
-    assert!(lock.contains("resolution-markers"));
+    assert!(lock.contains("[[resolution]]"));
+    assert!(lock.contains("kind = \"runtime\""));
 
     // Remove the bound and lock with `--upgrade`.
     pyproject_toml.write_str(&requirements.replace("foo==1", "foo"))?;
@@ -12570,6 +12592,7 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
         .assert()
         .success();
     let lock = context.read("uv.lock");
+    assert!(!lock.contains("[[resolution]]"));
     assert!(!lock.contains("resolution-markers"));
     Ok(())
 }

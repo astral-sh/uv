@@ -45,9 +45,9 @@ use uv_resolver::{
 };
 use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildPackageKey, BuildPreferences,
-    BuildResolutions, BuildStack, EmptyInstalledPackages, HashStrategy, InFlight,
-    LockedBuildDependency, LockedBuildResolution, LockedBuildResolutions, ResolvedRequirements,
-    SourceTreeEditablePolicy,
+    BuildResolutionGraphKey, BuildResolutionStage, BuildResolutions, BuildStack,
+    EmptyInstalledPackages, HashStrategy, InFlight, LockedBuildDependency, LockedBuildResolution,
+    LockedBuildResolutions, ResolvedRequirements, SourceTreeEditablePolicy,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -141,6 +141,10 @@ pub struct BuildDispatch<'a> {
     concurrency: Concurrency,
     preview: Preview,
     build_resolutions: BuildResolutions,
+    /// Active build resolution contexts for source packages being resolved.
+    build_resolution_contexts:
+        Mutex<BTreeMap<BuildPackageKey, BTreeMap<BuildResolutionStage, BuildResolutionGraphKey>>>,
+    /// Complete build dependency resolutions reconstructed from the lock file.
     locked_build_resolutions: LockedBuildResolutions,
     build_preferences: BuildPreferences,
     /// Whether to use universal resolution for build dependencies (for lock files).
@@ -153,6 +157,8 @@ pub struct BuildDispatch<'a> {
     universal_build_artifact_environments: SupportedEnvironments,
     /// The environments in which individual source packages can require builds.
     universal_build_markers: Mutex<BTreeMap<BuildPackageKey, MarkerTree>>,
+    /// The environments in which individual build resolution contexts can require builds.
+    universal_build_context_markers: Mutex<BTreeMap<BuildResolutionGraphKey, MarkerTree>>,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -208,6 +214,7 @@ impl<'a> BuildDispatch<'a> {
             concurrency,
             preview,
             build_resolutions: BuildResolutions::default(),
+            build_resolution_contexts: Mutex::new(BTreeMap::new()),
             locked_build_resolutions: LockedBuildResolutions::default(),
             build_preferences: BuildPreferences::default(),
             universal_build_resolution: false,
@@ -215,6 +222,7 @@ impl<'a> BuildDispatch<'a> {
             universal_build_environments: SupportedEnvironments::default(),
             universal_build_artifact_environments: SupportedEnvironments::default(),
             universal_build_markers: Mutex::new(BTreeMap::new()),
+            universal_build_context_markers: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -280,23 +288,46 @@ impl<'a> BuildDispatch<'a> {
             .universal_build_markers
             .lock()
             .expect("universal build marker lock poisoned");
-        match markers.entry(package) {
-            Entry::Vacant(entry) => {
-                entry.insert(marker);
-                true
-            }
-            Entry::Occupied(mut entry) => {
-                let existing = *entry.get();
-                let mut combined = existing;
-                combined.or(marker);
-                if combined == existing {
-                    false
-                } else {
-                    entry.insert(combined);
-                    true
-                }
+        merge_marker(markers.entry(package), marker)
+    }
+
+    /// Record the marker environments in which a build resolution context can require building.
+    ///
+    /// Returns `true` if the marker environments for the context expanded.
+    pub fn add_universal_build_context_marker(
+        &self,
+        context: BuildResolutionGraphKey,
+        marker: MarkerTree,
+    ) -> bool {
+        let mut markers = self
+            .universal_build_context_markers
+            .lock()
+            .expect("universal build context marker lock poisoned");
+        merge_marker(markers.entry(context), marker)
+    }
+
+    fn universal_build_marker(
+        &self,
+        package: &BuildPackageKey,
+        stage: BuildResolutionStage,
+    ) -> Option<MarkerTree> {
+        if let Some(key) = self.build_resolution_context(package, stage) {
+            if let Some(marker) = self
+                .universal_build_context_markers
+                .lock()
+                .expect("universal build context marker lock poisoned")
+                .get(&key)
+                .copied()
+            {
+                return Some(marker);
             }
         }
+
+        self.universal_build_markers
+            .lock()
+            .expect("universal build marker lock poisoned")
+            .get(package)
+            .copied()
     }
 
     /// Return the collected build resolutions.
@@ -304,19 +335,64 @@ impl<'a> BuildDispatch<'a> {
         &self.build_resolutions
     }
 
+    /// Record the active build resolution context for a source package.
+    ///
+    /// The context is assigned by the lockfile layer, which owns the serialized
+    /// resolution identity. Build dispatch only preserves the association while
+    /// backend setup resolves build requirements.
+    pub fn set_build_resolution_context(&self, context: BuildResolutionGraphKey) {
+        let stage = context.stage.unwrap_or(BuildResolutionStage::Build);
+        let mut contexts = self
+            .build_resolution_contexts
+            .lock()
+            .expect("build resolution context lock poisoned");
+        contexts
+            .entry(context.package.clone())
+            .or_default()
+            .insert(stage, context);
+    }
+
+    /// Record both active PEP 517 stage contexts for a source package.
+    pub fn set_build_resolution_stage_contexts(
+        &self,
+        bootstrap: BuildResolutionGraphKey,
+        build: BuildResolutionGraphKey,
+    ) {
+        let mut contexts = self
+            .build_resolution_contexts
+            .lock()
+            .expect("build resolution context lock poisoned");
+        let package_contexts = contexts.entry(bootstrap.package.clone()).or_default();
+        package_contexts.insert(BuildResolutionStage::Bootstrap, bootstrap);
+        package_contexts.insert(BuildResolutionStage::Build, build);
+    }
+
+    fn build_resolution_context(
+        &self,
+        package: &BuildPackageKey,
+        stage: BuildResolutionStage,
+    ) -> Option<BuildResolutionGraphKey> {
+        self.build_resolution_contexts
+            .lock()
+            .expect("build resolution context lock poisoned")
+            .get(package)
+            .and_then(|contexts| {
+                contexts
+                    .get(&stage)
+                    .or_else(|| contexts.get(&BuildResolutionStage::Build))
+                    .cloned()
+            })
+    }
+
     fn universal_environments_for_package(
         &self,
         environments: &SupportedEnvironments,
         package: Option<&BuildPackageKey>,
+        stage: BuildResolutionStage,
         restrict_unconstrained: bool,
     ) -> SupportedEnvironments {
-        let Some(marker) = package.and_then(|package| {
-            self.universal_build_markers
-                .lock()
-                .expect("universal build marker lock poisoned")
-                .get(package)
-                .copied()
-        }) else {
+        let Some(marker) = package.and_then(|package| self.universal_build_marker(package, stage))
+        else {
             return environments.clone();
         };
 
@@ -362,19 +438,42 @@ impl<'a> BuildDispatch<'a> {
         resolution: &LockedBuildResolution,
         requirements: &[Requirement],
     ) -> Option<Resolution> {
+        let requirements = resolution.initial_requirements().unwrap_or(requirements);
+        let direct_dependencies = resolution
+            .bootstrap_direct_dependencies()
+            .unwrap_or_else(|| resolution.direct_dependencies());
         let markers = self.interpreter.resolver_marker_environment();
         let mut selected = Resolution::default();
         for requirement in requirements
             .iter()
             .filter(|requirement| requirement.evaluate_markers(Some(&markers), &[]))
         {
-            let dependency = resolution
-                .direct_dependencies()
+            let dependency = direct_dependencies
                 .iter()
                 .find(|dependency| locked_dependency_satisfies(requirement, dependency))?;
             selected.extend(dependency.resolution());
         }
         Some(selected)
+    }
+}
+
+fn merge_marker<K: Ord>(entry: Entry<'_, K, MarkerTree>, marker: MarkerTree) -> bool {
+    match entry {
+        Entry::Vacant(entry) => {
+            entry.insert(marker);
+            true
+        }
+        Entry::Occupied(mut entry) => {
+            let existing = *entry.get();
+            let mut combined = existing;
+            combined.or(marker);
+            if combined == existing {
+                false
+            } else {
+                entry.insert(combined);
+                true
+            }
+        }
     }
 }
 
@@ -489,6 +588,12 @@ impl BuildContext for BuildDispatch<'_> {
         build_stack: &'data BuildStack,
         validate_locked_requirements: Option<&'data [Requirement]>,
     ) -> Result<ResolvedRequirements, BuildDispatchError> {
+        let stage = if validate_locked_requirements.is_some() {
+            BuildResolutionStage::Build
+        } else {
+            BuildResolutionStage::Bootstrap
+        };
+
         // If we have a suitable locked build resolution for this package, return it directly
         // without running the resolver. Backend hook requirements are validated separately from
         // `build-system.requires`, which remains fixed by a frozen lock.
@@ -529,11 +634,13 @@ impl BuildContext for BuildDispatch<'_> {
         let universal_build_environments = self.universal_environments_for_package(
             &self.universal_build_environments,
             package,
+            stage,
             true,
         );
         let universal_build_artifact_environments = self.universal_environments_for_package(
             &self.universal_build_artifact_environments,
             package,
+            stage,
             false,
         );
         let resolver_env = if self.universal_build_resolution {
@@ -639,7 +746,17 @@ impl BuildContext for BuildDispatch<'_> {
         };
 
         if let (Some(package), Some(graph)) = (package, build_resolution_graph.clone()) {
-            self.build_resolutions.insert(package.clone(), graph);
+            if let Some(key) = self.build_resolution_context(package, stage) {
+                self.build_resolutions.insert_key(key, graph.clone());
+                if stage == BuildResolutionStage::Bootstrap
+                    && let Some(build_key) =
+                        self.build_resolution_context(package, BuildResolutionStage::Build)
+                {
+                    self.build_resolutions.insert_key(build_key, graph);
+                }
+            } else {
+                self.build_resolutions.insert(package.clone(), graph);
+            }
         }
 
         let resolution = if self.universal_build_resolution {

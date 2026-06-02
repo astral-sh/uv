@@ -18,7 +18,7 @@ use toml_edit::{Array, ArrayOfTables, InlineTable, Item, Table, Value, value};
 use tracing::{debug, instrument, trace};
 use url::Url;
 
-use uv_cache_key::RepositoryUrl;
+use uv_cache_key::{RepositoryUrl, hash_digest};
 use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults,
     InstallTarget,
@@ -44,19 +44,21 @@ use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{
-    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
+    ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerTree, Scheme, VerbatimUrl,
+    VerbatimUrlError, split_scheme,
 };
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_pypi_types::{
-    ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
-    ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ConflictItem, ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes,
+    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 use uv_types::{
-    BuildContext, BuildPackageKey, BuildPackageSource, HashStrategy, LockedBuildDependency,
+    BuildContext, BuildPackageKey, BuildPackageSource, BuildResolutionGraphKey,
+    BuildResolutionGraphMap, BuildResolutionStage, HashStrategy, LockedBuildDependency,
     LockedBuildResolution,
 };
 use uv_workspace::{Editability, WorkspaceMember};
@@ -265,6 +267,8 @@ pub(crate) struct HashedDist {
 /// (name, version) pairs. Used as resolver preferences during re-lock.
 pub(crate) type BuildDependencyPreferences = BTreeMap<BuildPackageKey, Vec<(PackageName, Version)>>;
 
+type UnambiguousPackageIds = FxHashMap<(PackageName, Option<String>), PackageId>;
+
 fn build_key_from_package_id(package_id: &PackageId) -> BuildPackageKey {
     let source = match &package_id.source {
         Source::Registry(RegistrySource::Url(url)) => {
@@ -305,6 +309,94 @@ fn build_key_for_package(package: &Package, root: &Path) -> BuildPackageKey {
     }
 }
 
+fn build_resolution_context_id_for_package(
+    package: &Package,
+    stage: BuildResolutionStage,
+    target: Option<&TargetSelector>,
+    executor: Option<&ExecutorSelector>,
+) -> String {
+    build_resolution_context_id_with_context(
+        &build_key_from_package_id(&package.id),
+        stage,
+        target,
+        executor,
+    )
+}
+
+fn build_resolution_context_id(package: &BuildPackageKey) -> String {
+    build_resolution_context_id_with_context(package, BuildResolutionStage::Build, None, None)
+}
+
+fn build_resolution_context_id_with_context(
+    package: &BuildPackageKey,
+    stage: BuildResolutionStage,
+    target: Option<&TargetSelector>,
+    executor: Option<&ExecutorSelector>,
+) -> String {
+    let digest = hash_digest(&build_resolution_context_identity(
+        package, stage, target, executor,
+    ));
+    format!("build:{}:wheel:{}:{digest}", package.name, stage.as_str())
+}
+
+fn build_resolution_context_identity(
+    package: &BuildPackageKey,
+    stage: BuildResolutionStage,
+    target: Option<&TargetSelector>,
+    executor: Option<&ExecutorSelector>,
+) -> String {
+    let mut identity = format!("operation=wheel;name={}", package.name);
+    identity.push_str(";stage=");
+    identity.push_str(stage.as_str());
+    if let Some(version) = package.version.as_ref() {
+        identity.push_str(";version=");
+        identity.push_str(&version.to_string());
+    }
+    if let Some(source) = package.source.as_ref() {
+        let (kind, value) = build_package_source_identity(source);
+        identity.push_str(";source=");
+        identity.push_str(kind);
+        identity.push('=');
+        identity.push_str(value);
+    }
+    if let Some(target) = target {
+        identity.push_str(";target=");
+        identity.push_str(&target.to_toml().to_string());
+    }
+    if let Some(executor) = executor {
+        identity.push_str(";executor=");
+        identity.push_str(&executor.to_toml().to_string());
+    }
+    identity
+}
+
+fn build_package_source_identity(source: &BuildPackageSource) -> (&'static str, &str) {
+    match source {
+        BuildPackageSource::Registry(value) => ("registry", value),
+        BuildPackageSource::DirectUrl(value) => ("direct-url", value),
+        BuildPackageSource::Git(value) => ("git", value),
+        BuildPackageSource::Path(value) => ("path", value),
+        BuildPackageSource::Directory(value) => ("directory", value),
+        BuildPackageSource::Editable(value) => ("editable", value),
+        BuildPackageSource::Virtual(value) => ("virtual", value),
+    }
+}
+
+fn runtime_resolution_context_id(index: usize) -> String {
+    format!("runtime:{index}")
+}
+
+fn marker_environment_marker(markers: &MarkerEnvironment) -> String {
+    let sys_platform = markers.sys_platform();
+    let platform_machine = markers.platform_machine();
+
+    if platform_machine.is_empty() {
+        format!("sys_platform == '{sys_platform}'")
+    } else {
+        format!("sys_platform == '{sys_platform}' and platform_machine == '{platform_machine}'")
+    }
+}
+
 fn package_id_from_resolved_dist(
     resolved_dist: &ResolvedDist,
     root: &Path,
@@ -314,6 +406,7 @@ fn package_id_from_resolved_dist(
         name: resolved_dist.name().clone(),
         version: resolved_dist_lock_version(resolved_dist, &source, root),
         source,
+        resolution_id: None,
     })
 }
 
@@ -380,6 +473,20 @@ fn lookup_build_key_value<'a, T>(
     None
 }
 
+fn build_resolution_target(
+    build_markers: &BTreeMap<BuildPackageKey, UniversalMarker>,
+    package: &Package,
+    root: &Path,
+    requires_python: &RequiresPython,
+) -> Option<TargetSelector> {
+    lookup_build_key_value(build_markers, package, root).and_then(|marker| {
+        (!marker.is_true())
+            .then(|| TargetSelector::from_universal_marker(*marker, requires_python))
+            .flatten()
+            .filter(|target| !target.is_empty())
+    })
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
 pub struct Lock {
@@ -413,6 +520,8 @@ pub struct Lock {
     options: ResolverOptions,
     /// The actual locked version and their metadata.
     packages: Vec<Package>,
+    /// Independently replayable resolution contexts represented in the package graph.
+    resolutions: Vec<ResolutionRecord>,
     /// A map from package ID to index in `packages`.
     ///
     /// This can be used to quickly lookup the full package for any ID
@@ -445,9 +554,10 @@ impl Lock {
         resolution: &ResolverOutput,
         root: &Path,
         supported_environments: Vec<MarkerTree>,
-    ) -> Result<(Self, BTreeMap<BuildPackageKey, MarkerTree>), LockError> {
+    ) -> Result<(Self, BTreeMap<BuildPackageKey, UniversalMarker>), LockError> {
         let mut packages = BTreeMap::new();
         let mut build_markers = BTreeMap::new();
+        let mut selected_source_package_keys = FxHashMap::default();
         let requires_python = resolution.requires_python.clone();
         let supported_environments = supported_environments
             .into_iter()
@@ -511,11 +621,8 @@ impl Lock {
             ) && !matches!(package.id.source, Source::Virtual(_))
                 && package.to_source_dist(root)?.is_some()
             {
-                let key = build_key_for_package(&package, root);
-                build_markers
-                    .entry(key)
-                    .and_modify(|marker: &mut MarkerTree| marker.or(dist.marker.pep508()))
-                    .or_insert_with(|| dist.marker.pep508());
+                selected_source_package_keys
+                    .insert(package.id.clone(), build_key_for_package(&package, root));
             }
             let mut wheel_marker = dist.marker;
             if let Some(supported_environments_marker) = supported_environments_marker {
@@ -604,6 +711,43 @@ impl Lock {
                         root,
                     )?;
                 }
+            }
+        }
+
+        for key in selected_source_package_keys.values() {
+            build_markers.insert(key.clone(), UniversalMarker::FALSE);
+        }
+
+        for package in packages.values() {
+            for dependency in package
+                .dependencies
+                .iter()
+                .chain(
+                    package
+                        .optional_dependencies
+                        .values()
+                        .flat_map(|dependencies| dependencies.iter()),
+                )
+                .chain(
+                    package
+                        .dependency_groups
+                        .values()
+                        .flat_map(|dependencies| dependencies.iter()),
+                )
+            {
+                let Some(key) = selected_source_package_keys.get(&dependency.package_id) else {
+                    continue;
+                };
+                build_markers
+                    .entry(key.clone())
+                    .and_modify(|marker| marker.or(dependency.complexified_marker))
+                    .or_insert(dependency.complexified_marker);
+            }
+        }
+
+        for marker in build_markers.values_mut() {
+            if marker.is_false() {
+                *marker = UniversalMarker::TRUE;
             }
         }
 
@@ -813,6 +957,7 @@ impl Lock {
             requires_python,
             options,
             packages,
+            resolutions: Vec::new(),
             by_id,
             manifest,
         };
@@ -856,6 +1001,93 @@ impl Lock {
             })
     }
 
+    /// Return the context ID for a captured build resolution graph.
+    pub fn build_resolution_context_id_for(
+        &self,
+        key: &BuildPackageKey,
+        stage: BuildResolutionStage,
+        build_markers: &BTreeMap<BuildPackageKey, UniversalMarker>,
+        executor_markers: &MarkerEnvironment,
+        executor_python: &Version,
+        root: &Path,
+    ) -> Result<String, LockError> {
+        let executor = ExecutorSelector::from_marker_environment(
+            executor_markers,
+            executor_python.clone(),
+            &self.requires_python,
+        )?;
+        let package = self
+            .packages
+            .iter()
+            .find(|package| build_key_for_package(package, root) == *key);
+        let target = package.and_then(|package| {
+            build_resolution_target(build_markers, package, root, &self.requires_python)
+        });
+        Ok(package.map_or_else(
+            || {
+                build_resolution_context_id_with_context(
+                    key,
+                    stage,
+                    target.as_ref(),
+                    Some(&executor),
+                )
+            },
+            |package| {
+                build_resolution_context_id_for_package(
+                    package,
+                    stage,
+                    target.as_ref(),
+                    Some(&executor),
+                )
+            },
+        ))
+    }
+
+    /// Return the context ID for a captured build resolution graph with an explicit target marker.
+    pub fn build_resolution_context_id_for_marker(
+        &self,
+        key: &BuildPackageKey,
+        stage: BuildResolutionStage,
+        target_marker: Option<MarkerTree>,
+        executor_markers: &MarkerEnvironment,
+        executor_python: &Version,
+        root: &Path,
+    ) -> Result<String, LockError> {
+        let executor = ExecutorSelector::from_marker_environment(
+            executor_markers,
+            executor_python.clone(),
+            &self.requires_python,
+        )?;
+        let package = self
+            .packages
+            .iter()
+            .find(|package| build_key_for_package(package, root) == *key);
+        let target = target_marker
+            .map(|marker| {
+                UniversalMarker::from_combined(self.requires_python.complexify_markers(marker))
+            })
+            .and_then(|marker| TargetSelector::from_universal_marker(marker, &self.requires_python))
+            .filter(|target| !target.is_empty());
+        Ok(package.map_or_else(
+            || {
+                build_resolution_context_id_with_context(
+                    key,
+                    stage,
+                    target.as_ref(),
+                    Some(&executor),
+                )
+            },
+            |package| {
+                build_resolution_context_id_for_package(
+                    package,
+                    stage,
+                    target.as_ref(),
+                    Some(&executor),
+                )
+            },
+        ))
+    }
+
     /// Populate build dependencies from captured build resolutions.
     ///
     /// Only **direct** build requirements are stored in `build-dependencies`,
@@ -865,8 +1097,11 @@ impl Lock {
     /// select incompatible closures for the same package.
     pub async fn with_build_resolutions<Context: BuildContext>(
         mut self,
-        build_resolutions: &BTreeMap<BuildPackageKey, uv_types::BuildResolutionGraph>,
+        build_resolutions: &BuildResolutionGraphMap,
         extra_build_requires: &ExtraBuildRequires,
+        build_markers: &BTreeMap<BuildPackageKey, UniversalMarker>,
+        executor_markers: &MarkerEnvironment,
+        executor_python: &Version,
         root: &Path,
         database: &DistributionDatabase<'_, Context>,
         build_hasher: &HashStrategy,
@@ -882,13 +1117,99 @@ impl Lock {
 
         // Collect direct build dep refs per parent, and new packages to add.
         let mut build_dep_refs: BTreeMap<BuildPackageKey, Vec<BuildDependency>> = BTreeMap::new();
+        let mut build_resolution_dep_refs: BTreeMap<BuildResolutionGraphKey, Vec<BuildDependency>> =
+            BTreeMap::new();
         let mut build_requires_map: BTreeMap<BuildPackageKey, BTreeSet<Requirement>> =
             BTreeMap::new();
         let mut new_packages: Vec<Package> = Vec::new();
+        let contextual_build_packages = build_resolutions
+            .keys()
+            .filter(|key| key.context.is_some())
+            .map(|key| key.package.clone())
+            .collect::<BTreeSet<_>>();
+        let build_resolution_graphs = build_resolutions
+            .iter()
+            .filter(|(key, _)| {
+                if key.context.is_some() {
+                    return true;
+                }
+                if contextual_build_packages.contains(&key.package) {
+                    return false;
+                }
+                if key.package.source.is_some() {
+                    return true;
+                }
+                !contextual_build_packages.iter().any(|contextual| {
+                    contextual.name == key.package.name && contextual.version == key.package.version
+                })
+            })
+            .collect_vec();
+
+        let executor = ExecutorSelector::from_marker_environment(
+            executor_markers,
+            executor_python.clone(),
+            &self.requires_python,
+        )?;
+        let mut build_resolution_contexts = BTreeMap::new();
+        let mut context_counts = BTreeMap::new();
+        for &(graph_key, _) in &build_resolution_graphs {
+            let parent_key = &graph_key.package;
+            let stage = graph_key.stage.unwrap_or(BuildResolutionStage::Build);
+            let package = self
+                .packages
+                .iter()
+                .find(|package| build_key_for_package(package, root) == *parent_key);
+            let target = graph_key
+                .target_marker
+                .map(|marker| {
+                    UniversalMarker::from_combined(self.requires_python.complexify_markers(marker))
+                })
+                .and_then(|marker| {
+                    TargetSelector::from_universal_marker(marker, &self.requires_python)
+                })
+                .filter(|target| !target.is_empty())
+                .or_else(|| {
+                    package.and_then(|package| {
+                        build_resolution_target(build_markers, package, root, &self.requires_python)
+                    })
+                });
+            let id = if let Some(context) = graph_key.context.clone() {
+                context
+            } else {
+                let base = package.map_or_else(
+                    || {
+                        build_resolution_context_id_with_context(
+                            parent_key,
+                            stage,
+                            target.as_ref(),
+                            Some(&executor),
+                        )
+                    },
+                    |package| {
+                        build_resolution_context_id_for_package(
+                            package,
+                            stage,
+                            target.as_ref(),
+                            Some(&executor),
+                        )
+                    },
+                );
+                let count = context_counts.entry(base.clone()).or_insert(0usize);
+                let id = if *count == 0 {
+                    base
+                } else {
+                    format!("{base}:{}", *count + 1)
+                };
+                *count += 1;
+                id
+            };
+            build_resolution_contexts.insert(graph_key.clone(), id);
+        }
 
         // First pass: create all new Package entries (without dependencies) and
         // collect direct build requirements per parent.
-        for (parent_key, info) in build_resolutions {
+        for &(graph_key, info) in &build_resolution_graphs {
+            let parent_key = &graph_key.package;
             // Create Package entries for any packages not already in the lock.
             for entry in &info.packages {
                 let resolved_dist = &entry.dist;
@@ -992,7 +1313,14 @@ impl Lock {
                     match_runtime,
                 ));
             }
-            build_dep_refs.insert(parent_key.clone(), deps);
+            if graph_key.stage.unwrap_or(BuildResolutionStage::Build) == BuildResolutionStage::Build
+            {
+                build_dep_refs
+                    .entry(parent_key.clone())
+                    .or_default()
+                    .extend(deps.iter().cloned());
+            }
+            build_resolution_dep_refs.insert(graph_key.clone(), deps);
         }
 
         // Add new packages to the lock before extracting build requirement metadata so
@@ -1043,22 +1371,76 @@ impl Lock {
         let package_ids: FxHashSet<PackageId> =
             self.packages.iter().map(|p| p.id.clone()).collect();
 
-        // Second pass: retain scoped ordinary and optional dependency edges captured
-        // through build requirements. Only build-only packages can safely store these
-        // edges globally; packages also selected at runtime must retain isolated edges.
-        let mut dep_updates: FxHashMap<PackageId, Vec<Dependency>> = FxHashMap::default();
-        let mut optional_dep_updates: FxHashMap<PackageId, BTreeMap<ExtraName, Vec<Dependency>>> =
-            FxHashMap::default();
+        // Second pass: collect graph-specific ordinary and optional dependency
+        // edges. The edges are keyed by the unscoped package ID selected by the
+        // build solve; resolution-id scoping is applied after we know which
+        // package nodes can safely be shared.
         let mut build_dependency_packages: BTreeMap<
-            BuildPackageKey,
+            BuildResolutionGraphKey,
             BTreeMap<PackageId, BuildDependencyEdges>,
         > = BTreeMap::new();
-        let mut build_dependency_package_markers: BTreeMap<
-            BuildPackageKey,
-            BTreeMap<PackageId, UniversalMarker>,
-        > = BTreeMap::new();
+        let executor = ExecutorSelector::from_marker_environment(
+            executor_markers,
+            executor_python.clone(),
+            &self.requires_python,
+        )?;
+        let mut build_resolution_contexts = BTreeMap::new();
+        let mut context_counts = BTreeMap::new();
+        for &(graph_key, _) in &build_resolution_graphs {
+            let parent_key = &graph_key.package;
+            let stage = graph_key.stage.unwrap_or(BuildResolutionStage::Build);
+            let package = self
+                .packages
+                .iter()
+                .find(|package| build_key_for_package(package, root) == *parent_key);
+            let target = graph_key
+                .target_marker
+                .map(|marker| {
+                    UniversalMarker::from_combined(self.requires_python.complexify_markers(marker))
+                })
+                .and_then(|marker| {
+                    TargetSelector::from_universal_marker(marker, &self.requires_python)
+                })
+                .filter(|target| !target.is_empty())
+                .or_else(|| {
+                    package.and_then(|package| {
+                        build_resolution_target(build_markers, package, root, &self.requires_python)
+                    })
+                });
+            let id = if let Some(context) = graph_key.context.clone() {
+                context
+            } else {
+                let base = package.map_or_else(
+                    || {
+                        build_resolution_context_id_with_context(
+                            parent_key,
+                            stage,
+                            target.as_ref(),
+                            Some(&executor),
+                        )
+                    },
+                    |package| {
+                        build_resolution_context_id_for_package(
+                            package,
+                            stage,
+                            target.as_ref(),
+                            Some(&executor),
+                        )
+                    },
+                );
+                let count = context_counts.entry(base.clone()).or_insert(0usize);
+                let id = if *count == 0 {
+                    base
+                } else {
+                    format!("{base}:{}", *count + 1)
+                };
+                *count += 1;
+                id
+            };
+            build_resolution_contexts.insert(graph_key.clone(), id);
+        }
 
-        for (parent_key, info) in build_resolutions {
+        for &(graph_key, info) in &build_resolution_graphs {
             for entry in &info.packages {
                 let resolved_dist = &entry.dist;
                 let Ok(key) = package_id_from_resolved_dist(resolved_dist, root) else {
@@ -1066,20 +1448,10 @@ impl Lock {
                 };
 
                 let scoped_edges = build_dependency_packages
-                    .entry(parent_key.clone())
+                    .entry(graph_key.clone())
                     .or_default()
-                    .entry(key.clone())
+                    .entry(key)
                     .or_default();
-                let simplified = SimplifiedMarkerTree::new(&self.requires_python, entry.marker);
-                let complexified = simplified.into_marker(&self.requires_python);
-                let marker = UniversalMarker::from_combined(complexified);
-                build_dependency_package_markers
-                    .entry(parent_key.clone())
-                    .or_default()
-                    .entry(key.clone())
-                    .and_modify(|existing| existing.or(marker))
-                    .or_insert(marker);
-                let deps = dep_updates.entry(key.clone()).or_default();
                 for dep_edge in &entry.dependencies {
                     let Ok(dep_id) = package_id_from_resolved_dist(&dep_edge.dist, root) else {
                         continue;
@@ -1090,19 +1462,16 @@ impl Lock {
                     let simplified =
                         SimplifiedMarkerTree::new(&self.requires_python, dep_edge.marker);
                     let complexified = simplified.into_marker(&self.requires_python);
-                    let dependency = Dependency {
+                    scoped_edges.dependencies.push(Dependency {
                         package_id: dep_id,
                         extra: dep_edge.extras.clone(),
+                        contexts: BTreeSet::new(),
                         simplified_marker: simplified,
                         complexified_marker: UniversalMarker::from_combined(complexified),
-                    };
-                    deps.push(dependency.clone());
-                    scoped_edges.dependencies.push(dependency);
+                    });
                 }
 
-                let optional_updates = optional_dep_updates.entry(key).or_default();
                 for (extra, dependencies) in &entry.optional_dependencies {
-                    let deps = optional_updates.entry(extra.clone()).or_default();
                     let scoped_deps = scoped_edges
                         .optional_dependencies
                         .entry(extra.clone())
@@ -1117,18 +1486,27 @@ impl Lock {
                         let simplified =
                             SimplifiedMarkerTree::new(&self.requires_python, dep_edge.marker);
                         let complexified = simplified.into_marker(&self.requires_python);
-                        let dependency = Dependency {
+                        scoped_deps.push(Dependency {
                             package_id: dep_id,
                             extra: dep_edge.extras.clone(),
+                            contexts: BTreeSet::new(),
                             simplified_marker: simplified,
                             complexified_marker: UniversalMarker::from_combined(complexified),
-                        };
-                        deps.push(dependency.clone());
-                        scoped_deps.push(dependency);
+                        });
                     }
                 }
             }
         }
+
+        let normalize_edges = |mut edges: BuildDependencyEdges| {
+            edges.dependencies.sort();
+            edges.dependencies.dedup();
+            for dependencies in edges.optional_dependencies.values_mut() {
+                dependencies.sort();
+                dependencies.dedup();
+            }
+            edges
+        };
 
         for graph in build_dependency_packages.values_mut() {
             for edges in graph.values_mut() {
@@ -1141,83 +1519,275 @@ impl Lock {
             }
         }
 
-        // Apply dependency updates to packages.
-        for package in &mut self.packages {
-            if runtime_packages.contains(&package.id) {
-                continue;
-            }
-            if let Some(mut deps) = dep_updates.remove(&package.id) {
-                package.dependencies.append(&mut deps);
-                package.dependencies.sort();
-                package.dependencies.dedup();
-            }
-            if let Some(optional_deps) = optional_dep_updates.remove(&package.id) {
-                for (extra, mut deps) in optional_deps {
-                    let package_deps = package.optional_dependencies.entry(extra).or_default();
-                    package_deps.append(&mut deps);
-                    package_deps.sort();
-                    package_deps.dedup();
+        let map_dependency =
+            |dependency: &Dependency,
+             graph_key: &BuildResolutionGraphKey,
+             scoped_build_packages: &BTreeSet<(BuildResolutionGraphKey, PackageId)>| {
+                let mut dependency = dependency.clone();
+                dependency.contexts.clear();
+                let package_id = dependency.package_id.unscoped();
+                dependency.package_id =
+                    if scoped_build_packages.contains(&(graph_key.clone(), package_id.clone())) {
+                        let context = build_resolution_contexts
+                            .get(graph_key)
+                            .expect("build resolution context exists");
+                        package_id.scoped(context.clone())
+                    } else {
+                        package_id
+                    };
+                dependency
+            };
+        let map_edges =
+            |graph_key: &BuildResolutionGraphKey,
+             edges: &BuildDependencyEdges,
+             scoped_build_packages: &BTreeSet<(BuildResolutionGraphKey, PackageId)>| {
+                normalize_edges(BuildDependencyEdges {
+                    dependencies: edges
+                        .dependencies
+                        .iter()
+                        .map(|dependency| {
+                            map_dependency(dependency, graph_key, scoped_build_packages)
+                        })
+                        .collect(),
+                    optional_dependencies: edges
+                        .optional_dependencies
+                        .iter()
+                        .map(|(extra, dependencies)| {
+                            (
+                                extra.clone(),
+                                dependencies
+                                    .iter()
+                                    .map(|dependency| {
+                                        map_dependency(dependency, graph_key, scoped_build_packages)
+                                    })
+                                    .collect(),
+                            )
+                        })
+                        .collect(),
+                })
+            };
+        let package_edges = |package: &Package| {
+            normalize_edges(BuildDependencyEdges {
+                dependencies: package
+                    .dependencies
+                    .iter()
+                    .filter(|dependency| dependency.is_runtime_edge())
+                    .cloned()
+                    .collect(),
+                optional_dependencies: package
+                    .optional_dependencies
+                    .iter()
+                    .map(|(extra, dependencies)| {
+                        (
+                            extra.clone(),
+                            dependencies
+                                .iter()
+                                .filter(|dependency| dependency.is_runtime_edge())
+                                .cloned()
+                                .collect(),
+                        )
+                    })
+                    .collect(),
+            })
+        };
+
+        let mut scoped_build_packages: BTreeSet<(BuildResolutionGraphKey, PackageId)> =
+            BTreeSet::new();
+        loop {
+            let mut next_scoped_build_packages = scoped_build_packages.clone();
+            let mut canonical_edges: BTreeMap<PackageId, BuildDependencyEdges> = BTreeMap::new();
+            for package in &self.packages {
+                if runtime_packages.contains(&package.id) {
+                    canonical_edges.insert(package.id.clone(), package_edges(package));
                 }
+            }
+
+            for (graph_key, graph) in &build_dependency_packages {
+                for (package_id, edges) in graph {
+                    if scoped_build_packages.contains(&(graph_key.clone(), package_id.clone())) {
+                        continue;
+                    }
+                    let desired_edges = map_edges(graph_key, edges, &scoped_build_packages);
+                    if let Some(canonical_edges) = canonical_edges.get(package_id) {
+                        if canonical_edges != &desired_edges {
+                            next_scoped_build_packages
+                                .insert((graph_key.clone(), package_id.clone()));
+                        }
+                    } else {
+                        canonical_edges.insert(package_id.clone(), desired_edges);
+                    }
+                }
+            }
+
+            if next_scoped_build_packages == scoped_build_packages {
+                break;
+            }
+            scoped_build_packages = next_scoped_build_packages;
+        }
+
+        let mut unscoped_build_edges: BTreeMap<PackageId, BuildDependencyEdges> = BTreeMap::new();
+        for (graph_key, graph) in &build_dependency_packages {
+            for (package_id, edges) in graph {
+                if runtime_packages.contains(package_id)
+                    || scoped_build_packages.contains(&(graph_key.clone(), package_id.clone()))
+                {
+                    continue;
+                }
+                unscoped_build_edges
+                    .entry(package_id.clone())
+                    .or_insert_with(|| map_edges(graph_key, edges, &scoped_build_packages));
             }
         }
 
-        // Retain a scoped graph only when walking globally stored package edges
-        // would differ from the isolated build resolution in an overlapping marker region.
-        // Disjoint universal branches remain safely representable as global edges.
-        build_dependency_packages.retain(|parent_key, graph| {
-            let Some(package_markers) = build_dependency_package_markers.get(parent_key) else {
-                return false;
+        for package in &mut self.packages {
+            if let Some(edges) = unscoped_build_edges.get(&package.id) {
+                package.dependencies.clone_from(&edges.dependencies);
+                package
+                    .optional_dependencies
+                    .clone_from(&edges.optional_dependencies);
+            }
+        }
+
+        let mut scoped_packages = Vec::new();
+        for (graph_key, package_id) in &scoped_build_packages {
+            let Some(edges) = build_dependency_packages
+                .get(graph_key)
+                .and_then(|graph| graph.get(package_id))
+            else {
+                continue;
             };
-            graph.iter().any(|(package_id, edges)| {
-                let Some(package) = self
+            let context = build_resolution_contexts
+                .get(graph_key)
+                .expect("build resolution context exists");
+            let scoped_id = package_id.scoped(context.clone());
+            if self.packages.iter().any(|package| package.id == scoped_id)
+                || scoped_packages
+                    .iter()
+                    .any(|package: &Package| package.id == scoped_id)
+            {
+                continue;
+            }
+            let Some(base_package) = self
+                .packages
+                .iter()
+                .find(|package| package.id == *package_id && package.id.resolution_id.is_none())
+            else {
+                continue;
+            };
+            let mut package = base_package.clone();
+            package.id = scoped_id;
+            package.fork_markers.clear();
+            let edges = map_edges(graph_key, edges, &scoped_build_packages);
+            package.dependencies = edges.dependencies;
+            package.optional_dependencies = edges.optional_dependencies;
+            package.dependency_groups.clear();
+            package.build_dependencies.clear();
+            package.build_dependencies_resolved = false;
+            package.build_dependency_packages = None;
+            scoped_packages.push(package);
+        }
+        self.packages.extend(scoped_packages);
+
+        let mut mapped_build_resolution_dep_refs = BTreeMap::new();
+        let mut mapped_build_dep_refs: BTreeMap<BuildPackageKey, Vec<BuildDependency>> =
+            BTreeMap::new();
+        for (graph_key, deps) in &build_resolution_dep_refs {
+            let mut mapped_deps = deps
+                .iter()
+                .cloned()
+                .map(|mut dependency| {
+                    let package_id = dependency.package_id.unscoped();
+                    dependency.package_id = if scoped_build_packages
+                        .contains(&(graph_key.clone(), package_id.clone()))
+                    {
+                        let context = build_resolution_contexts
+                            .get(graph_key)
+                            .expect("build resolution context exists");
+                        package_id.scoped(context.clone())
+                    } else {
+                        package_id
+                    };
+                    dependency
+                })
+                .collect::<Vec<_>>();
+            mapped_deps.sort();
+            mapped_deps.dedup();
+            if graph_key.stage.unwrap_or(BuildResolutionStage::Build) == BuildResolutionStage::Build
+            {
+                mapped_build_dep_refs
+                    .entry(graph_key.package.clone())
+                    .or_default()
+                    .extend(mapped_deps.iter().cloned());
+            }
+            mapped_build_resolution_dep_refs.insert(graph_key.clone(), mapped_deps);
+        }
+        for deps in mapped_build_dep_refs.values_mut() {
+            deps.sort();
+            deps.dedup();
+        }
+        build_dep_refs = mapped_build_dep_refs;
+        build_resolution_dep_refs = mapped_build_resolution_dep_refs;
+
+        let mut resolutions_by_id: BTreeMap<String, ResolutionRecord> = BTreeMap::new();
+        for (graph_key, context) in &build_resolution_contexts {
+            let Some(record) = (|| {
+                let parent_key = &graph_key.package;
+                let package = self
                     .packages
                     .iter()
-                    .find(|package| package.id == *package_id)
-                else {
-                    return true;
-                };
-                let marker = package_markers
-                    .get(package_id)
-                    .copied()
-                    .unwrap_or(UniversalMarker::TRUE);
-                let has_dependency_not_in =
-                    |dependencies: &[Dependency], comparison: &[Dependency]| -> bool {
-                        dependencies.iter().any(|dependency| {
-                            !dependency.complexified_marker.is_disjoint(marker)
-                                && !comparison.iter().any(|other| {
-                                    other.package_id == dependency.package_id
-                                        && other.extra == dependency.extra
-                                        && !other.complexified_marker.is_disjoint(marker)
-                                })
-                        })
-                    };
-                let differs = |global: &[Dependency], scoped: &[Dependency]| {
-                    has_dependency_not_in(global, scoped) || has_dependency_not_in(scoped, global)
-                };
+                    .find(|package| build_key_for_package(package, root) == *parent_key)?;
+                let package_id = package.id.clone();
+                let mut dependencies = build_resolution_dep_refs.get(graph_key)?.clone();
+                dependencies.sort();
+                dependencies.dedup();
+                let target = graph_key
+                    .target_marker
+                    .map(|marker| {
+                        UniversalMarker::from_combined(
+                            self.requires_python.complexify_markers(marker),
+                        )
+                    })
+                    .and_then(|marker| {
+                        TargetSelector::from_universal_marker(marker, &self.requires_python)
+                    })
+                    .filter(|target| !target.is_empty())
+                    .or_else(|| {
+                        build_resolution_target(build_markers, package, root, &self.requires_python)
+                    });
+                Some(ResolutionRecord {
+                    id: context.clone(),
+                    kind: ResolutionKind::Build,
+                    operation: Some(ResolutionOperation::Wheel),
+                    mode: Some(ResolutionModeRecord::Isolated),
+                    stage: graph_key.stage.or(Some(BuildResolutionStage::Build)),
+                    package_id: Some(package_id),
+                    target,
+                    executor: Some(executor.clone()),
+                    dependencies,
+                })
+            })() else {
+                continue;
+            };
 
-                differs(&package.dependencies, &edges.dependencies)
-                    || edges
-                        .optional_dependencies
-                        .iter()
-                        .any(|(extra, scoped_dependencies)| {
-                            package.optional_dependencies.get(extra).is_some_and(
-                                |merged_dependencies| {
-                                    differs(merged_dependencies, scoped_dependencies)
-                                },
-                            ) || !scoped_dependencies.is_empty()
-                                && !package.optional_dependencies.contains_key(extra)
-                        })
-            })
-        });
-
-        // Set build-dependencies references and build-requires metadata on parent packages.
-        for package in &mut self.packages {
-            if let Some(deps) = lookup_build_key_value(&build_dep_refs, package, root) {
-                package.build_dependencies.clone_from(deps);
-                package.build_dependencies_resolved = true;
+            if let Some(existing) = resolutions_by_id.get_mut(&record.id) {
+                existing.dependencies.extend(record.dependencies);
+                existing.dependencies.sort();
+                existing.dependencies.dedup();
+            } else {
+                resolutions_by_id.insert(record.id.clone(), record);
             }
-            package.build_dependency_packages =
-                lookup_build_key_value(&build_dependency_packages, package, root).cloned();
+        }
+        self.resolutions = resolutions_by_id.into_values().collect();
+
+        // Set build-dependencies references and build-requires metadata on source packages.
+        for package in &mut self.packages {
+            if package.id.resolution_id.is_none() {
+                if let Some(deps) = lookup_build_key_value(&build_dep_refs, package, root) {
+                    package.build_dependencies.clone_from(deps);
+                    package.build_dependencies_resolved = true;
+                }
+            }
+            package.build_dependency_packages = None;
 
             // Store the original build-system.requires in metadata for satisfies() checks.
             if let Some(build_requires) = lookup_build_key_value(&build_requires_map, package, root)
@@ -1249,7 +1819,8 @@ impl Lock {
     ) -> Result<Vec<(BuildPackageKey, uv_distribution_types::SourceDist)>, LockError> {
         let mut sources = Vec::new();
         for package in &self.packages {
-            if matches!(package.id.source, Source::Virtual(_)) {
+            if package.id.resolution_id.is_some() || matches!(package.id.source, Source::Virtual(_))
+            {
                 continue;
             }
             if let Some(source_dist) = package.to_source_dist(workspace_root)? {
@@ -1269,7 +1840,8 @@ impl Lock {
     ) -> Result<Vec<(BuildPackageKey, uv_distribution_types::SourceDist)>, LockError> {
         let mut sources = Vec::new();
         for package in &self.packages {
-            if matches!(package.id.source, Source::Virtual(_)) {
+            if package.id.resolution_id.is_some() || matches!(package.id.source, Source::Virtual(_))
+            {
                 continue;
             }
             if package.build_dependencies_resolved {
@@ -1302,6 +1874,50 @@ impl Lock {
             .collect()
     }
 
+    fn build_resolution_record_for_package(
+        &self,
+        package: &Package,
+        stage: BuildResolutionStage,
+    ) -> Option<&ResolutionRecord> {
+        self.resolutions.iter().find(|resolution| {
+            resolution.kind == ResolutionKind::Build
+                && resolution.package_id.as_ref() == Some(&package.id)
+                && resolution.stage.unwrap_or(BuildResolutionStage::Build) == stage
+        })
+    }
+
+    fn build_resolution_context_for_package(&self, package: &Package) -> Option<&str> {
+        self.build_resolution_record_for_package(package, BuildResolutionStage::Build)
+            .map(|resolution| resolution.id.as_str())
+    }
+
+    fn build_resolution_record_for_package_in_markers(
+        &self,
+        package: &Package,
+        markers: &MarkerEnvironment,
+        stage: BuildResolutionStage,
+    ) -> Result<Option<&ResolutionRecord>, LockError> {
+        let mut fallback = None;
+        for resolution in self.resolutions.iter().filter(|resolution| {
+            resolution.kind == ResolutionKind::Build
+                && resolution.package_id.as_ref() == Some(&package.id)
+                && resolution.stage.unwrap_or(BuildResolutionStage::Build) == stage
+        }) {
+            let Some(target) = resolution.target.as_ref() else {
+                fallback.get_or_insert(resolution);
+                continue;
+            };
+            if target
+                .to_universal_marker(&self.requires_python, &resolution.id)?
+                .evaluate_no_extras(markers)
+            {
+                return Ok(Some(resolution));
+            }
+        }
+
+        Ok(fallback)
+    }
+
     /// Walk the build dependency graph for a package, optionally filtering
     /// marker-controlled edges for a concrete environment.
     fn build_dependency_package_ids(
@@ -1310,6 +1926,7 @@ impl Lock {
         package_by_id: &FxHashMap<PackageId, &Package>,
         markers: Option<&MarkerEnvironment>,
         runtime_package_ids: Option<&FxHashSet<PackageId>>,
+        context: Option<&str>,
     ) -> Option<Vec<PackageId>> {
         self.build_dependency_package_ids_from(
             package,
@@ -1317,6 +1934,7 @@ impl Lock {
             package_by_id,
             markers,
             runtime_package_ids,
+            context,
         )
     }
 
@@ -1328,6 +1946,7 @@ impl Lock {
         package_by_id: &FxHashMap<PackageId, &Package>,
         markers: Option<&MarkerEnvironment>,
         runtime_package_ids: Option<&FxHashSet<PackageId>>,
+        context: Option<&str>,
     ) -> Option<Vec<PackageId>> {
         let mut dependency_ids = Vec::new();
         let mut emitted: FxHashSet<PackageId> = FxHashSet::default();
@@ -1376,27 +1995,84 @@ impl Lock {
                 continue;
             };
 
-            let dependencies = if let Some(scoped_packages) = &package.build_dependency_packages {
-                let Some(scoped_edges) = scoped_packages.get(&dep_id) else {
-                    continue;
-                };
-                if let Some(extra) = extra {
-                    scoped_edges
-                        .optional_dependencies
-                        .get(&extra)
-                        .map(Vec::as_slice)
-                        .unwrap_or_default()
-                } else {
-                    scoped_edges.dependencies.as_slice()
-                }
-            } else if let Some(extra) = extra {
+            let global_dependencies = if let Some(extra) = extra.as_ref() {
                 dep_package
                     .optional_dependencies
-                    .get(&extra)
+                    .get(extra)
                     .map(Vec::as_slice)
                     .unwrap_or_default()
             } else {
                 dep_package.dependencies.as_slice()
+            };
+            let dependencies = if let Some(context) = context {
+                if dep_id.resolution_id.as_deref() == Some(context) {
+                    global_dependencies
+                        .iter()
+                        .filter(|dependency| {
+                            dependency.is_runtime_edge() || dependency.contexts.contains(context)
+                        })
+                        .collect_vec()
+                } else {
+                    let dependencies = global_dependencies
+                        .iter()
+                        .filter(|dependency| dependency.contexts.contains(context))
+                        .collect_vec();
+                    if !dependencies.is_empty() {
+                        dependencies
+                    } else if global_dependencies
+                        .iter()
+                        .all(|dependency| dependency.is_runtime_edge())
+                    {
+                        global_dependencies
+                            .iter()
+                            .filter(|dependency| dependency.is_runtime_edge())
+                            .collect_vec()
+                    } else if let Some(scoped_packages) = &package.build_dependency_packages {
+                        let Some(scoped_edges) = scoped_packages.get(&dep_id) else {
+                            continue;
+                        };
+                        let scoped_dependencies = if let Some(extra) = extra.as_ref() {
+                            scoped_edges
+                                .optional_dependencies
+                                .get(extra)
+                                .map(Vec::as_slice)
+                                .unwrap_or_default()
+                        } else {
+                            scoped_edges.dependencies.as_slice()
+                        };
+                        scoped_dependencies
+                            .iter()
+                            .filter(|dependency| {
+                                dependency.contexts.is_empty()
+                                    || dependency.contexts.contains(context)
+                            })
+                            .collect_vec()
+                    } else {
+                        Vec::new()
+                    }
+                }
+            } else if let Some(scoped_packages) = &package.build_dependency_packages {
+                let Some(scoped_edges) = scoped_packages.get(&dep_id) else {
+                    continue;
+                };
+                let scoped_dependencies = if let Some(extra) = extra.as_ref() {
+                    scoped_edges
+                        .optional_dependencies
+                        .get(extra)
+                        .map(Vec::as_slice)
+                        .unwrap_or_default()
+                } else {
+                    scoped_edges.dependencies.as_slice()
+                };
+                scoped_dependencies
+                    .iter()
+                    .filter(|dependency| dependency.is_runtime_edge())
+                    .collect_vec()
+            } else {
+                global_dependencies
+                    .iter()
+                    .filter(|dependency| dependency.is_runtime_edge())
+                    .collect_vec()
             };
 
             for dep in dependencies {
@@ -1467,11 +2143,24 @@ impl Lock {
                 continue;
             }
 
-            let Some(dependency_ids) = self.build_dependency_package_ids(
+            let build_resolution_record = self.build_resolution_record_for_package_in_markers(
                 package,
+                markers,
+                BuildResolutionStage::Build,
+            )?;
+            let build_dependencies = build_resolution_record
+                .map_or(package.build_dependencies.as_slice(), |resolution| {
+                    resolution.dependencies.as_slice()
+                });
+            let resolution_context =
+                build_resolution_record.map(|resolution| resolution.id.as_str());
+            let Some(dependency_ids) = self.build_dependency_package_ids_from(
+                package,
+                build_dependencies,
                 &package_by_id,
                 Some(markers),
                 Some(&runtime_package_ids),
+                resolution_context,
             ) else {
                 continue;
             };
@@ -1497,7 +2186,16 @@ impl Lock {
         let mut resolutions = BTreeMap::new();
 
         for package in &self.packages {
-            if package.build_dependencies.is_empty() {
+            let build_resolution_record = self.build_resolution_record_for_package_in_markers(
+                package,
+                markers,
+                BuildResolutionStage::Build,
+            )?;
+            let build_dependencies = build_resolution_record
+                .map_or(package.build_dependencies.as_slice(), |resolution| {
+                    resolution.dependencies.as_slice()
+                });
+            if build_dependencies.is_empty() {
                 continue;
             }
             if !build_resolution_roots.contains(&package.id) {
@@ -1505,11 +2203,15 @@ impl Lock {
             }
 
             let mut graph = petgraph::graph::DiGraph::new();
-            let Some(dependency_ids) = self.build_dependency_package_ids(
+            let resolution_context =
+                build_resolution_record.map(|resolution| resolution.id.as_str());
+            let Some(dependency_ids) = self.build_dependency_package_ids_from(
                 package,
+                build_dependencies,
                 &package_by_id,
                 Some(markers),
                 Some(&runtime_package_ids),
+                resolution_context,
             ) else {
                 continue;
             };
@@ -1534,77 +2236,112 @@ impl Lock {
                 });
             }
 
-            let mut direct_dependencies = Vec::new();
-            for build_dependency in &package.build_dependencies {
-                if build_dependency.match_runtime()
-                    && !runtime_package_ids.contains(&build_dependency.package_id)
-                {
-                    continue;
-                }
-                if let Some(marker) = build_dependency.marker() {
-                    let complexified = self.requires_python.complexify_markers(*marker);
-                    if !UniversalMarker::from_combined(complexified).evaluate_no_extras(markers) {
-                        continue;
-                    }
-                }
+            let locked_direct_dependencies =
+                |build_dependencies: &[BuildDependency],
+                 resolution_context: Option<&str>|
+                 -> Result<Vec<LockedBuildDependency>, LockError> {
+                    let mut direct_dependencies = Vec::new();
+                    for build_dependency in build_dependencies {
+                        if build_dependency.match_runtime()
+                            && !runtime_package_ids.contains(&build_dependency.package_id)
+                        {
+                            continue;
+                        }
+                        if let Some(marker) = build_dependency.marker() {
+                            let complexified = self.requires_python.complexify_markers(*marker);
+                            if !UniversalMarker::from_combined(complexified)
+                                .evaluate_no_extras(markers)
+                            {
+                                continue;
+                            }
+                        }
 
-                let Some(dependency_package) = package_by_id.get(&build_dependency.package_id)
-                else {
-                    continue;
+                        let Some(dependency_package) =
+                            package_by_id.get(&build_dependency.package_id)
+                        else {
+                            continue;
+                        };
+                        let HashedDist { dist, .. } = dependency_package.to_dist(
+                            workspace_root,
+                            tag_policy,
+                            build_options,
+                            markers,
+                        )?;
+                        let mut dependency_graph = petgraph::graph::DiGraph::new();
+                        let Some(dependency_ids) = self.build_dependency_package_ids_from(
+                            package,
+                            std::slice::from_ref(build_dependency),
+                            &package_by_id,
+                            Some(markers),
+                            Some(&runtime_package_ids),
+                            resolution_context,
+                        ) else {
+                            continue;
+                        };
+                        for dependency_id in dependency_ids {
+                            let Some(dependency_package) = package_by_id.get(&dependency_id) else {
+                                continue;
+                            };
+                            let HashedDist { dist, hashes } = dependency_package.to_dist(
+                                workspace_root,
+                                tag_policy,
+                                build_options,
+                                markers,
+                            )?;
+                            dependency_graph.add_node(Node::Dist {
+                                dist: ResolvedDist::Installable {
+                                    dist: Arc::new(dist),
+                                    version: dependency_package.version().cloned(),
+                                },
+                                hashes,
+                                install: true,
+                            });
+                        }
+                        direct_dependencies.push(LockedBuildDependency::new(
+                            ResolvedDist::Installable {
+                                dist: Arc::new(dist),
+                                version: dependency_package.version().cloned(),
+                            },
+                            build_dependency.extras().clone(),
+                            uv_distribution_types::Resolution::new(dependency_graph),
+                        ));
+                    }
+                    Ok(direct_dependencies)
                 };
-                let HashedDist { dist, .. } = dependency_package.to_dist(
-                    workspace_root,
-                    tag_policy,
-                    build_options,
-                    markers,
-                )?;
-                let mut dependency_graph = petgraph::graph::DiGraph::new();
-                let Some(dependency_ids) = self.build_dependency_package_ids_from(
-                    package,
-                    std::slice::from_ref(build_dependency),
-                    &package_by_id,
-                    Some(markers),
-                    Some(&runtime_package_ids),
-                ) else {
-                    continue;
+
+            let direct_dependencies =
+                locked_direct_dependencies(build_dependencies, resolution_context)?;
+
+            let bootstrap_resolution_record = self.build_resolution_record_for_package_in_markers(
+                package,
+                markers,
+                BuildResolutionStage::Bootstrap,
+            )?;
+            let bootstrap_direct_dependencies =
+                if let Some(bootstrap_resolution_record) = bootstrap_resolution_record {
+                    locked_direct_dependencies(
+                        bootstrap_resolution_record.dependencies.as_slice(),
+                        Some(bootstrap_resolution_record.id.as_str()),
+                    )?
+                } else {
+                    Vec::new()
                 };
-                for dependency_id in dependency_ids {
-                    let Some(dependency_package) = package_by_id.get(&dependency_id) else {
-                        continue;
-                    };
-                    let HashedDist { dist, hashes } = dependency_package.to_dist(
-                        workspace_root,
-                        tag_policy,
-                        build_options,
-                        markers,
-                    )?;
-                    dependency_graph.add_node(Node::Dist {
-                        dist: ResolvedDist::Installable {
-                            dist: Arc::new(dist),
-                            version: dependency_package.version().cloned(),
-                        },
-                        hashes,
-                        install: true,
-                    });
-                }
-                direct_dependencies.push(LockedBuildDependency::new(
-                    ResolvedDist::Installable {
-                        dist: Arc::new(dist),
-                        version: dependency_package.version().cloned(),
-                    },
-                    build_dependency.extras().clone(),
-                    uv_distribution_types::Resolution::new(dependency_graph),
-                ));
-            }
 
             let key = build_key_for_package(package, workspace_root);
-            resolutions.insert(
-                key,
-                LockedBuildResolution::new(
-                    uv_distribution_types::Resolution::new(graph),
-                    direct_dependencies,
-                ),
+            let mut locked_resolution = LockedBuildResolution::new(
+                uv_distribution_types::Resolution::new(graph),
+                direct_dependencies,
+                package
+                    .metadata
+                    .build_requires
+                    .as_ref()
+                    .map(|requirements| requirements.iter().cloned().collect()),
             );
+            if bootstrap_resolution_record.is_some() {
+                locked_resolution = locked_resolution
+                    .with_bootstrap_direct_dependencies(bootstrap_direct_dependencies);
+            }
+            resolutions.insert(key, locked_resolution);
         }
 
         Ok(resolutions)
@@ -1624,9 +2361,16 @@ impl Lock {
                 continue;
             }
 
+            let resolution_context = self.build_resolution_context_for_package(package);
             let mut deps = Vec::new();
             let dependency_ids = self
-                .build_dependency_package_ids(package, &package_by_id, None, None)
+                .build_dependency_package_ids(
+                    package,
+                    &package_by_id,
+                    None,
+                    None,
+                    resolution_context,
+                )
                 .unwrap_or_default();
 
             for dep_id in dependency_ids {
@@ -1953,6 +2697,9 @@ impl Lock {
             };
 
             for dep in dependencies {
+                if !dep.is_runtime_edge() {
+                    continue;
+                }
                 enqueue_dep(self, &mut seen, &mut queue, dep);
             }
         }
@@ -2085,9 +2832,24 @@ impl Lock {
 
         doc.insert("requires-python", value(self.requires_python.to_string()));
 
-        if !self.fork_markers.is_empty() {
+        let mut runtime_resolution_ids: FxHashMap<UniversalMarker, String> = FxHashMap::default();
+        let mut runtime_resolutions = Vec::new();
+        let mut legacy_fork_markers = Vec::new();
+        for (index, fork_marker) in self.fork_markers.iter().copied().enumerate() {
+            if let Some(target) =
+                TargetSelector::from_universal_marker(fork_marker, &self.requires_python)
+            {
+                let id = runtime_resolution_context_id(index);
+                runtime_resolution_ids.insert(fork_marker, id.clone());
+                runtime_resolutions.push(ResolutionRecord::runtime(id, target));
+            } else {
+                legacy_fork_markers.push(fork_marker);
+            }
+        }
+        if !legacy_fork_markers.is_empty() {
             let fork_markers = each_element_on_its_line_array(
-                simplified_universal_markers(&self.fork_markers, &self.requires_python).into_iter(),
+                simplified_universal_markers(&legacy_fork_markers, &self.requires_python)
+                    .into_iter(),
             );
             if !fork_markers.is_empty() {
                 doc.insert("resolution-markers", value(fork_markers));
@@ -2408,9 +3170,24 @@ impl Lock {
             *dist_count_by_name.entry(dist.id.name.clone()).or_default() += 1;
         }
 
+        if !runtime_resolutions.is_empty() || !self.resolutions.is_empty() {
+            let mut resolutions = ArrayOfTables::new();
+            for resolution in &runtime_resolutions {
+                resolutions.push(resolution.to_toml(&dist_count_by_name));
+            }
+            for resolution in &self.resolutions {
+                resolutions.push(resolution.to_toml(&dist_count_by_name));
+            }
+            doc.insert("resolution", Item::ArrayOfTables(resolutions));
+        }
+
         let mut packages = ArrayOfTables::new();
         for dist in &self.packages {
-            packages.push(dist.to_toml(&self.requires_python, &dist_count_by_name)?);
+            packages.push(dist.to_toml(
+                &self.requires_python,
+                &dist_count_by_name,
+                &runtime_resolution_ids,
+            )?);
         }
 
         doc.insert("package", Item::ArrayOfTables(packages));
@@ -2423,6 +3200,9 @@ impl Lock {
     pub fn find_by_name(&self, name: &PackageName) -> Result<Option<&Package>, String> {
         let mut found_dist = None;
         for dist in &self.packages {
+            if dist.id.resolution_id.is_some() {
+                continue;
+            }
             if &dist.id.name == name {
                 if found_dist.is_some() {
                     return Err(format!("found multiple packages matching `{name}`"));
@@ -2449,6 +3229,9 @@ impl Lock {
     ) -> Result<Option<&Package>, String> {
         let mut found_dist = None;
         for dist in &self.packages {
+            if dist.id.resolution_id.is_some() {
+                continue;
+            }
             if &dist.id.name == name {
                 if dist.fork_markers.is_empty()
                     || dist
@@ -3354,6 +4137,9 @@ impl Lock {
 
             // Recurse.
             for dep in &package.dependencies {
+                if !dep.is_runtime_edge() {
+                    continue;
+                }
                 if seen.insert(&dep.package_id) {
                     let dep_dist = self.find_by_id(&dep.package_id);
                     queue.push_back(dep_dist);
@@ -3362,6 +4148,9 @@ impl Lock {
 
             for dependencies in package.optional_dependencies.values() {
                 for dep in dependencies {
+                    if !dep.is_runtime_edge() {
+                        continue;
+                    }
                     if seen.insert(&dep.package_id) {
                         let dep_dist = self.find_by_id(&dep.package_id);
                         queue.push_back(dep_dist);
@@ -3371,6 +4160,9 @@ impl Lock {
 
             for dependencies in package.dependency_groups.values() {
                 for dep in dependencies {
+                    if !dep.is_runtime_edge() {
+                        continue;
+                    }
                     if seen.insert(&dep.package_id) {
                         let dep_dist = self.find_by_id(&dep.package_id);
                         queue.push_back(dep_dist);
@@ -3378,16 +4170,22 @@ impl Lock {
                 }
             }
 
-            if self.supports_build_dependencies()
-                && let Some(dependency_ids) =
-                    self.build_dependency_package_ids(package, &package_by_id, None, None)
-            {
-                for dependency_id in dependency_ids {
-                    let Some(dependency_package) = package_by_id.get(&dependency_id) else {
-                        continue;
-                    };
-                    if seen.insert(&dependency_package.id) {
-                        queue.push_back(dependency_package);
+            if self.supports_build_dependencies() {
+                let resolution_context = self.build_resolution_context_for_package(package);
+                if let Some(dependency_ids) = self.build_dependency_package_ids(
+                    package,
+                    &package_by_id,
+                    None,
+                    None,
+                    resolution_context,
+                ) {
+                    for dependency_id in dependency_ids {
+                        let Some(dependency_package) = package_by_id.get(&dependency_id) else {
+                            continue;
+                        };
+                        if seen.insert(&dependency_package.id) {
+                            queue.push_back(dependency_package);
+                        }
                     }
                 }
             }
@@ -3771,6 +4569,8 @@ struct LockWire {
     options: ResolverOptions,
     #[serde(default)]
     manifest: ResolverManifest,
+    #[serde(rename = "resolution", default)]
+    resolutions: Vec<ResolutionRecordWire>,
     #[serde(rename = "package", alias = "distribution", default)]
     packages: Vec<PackageWire>,
 }
@@ -3783,23 +4583,111 @@ impl TryFrom<LockWire> for Lock {
         // there's only one source for a particular package name (the
         // overwhelmingly common case), we can omit some data (like source and
         // version) on dependency edges since it is strictly redundant.
-        let mut unambiguous_package_ids: FxHashMap<PackageName, PackageId> = FxHashMap::default();
+        let mut unambiguous_package_ids = UnambiguousPackageIds::default();
         let mut ambiguous = FxHashSet::default();
         for dist in &wire.packages {
-            if ambiguous.contains(&dist.id.name) {
+            let key = (dist.id.name.clone(), dist.id.resolution_id.clone());
+            if ambiguous.contains(&key) {
                 continue;
             }
-            if let Some(id) = unambiguous_package_ids.remove(&dist.id.name) {
-                ambiguous.insert(id.name);
+            if unambiguous_package_ids.remove(&key).is_some() {
+                ambiguous.insert(key);
                 continue;
             }
-            unambiguous_package_ids.insert(dist.id.name.clone(), dist.id.clone());
+            unambiguous_package_ids.insert(key, dist.id.clone());
+        }
+        let package_names = wire
+            .packages
+            .iter()
+            .map(|dist| dist.id.name.clone())
+            .collect::<FxHashSet<_>>();
+
+        let mut resolution_ids = FxHashSet::default();
+        for resolution in &wire.resolutions {
+            if !resolution_ids.insert(resolution.id.clone()) {
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id: resolution.id.clone(),
+                    message: "duplicate resolution id",
+                }
+                .into());
+            }
+            if resolution.kind == ResolutionKind::Runtime {
+                if resolution.operation.is_some() {
+                    return Err(LockErrorKind::InvalidResolutionRecord {
+                        id: resolution.id.clone(),
+                        message: "runtime resolution cannot declare an operation",
+                    }
+                    .into());
+                }
+                if resolution.mode.is_some() {
+                    return Err(LockErrorKind::InvalidResolutionRecord {
+                        id: resolution.id.clone(),
+                        message: "runtime resolution cannot declare a replay mode",
+                    }
+                    .into());
+                }
+                if resolution.stage.is_some() {
+                    return Err(LockErrorKind::InvalidResolutionRecord {
+                        id: resolution.id.clone(),
+                        message: "runtime resolution cannot declare a build stage",
+                    }
+                    .into());
+                }
+                if resolution.executor.is_some() {
+                    return Err(LockErrorKind::InvalidResolutionRecord {
+                        id: resolution.id.clone(),
+                        message: "runtime resolution cannot declare an executor",
+                    }
+                    .into());
+                }
+                if resolution.name.is_some()
+                    || resolution.version.is_some()
+                    || resolution.source.is_some()
+                {
+                    return Err(LockErrorKind::InvalidResolutionRecord {
+                        id: resolution.id.clone(),
+                        message: "runtime resolution cannot declare a source package",
+                    }
+                    .into());
+                }
+                if !resolution.dependencies.is_empty() {
+                    return Err(LockErrorKind::InvalidResolutionRecord {
+                        id: resolution.id.clone(),
+                        message: "runtime resolution cannot declare roots",
+                    }
+                    .into());
+                }
+            }
+            if let Some(target) = resolution.target.as_ref() {
+                target.validate_activations(&package_names, &resolution.id)?;
+            }
         }
 
+        let runtime_markers_by_id = wire
+            .resolutions
+            .iter()
+            .filter_map(|resolution| {
+                if resolution.kind != ResolutionKind::Runtime {
+                    return None;
+                }
+                Some(
+                    resolution
+                        .runtime_marker(&wire.requires_python)
+                        .map(|marker| (resolution.id.clone(), marker)),
+                )
+            })
+            .collect::<Result<FxHashMap<_, _>, _>>()?;
         let packages = wire
             .packages
             .into_iter()
-            .map(|dist| dist.unwire(&wire.requires_python, &unambiguous_package_ids))
+            .map(|dist| {
+                dist.unwire(
+                    &wire.requires_python,
+                    &unambiguous_package_ids,
+                    &runtime_markers_by_id,
+                    &package_names,
+                )
+            })
             .collect::<Result<Vec<_>, _>>()?;
         let supported_environments = wire
             .supported_environments
@@ -3811,17 +4699,25 @@ impl TryFrom<LockWire> for Lock {
             .into_iter()
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .collect();
-        let fork_markers = wire
+        let mut fork_markers = wire
             .fork_markers
             .into_iter()
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .map(UniversalMarker::from_combined)
-            .collect();
+            .collect::<Vec<_>>();
+        fork_markers.extend(runtime_markers_by_id.values().copied());
+        fork_markers.sort();
+        fork_markers.dedup();
         let mut options = wire.options;
         if options.exclude_newer.exclude_newer_span.is_some() {
             options.exclude_newer.exclude_newer = None;
         }
-        let lock = Self::new(
+        let resolutions = wire
+            .resolutions
+            .into_iter()
+            .map(|resolution| resolution.unwire(&unambiguous_package_ids))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
             packages,
@@ -3833,9 +4729,286 @@ impl TryFrom<LockWire> for Lock {
             required_environments,
             fork_markers,
         )?;
+        for resolution in &resolutions {
+            if resolution.kind != ResolutionKind::Build {
+                continue;
+            }
+            if resolution.operation.is_none() {
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id: resolution.id.clone(),
+                    message: "build resolution is missing an operation",
+                }
+                .into());
+            }
+            if resolution.mode.is_none() {
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id: resolution.id.clone(),
+                    message: "build resolution is missing a replay mode",
+                }
+                .into());
+            }
+            if let Some(executor) = resolution.executor.as_ref() {
+                executor.validate(&resolution.id)?;
+            }
+            let Some(package_id) = resolution.package_id.as_ref() else {
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id: resolution.id.clone(),
+                    message: "build resolution is missing a source package",
+                }
+                .into());
+            };
+            if !lock.by_id.contains_key(package_id) {
+                return Err(LockErrorKind::UnrecognizedBuildDependency {
+                    id: package_id.clone(),
+                    dependency: BuildDependency::new(
+                        package_id.clone(),
+                        BTreeSet::new(),
+                        None,
+                        false,
+                    ),
+                }
+                .into());
+            }
+            for dependency in &resolution.dependencies {
+                if !lock.by_id.contains_key(&dependency.package_id) {
+                    return Err(LockErrorKind::UnrecognizedBuildDependency {
+                        id: package_id.clone(),
+                        dependency: dependency.clone(),
+                    }
+                    .into());
+                }
+            }
+        }
+        let build_resolution_ids = resolutions
+            .iter()
+            .filter(|resolution| resolution.kind == ResolutionKind::Build)
+            .map(|resolution| resolution.id.clone())
+            .collect::<FxHashSet<_>>();
+        let mut build_resolution_package_ids = FxHashSet::default();
+        let mut build_resolution_contexts_by_package: FxHashMap<PackageId, FxHashSet<String>> =
+            FxHashMap::default();
+        for resolution in resolutions
+            .iter()
+            .filter(|resolution| resolution.kind == ResolutionKind::Build)
+        {
+            if let Some(package_id) = resolution.package_id.as_ref() {
+                build_resolution_package_ids.insert(package_id.clone());
+                build_resolution_contexts_by_package
+                    .entry(package_id.clone())
+                    .or_default()
+                    .insert(resolution.id.clone());
+            }
+        }
+        let build_resolution_members = build_resolution_members(&lock, &resolutions);
+        for package in &lock.packages {
+            if lock.supports_build_dependencies()
+                && package.build_dependency_packages.is_some()
+                && !build_resolution_package_ids.contains(&package.id)
+            {
+                let id = build_resolution_context_id(&build_key_from_package_id(&package.id));
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id,
+                    message: "package scoped build dependencies are missing a build resolution",
+                }
+                .into());
+            }
+            if lock.supports_build_dependencies()
+                && package.build_dependencies_resolved
+                && !build_resolution_package_ids.contains(&package.id)
+            {
+                let id = build_resolution_context_id(&build_key_from_package_id(&package.id));
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id,
+                    message: "package build-dependencies are missing a build resolution",
+                }
+                .into());
+            }
+            validate_dependency_resolution_contexts(&package.dependencies, &build_resolution_ids)?;
+            validate_dependency_resolution_context_ownership(
+                &package.id,
+                &package.dependencies,
+                &build_resolution_members,
+            )?;
+            for dependencies in package.optional_dependencies.values() {
+                validate_dependency_resolution_contexts(dependencies, &build_resolution_ids)?;
+                validate_dependency_resolution_context_ownership(
+                    &package.id,
+                    dependencies,
+                    &build_resolution_members,
+                )?;
+            }
+            for dependencies in package.dependency_groups.values() {
+                validate_dependency_resolution_contexts(dependencies, &build_resolution_ids)?;
+                validate_dependency_resolution_context_ownership(
+                    &package.id,
+                    dependencies,
+                    &build_resolution_members,
+                )?;
+            }
+            if let Some(build_dependency_packages) = &package.build_dependency_packages {
+                let build_resolution_contexts =
+                    build_resolution_contexts_by_package.get(&package.id);
+                let expected_build_resolution_context =
+                    build_resolution_context_id(&build_key_from_package_id(&package.id));
+                for (package_id, edges) in build_dependency_packages {
+                    validate_scoped_build_dependency_package_ownership(
+                        build_resolution_contexts,
+                        &expected_build_resolution_context,
+                        package_id,
+                        &build_resolution_members,
+                    )?;
+                    validate_dependency_resolution_contexts(
+                        &edges.dependencies,
+                        &build_resolution_ids,
+                    )?;
+                    validate_scoped_dependency_resolution_context_ownership(
+                        build_resolution_contexts,
+                        &edges.dependencies,
+                    )?;
+                    for dependencies in edges.optional_dependencies.values() {
+                        validate_dependency_resolution_contexts(
+                            dependencies,
+                            &build_resolution_ids,
+                        )?;
+                        validate_scoped_dependency_resolution_context_ownership(
+                            build_resolution_contexts,
+                            dependencies,
+                        )?;
+                    }
+                }
+            }
+        }
+        lock.resolutions = resolutions;
+        lock.resolutions
+            .retain(|resolution| resolution.kind == ResolutionKind::Build);
 
         Ok(lock)
     }
+}
+
+fn validate_dependency_resolution_contexts(
+    dependencies: &[Dependency],
+    build_resolution_ids: &FxHashSet<String>,
+) -> Result<(), LockError> {
+    for dependency in dependencies {
+        for context in &dependency.contexts {
+            if !build_resolution_ids.contains(context) {
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id: context.clone(),
+                    message: "dependency selector references an unknown build resolution",
+                }
+                .into());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn build_resolution_members(
+    lock: &Lock,
+    resolutions: &[ResolutionRecord],
+) -> FxHashMap<String, FxHashSet<PackageId>> {
+    let package_by_id = lock.package_by_id();
+    resolutions
+        .iter()
+        .filter_map(|resolution| {
+            if resolution.kind != ResolutionKind::Build {
+                return None;
+            }
+            let package_id = resolution.package_id.as_ref()?;
+            let package = package_by_id.get(package_id)?;
+            let members = lock
+                .build_dependency_package_ids_from(
+                    package,
+                    &resolution.dependencies,
+                    &package_by_id,
+                    None,
+                    None,
+                    Some(&resolution.id),
+                )
+                .unwrap_or_default()
+                .into_iter()
+                .collect::<FxHashSet<_>>();
+            Some((resolution.id.clone(), members))
+        })
+        .collect()
+}
+
+fn validate_dependency_resolution_context_ownership(
+    package_id: &PackageId,
+    dependencies: &[Dependency],
+    build_resolution_members: &FxHashMap<String, FxHashSet<PackageId>>,
+) -> Result<(), LockError> {
+    for dependency in dependencies {
+        for context in &dependency.contexts {
+            if !build_resolution_members
+                .get(context)
+                .is_some_and(|members| members.contains(package_id))
+            {
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id: context.clone(),
+                    message: "dependency selector references a build resolution that does not contain the package",
+                }
+                .into());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_scoped_build_dependency_package_ownership(
+    build_resolution_contexts: Option<&FxHashSet<String>>,
+    expected_build_resolution_context: &str,
+    package_id: &PackageId,
+    build_resolution_members: &FxHashMap<String, FxHashSet<PackageId>>,
+) -> Result<(), LockError> {
+    let Some(contexts) = build_resolution_contexts else {
+        return Err(LockErrorKind::InvalidResolutionRecord {
+            id: expected_build_resolution_context.to_string(),
+            message: "package scoped build dependencies are missing a build resolution",
+        }
+        .into());
+    };
+    if contexts.iter().any(|context| {
+        build_resolution_members
+            .get(context)
+            .is_some_and(|members| members.contains(package_id))
+    }) {
+        Ok(())
+    } else {
+        Err(LockErrorKind::InvalidResolutionRecord {
+            id: contexts
+                .iter()
+                .next()
+                .cloned()
+                .unwrap_or_else(|| expected_build_resolution_context.to_string()),
+            message:
+                "scoped build dependency package is not contained in the source package's build resolution",
+        }
+        .into())
+    }
+}
+
+fn validate_scoped_dependency_resolution_context_ownership(
+    build_resolution_contexts: Option<&FxHashSet<String>>,
+    dependencies: &[Dependency],
+) -> Result<(), LockError> {
+    let Some(contexts) = build_resolution_contexts else {
+        return Ok(());
+    };
+    for dependency in dependencies {
+        for context in &dependency.contexts {
+            if !contexts.contains(context) {
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id: context.clone(),
+                    message:
+                        "dependency selector references a build resolution outside the source package's scoped build graph",
+                }
+                .into());
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Like [`Lock`], but limited to the version field. Used for error reporting: by limiting parsing
@@ -3855,6 +5028,812 @@ impl LockVersion {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+struct ResolutionRecord {
+    id: String,
+    kind: ResolutionKind,
+    operation: Option<ResolutionOperation>,
+    mode: Option<ResolutionModeRecord>,
+    stage: Option<BuildResolutionStage>,
+    package_id: Option<PackageId>,
+    target: Option<TargetSelector>,
+    executor: Option<ExecutorSelector>,
+    dependencies: Vec<BuildDependency>,
+}
+
+impl ResolutionRecord {
+    fn runtime(id: String, target: TargetSelector) -> Self {
+        Self {
+            id,
+            kind: ResolutionKind::Runtime,
+            operation: None,
+            mode: None,
+            stage: None,
+            package_id: None,
+            target: Some(target),
+            executor: None,
+            dependencies: Vec::new(),
+        }
+    }
+
+    fn to_toml(&self, dist_count_by_name: &FxHashMap<PackageName, u64>) -> Table {
+        let mut table = Table::new();
+        table.insert("id", value(self.id.clone()));
+        table.insert("kind", value(self.kind.as_str()));
+        if let Some(operation) = self.operation {
+            table.insert("operation", value(operation.as_str()));
+        }
+        if let Some(mode) = self.mode {
+            table.insert("mode", value(mode.as_str()));
+        }
+        if let Some(stage) = self.stage {
+            table.insert("stage", value(stage.as_str()));
+        }
+        if let Some(package_id) = self.package_id.as_ref() {
+            package_id.to_toml(Some(dist_count_by_name), &mut table);
+        }
+        if let Some(target) = self.target.as_ref() {
+            table.insert("target", value(target.to_toml()));
+        }
+        if let Some(executor) = self.executor.as_ref() {
+            table.insert("executor", value(executor.to_toml()));
+        }
+
+        if !self.dependencies.is_empty() {
+            let dependencies = each_element_on_its_line_array(
+                self.dependencies
+                    .iter()
+                    .map(|dependency| dependency.to_toml(dist_count_by_name).into_inline_table()),
+            );
+            table.insert("roots", value(dependencies));
+        }
+
+        table
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum ResolutionKind {
+    Runtime,
+    Build,
+}
+
+impl ResolutionKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Runtime => "runtime",
+            Self::Build => "build",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum ResolutionOperation {
+    Wheel,
+}
+
+impl ResolutionOperation {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Wheel => "wheel",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum ResolutionModeRecord {
+    Isolated,
+}
+
+impl ResolutionModeRecord {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Isolated => "isolated",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum ResolutionStageRecord {
+    Bootstrap,
+    Build,
+}
+
+impl From<ResolutionStageRecord> for BuildResolutionStage {
+    fn from(stage: ResolutionStageRecord) -> Self {
+        match stage {
+            ResolutionStageRecord::Bootstrap => Self::Bootstrap,
+            ResolutionStageRecord::Build => Self::Build,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+struct TargetSelector {
+    #[serde(default)]
+    marker: Option<SimplifiedMarkerTree>,
+    #[serde(default)]
+    active: Vec<ResolutionActivation>,
+    #[serde(default)]
+    inactive: Vec<ResolutionActivation>,
+    #[serde(default, rename = "any-of", alias = "dnf")]
+    any_of: Option<Vec<TargetSelectorClause>>,
+}
+
+impl TargetSelector {
+    fn from_universal_marker(
+        marker: UniversalMarker,
+        requires_python: &RequiresPython,
+    ) -> Option<Self> {
+        if let Some(selector) = Self::from_flat_universal_marker(marker, requires_python) {
+            return Some(selector);
+        }
+        Self::from_expression(marker, requires_python)
+    }
+
+    fn from_flat_universal_marker(
+        marker: UniversalMarker,
+        requires_python: &RequiresPython,
+    ) -> Option<Self> {
+        let mut selector = Self::from_conflict_marker(marker.conflict())?;
+        let pep508 = SimplifiedMarkerTree::new(requires_python, marker.pep508());
+        if pep508.clone().try_to_string().is_some() {
+            selector.marker = Some(pep508);
+        }
+        if selector
+            .to_universal_marker(requires_python, "selector")
+            .ok()?
+            != marker
+        {
+            return None;
+        }
+        Some(selector)
+    }
+
+    fn from_conflict_marker(conflict_marker: ConflictMarker) -> Option<Self> {
+        if conflict_marker == ConflictMarker::FALSE {
+            return None;
+        }
+        let (active, inactive) = conflict_marker.filter_rules().ok()?;
+        let selector = Self {
+            marker: None,
+            active: active
+                .into_iter()
+                .map(ResolutionActivation::from_conflict_item)
+                .collect(),
+            inactive: inactive
+                .into_iter()
+                .map(ResolutionActivation::from_conflict_item)
+                .collect(),
+            any_of: None,
+        };
+        if selector.conflict_marker("selector").ok()? != conflict_marker {
+            return None;
+        }
+        Some(selector)
+    }
+
+    fn from_expression(marker: UniversalMarker, requires_python: &RequiresPython) -> Option<Self> {
+        let marker_tree = requires_python.simplify_markers(marker.combined());
+        let any_of = marker_tree
+            .to_dnf()
+            .into_iter()
+            .map(|clause| {
+                let all_of = clause
+                    .into_iter()
+                    .map(TargetSelectorTerm::from_marker_expression)
+                    .collect::<Vec<_>>();
+                TargetSelectorClause { all_of }
+            })
+            .collect::<Vec<_>>();
+        let selector = Self {
+            marker: None,
+            active: Vec::new(),
+            inactive: Vec::new(),
+            any_of: Some(any_of),
+        };
+        let reconstructed = selector
+            .to_universal_marker(requires_python, "selector")
+            .ok()?;
+        if !universal_markers_equivalent(reconstructed, marker) {
+            return None;
+        }
+        Some(selector)
+    }
+
+    fn to_universal_marker(
+        &self,
+        requires_python: &RequiresPython,
+        resolution_id: &str,
+    ) -> Result<UniversalMarker, LockError> {
+        if self.any_of.is_some() {
+            return Ok(UniversalMarker::from_combined(
+                requires_python.complexify_markers(
+                    self.expression_marker_tree(requires_python, resolution_id)?,
+                ),
+            ));
+        }
+
+        let pep508 = self
+            .marker
+            .clone()
+            .unwrap_or_default()
+            .into_marker(requires_python);
+        let mut conflict_marker = ConflictMarker::TRUE;
+        for item in &self.inactive {
+            conflict_marker = conflict_marker.and(
+                ConflictMarker::from_conflict_item(&item.to_conflict_item(resolution_id)?).negate(),
+            );
+        }
+        for item in &self.active {
+            conflict_marker = conflict_marker.and(ConflictMarker::from_conflict_item(
+                &item.to_conflict_item(resolution_id)?,
+            ));
+        }
+        Ok(UniversalMarker::new(pep508, conflict_marker))
+    }
+
+    fn conflict_marker(&self, resolution_id: &str) -> Result<ConflictMarker, LockError> {
+        if self.any_of.is_some() {
+            return Err(LockErrorKind::InvalidResolutionRecord {
+                id: resolution_id.to_string(),
+                message: "selector expression cannot be reduced to a flat conflict marker",
+            }
+            .into());
+        }
+
+        let mut conflict_marker = ConflictMarker::TRUE;
+        for item in &self.inactive {
+            conflict_marker = conflict_marker.and(
+                ConflictMarker::from_conflict_item(&item.to_conflict_item(resolution_id)?).negate(),
+            );
+        }
+        for item in &self.active {
+            conflict_marker = conflict_marker.and(ConflictMarker::from_conflict_item(
+                &item.to_conflict_item(resolution_id)?,
+            ));
+        }
+        Ok(conflict_marker)
+    }
+
+    fn has_conflict_items(&self) -> bool {
+        !self.active.is_empty() || !self.inactive.is_empty() || self.any_of.is_some()
+    }
+
+    fn has_expression(&self) -> bool {
+        self.any_of.is_some()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.marker.is_none()
+            && self.active.is_empty()
+            && self.inactive.is_empty()
+            && self.any_of.is_none()
+    }
+
+    fn expression_marker_tree(
+        &self,
+        requires_python: &RequiresPython,
+        resolution_id: &str,
+    ) -> Result<MarkerTree, LockError> {
+        if self.marker.is_some() || !self.active.is_empty() || !self.inactive.is_empty() {
+            return Err(LockErrorKind::InvalidResolutionRecord {
+                id: resolution_id.to_string(),
+                message: "selector expression cannot be combined with marker, active, or inactive",
+            }
+            .into());
+        }
+
+        let Some(any_of) = self.any_of.as_ref() else {
+            return Err(LockErrorKind::InvalidResolutionRecord {
+                id: resolution_id.to_string(),
+                message: "selector expression is missing any-of",
+            }
+            .into());
+        };
+        let mut marker = MarkerTree::FALSE;
+        for clause in any_of {
+            let mut clause_marker = MarkerTree::TRUE;
+            for term in &clause.all_of {
+                clause_marker.and(term.to_marker_tree(resolution_id)?);
+            }
+            marker.or(clause_marker);
+        }
+        Ok(requires_python.simplify_markers(marker))
+    }
+
+    fn validate_activations(
+        &self,
+        package_names: &FxHashSet<PackageName>,
+        resolution_id: &str,
+    ) -> Result<(), LockError> {
+        for activation in self.active.iter().chain(&self.inactive) {
+            activation.validate(package_names, resolution_id)?;
+        }
+        if let Some(any_of) = self.any_of.as_ref() {
+            for clause in any_of {
+                clause.validate_activations(package_names, resolution_id)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn to_toml(&self) -> InlineTable {
+        let mut table = InlineTable::new();
+        if let Some(any_of) = self.any_of.as_ref() {
+            table.insert(
+                "any-of",
+                Value::from(each_element_on_its_line_array(
+                    any_of.iter().map(TargetSelectorClause::to_toml),
+                )),
+            );
+            return table;
+        }
+
+        if let Some(marker) = self
+            .marker
+            .clone()
+            .and_then(SimplifiedMarkerTree::try_to_string)
+        {
+            table.insert("marker", Value::from(marker));
+        }
+        if !self.active.is_empty() {
+            table.insert(
+                "active",
+                Value::from(each_element_on_its_line_array(
+                    self.active.iter().map(ResolutionActivation::to_toml),
+                )),
+            );
+        }
+        if !self.inactive.is_empty() {
+            table.insert(
+                "inactive",
+                Value::from(each_element_on_its_line_array(
+                    self.inactive.iter().map(ResolutionActivation::to_toml),
+                )),
+            );
+        }
+        table
+    }
+}
+
+fn universal_markers_equivalent(left: UniversalMarker, right: UniversalMarker) -> bool {
+    marker_trees_equivalent(left.combined(), right.combined())
+        && marker_trees_equivalent(left.pep508(), right.pep508())
+}
+
+fn marker_trees_equivalent(left: MarkerTree, right: MarkerTree) -> bool {
+    if left == right || left.try_to_string() == right.try_to_string() {
+        return true;
+    }
+    let mut left_implies_right = left;
+    left_implies_right.implies(right);
+    let mut right_implies_left = right;
+    right_implies_left.implies(left);
+    left_implies_right.is_true() && right_implies_left.is_true()
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+struct TargetSelectorClause {
+    #[serde(default, rename = "all-of", alias = "all")]
+    all_of: Vec<TargetSelectorTerm>,
+}
+
+impl TargetSelectorClause {
+    fn validate_activations(
+        &self,
+        package_names: &FxHashSet<PackageName>,
+        resolution_id: &str,
+    ) -> Result<(), LockError> {
+        for term in &self.all_of {
+            term.validate_activations(package_names, resolution_id)?;
+        }
+        Ok(())
+    }
+
+    fn to_toml(&self) -> InlineTable {
+        let mut table = InlineTable::new();
+        table.insert(
+            "all-of",
+            Value::from(each_element_on_its_line_array(
+                self.all_of.iter().map(TargetSelectorTerm::to_toml),
+            )),
+        );
+        table
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+struct TargetSelectorTerm {
+    #[serde(default)]
+    marker: Option<String>,
+    #[serde(default)]
+    active: Option<ResolutionActivation>,
+    #[serde(default)]
+    inactive: Option<ResolutionActivation>,
+}
+
+impl TargetSelectorTerm {
+    fn from_marker_expression(expression: MarkerExpression) -> Self {
+        match &expression {
+            MarkerExpression::Extra { name, operator } => {
+                let Some(extra) = name.as_extra() else {
+                    return Self {
+                        marker: Some(expression.to_string()),
+                        active: None,
+                        inactive: None,
+                    };
+                };
+                let Ok(item) = ConflictMarker::decode_extra(extra) else {
+                    return Self {
+                        marker: Some(expression.to_string()),
+                        active: None,
+                        inactive: None,
+                    };
+                };
+                let activation = ResolutionActivation::from_conflict_item(item);
+                match operator {
+                    ExtraOperator::Equal => Self {
+                        marker: None,
+                        active: Some(activation),
+                        inactive: None,
+                    },
+                    ExtraOperator::NotEqual => Self {
+                        marker: None,
+                        active: None,
+                        inactive: Some(activation),
+                    },
+                }
+            }
+            expression => Self {
+                marker: Some(expression.to_string()),
+                active: None,
+                inactive: None,
+            },
+        }
+    }
+
+    fn to_marker_tree(&self, resolution_id: &str) -> Result<MarkerTree, LockError> {
+        match (&self.marker, &self.active, &self.inactive) {
+            (Some(marker), None, None) => {
+                let expression = MarkerExpression::from_str(marker)
+                    .map_err(|err| LockErrorKind::InvalidMarker {
+                        marker: marker.clone(),
+                        err,
+                    })?
+                    .ok_or_else(|| LockErrorKind::InvalidResolutionRecord {
+                        id: resolution_id.to_string(),
+                        message: "selector marker term does not contain a marker expression",
+                    })?;
+                Ok(MarkerTree::expression(expression))
+            }
+            (None, Some(active), None) => Ok(UniversalMarker::new(
+                MarkerTree::TRUE,
+                ConflictMarker::from_conflict_item(&active.to_conflict_item(resolution_id)?),
+            )
+            .combined()),
+            (None, None, Some(inactive)) => Ok(UniversalMarker::new(
+                MarkerTree::TRUE,
+                ConflictMarker::from_conflict_item(&inactive.to_conflict_item(resolution_id)?)
+                    .negate(),
+            )
+            .combined()),
+            _ => Err(LockErrorKind::InvalidResolutionRecord {
+                id: resolution_id.to_string(),
+                message: "selector term must specify exactly one of marker, active, or inactive",
+            }
+            .into()),
+        }
+    }
+
+    fn validate_activations(
+        &self,
+        package_names: &FxHashSet<PackageName>,
+        resolution_id: &str,
+    ) -> Result<(), LockError> {
+        if let Some(active) = self.active.as_ref() {
+            active.validate(package_names, resolution_id)?;
+        }
+        if let Some(inactive) = self.inactive.as_ref() {
+            inactive.validate(package_names, resolution_id)?;
+        }
+        Ok(())
+    }
+
+    fn to_toml(&self) -> InlineTable {
+        let mut table = InlineTable::new();
+        if let Some(marker) = &self.marker {
+            table.insert("marker", Value::from(marker.as_str()));
+        }
+        if let Some(active) = &self.active {
+            table.insert("active", Value::from(active.to_toml()));
+        }
+        if let Some(inactive) = &self.inactive {
+            table.insert("inactive", Value::from(inactive.to_toml()));
+        }
+        table
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+struct ResolutionActivation {
+    package: PackageName,
+    #[serde(default)]
+    extra: Option<ExtraName>,
+    #[serde(default)]
+    group: Option<GroupName>,
+}
+
+impl ResolutionActivation {
+    fn from_conflict_item(item: ConflictItem) -> Self {
+        let package = item.package().clone();
+        match item.kind() {
+            ConflictKind::Project => Self {
+                package,
+                extra: None,
+                group: None,
+            },
+            ConflictKind::Extra(extra) => Self {
+                package,
+                extra: Some(extra.clone()),
+                group: None,
+            },
+            ConflictKind::Group(group) => Self {
+                package,
+                extra: None,
+                group: Some(group.clone()),
+            },
+        }
+    }
+
+    fn to_conflict_item(&self, resolution_id: &str) -> Result<ConflictItem, LockError> {
+        match (&self.extra, &self.group) {
+            (Some(extra), None) => Ok(ConflictItem::from((self.package.clone(), extra.clone()))),
+            (None, Some(group)) => Ok(ConflictItem::from((self.package.clone(), group.clone()))),
+            (None, None) => Ok(ConflictItem::from(self.package.clone())),
+            (Some(_), Some(_)) => Err(LockErrorKind::InvalidResolutionRecord {
+                id: resolution_id.to_string(),
+                message: "selector entry cannot specify both extra and group",
+            }
+            .into()),
+        }
+    }
+
+    fn validate(
+        &self,
+        package_names: &FxHashSet<PackageName>,
+        resolution_id: &str,
+    ) -> Result<(), LockError> {
+        if package_names.contains(&self.package) {
+            Ok(())
+        } else {
+            Err(LockErrorKind::InvalidResolutionRecord {
+                id: resolution_id.to_string(),
+                message: "selector activation references an unknown package",
+            }
+            .into())
+        }
+    }
+
+    fn to_toml(&self) -> InlineTable {
+        let mut table = InlineTable::new();
+        table.insert("package", Value::from(self.package.to_string()));
+        if let Some(extra) = &self.extra {
+            table.insert("extra", Value::from(extra.to_string()));
+        }
+        if let Some(group) = &self.group {
+            table.insert("group", Value::from(group.to_string()));
+        }
+        table
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+struct PackageSelectorWire {
+    target: PackageSelectorTargetWire,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(untagged)]
+enum PackageSelectorTargetWire {
+    Resolution(String),
+    Target(TargetSelector),
+}
+
+impl PackageSelectorWire {
+    fn to_toml_resolution(target: &str) -> InlineTable {
+        let mut table = InlineTable::new();
+        table.insert("target", Value::from(target));
+        table
+    }
+
+    fn to_toml_target(target: &TargetSelector) -> InlineTable {
+        let mut table = InlineTable::new();
+        table.insert("target", Value::from(target.to_toml()));
+        table
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+struct ExecutorSelector {
+    #[serde(default)]
+    marker: Option<SimplifiedMarkerTree>,
+    #[serde(default)]
+    python: Option<Version>,
+}
+
+impl ExecutorSelector {
+    fn from_marker_environment(
+        markers: &MarkerEnvironment,
+        python: Version,
+        requires_python: &RequiresPython,
+    ) -> Result<Self, LockError> {
+        let marker = marker_environment_marker(markers);
+        let marker = marker
+            .parse::<MarkerTree>()
+            .map_err(|err| LockErrorKind::InvalidMarker { marker, err })?;
+        Ok(Self {
+            marker: Some(SimplifiedMarkerTree::new(requires_python, marker)),
+            python: Some(python),
+        })
+    }
+
+    fn validate(&self, resolution_id: &str) -> Result<(), LockError> {
+        if self.marker.is_none() && self.python.is_none() {
+            Err(LockErrorKind::InvalidResolutionRecord {
+                id: resolution_id.to_string(),
+                message: "executor selector must declare marker or python",
+            }
+            .into())
+        } else {
+            Ok(())
+        }
+    }
+
+    fn to_toml(&self) -> InlineTable {
+        let mut table = InlineTable::new();
+        if let Some(marker) = self
+            .marker
+            .clone()
+            .and_then(SimplifiedMarkerTree::try_to_string)
+        {
+            table.insert("marker", Value::from(marker));
+        }
+        if let Some(python) = &self.python {
+            table.insert("python", Value::from(python.to_string()));
+        }
+        table
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+struct DependencySelectorWire {
+    #[serde(default)]
+    resolution: Option<String>,
+    #[serde(default)]
+    resolutions: BTreeSet<String>,
+    #[serde(default)]
+    target: Option<TargetSelector>,
+}
+
+impl DependencySelectorWire {
+    fn resolution_contexts(&self) -> BTreeSet<String> {
+        self.resolution
+            .iter()
+            .cloned()
+            .chain(self.resolutions.iter().cloned())
+            .collect()
+    }
+
+    fn to_toml(contexts: &BTreeSet<String>, target: Option<&TargetSelector>) -> InlineTable {
+        let mut table = InlineTable::new();
+        if contexts.len() == 1 {
+            if let Some(context) = contexts.iter().next() {
+                table.insert("resolution", Value::from(context.as_str()));
+            }
+        } else if !contexts.is_empty() {
+            table.insert(
+                "resolutions",
+                Value::from(Array::from_iter(contexts.iter().cloned())),
+            );
+        }
+        if let Some(target) = target {
+            table.insert("target", Value::from(target.to_toml()));
+        }
+        table
+    }
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+struct ResolutionRecordWire {
+    id: String,
+    kind: ResolutionKind,
+    #[serde(default)]
+    operation: Option<ResolutionOperation>,
+    #[serde(default)]
+    mode: Option<ResolutionModeRecord>,
+    #[serde(default)]
+    stage: Option<ResolutionStageRecord>,
+    #[serde(default)]
+    name: Option<PackageName>,
+    #[serde(default)]
+    version: Option<Version>,
+    #[serde(default)]
+    source: Option<Source>,
+    #[serde(default)]
+    target: Option<TargetSelector>,
+    #[serde(default)]
+    executor: Option<ExecutorSelector>,
+    #[serde(default, rename = "roots")]
+    dependencies: Vec<BuildDependencyWire>,
+}
+
+impl ResolutionRecordWire {
+    fn runtime_marker(
+        &self,
+        requires_python: &RequiresPython,
+    ) -> Result<UniversalMarker, LockError> {
+        let Some(target) = self.target.as_ref() else {
+            return Err(LockErrorKind::InvalidResolutionRecord {
+                id: self.id.clone(),
+                message: "runtime resolution is missing a target selector",
+            }
+            .into());
+        };
+        target.to_universal_marker(requires_python, &self.id)
+    }
+
+    fn unwire(
+        self,
+        unambiguous_package_ids: &UnambiguousPackageIds,
+    ) -> Result<ResolutionRecord, LockError> {
+        let package_id = self
+            .name
+            .map(|name| PackageIdForDependency {
+                name,
+                version: self.version,
+                source: self.source,
+                resolution_id: None,
+            })
+            .map(|package_id| package_id.unwire(unambiguous_package_ids))
+            .transpose()?;
+        Ok(ResolutionRecord {
+            id: self.id,
+            kind: self.kind,
+            operation: self.operation,
+            mode: self.mode,
+            stage: match self.kind {
+                ResolutionKind::Runtime => self.stage.map(BuildResolutionStage::from),
+                ResolutionKind::Build => Some(
+                    self.stage
+                        .map(BuildResolutionStage::from)
+                        .unwrap_or(BuildResolutionStage::Build),
+                ),
+            },
+            package_id,
+            target: self.target,
+            executor: self.executor,
+            dependencies: self
+                .dependencies
+                .into_iter()
+                .map(|dependency| dependency.unwire(unambiguous_package_ids))
+                .collect::<Result<_, _>>()?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Package {
     pub(crate) id: PackageId,
     sdist: Option<SourceDist>,
@@ -3863,7 +5842,8 @@ pub struct Package {
     /// the fork(s) that contained this version or source, so we can set the correct preferences in
     /// the next resolution.
     ///
-    /// Named `resolution-markers` in `uv.lock`.
+    /// Serialized as typed resolution selectors in new lockfiles, with
+    /// `resolution-markers` accepted for compatibility and fallback cases.
     fork_markers: Vec<UniversalMarker>,
     /// The resolved dependencies of the package.
     dependencies: Vec<Dependency>,
@@ -3940,6 +5920,7 @@ impl Package {
             name,
             version,
             source,
+            resolution_id: None,
         };
 
         let ResolvedDist::Installable { dist, .. } = resolved_dist else {
@@ -4581,17 +6562,37 @@ impl Package {
         &self,
         requires_python: &RequiresPython,
         dist_count_by_name: &FxHashMap<PackageName, u64>,
+        runtime_resolution_ids: &FxHashMap<UniversalMarker, String>,
     ) -> Result<Table, toml_edit::ser::Error> {
         let mut table = Table::new();
 
         self.id.to_toml(None, &mut table);
 
         if !self.fork_markers.is_empty() {
-            let fork_markers = each_element_on_its_line_array(
-                simplified_universal_markers(&self.fork_markers, requires_python).into_iter(),
-            );
-            if !fork_markers.is_empty() {
-                table.insert("resolution-markers", value(fork_markers));
+            let mut legacy_fork_markers = Vec::new();
+            let selectors =
+                each_element_on_its_line_array(self.fork_markers.iter().filter_map(|marker| {
+                    if let Some(id) = runtime_resolution_ids.get(marker) {
+                        Some(PackageSelectorWire::to_toml_resolution(id))
+                    } else if let Some(target) =
+                        TargetSelector::from_universal_marker(*marker, requires_python)
+                    {
+                        Some(PackageSelectorWire::to_toml_target(&target))
+                    } else {
+                        legacy_fork_markers.push(*marker);
+                        None
+                    }
+                }));
+            if !selectors.is_empty() {
+                table.insert("selectors", value(selectors));
+            }
+            if !legacy_fork_markers.is_empty() {
+                let fork_markers = each_element_on_its_line_array(
+                    simplified_universal_markers(&legacy_fork_markers, requires_python).into_iter(),
+                );
+                if !fork_markers.is_empty() {
+                    table.insert("resolution-markers", value(fork_markers));
+                }
             }
         }
 
@@ -4646,17 +6647,6 @@ impl Package {
                 )
             };
             table.insert("build-dependencies", value(deps));
-        }
-
-        if let Some(build_dependency_packages) = &self.build_dependency_packages {
-            let packages = each_element_on_its_line_array(build_dependency_packages.iter().map(
-                |(package_id, edges)| {
-                    edges
-                        .to_toml(package_id, requires_python, dist_count_by_name)
-                        .into_inline_table()
-                },
-            ));
-            table.insert("build-dependency-packages", value(packages));
         }
 
         if let Some(ref sdist) = self.sdist {
@@ -4949,6 +6939,8 @@ struct PackageWire {
     #[serde(default, rename = "resolution-markers")]
     fork_markers: Vec<SimplifiedMarkerTree>,
     #[serde(default)]
+    selectors: Vec<PackageSelectorWire>,
+    #[serde(default)]
     dependencies: Vec<DependencyWire>,
     #[serde(default)]
     optional_dependencies: BTreeMap<ExtraName, Vec<DependencyWire>>,
@@ -5011,7 +7003,9 @@ impl PackageWire {
     fn unwire(
         self,
         requires_python: &RequiresPython,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        unambiguous_package_ids: &UnambiguousPackageIds,
+        runtime_markers_by_id: &FxHashMap<String, UniversalMarker>,
+        package_names: &FxHashSet<PackageName>,
     ) -> Result<Package, LockError> {
         // Consistency check
         if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
@@ -5034,7 +7028,7 @@ impl PackageWire {
 
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
-                .map(|dep| dep.unwire(requires_python, unambiguous_package_ids))
+                .map(|dep| dep.unwire(requires_python, unambiguous_package_ids, package_names))
                 .collect()
         };
         let build_dependencies_resolved = self.build_dependencies.is_some();
@@ -5049,22 +7043,47 @@ impl PackageWire {
             .map(|packages| {
                 packages
                     .into_iter()
-                    .map(|package| package.unwire(requires_python, unambiguous_package_ids))
+                    .map(|package| {
+                        package.unwire(requires_python, unambiguous_package_ids, package_names)
+                    })
                     .collect::<Result<BTreeMap<_, _>, _>>()
             })
             .transpose()?;
+
+        let mut fork_markers = self
+            .fork_markers
+            .into_iter()
+            .map(|simplified_marker| simplified_marker.into_marker(requires_python))
+            .map(UniversalMarker::from_combined)
+            .collect::<Vec<_>>();
+        for selector in self.selectors {
+            match selector.target {
+                PackageSelectorTargetWire::Resolution(target) => {
+                    let Some(marker) = runtime_markers_by_id.get(&target) else {
+                        return Err(LockErrorKind::InvalidResolutionRecord {
+                            id: target,
+                            message: "package selector references an unknown runtime resolution",
+                        }
+                        .into());
+                    };
+                    fork_markers.push(*marker);
+                }
+                PackageSelectorTargetWire::Target(target) => {
+                    target.validate_activations(package_names, "package selector")?;
+                    fork_markers
+                        .push(target.to_universal_marker(requires_python, "package selector")?);
+                }
+            }
+        }
+        fork_markers.sort();
+        fork_markers.dedup();
 
         Ok(Package {
             id: self.id,
             metadata: self.metadata,
             sdist: self.sdist,
             wheels: self.wheels,
-            fork_markers: self
-                .fork_markers
-                .into_iter()
-                .map(|simplified_marker| simplified_marker.into_marker(requires_python))
-                .map(UniversalMarker::from_combined)
-                .collect(),
+            fork_markers,
             dependencies: unwire_deps(self.dependencies)?,
             optional_dependencies: self
                 .optional_dependencies
@@ -5091,6 +7110,8 @@ pub(crate) struct PackageId {
     pub(crate) name: PackageName,
     version: Option<Version>,
     source: Source,
+    #[serde(default, rename = "resolution-id")]
+    resolution_id: Option<String>,
 }
 
 impl PackageId {
@@ -5113,7 +7134,26 @@ impl PackageId {
             name,
             version,
             source,
+            resolution_id: None,
         })
+    }
+
+    fn scoped(&self, resolution_id: String) -> Self {
+        Self {
+            name: self.name.clone(),
+            version: self.version.clone(),
+            source: self.source.clone(),
+            resolution_id: Some(resolution_id),
+        }
+    }
+
+    fn unscoped(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            version: self.version.clone(),
+            source: self.source.clone(),
+            resolution_id: None,
+        }
     }
 
     /// Writes this package ID inline into the table given.
@@ -5125,18 +7165,31 @@ impl PackageId {
     fn to_toml(&self, dist_count_by_name: Option<&FxHashMap<PackageName, u64>>, table: &mut Table) {
         let count = dist_count_by_name.and_then(|map| map.get(&self.name).copied());
         table.insert("name", value(self.name.to_string()));
-        if count.map(|count| count > 1).unwrap_or(true) {
+        if self.resolution_id.is_some() || count.map(|count| count > 1).unwrap_or(true) {
             if let Some(version) = &self.version {
                 table.insert("version", value(version.to_string()));
             }
             self.source.to_toml(table);
+        }
+        if let Some(resolution_id) = &self.resolution_id {
+            table.insert("resolution-id", value(resolution_id.clone()));
         }
     }
 }
 
 impl Display for PackageId {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if let Some(version) = &self.version {
+        if let Some(resolution_id) = &self.resolution_id {
+            if let Some(version) = &self.version {
+                write!(
+                    f,
+                    "{}=={} @ {} ({resolution_id})",
+                    self.name, version, self.source
+                )
+            } else {
+                write!(f, "{} @ {} ({resolution_id})", self.name, self.source)
+            }
+        } else if let Some(version) = &self.version {
             write!(f, "{}=={} @ {}", self.name, version, self.source)
         } else {
             write!(f, "{} @ {}", self.name, self.source)
@@ -5150,14 +7203,17 @@ struct PackageIdForDependency {
     name: PackageName,
     version: Option<Version>,
     source: Option<Source>,
+    #[serde(default, rename = "resolution-id")]
+    resolution_id: Option<String>,
 }
 
 impl PackageIdForDependency {
     fn unwire(
         self,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        unambiguous_package_ids: &UnambiguousPackageIds,
     ) -> Result<PackageId, LockError> {
-        let unambiguous_package_id = unambiguous_package_ids.get(&self.name);
+        let lookup_key = (self.name.clone(), self.resolution_id.clone());
+        let unambiguous_package_id = unambiguous_package_ids.get(&lookup_key);
         let source = self.source.map(Ok::<_, LockError>).unwrap_or_else(|| {
             let Some(package_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencySource {
@@ -5189,6 +7245,7 @@ impl PackageIdForDependency {
             name: self.name,
             version,
             source,
+            resolution_id: self.resolution_id,
         })
     }
 }
@@ -5199,6 +7256,7 @@ impl From<PackageId> for PackageIdForDependency {
             name: id.name,
             version: id.version,
             source: Some(id.source),
+            resolution_id: id.resolution_id,
         }
     }
 }
@@ -6737,11 +8795,15 @@ impl BuildDependency {
         if let Some(version) = &self.package_id.version {
             table.insert("version", value(version.to_string()));
         }
-        if dist_count_by_name
-            .get(&self.package_id.name)
-            .is_some_and(|count| *count > 1)
+        if self.package_id.resolution_id.is_some()
+            || dist_count_by_name
+                .get(&self.package_id.name)
+                .is_some_and(|count| *count > 1)
         {
             self.package_id.source.to_toml(&mut table);
+        }
+        if let Some(resolution_id) = &self.package_id.resolution_id {
+            table.insert("resolution-id", value(resolution_id.clone()));
         }
         if !self.extras.is_empty() {
             let extra_array = self
@@ -6792,48 +8854,6 @@ struct BuildDependencyEdges {
     optional_dependencies: BTreeMap<ExtraName, Vec<Dependency>>,
 }
 
-impl BuildDependencyEdges {
-    fn to_toml(
-        &self,
-        package_id: &PackageId,
-        requires_python: &RequiresPython,
-        dist_count_by_name: &FxHashMap<PackageName, u64>,
-    ) -> Table {
-        let mut table = Table::new();
-        package_id.to_toml(Some(dist_count_by_name), &mut table);
-
-        if !self.dependencies.is_empty() {
-            let dependencies =
-                each_element_on_its_line_array(self.dependencies.iter().map(|dependency| {
-                    dependency
-                        .to_toml(requires_python, dist_count_by_name)
-                        .into_inline_table()
-                }));
-            table.insert("dependencies", value(dependencies));
-        }
-
-        if !self.optional_dependencies.is_empty() {
-            let mut optional_dependencies = Table::new();
-            for (extra, dependencies) in &self.optional_dependencies {
-                let dependencies =
-                    each_element_on_its_line_array(dependencies.iter().map(|dependency| {
-                        dependency
-                            .to_toml(requires_python, dist_count_by_name)
-                            .into_inline_table()
-                    }));
-                if !dependencies.is_empty() {
-                    optional_dependencies.insert(extra.as_ref(), value(dependencies));
-                }
-            }
-            if !optional_dependencies.is_empty() {
-                table.insert("optional-dependencies", Item::Table(optional_dependencies));
-            }
-        }
-
-        table
-    }
-}
-
 /// Wire format for dependency edges scoped to one isolated build environment.
 #[derive(Clone, Debug, serde::Deserialize)]
 struct BuildDependencyEdgesWire {
@@ -6849,13 +8869,16 @@ impl BuildDependencyEdgesWire {
     fn unwire(
         self,
         requires_python: &RequiresPython,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        unambiguous_package_ids: &UnambiguousPackageIds,
+        package_names: &FxHashSet<PackageName>,
     ) -> Result<(PackageId, BuildDependencyEdges), LockError> {
         let unwire_dependencies =
             |dependencies: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
                 dependencies
                     .into_iter()
-                    .map(|dependency| dependency.unwire(requires_python, unambiguous_package_ids))
+                    .map(|dependency| {
+                        dependency.unwire(requires_python, unambiguous_package_ids, package_names)
+                    })
                     .collect()
             };
         Ok((
@@ -6888,7 +8911,7 @@ struct BuildDependencyWire {
 impl BuildDependencyWire {
     fn unwire(
         self,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        unambiguous_package_ids: &UnambiguousPackageIds,
     ) -> Result<BuildDependency, LockError> {
         let marker_str = self.marker;
         let marker = marker_str
@@ -6924,6 +8947,7 @@ impl From<&BuildDependency> for BuildDependencyWire {
 pub struct Dependency {
     package_id: PackageId,
     extra: BTreeSet<ExtraName>,
+    contexts: BTreeSet<String>,
     /// A marker simplified from the PEP 508 marker in `complexified_marker`
     /// by assuming `requires-python` is satisfied. So if
     /// `requires-python = '>=3.8'`, then
@@ -6963,6 +8987,7 @@ impl Dependency {
         Self {
             package_id,
             extra,
+            contexts: BTreeSet::new(),
             simplified_marker,
             complexified_marker: UniversalMarker::from_combined(complexified_marker),
         }
@@ -6987,7 +9012,7 @@ impl Dependency {
     /// Returns the TOML representation of this dependency.
     fn to_toml(
         &self,
-        _requires_python: &RequiresPython,
+        requires_python: &RequiresPython,
         dist_count_by_name: &FxHashMap<PackageName, u64>,
     ) -> Table {
         let mut table = Table::new();
@@ -7001,11 +9026,55 @@ impl Dependency {
                 .collect::<Array>();
             table.insert("extra", value(extra_array));
         }
-        if let Some(marker) = self.simplified_marker.try_to_string() {
-            table.insert("marker", value(marker));
+        if let Some((pep508_marker, target)) = self.target_selector(requires_python) {
+            if let Some(marker) = pep508_marker.try_to_string() {
+                table.insert("marker", value(marker));
+            }
+            if !self.contexts.is_empty() || target.has_conflict_items() {
+                table.insert(
+                    "selector",
+                    value(DependencySelectorWire::to_toml(
+                        &self.contexts,
+                        target.has_conflict_items().then_some(&target),
+                    )),
+                );
+            }
+        } else {
+            if let Some(marker) = self.simplified_marker.try_to_string() {
+                table.insert("marker", value(marker));
+            }
+            if !self.contexts.is_empty() {
+                table.insert(
+                    "contexts",
+                    value(Array::from_iter(self.contexts.iter().cloned())),
+                );
+            }
         }
 
         table
+    }
+
+    fn target_selector(
+        &self,
+        requires_python: &RequiresPython,
+    ) -> Option<(SimplifiedMarkerTree, TargetSelector)> {
+        if let Some(target) =
+            TargetSelector::from_conflict_marker(self.complexified_marker.conflict())
+        {
+            let pep508_marker =
+                SimplifiedMarkerTree::new(requires_python, self.complexified_marker.pep508());
+            let recombined = UniversalMarker::new(
+                pep508_marker.clone().into_marker(requires_python),
+                target.conflict_marker("dependency selector").ok()?,
+            );
+            if recombined == self.complexified_marker {
+                return Some((pep508_marker, target));
+            }
+        }
+
+        let target =
+            TargetSelector::from_universal_marker(self.complexified_marker, requires_python)?;
+        Some((SimplifiedMarkerTree::default(), target))
     }
 
     /// Returns the package name of this dependency.
@@ -7016,6 +9085,11 @@ impl Dependency {
     /// Returns the extras specified on this dependency.
     pub fn extra(&self) -> &BTreeSet<ExtraName> {
         &self.extra
+    }
+
+    /// Returns `true` if this dependency edge participates in runtime traversal.
+    pub fn is_runtime_edge(&self) -> bool {
+        self.contexts.is_empty()
     }
 }
 
@@ -7042,7 +9116,7 @@ impl Display for Dependency {
 }
 
 /// A single dependency of a package in a lockfile.
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct DependencyWire {
     #[serde(flatten)]
@@ -7050,21 +9124,51 @@ struct DependencyWire {
     #[serde(default)]
     extra: BTreeSet<ExtraName>,
     #[serde(default)]
+    contexts: BTreeSet<String>,
+    #[serde(default)]
     marker: SimplifiedMarkerTree,
+    #[serde(default)]
+    selector: Option<DependencySelectorWire>,
 }
 
 impl DependencyWire {
     fn unwire(
         self,
         requires_python: &RequiresPython,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        unambiguous_package_ids: &UnambiguousPackageIds,
+        package_names: &FxHashSet<PackageName>,
     ) -> Result<Dependency, LockError> {
-        let complexified_marker = self.marker.into_marker(requires_python);
+        let mut contexts = self.contexts;
+        let complexified_marker = if let Some(selector) = self.selector {
+            contexts.extend(selector.resolution_contexts());
+            if let Some(target) = selector.target.as_ref() {
+                target.validate_activations(package_names, "dependency selector")?;
+                if target.has_expression() {
+                    let mut marker = self.marker.as_simplified_marker_tree();
+                    marker.and(
+                        target.expression_marker_tree(requires_python, "dependency selector")?,
+                    );
+                    UniversalMarker::from_combined(requires_python.complexify_markers(marker))
+                } else {
+                    UniversalMarker::new(
+                        self.marker.into_marker(requires_python),
+                        target.conflict_marker("dependency selector")?,
+                    )
+                }
+            } else {
+                UniversalMarker::from_combined(self.marker.into_marker(requires_python))
+            }
+        } else {
+            UniversalMarker::from_combined(self.marker.into_marker(requires_python))
+        };
+        let simplified_marker =
+            SimplifiedMarkerTree::new(requires_python, complexified_marker.combined());
         Ok(Dependency {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
             extra: self.extra,
-            simplified_marker: self.marker,
-            complexified_marker: UniversalMarker::from_combined(complexified_marker),
+            contexts,
+            simplified_marker,
+            complexified_marker,
         })
     }
 }
@@ -7812,6 +9916,14 @@ enum LockErrorKind {
         #[source]
         err: uv_pep508::Pep508Error,
     },
+    /// An error that occurs when a typed resolution record is malformed.
+    #[error("Invalid resolution record `{id}`: {message}")]
+    InvalidResolutionRecord {
+        /// The ID of the malformed resolution record.
+        id: String,
+        /// The parse error.
+        message: &'static str,
+    },
     /// An error that occurs when multiple packages with the same
     /// ID were found.
     #[error("Found duplicate package `{id}`", id = id.cyan())]
@@ -8521,9 +10633,1343 @@ mod tests {
                 .replace("                build_dependencies: [],\n", "")
                 .replace("                build_dependency_packages: None,\n", "")
                 .replace("                build_dependencies_resolved: false,\n", "")
-                .replace("                    build_requires: None,\n", "");
+                .replace("                        contexts: {},\n", "")
+                .replace("        resolutions: [],\n", "")
+                .replace("                    build_requires: None,\n", "")
+                .replace("            build_settings: None,\n", "");
             insta::assert_snapshot!(expr);
         }};
+    }
+
+    #[test]
+    fn runtime_resolution_selector_round_trip() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:linux-foo"
+kind = "runtime"
+target = { active = [{ package = "project", extra = "foo" }] }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+selectors = [{ target = "runtime:linux-foo" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+"#;
+        let lock = toml::from_str::<Lock>(data).unwrap();
+        let serialized = lock.to_toml().unwrap();
+
+        assert!(serialized.contains(r#"id = "runtime:0""#), "{serialized}");
+        assert!(serialized.contains(r#"kind = "runtime""#), "{serialized}");
+        assert!(
+            serialized.contains(r#"package = "project""#),
+            "{serialized}"
+        );
+        assert!(serialized.contains(r#"extra = "foo""#), "{serialized}");
+        assert!(
+            serialized.contains(r#"target = "runtime:0""#),
+            "{serialized}"
+        );
+        assert!(!serialized.contains("resolution-markers"), "{serialized}");
+    }
+
+    #[test]
+    fn package_selector_target_expression_round_trip() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+selectors = [{ target = { marker = "sys_platform == 'darwin'" } }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let lock = toml::from_str::<Lock>(data).unwrap();
+        let serialized = lock.to_toml().unwrap();
+
+        assert!(
+            serialized.contains(r#"target = { marker = "sys_platform == 'darwin'" }"#),
+            "{serialized}"
+        );
+        assert!(!serialized.contains("resolution-markers"), "{serialized}");
+    }
+
+    #[test]
+    fn runtime_resolution_selector_preserves_active_and_inactive_conflicts() {
+        let package = PackageName::from_str("project").unwrap();
+        let cpu = ExtraName::from_str("cpu").unwrap();
+        let cu124 = ExtraName::from_str("cu124").unwrap();
+        let conflict_marker = ConflictMarker::extra(&package, &cpu)
+            .and(ConflictMarker::extra(&package, &cu124).negate());
+
+        let selector = TargetSelector::from_conflict_marker(conflict_marker).unwrap();
+
+        assert_eq!(
+            selector.conflict_marker("selector").unwrap(),
+            conflict_marker
+        );
+        let target = selector.to_toml().to_string();
+        assert!(target.contains("active = ["), "{target}");
+        assert!(
+            target.contains(r#"{ package = "project", extra = "cpu" }"#),
+            "{target}"
+        );
+        assert!(target.contains("inactive = ["), "{target}");
+        assert!(
+            target.contains(r#"{ package = "project", extra = "cu124" }"#),
+            "{target}"
+        );
+    }
+
+    #[test]
+    fn runtime_resolution_selector_falls_back_for_non_conjunctive_conflicts() {
+        let package = PackageName::from_str("project").unwrap();
+        let cpu = ExtraName::from_str("cpu").unwrap();
+        let cu124 = ExtraName::from_str("cu124").unwrap();
+        let conflict_marker =
+            ConflictMarker::extra(&package, &cpu).or(ConflictMarker::extra(&package, &cu124));
+
+        assert!(TargetSelector::from_conflict_marker(conflict_marker).is_none());
+    }
+
+    #[test]
+    fn runtime_resolution_selector_uses_expression_for_non_conjunctive_conflicts() {
+        let requires_python = RequiresPython::greater_than_equal_version(&Version::new([3, 12]));
+        let package = PackageName::from_str("project").unwrap();
+        let cpu = ExtraName::from_str("cpu").unwrap();
+        let cu124 = ExtraName::from_str("cu124").unwrap();
+        let mut conflict_marker = ConflictMarker::extra(&package, &cpu);
+        conflict_marker = conflict_marker.or(ConflictMarker::extra(&package, &cu124));
+        let marker = UniversalMarker::new(
+            requires_python.complexify_markers(MarkerTree::TRUE),
+            conflict_marker,
+        );
+
+        let selector = TargetSelector::from_universal_marker(marker, &requires_python).unwrap();
+        assert!(universal_markers_equivalent(
+            selector
+                .to_universal_marker(&requires_python, "runtime:0")
+                .unwrap(),
+            marker
+        ));
+
+        let target = selector.to_toml().to_string();
+        assert!(target.contains("any-of = ["), "{target}");
+        assert!(
+            target.contains(r#"{ active = { package = "project", extra = "cpu" } }"#),
+            "{target}"
+        );
+        assert!(
+            target.contains(r#"{ active = { package = "project", extra = "cu124" } }"#),
+            "{target}"
+        );
+    }
+
+    #[test]
+    fn target_selector_empty_any_of_is_false() {
+        let requires_python = RequiresPython::greater_than_equal_version(&Version::new([3, 12]));
+        let selector = toml::from_str::<TargetSelector>("any-of = []").unwrap();
+
+        assert!(selector.has_expression());
+        assert!(
+            selector
+                .to_universal_marker(&requires_python, "runtime:0")
+                .unwrap()
+                .is_false()
+        );
+        let target = selector.to_toml().to_string();
+        assert!(target.contains("any-of"), "{target}");
+        assert!(!target.contains("active"), "{target}");
+
+        let selector =
+            toml::from_str::<TargetSelector>("any-of = []\nactive = [{ package = \"project\" }]")
+                .unwrap();
+        assert!(
+            selector
+                .to_universal_marker(&requires_python, "runtime:0")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn dependency_selector_combines_resolution_and_target() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b" },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "c", selector = { resolution = "build:a:wheel", target = { active = [{ package = "project", extra = "foo" }] } } },
+]
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/c.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+"#;
+        let lock = toml::from_str::<Lock>(data).unwrap();
+        let serialized = lock.to_toml().unwrap();
+
+        assert!(
+            serialized.contains(
+                r#"selector = { resolution = "build:a:wheel", target = { active = [
+    { package = "project", extra = "foo" },
+] } }"#
+            ),
+            "{serialized}"
+        );
+        assert!(
+            !serialized.contains("extra == 'extra-7-project-foo'"),
+            "{serialized}"
+        );
+    }
+
+    #[test]
+    fn dependency_selector_rejects_unknown_resolution() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "b", selector = { resolution = "build:missing:wheel" } },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "debug"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/debug.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:missing:wheel`: dependency selector references an unknown build resolution"
+        );
+    }
+
+    #[test]
+    fn dependency_selector_rejects_context_outside_build_graph() {
+        let data = r#"
+version = 1
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b" },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "d", selector = { resolution = "build:a:wheel" } },
+]
+sdist = { url = "https://example.com/c.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "d"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/d.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel`: dependency selector references a build resolution that does not contain the package"
+        );
+    }
+
+    #[test]
+    fn scoped_build_edge_rejects_context_outside_owning_build_graph() {
+        let data = r#"
+version = 1
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[resolution]]
+id = "build:x:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "x"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "y" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b" },
+]
+build-dependency-packages = [
+    { name = "b", dependencies = [{ name = "c", selector = { resolution = "build:x:wheel" } }] },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/c.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "x"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "y" },
+]
+sdist = { url = "https://example.com/x.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "y"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/y.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:x:wheel`: dependency selector references a build resolution outside the source package's scoped build graph"
+        );
+    }
+
+    #[test]
+    fn scoped_build_edge_rejects_package_outside_owning_build_graph() {
+        let data = r#"
+version = 1
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b" },
+]
+build-dependency-packages = [
+    { name = "c", dependencies = [] },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/c.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel`: scoped build dependency package is not contained in the source package's build resolution"
+        );
+    }
+
+    #[test]
+    fn dependency_selector_rejects_unknown_activation_package() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b" },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "c", selector = { resolution = "build:a:wheel", target = { active = [{ package = "missing", extra = "foo" }] } } },
+]
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/c.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `dependency selector`: selector activation references an unknown package"
+        );
+    }
+
+    #[test]
+    fn dependency_selector_rejects_unknown_field() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "b", selector = { resoluton = "build:a:wheel" } },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @r#"
+TOML parse error at line 10, column 32
+   |
+10 |     { name = "b", selector = { resoluton = "build:a:wheel" } },
+   |                                ^^^^^^^^^
+unknown field `resoluton`, expected one of `resolution`, `resolutions`, `target`
+"#
+        );
+    }
+
+    #[test]
+    fn target_selector_rejects_unknown_field() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+target = { makrer = "sys_platform == 'linux'" }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @r#"
+TOML parse error at line 8, column 12
+  |
+8 | target = { makrer = "sys_platform == 'linux'" }
+  |            ^^^^^^
+unknown field `makrer`, expected one of `marker`, `active`, `inactive`, `any-of`, `dnf`
+"#
+        );
+    }
+
+    #[test]
+    fn runtime_resolution_rejects_unknown_activation_package() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+target = { active = [{ package = "missing", extra = "foo" }] }
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `runtime:0`: selector activation references an unknown package"
+        );
+    }
+
+    #[test]
+    fn duplicate_resolution_ids_are_rejected() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:duplicate"
+kind = "runtime"
+target = { marker = "sys_platform == 'linux'" }
+
+[[resolution]]
+id = "runtime:duplicate"
+kind = "runtime"
+target = { marker = "sys_platform == 'darwin'" }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `runtime:duplicate`: duplicate resolution id"
+        );
+    }
+
+    #[test]
+    fn build_resolution_context_ids_include_source_identity() {
+        let name = PackageName::from_str("dep").unwrap();
+        let version = Some(Version::from_str("1.0.0").unwrap());
+        let directory = BuildPackageKey::with_source(
+            name.clone(),
+            version.clone(),
+            Some(BuildPackageSource::Directory("dep-a".to_string())),
+        );
+        let path = BuildPackageKey::with_source(
+            name.clone(),
+            version.clone(),
+            Some(BuildPackageSource::Path("dep-a.tar.gz".to_string())),
+        );
+        let registry = BuildPackageKey::with_source(
+            name,
+            version,
+            Some(BuildPackageSource::Registry(PYPI_URL.to_string())),
+        );
+
+        let directory_id = build_resolution_context_id(&directory);
+        let path_id = build_resolution_context_id(&path);
+        let registry_id = build_resolution_context_id(&registry);
+
+        assert!(directory_id.starts_with("build:dep:wheel:"));
+        assert!(path_id.starts_with("build:dep:wheel:"));
+        assert!(registry_id.starts_with("build:dep:wheel:"));
+        assert_ne!(directory_id, path_id);
+        assert_ne!(directory_id, registry_id);
+        assert_ne!(path_id, registry_id);
+    }
+
+    #[test]
+    fn build_resolution_context_ids_include_target_and_executor_identity() {
+        let requires_python = RequiresPython::greater_than_equal_version(&Version::new([3, 12]));
+        let package = BuildPackageKey::with_source(
+            PackageName::from_str("dep").unwrap(),
+            Some(Version::from_str("1.0.0").unwrap()),
+            Some(BuildPackageSource::Directory("dep".to_string())),
+        );
+        let linux_target = TargetSelector {
+            marker: Some(SimplifiedMarkerTree::new(
+                &requires_python,
+                "sys_platform == 'linux'".parse::<MarkerTree>().unwrap(),
+            )),
+            active: Vec::new(),
+            inactive: Vec::new(),
+            any_of: None,
+        };
+        let darwin_target = TargetSelector {
+            marker: Some(SimplifiedMarkerTree::new(
+                &requires_python,
+                "sys_platform == 'darwin'".parse::<MarkerTree>().unwrap(),
+            )),
+            active: Vec::new(),
+            inactive: Vec::new(),
+            any_of: None,
+        };
+        let linux_executor = ExecutorSelector {
+            marker: Some(SimplifiedMarkerTree::new(
+                &requires_python,
+                "sys_platform == 'linux'".parse::<MarkerTree>().unwrap(),
+            )),
+            python: Some(Version::new([3, 12])),
+        };
+        let darwin_executor = ExecutorSelector {
+            marker: Some(SimplifiedMarkerTree::new(
+                &requires_python,
+                "sys_platform == 'darwin'".parse::<MarkerTree>().unwrap(),
+            )),
+            python: Some(Version::new([3, 12])),
+        };
+        let python_313_executor = ExecutorSelector {
+            marker: Some(SimplifiedMarkerTree::new(
+                &requires_python,
+                "sys_platform == 'linux'".parse::<MarkerTree>().unwrap(),
+            )),
+            python: Some(Version::new([3, 13])),
+        };
+
+        let source_only_id = build_resolution_context_id(&package);
+        let linux_linux_id = build_resolution_context_id_with_context(
+            &package,
+            BuildResolutionStage::Build,
+            Some(&linux_target),
+            Some(&linux_executor),
+        );
+        let darwin_linux_id = build_resolution_context_id_with_context(
+            &package,
+            BuildResolutionStage::Build,
+            Some(&darwin_target),
+            Some(&linux_executor),
+        );
+        let linux_darwin_id = build_resolution_context_id_with_context(
+            &package,
+            BuildResolutionStage::Build,
+            Some(&linux_target),
+            Some(&darwin_executor),
+        );
+        let linux_python_313_id = build_resolution_context_id_with_context(
+            &package,
+            BuildResolutionStage::Build,
+            Some(&linux_target),
+            Some(&python_313_executor),
+        );
+
+        assert!(linux_linux_id.starts_with("build:dep:wheel:"));
+        assert_ne!(source_only_id, linux_linux_id);
+        assert_ne!(linux_linux_id, darwin_linux_id);
+        assert_ne!(linux_linux_id, linux_darwin_id);
+        assert_ne!(linux_linux_id, linux_python_313_id);
+    }
+
+    #[test]
+    fn build_resolution_source_packages_can_have_multiple_contexts() {
+        let data = r#"
+version = 1
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:one"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[resolution]]
+id = "build:a:wheel:two"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b" },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "c", version = "1.0.0", source = { registry = "https://pypi.org/simple" }, selector = { resolution = "build:a:wheel:one" } },
+    { name = "c", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, selector = { resolution = "build:a:wheel:two" } },
+]
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/c-1.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "c"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/c-2.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let lock = toml::from_str::<Lock>(data).unwrap();
+        let members = build_resolution_members(&lock, &lock.resolutions);
+        let context_one_versions = members
+            .get("build:a:wheel:one")
+            .unwrap()
+            .iter()
+            .filter(|package_id| package_id.name == PackageName::from_str("c").unwrap())
+            .map(|package_id| package_id.version.as_ref().unwrap().to_string())
+            .collect::<BTreeSet<_>>();
+        let context_two_versions = members
+            .get("build:a:wheel:two")
+            .unwrap()
+            .iter()
+            .filter(|package_id| package_id.name == PackageName::from_str("c").unwrap())
+            .map(|package_id| package_id.version.as_ref().unwrap().to_string())
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(context_one_versions, BTreeSet::from(["1.0.0".to_string()]));
+        assert_eq!(context_two_versions, BTreeSet::from(["2.0.0".to_string()]));
+    }
+
+    #[test]
+    fn package_resolution_id_scopes_build_dependency_traversal() {
+        let data = r#"
+version = 1
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b", resolution-id = "build:a:wheel" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b", resolution-id = "build:a:wheel" },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "helper", version = "2.0.0", source = { registry = "https://pypi.org/simple" } },
+]
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:a:wheel"
+dependencies = [
+    { name = "helper", version = "1.0.0", source = { registry = "https://pypi.org/simple" } },
+]
+sdist = { url = "https://example.com/b-build.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "helper"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/helper-1.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "helper"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/helper-2.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "b" },
+]
+"#;
+        let lock = toml::from_str::<Lock>(data).unwrap();
+        let project_name = PackageName::from_str("project").unwrap();
+        let helper_name = PackageName::from_str("helper").unwrap();
+        let project = lock
+            .packages
+            .iter()
+            .find(|package| package.id.name == project_name)
+            .unwrap();
+        assert!(project.dependencies[0].package_id.resolution_id.is_none());
+
+        let members = build_resolution_members(&lock, &lock.resolutions);
+        let helper_versions = members
+            .get("build:a:wheel")
+            .unwrap()
+            .iter()
+            .filter(|package_id| package_id.name == helper_name)
+            .map(|package_id| package_id.version.as_ref().unwrap().to_string())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(helper_versions, BTreeSet::from(["1.0.0".to_string()]));
+
+        let serialized = lock.to_toml().unwrap();
+        assert!(
+            serialized.contains(
+                r#"{ name = "b", version = "1.0.0", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:a:wheel" }"#
+            ),
+            "{serialized}"
+        );
+        assert!(
+            serialized.contains(r#"resolution-id = "build:a:wheel""#),
+            "{serialized}"
+        );
+
+        let reparsed = toml::from_str::<Lock>(&serialized).unwrap();
+        assert_eq!(reparsed, lock);
+    }
+
+    #[test]
+    fn runtime_resolution_requires_target() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `runtime:0`: runtime resolution is missing a target selector"
+        );
+    }
+
+    #[test]
+    fn runtime_resolution_rejects_operation() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+operation = "wheel"
+target = { marker = "sys_platform == 'linux'" }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `runtime:0`: runtime resolution cannot declare an operation"
+        );
+    }
+
+    #[test]
+    fn runtime_resolution_rejects_mode() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+mode = "isolated"
+target = { marker = "sys_platform == 'linux'" }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `runtime:0`: runtime resolution cannot declare a replay mode"
+        );
+    }
+
+    #[test]
+    fn runtime_resolution_rejects_executor() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+executor = { marker = "sys_platform == 'linux'", python = "3.12" }
+target = { marker = "sys_platform == 'linux'" }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `runtime:0`: runtime resolution cannot declare an executor"
+        );
+    }
+
+    #[test]
+    fn runtime_resolution_rejects_source_package() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+name = "a"
+target = { marker = "sys_platform == 'linux'" }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `runtime:0`: runtime resolution cannot declare a source package"
+        );
+    }
+
+    #[test]
+    fn runtime_resolution_rejects_roots() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+target = { marker = "sys_platform == 'linux'" }
+roots = [{ name = "a" }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `runtime:0`: runtime resolution cannot declare roots"
+        );
+    }
+
+    #[test]
+    fn build_resolution_requires_operation() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel`: build resolution is missing an operation"
+        );
+    }
+
+    #[test]
+    fn build_resolution_requires_mode() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel`: build resolution is missing a replay mode"
+        );
+    }
+
+    #[test]
+    fn build_resolution_requires_source_package() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel`: build resolution is missing a source package"
+        );
+    }
+
+    #[test]
+    fn build_resolution_rejects_empty_executor() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+executor = {}
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel`: executor selector must declare marker or python"
+        );
+    }
+
+    #[test]
+    fn build_resolution_preserves_executor() {
+        let data = r#"
+version = 1
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+executor = { marker = "sys_platform == 'linux'", python = "3.12" }
+roots = [{ name = "b" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b" },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let lock = toml::from_str::<Lock>(data).unwrap();
+        let serialized = lock.to_toml().unwrap();
+        assert!(
+            serialized
+                .contains(r#"executor = { marker = "sys_platform == 'linux'", python = "3.12" }"#),
+            "{serialized}"
+        );
+
+        let reparsed = toml::from_str::<Lock>(&serialized).unwrap();
+        assert_eq!(reparsed, lock);
+    }
+
+    #[test]
+    fn build_resolution_roots_drive_membership() {
+        let data = r#"
+version = 1
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "c" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b" },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/c.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let lock = toml::from_str::<Lock>(data).unwrap();
+        let members = build_resolution_members(&lock, &lock.resolutions);
+        let member_names = members
+            .get("build:a:wheel")
+            .unwrap()
+            .iter()
+            .map(|package_id| package_id.name.to_string())
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(member_names, BTreeSet::from(["c".to_string()]));
+    }
+
+    #[test]
+    fn build_resolution_records_must_cover_captured_build_dependencies() {
+        let data = r#"
+version = 1
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b" },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = []
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:b:wheel:build:0584d5b62a248c6b`: package build-dependencies are missing a build resolution"
+        );
+    }
+
+    #[test]
+    fn scoped_build_dependencies_require_resolution_record() {
+        let data = r#"
+version = 1
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b" },
+]
+build-dependency-packages = [
+    { name = "b", dependencies = [] },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel:build:60eeaccb2dcdee04`: package scoped build dependencies are missing a build resolution"
+        );
+    }
+
+    #[test]
+    fn build_resolution_records_must_cover_captured_build_dependencies_without_existing_records() {
+        let data = r#"
+version = 1
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b" },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel:build:60eeaccb2dcdee04`: package build-dependencies are missing a build resolution"
+        );
+    }
+
+    #[test]
+    fn dependency_selector_preserves_correlated_marker_and_conflict() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "b", marker = "(platform_machine == 'inapplicable' and extra == 'extra-5-debug-b') or (extra == 'extra-5-debug-a' and extra == 'extra-5-debug-b')" },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "debug"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/debug.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let lock = toml::from_str::<Lock>(data).unwrap();
+        let serialized = lock.to_toml().unwrap();
+
+        assert!(
+            serialized.contains("platform_machine == 'inapplicable'"),
+            "{serialized}"
+        );
+        assert!(
+            serialized.contains(r#"{ active = { package = "debug", extra = "b" } }"#),
+            "{serialized}"
+        );
+        assert!(
+            serialized.contains(r#"{ active = { package = "debug", extra = "a" } }"#),
+            "{serialized}"
+        );
+        assert!(serialized.contains("selector = { target"), "{serialized}");
+        assert!(
+            !serialized.contains("extra == 'extra-5-debug"),
+            "{serialized}"
+        );
+
+        let reparsed = toml::from_str::<Lock>(&serialized).unwrap();
+        assert_eq!(reparsed, lock);
     }
 
     #[test]
@@ -8630,6 +12076,93 @@ sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d
 [[package.dependencies]]
 name = "a"
 version = "0.1.0"
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"Dependency `a` has missing `source` field but has more than one matching package");
+    }
+
+    #[test]
+    fn build_dependency_source_ambiguous() {
+        let data = r#"
+version = 1
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:b:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [
+    { name = "a", version = "1.0.0", source = { registry = "https://pypi.org/simple" } },
+]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { directory = "vendor/a" }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "a", version = "1.0.0", source = { registry = "https://pypi.org/simple" } },
+]
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let lock = toml::from_str::<Lock>(data).unwrap();
+        let package = lock
+            .packages
+            .iter()
+            .find(|package| package.id.name == PackageName::from_str("b").unwrap())
+            .unwrap();
+        assert!(matches!(
+            package.build_dependencies[0].package_id.source,
+            Source::Registry(_)
+        ));
+
+        let serialized = lock.to_toml().unwrap();
+        assert!(serialized.contains(
+            r#"{ name = "a", version = "1.0.0", source = { registry = "https://pypi.org/simple" } }"#
+        ));
+    }
+
+    #[test]
+    fn build_dependency_missing_source_ambiguous() {
+        let data = r#"
+version = 1
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { directory = "vendor/a" }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "a", version = "1.0.0" },
+]
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 "#;
         let result = toml::from_str::<Lock>(data).unwrap_err();
         assert_stripped_snapshot!(result, @"Dependency `a` has missing `source` field but has more than one matching package");

@@ -53,6 +53,9 @@ impl UpgradePackages {
                         for (group_name, dependencies) in package.resolved_dependency_groups() {
                             if groups.contains(group_name) {
                                 for dependency in dependencies {
+                                    if !dependency.is_runtime_edge() {
+                                        continue;
+                                    }
                                     combined.insert(dependency.package_name().clone());
                                 }
                             }

@@ -156,6 +156,9 @@ pub trait Installable<'lock> {
                 })
                 .flatten()
             {
+                if !dep.is_runtime_edge() {
+                    continue;
+                }
                 let additional_activated_extras = newly_activated_extras(dep, &activated_extras);
                 if !dep.complexified_marker.evaluate(
                     marker_env,
@@ -387,6 +390,9 @@ pub trait Installable<'lock> {
                     Either::Right(package.dependencies.iter())
                 };
                 for dep in deps {
+                    if !dep.is_runtime_edge() {
+                        continue;
+                    }
                     let additional_activated_extras =
                         newly_activated_extras(dep, &activated_extras);
                     if !dep.complexified_marker.evaluate(
@@ -477,6 +483,9 @@ pub trait Installable<'lock> {
                 Either::Right(package.dependencies.iter())
             };
             for dep in deps {
+                if !dep.is_runtime_edge() {
+                    continue;
+                }
                 if !dep.complexified_marker.evaluate(
                     marker_env,
                     activated_projects.iter().copied(),

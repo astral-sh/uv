@@ -28,7 +28,7 @@ use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
+use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -40,8 +40,9 @@ use uv_resolver::{
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{
-    BuildContext, BuildIsolation, BuildPackageKey, BuildPreferences, BuildResolutionGraph,
-    BuildStack, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
+    BuildContext, BuildIsolation, BuildPackageKey, BuildPreferences, BuildResolutionGraphKey,
+    BuildResolutionStage, BuildStack, EmptyInstalledPackages, HashStrategy,
+    SourceTreeEditablePolicy,
 };
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{
@@ -809,7 +810,7 @@ async fn do_lock(
         NoBuild::None | NoBuild::All => BTreeSet::new(),
     };
     let build_settings = (!config_setting.is_empty()
-        || !config_settings_package.is_empty()
+        || *config_settings_package != Default::default()
         || !extra_build_variables.is_empty()
         || !no_build_packages.is_empty())
     .then(|| {
@@ -1085,7 +1086,7 @@ async fn do_lock(
             )
             .relative_to(target.install_path())?;
             if preview.is_enabled(PreviewFeature::LockBuildDependencies)
-                && !build_options.no_build_all()
+                && !build_options.no_build_requirement(None)
             {
                 manifest = manifest.with_build_settings(build_settings.clone());
             }
@@ -1128,15 +1129,21 @@ async fn do_lock(
                         &build_database,
                         &build_hasher,
                         &build_markers,
+                        interpreter.markers(),
+                        &interpreter.python_minor_version(),
                     )
                     .await
                     .map_err(ProjectError::from)?;
 
-                    let build_resolutions = build_dispatch.build_resolutions().snapshot();
+                    let build_resolutions = build_dispatch.build_resolutions().snapshot_contexts();
+                    let executor_python = interpreter.python_minor_version();
                     lock = lock
                         .with_build_resolutions(
                             &build_resolutions,
                             &extra_build_requires,
+                            &build_markers,
+                            interpreter.markers(),
+                            &executor_python,
                             target.install_path(),
                             &build_database,
                             &build_hasher,
@@ -1170,27 +1177,6 @@ fn source_dist_from_resolved_dist(resolved_dist: &ResolvedDist) -> Option<Source
             .as_ref()
             .map(|sdist| SourceDist::Registry(sdist.clone())),
         Dist::Built(BuiltDist::DirectUrl(_) | BuiltDist::Path(_) | BuiltDist::GitPath(_)) => None,
-    }
-}
-
-fn graph_for_key<'a>(
-    map: &'a BTreeMap<BuildPackageKey, BuildResolutionGraph>,
-    key: &BuildPackageKey,
-) -> Option<&'a BuildResolutionGraph> {
-    if let Some(graph) = map.get(key) {
-        return Some(graph);
-    }
-
-    let mut matches = map
-        .iter()
-        .filter(|(candidate, _)| candidate.name == key.name && candidate.version == key.version)
-        .map(|(_, graph)| graph);
-
-    let first = matches.next()?;
-    if matches.next().is_none() {
-        Some(first)
-    } else {
-        None
     }
 }
 
@@ -1236,43 +1222,139 @@ async fn resolve_all_possible_builds(
     build_dispatch: &BuildDispatch<'_>,
     database: &DistributionDatabase<'_, BuildDispatch<'_>>,
     build_hasher: &HashStrategy,
-    build_markers: &BTreeMap<BuildPackageKey, MarkerTree>,
+    build_markers: &BTreeMap<BuildPackageKey, UniversalMarker>,
+    executor_markers: &MarkerEnvironment,
+    executor_python: &Version,
 ) -> anyhow::Result<()> {
-    let mut queue: VecDeque<(BuildPackageKey, SourceDist, Option<MarkerTree>)> = lock
+    struct BuildResolutionRequest {
+        key: BuildPackageKey,
+        source_dist: SourceDist,
+        solve_marker: Option<MarkerTree>,
+        context_marker: Option<MarkerTree>,
+    }
+
+    let mut queue: VecDeque<BuildResolutionRequest> = lock
         .source_distributions_for_build(workspace_root)?
         .into_iter()
         .filter(|(key, _)| !build_options.no_build_package(&key.name))
         .map(|(key, source_dist)| {
-            let marker = build_markers.get(&key).copied().map(source_python_marker);
-            (key, source_dist, marker)
+            let marker = build_markers
+                .get(&key)
+                .copied()
+                .map(UniversalMarker::combined)
+                .map(source_python_marker);
+            BuildResolutionRequest {
+                key,
+                source_dist,
+                solve_marker: marker,
+                context_marker: None,
+            }
         })
         .collect();
 
-    let mut seen: FxHashSet<BuildPackageKey> = FxHashSet::default();
+    let mut seen: FxHashSet<BuildResolutionGraphKey> = FxHashSet::default();
 
-    while let Some((key, source_dist, marker)) = queue.pop_front() {
-        let resolve_backend_hook_requirements = marker.is_some();
-        let marker_widened = marker
-            .is_some_and(|marker| build_dispatch.add_universal_build_marker(key.clone(), marker));
-        let seen_before = !seen.insert(key.clone());
+    while let Some(BuildResolutionRequest {
+        key,
+        source_dist,
+        solve_marker,
+        context_marker,
+    }) = queue.pop_front()
+    {
+        let resolve_backend_hook_requirements = solve_marker.is_some();
+        let target_marker = if build_markers.contains_key(&key) {
+            None
+        } else {
+            context_marker.filter(|marker| !(*marker).is_true())
+        };
+        let bootstrap_context = if build_markers.contains_key(&key) {
+            lock.build_resolution_context_id_for(
+                &key,
+                BuildResolutionStage::Bootstrap,
+                build_markers,
+                executor_markers,
+                executor_python,
+                workspace_root,
+            )?
+        } else {
+            lock.build_resolution_context_id_for_marker(
+                &key,
+                BuildResolutionStage::Bootstrap,
+                target_marker,
+                executor_markers,
+                executor_python,
+                workspace_root,
+            )?
+        };
+        let build_context = if build_markers.contains_key(&key) {
+            lock.build_resolution_context_id_for(
+                &key,
+                BuildResolutionStage::Build,
+                build_markers,
+                executor_markers,
+                executor_python,
+                workspace_root,
+            )?
+        } else {
+            lock.build_resolution_context_id_for_marker(
+                &key,
+                BuildResolutionStage::Build,
+                target_marker,
+                executor_markers,
+                executor_python,
+                workspace_root,
+            )?
+        };
+        let bootstrap_graph_key = BuildResolutionGraphKey::context_with_marker(
+            key.clone(),
+            bootstrap_context,
+            BuildResolutionStage::Bootstrap,
+            target_marker,
+        );
+        let build_graph_key = BuildResolutionGraphKey::context_with_marker(
+            key.clone(),
+            build_context,
+            BuildResolutionStage::Build,
+            target_marker,
+        );
+        build_dispatch.set_build_resolution_stage_contexts(
+            bootstrap_graph_key.clone(),
+            build_graph_key.clone(),
+        );
+        let marker_widened = solve_marker.is_some_and(|marker| {
+            let bootstrap_widened = build_dispatch
+                .add_universal_build_context_marker(bootstrap_graph_key.clone(), marker);
+            let build_widened =
+                build_dispatch.add_universal_build_context_marker(build_graph_key.clone(), marker);
+            bootstrap_widened || build_widened
+        });
+        let seen_before = !seen.insert(build_graph_key.clone());
         if seen_before && !marker_widened {
             continue;
         }
         let re_resolve_build_requirements = seen_before && marker_widened;
 
         let dist = Dist::Source(source_dist.clone());
+        let hash_policy = build_hasher.get(&dist);
+        database
+            .get_or_build_wheel_metadata(&dist, hash_policy)
+            .await?;
+
+        let build_resolutions = build_dispatch.build_resolutions();
+        let mut graph = if re_resolve_build_requirements {
+            None
+        } else {
+            build_resolutions
+                .get(&build_graph_key)
+                .or_else(|| build_resolutions.get(&bootstrap_graph_key))
+        };
         let extra_build_dependencies = build_dispatch
             .extra_build_requires()
             .get(&key.name)
             .cloned()
             .unwrap_or_default();
-        let mut graph_exists = !re_resolve_build_requirements && {
-            let snapshot = build_dispatch.build_resolutions().snapshot();
-            graph_for_key(&snapshot, &key).is_some()
-        };
-        let mut resolved_statically = false;
 
-        if !graph_exists {
+        if graph.is_none() {
             let direct_build = extra_build_dependencies.is_empty()
                 && database
                     .is_direct_build(&source_dist, build_hasher.get(&dist), uv_version::version())
@@ -1290,12 +1372,14 @@ async fn resolve_all_possible_builds(
                 database
                     .resolve_static_build_requirements(&source_dist, build_hasher.get(&dist))
                     .await?;
-                let snapshot = build_dispatch.build_resolutions().snapshot();
-                graph_exists = graph_for_key(&snapshot, &key).is_some();
-                resolved_statically = graph_exists;
+                graph = build_resolutions
+                    .get(&build_graph_key)
+                    .or_else(|| build_resolutions.get(&bootstrap_graph_key));
             }
 
-            if !graph_exists && let Some(mut requirements) = build_requirements {
+            if graph.is_none()
+                && let Some(mut requirements) = build_requirements
+            {
                 requirements.extend(
                     extra_build_dependencies
                         .clone()
@@ -1307,15 +1391,13 @@ async fn resolve_all_possible_builds(
                     let _ = build_dispatch
                         .resolve(&requirements, Some(&key), &build_stack, None)
                         .await?;
-                    resolved_statically = true;
+                    graph = build_resolutions
+                        .get(&build_graph_key)
+                        .or_else(|| build_resolutions.get(&bootstrap_graph_key));
                 }
             }
 
-            let graph_exists = {
-                let snapshot = build_dispatch.build_resolutions().snapshot();
-                graph_for_key(&snapshot, &key).is_some()
-            };
-            if !graph_exists
+            if graph.is_none()
                 && !source_dist.is_virtual()
                 && !direct_build
                 && !has_explicit_build_system
@@ -1328,42 +1410,41 @@ async fn resolve_all_possible_builds(
                 let _ = build_dispatch
                     .resolve(&requirements, Some(&key), &build_stack, None)
                     .await?;
-                resolved_statically = true;
+                graph = build_resolutions
+                    .get(&build_graph_key)
+                    .or_else(|| build_resolutions.get(&bootstrap_graph_key));
             }
         }
 
-        if !resolved_statically {
-            let hash_policy = build_hasher.get(&dist);
-            database
-                .get_or_build_wheel_metadata(&dist, hash_policy)
-                .await?;
-        }
+        let graphs = [
+            build_resolutions.get(&bootstrap_graph_key),
+            build_resolutions.get(&build_graph_key),
+            graph,
+        ];
 
-        let snapshot = build_dispatch.build_resolutions().snapshot();
-        let Some(graph) = graph_for_key(&snapshot, &key) else {
-            continue;
-        };
+        for graph in graphs.into_iter().flatten() {
+            for package in &graph.packages {
+                let Some(source_dist) = source_dist_from_resolved_dist(&package.dist) else {
+                    continue;
+                };
 
-        for package in &graph.packages {
-            let Some(source_dist) = source_dist_from_resolved_dist(&package.dist) else {
-                continue;
-            };
+                let name = package.dist.name().clone();
+                if build_options.no_build_package(&name) {
+                    continue;
+                }
 
-            let name = package.dist.name().clone();
-            if build_options.no_build_package(&name) {
-                continue;
+                let dep_key = BuildPackageKey::from_source_dist(
+                    name,
+                    package.dist.version().cloned(),
+                    Some(&source_dist),
+                );
+                queue.push_back(BuildResolutionRequest {
+                    key: dep_key,
+                    source_dist,
+                    solve_marker: resolve_backend_hook_requirements.then_some(package.marker),
+                    context_marker: resolve_backend_hook_requirements.then_some(package.marker),
+                });
             }
-
-            let dep_key = BuildPackageKey::from_source_dist(
-                name,
-                package.dist.version().cloned(),
-                Some(&source_dist),
-            );
-            queue.push_back((
-                dep_key,
-                source_dist,
-                resolve_backend_hook_requirements.then_some(package.marker),
-            ));
         }
     }
 
