@@ -719,6 +719,14 @@ async fn do_lock(
         .platform(interpreter.platform())
         .build()?;
 
+    let build_isolation_settings: Option<Option<BTreeSet<String>>> = match build_isolation {
+        uv_configuration::BuildIsolation::Isolate => None,
+        uv_configuration::BuildIsolation::Shared => Some(None),
+        uv_configuration::BuildIsolation::SharedPackage(packages) => {
+            Some(Some(packages.iter().map(ToString::to_string).collect()))
+        }
+    };
+
     // Determine whether to enable build isolation.
     let environment;
     let build_isolation = match build_isolation {
@@ -809,18 +817,28 @@ async fn do_lock(
         NoBuild::Packages(packages) => packages.iter().map(ToString::to_string).collect(),
         NoBuild::None | NoBuild::All => BTreeSet::new(),
     };
-    let build_settings = (!config_setting.is_empty()
+    let has_build_settings = !config_setting.is_empty()
         || *config_settings_package != Default::default()
         || !extra_build_variables.is_empty()
-        || !no_build_packages.is_empty())
-    .then(|| {
-        cache_digest(&(
+        || !no_build_packages.is_empty();
+    let build_settings = if let Some(build_isolation_settings) = build_isolation_settings {
+        Some(cache_digest(&(
             config_setting,
             config_settings_package,
             extra_build_variables,
             &no_build_packages,
-        ))
-    });
+            build_isolation_settings,
+        )))
+    } else if has_build_settings {
+        Some(cache_digest(&(
+            config_setting,
+            config_settings_package,
+            extra_build_variables,
+            &no_build_packages,
+        )))
+    } else {
+        None
+    };
 
     let make_build_dispatch = |build_preferences, extra_build_requires| {
         BuildDispatch::new(
