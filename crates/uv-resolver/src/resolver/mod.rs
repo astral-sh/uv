@@ -2093,7 +2093,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 project_name,
                 variant.extra.as_ref(),
                 variant.group.as_ref(),
-                conflict_scoped,
             );
             let solver_marker = UniversalMarker::from_source_scope(
                 requirement.marker,
@@ -2166,7 +2165,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         project_name,
                         variant.extra.as_ref(),
                         variant.group.as_ref(),
-                        conflict_scoped,
                     );
                     source_constraints.extend(PubGrubDependency::from_requirement_with_marker(
                         &self.conflicts,
@@ -2366,13 +2364,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 conflict_scoped,
                 &self.conflicts,
             );
-            let edge_marker = UniversalMarker::source_edge_marker(
-                requirement.marker,
-                project_name,
-                extra,
-                group,
-                conflict_scoped,
-            );
+            let edge_marker =
+                UniversalMarker::source_edge_marker(requirement.marker, project_name, extra, group);
             if marker.is_false() || !env.included_by_marker(marker.combined()) {
                 continue;
             }

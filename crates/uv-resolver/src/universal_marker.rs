@@ -163,33 +163,16 @@ impl UniversalMarker {
 
     /// Returns the marker to persist on an edge for a source-scoped dependency.
     ///
-    /// Non-conflict-scoped source conditions can retain ordinary extra markers because lockfile
-    /// dependency markers are evaluated relative to their declaring package. Explicit-index
-    /// conditions are conflict-scoped and must retain the package-qualified encoding used by
-    /// universal resolution. Groups are always package-qualified because PEP 508 has no group
-    /// marker.
+    /// Source conditions retain the package-qualified encoding used by universal resolution so
+    /// lockfile traversal can evaluate them against the activated extras and groups for each
+    /// package.
     pub(crate) fn source_edge_marker(
         marker: MarkerTree,
         package: &PackageName,
         extra: Option<&ExtraName>,
         group: Option<&GroupName>,
-        conflict_scoped: bool,
     ) -> MarkerTree {
-        if conflict_scoped {
-            return Self::from_source_scope(marker, package, extra, group).combined();
-        }
-
-        let mut marker = marker;
-        if let Some(extra) = extra {
-            marker.and(MarkerTree::expression(MarkerExpression::Extra {
-                name: MarkerValueExtra::Extra(extra.clone()),
-                operator: ExtraOperator::Equal,
-            }));
-        }
-        if let Some(group) = group {
-            marker.and(ConflictMarker::group(package, group).marker);
-        }
-        marker
+        Self::from_source_scope(marker, package, extra, group).combined()
     }
 
     /// Remove solver-only source extra expressions from this marker.
