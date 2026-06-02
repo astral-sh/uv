@@ -718,8 +718,9 @@ impl AuthMiddleware {
         } else {
             (FetchUrl::Realm(Realm::from(&**url)), username)
         };
-        // Google Artifact Registry credentials have their own expiry-aware cache. Avoid storing a
-        // miss for the entire invocation so a transient ADC or `gcloud` failure can be retried.
+        // Google Artifact Registry credentials have their own expiry-aware cache for both hits and
+        // misses. Avoid storing a miss for the entire invocation so a transient ADC or `gcloud`
+        // failure can be retried after that cache expires.
         let memoize_fetch = !ArtifactRegistryProvider::is_artifact_registry(url);
         if memoize_fetch
             && let Some(credentials) = self.cache().fetches.register_or_wait(&key).await
