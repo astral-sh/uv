@@ -43,7 +43,7 @@ fn lock_wheel_registry() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -175,7 +175,7 @@ fn lock_sdist_registry() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -273,7 +273,7 @@ fn lock_sdist_git() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -363,7 +363,7 @@ fn lock_sdist_git() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -421,7 +421,7 @@ fn lock_sdist_git() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -478,7 +478,7 @@ fn lock_sdist_git() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -540,7 +540,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -634,7 +634,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -698,7 +698,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -753,7 +753,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -807,7 +807,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -872,7 +872,7 @@ fn lock_sdist_git_short_rev() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -984,7 +984,7 @@ fn lock_sdist_git_archive() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r###"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1143,7 +1143,7 @@ fn lock_wheel_git_archive() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r###"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1296,7 +1296,7 @@ fn lock_wheel_url() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1450,7 +1450,7 @@ fn lock_sdist_url() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1605,7 +1605,7 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1739,7 +1739,7 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1876,7 +1876,7 @@ fn lock_project_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -2164,7 +2164,7 @@ fn lock_project_with_excludes() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -2585,7 +2585,7 @@ fn lock_dependency_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -2784,7 +2784,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.7"
         resolution-markers = [
@@ -3082,7 +3082,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -3315,7 +3315,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -3497,7 +3497,7 @@ fn lock_conflicting_workspace_members() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -3764,7 +3764,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -4097,7 +4097,7 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -4275,7 +4275,7 @@ fn lock_conflicting_project_basic2() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -4493,7 +4493,7 @@ fn lock_conflicting_mixed() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -4644,7 +4644,7 @@ fn lock_upgrade_log() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -4726,7 +4726,7 @@ fn lock_upgrade_log() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -4814,7 +4814,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -4906,7 +4906,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -5064,7 +5064,7 @@ fn lock_check_refresh_workspace_conflicts() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -5196,7 +5196,7 @@ fn lock_preference() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -5256,7 +5256,7 @@ fn lock_preference() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -5303,7 +5303,7 @@ fn lock_preference() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -5372,7 +5372,7 @@ fn lock_git_plus_prefix() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -5458,7 +5458,7 @@ fn lock_partial_git() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10"
         resolution-markers = [
@@ -5598,7 +5598,7 @@ fn lock_unsupported_tag() -> Result<()> {
 
     let lock = context.temp_dir.child("uv.lock");
     lock.write_str(r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12.0"
 
@@ -5685,7 +5685,7 @@ fn lock_git_sha() -> Result<()> {
     // the latest.
     let lock = context.temp_dir.child("uv.lock");
     lock.write_str(r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -5751,7 +5751,7 @@ fn lock_git_sha() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -5851,7 +5851,7 @@ fn lock_requires_python() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.7"
         resolution-markers = [
@@ -6142,7 +6142,7 @@ fn lock_requires_python() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.7.9"
         resolution-markers = [
@@ -6362,7 +6362,7 @@ fn lock_requires_python() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -6501,7 +6501,7 @@ fn lock_requires_python_upper() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.11.*"
 
@@ -6626,7 +6626,7 @@ fn lock_requires_python_exact() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.13"
 
@@ -6768,7 +6768,7 @@ fn lock_requires_python_fork() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.9"
 
@@ -6863,7 +6863,7 @@ fn lock_requires_python_wheels() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.12.*"
 
@@ -6948,7 +6948,7 @@ fn lock_requires_python_wheels() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.11.*"
 
@@ -7042,7 +7042,7 @@ fn lock_requires_python_star() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.11.*"
 
@@ -7164,7 +7164,7 @@ fn lock_requires_python_not_equal() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">3.10, !=3.10.9, !=3.10.10, !=3.11.*, <3.13"
 
@@ -7243,7 +7243,7 @@ fn lock_requires_python_pre() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
 
@@ -7365,7 +7365,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "<=3.12"
         resolution-markers = [
@@ -7506,7 +7506,7 @@ fn lock_requires_python_maximum_version() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
@@ -7665,7 +7665,7 @@ fn lock_requires_python_fewest_versions() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.8"
 
@@ -7782,7 +7782,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
@@ -7894,7 +7894,7 @@ fn lock_dev() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -8011,7 +8011,7 @@ fn lock_conditional_unconditional() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -8089,7 +8089,7 @@ fn lock_multiple_markers() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -8205,7 +8205,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11, <3.13"
 
@@ -8318,7 +8318,7 @@ fn lock_pep508_urls_with_vars() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11, <3.13"
 
@@ -8432,7 +8432,7 @@ fn lock_constraint_dependency_absolute_path() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -8552,7 +8552,7 @@ fn lock_index_absolute_path_from_config() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -8616,7 +8616,7 @@ fn lock_cycles() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -8819,7 +8819,7 @@ fn lock_new_extras() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -8944,7 +8944,7 @@ fn lock_new_extras() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -9079,7 +9079,7 @@ fn lock_invalid_hash() -> Result<()> {
     let lock = context.temp_dir.child("uv.lock");
 
     lock.write_str(r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -9254,7 +9254,7 @@ fn lock_mixed_hashes() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.13"
 
@@ -9336,7 +9336,7 @@ fn lock_mixed_hashes() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.13"
 
@@ -9478,7 +9478,7 @@ async fn lock_zstd_wheel() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.13"
 
@@ -9538,7 +9538,7 @@ fn lock_resolution_mode() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -9619,7 +9619,7 @@ fn lock_resolution_mode() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -9781,7 +9781,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -10003,7 +10003,7 @@ fn lock_exclusion() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -10104,7 +10104,7 @@ fn lock_relative_lock_deserialization() -> Result<()> {
     // trigger the bug.
     child.child("uv.lock").write_str(
         r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -10309,7 +10309,7 @@ fn lock_peer_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -10434,7 +10434,7 @@ async fn lock_index_workspace_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -10587,7 +10587,7 @@ fn lock_dev_transitive() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -10721,7 +10721,7 @@ async fn lock_redact_http() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -10986,7 +10986,7 @@ fn lock_redact_git_pep508() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11074,7 +11074,7 @@ fn lock_redact_git_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11160,7 +11160,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11246,7 +11246,7 @@ async fn lock_redact_index_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11335,7 +11335,7 @@ async fn lock_redact_url_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11445,7 +11445,7 @@ async fn lock_env_credentials() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11612,7 +11612,7 @@ async fn lock_relative_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11725,7 +11725,7 @@ fn lock_no_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11816,7 +11816,7 @@ fn lock_no_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11919,7 +11919,7 @@ fn lock_migrate() -> Result<()> {
     let lock = context.temp_dir.child("uv.lock");
     lock.write_str(
         r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -11987,7 +11987,7 @@ fn lock_migrate() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -12086,7 +12086,7 @@ fn lock_upgrade_package() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -12182,7 +12182,7 @@ fn lock_upgrade_package() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -12266,7 +12266,7 @@ fn lock_upgrade_package() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -12685,7 +12685,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -12806,7 +12806,7 @@ fn lock_find_links_ignore_explicit_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -12923,7 +12923,7 @@ fn lock_find_links_relative_url() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -13036,7 +13036,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -13128,7 +13128,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -13220,7 +13220,7 @@ fn lock_find_links_http_sdist() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -13338,7 +13338,7 @@ fn lock_find_links_explicit_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -13440,7 +13440,7 @@ fn lock_find_links_higher_priority_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -13535,7 +13535,7 @@ fn lock_find_links_lower_priority_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -13671,7 +13671,7 @@ fn lock_local_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.13"
 
@@ -13759,7 +13759,7 @@ fn lock_sources_url() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -13964,7 +13964,7 @@ fn lock_sources_archive() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -14114,7 +14114,7 @@ fn lock_sources_source_tree() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -14251,7 +14251,7 @@ fn lock_editable() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -14434,7 +14434,7 @@ fn lock_mixed_extras() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -14631,7 +14631,7 @@ fn lock_transitive_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -14783,7 +14783,7 @@ fn lock_mismatched_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -14827,7 +14827,7 @@ fn lock_mismatched_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -14895,7 +14895,7 @@ fn lock_mismatched_versions() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -14987,7 +14987,7 @@ fn lock_no_sources_package() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -15094,7 +15094,7 @@ fn lock_no_sources_package_multiple() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -15211,7 +15211,7 @@ fn lock_no_sources_with_no_sources_package() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -15320,7 +15320,7 @@ fn lock_no_sources_package_env_var() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -15569,7 +15569,7 @@ fn normalize_false_marker_dependency_groups() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
 
@@ -15637,7 +15637,7 @@ fn normalize_false_marker_requires_dist() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
 
@@ -15691,7 +15691,7 @@ async fn lock_change_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -15738,7 +15738,7 @@ async fn lock_change_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -15832,7 +15832,7 @@ fn lock_remove_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -15956,7 +15956,7 @@ fn lock_remove_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16062,7 +16062,7 @@ fn lock_remove_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16120,7 +16120,7 @@ fn lock_add_member_with_build_system() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16231,7 +16231,7 @@ fn lock_add_member_with_build_system() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16332,7 +16332,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16439,7 +16439,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16558,7 +16558,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16668,7 +16668,7 @@ fn lock_redundant_add_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16773,7 +16773,7 @@ fn lock_redundant_add_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16865,7 +16865,7 @@ fn lock_new_constraints() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16972,7 +16972,7 @@ fn lock_new_constraints() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -17077,7 +17077,7 @@ fn lock_remove_member_non_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -17186,7 +17186,7 @@ fn lock_remove_member_non_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -17233,7 +17233,7 @@ fn lock_rename_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -17314,7 +17314,7 @@ fn lock_rename_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -17367,7 +17367,7 @@ fn lock_missing_metadata() -> Result<()> {
 
     // Write a lockfile with a missing `[package.metadata]` section.
     lock.write_str(r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -17431,7 +17431,7 @@ fn lock_missing_metadata() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -17512,7 +17512,7 @@ fn lock_dev_dependencies_alias() -> Result<()> {
 
     // Write a lockfile with `[package.dev-dependencies]`.
     lock.write_str(r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -17585,7 +17585,7 @@ fn lock_dev_dependencies_alias() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -17668,7 +17668,7 @@ fn lock_reorder() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -17818,7 +17818,7 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.7, <4"
         resolution-markers = [
@@ -17929,7 +17929,7 @@ fn lock_narrowed_python_version() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.7"
         resolution-markers = [
@@ -18029,7 +18029,7 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -18137,7 +18137,7 @@ fn lock_constrained_environment() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -18315,7 +18315,7 @@ fn lock_constrained_environment() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -18461,7 +18461,7 @@ fn lock_constrained_environment_non_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -18650,7 +18650,7 @@ fn lock_non_project_fork() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10"
         resolution-markers = [
@@ -18843,7 +18843,7 @@ fn lock_non_project_conditional() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -18952,7 +18952,7 @@ fn lock_non_project_group() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10"
 
@@ -19092,7 +19092,7 @@ fn lock_non_project_group_standard() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10"
 
@@ -19188,7 +19188,7 @@ fn lock_non_project_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -19325,7 +19325,7 @@ fn lock_non_project_member_conflicts() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -19492,7 +19492,7 @@ fn lock_dropped_dev_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -19610,7 +19610,7 @@ fn lock_empty_dev_dependencies() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -19717,7 +19717,7 @@ fn lock_empty_dependency_group() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -19818,7 +19818,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -19900,7 +19900,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -19982,7 +19982,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -20060,7 +20060,7 @@ fn lock_trailing_slash_index_url() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -20236,7 +20236,7 @@ fn lock_explicit_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -20344,7 +20344,7 @@ fn lock_explicit_default_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -20435,7 +20435,7 @@ fn lock_explicit_default_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -20605,7 +20605,7 @@ async fn lock_named_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -20674,7 +20674,7 @@ fn lock_default_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -20737,7 +20737,7 @@ fn lock_default_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -20817,7 +20817,7 @@ fn lock_named_index_cli() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -21113,7 +21113,7 @@ fn lock_repeat_named_index_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -21202,7 +21202,7 @@ fn lock_unique_named_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -21276,7 +21276,7 @@ fn lock_repeat_named_index_cli() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -21344,7 +21344,7 @@ fn lock_repeat_named_index_cli() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -21443,7 +21443,7 @@ fn lock_named_index_overlap() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -21526,7 +21526,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -21748,7 +21748,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -21979,7 +21979,7 @@ fn lock_implicit_package_path() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -22163,7 +22163,7 @@ fn lock_split_python_environment() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.7"
         resolution-markers = [
@@ -22274,7 +22274,7 @@ fn lock_python_upper_bound() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
@@ -22646,7 +22646,7 @@ fn lock_simplified_environments() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.11.*"
         resolution-markers = [
@@ -22756,7 +22756,7 @@ fn lock_dependency_metadata() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -22998,7 +22998,7 @@ fn lock_dependency_metadata_git() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -23111,7 +23111,7 @@ fn lock_strip_fragment() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -23403,7 +23403,7 @@ fn lock_unsupported_version() -> Result<()> {
     // Validate schema, invalid version.
     context.temp_dir.child("uv.lock").write_str(
         r#"
-        version = 2
+        version = 1
         requires-python = ">=3.12"
 
         [options]
@@ -23437,13 +23437,13 @@ fn lock_unsupported_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The lockfile at `uv.lock` uses an unsupported schema version (v2, but only v1 is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
+    error: The lockfile at `uv.lock` uses an unsupported schema version (v1, but only v2 is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
     ");
 
     // Invalid schema (`iniconfig` is referenced, but missing), invalid version.
     context.temp_dir.child("uv.lock").write_str(
         r#"
-        version = 2
+        version = 1
         requires-python = ">=3.12"
 
         [options]
@@ -23468,7 +23468,7 @@ fn lock_unsupported_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `uv.lock`, which uses an unsupported schema version (v2, but only v1 is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
+    error: Failed to parse `uv.lock`, which uses an unsupported schema version (v1, but only v2 is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
       Caused by: Dependency `iniconfig` has missing `source` field but has more than one matching package
     ");
 
@@ -23510,7 +23510,7 @@ fn lock_change_requires_python() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -23620,7 +23620,7 @@ fn lock_change_requires_python() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10"
         resolution-markers = [
@@ -23767,7 +23767,7 @@ async fn lock_keyring_credentials() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -23961,7 +23961,7 @@ async fn lock_keyring_credentials_always_authenticate_fetches_username() -> Resu
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -24090,7 +24090,7 @@ fn lock_multiple_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -24272,7 +24272,7 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -24403,7 +24403,7 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -24537,7 +24537,7 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -24638,7 +24638,7 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -24784,7 +24784,7 @@ fn lock_multiple_sources_non_total() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -24885,7 +24885,7 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -24967,7 +24967,7 @@ fn lock_multiple_sources_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -25397,7 +25397,7 @@ fn lock_group_include() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -25584,7 +25584,7 @@ fn lock_group_requires_python() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -25706,7 +25706,7 @@ fn lock_group_includes_requires_python() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -25922,7 +25922,7 @@ fn lock_group_includes_requires_python_contradiction() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -26385,7 +26385,7 @@ fn lock_group_workspace() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -26576,7 +26576,7 @@ fn lock_transitive_git() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -26739,7 +26739,7 @@ fn lock_dynamic_version() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -26778,7 +26778,7 @@ fn lock_dynamic_version() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -26849,7 +26849,7 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -26888,7 +26888,7 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -26947,7 +26947,7 @@ fn lock_dynamic_version_no_build() -> Result<()> {
 
     context.temp_dir.child("uv.lock").write_str(indoc::indoc! {
     r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -27045,7 +27045,7 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -27115,7 +27115,7 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -27233,7 +27233,7 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -27297,7 +27297,7 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -27397,7 +27397,7 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -27557,7 +27557,7 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -27709,7 +27709,7 @@ fn lock_dynamic_built_cache() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -27756,7 +27756,7 @@ fn lock_dynamic_built_cache() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -27831,7 +27831,7 @@ fn lock_shared_build_dependency() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
@@ -28110,7 +28110,7 @@ fn lock_dynamic_to_static() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -28167,7 +28167,7 @@ fn lock_dynamic_to_static() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -28221,7 +28221,7 @@ fn lock_static_to_dynamic() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -28298,7 +28298,7 @@ fn lock_static_to_dynamic() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -28346,7 +28346,7 @@ fn lock_bump_static_version() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -28400,7 +28400,7 @@ fn lock_bump_static_version() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -28739,7 +28739,7 @@ fn lock_relative_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -28841,7 +28841,7 @@ fn lock_recursive_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -28980,7 +28980,7 @@ fn lock_no_build_static_metadata() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -29105,7 +29105,7 @@ fn lock_self_compatible() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -29205,7 +29205,7 @@ fn lock_self_exact() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -29338,7 +29338,7 @@ fn lock_self_extra_to_extra_compatible() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -29509,7 +29509,7 @@ fn lock_self_extra_compatible() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -29643,7 +29643,7 @@ fn lock_self_marker_compatible() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -29778,7 +29778,7 @@ fn lock_split_on_windows() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -29902,7 +29902,7 @@ fn lock_arm() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -29977,7 +29977,7 @@ fn lock_x86_64() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -30053,7 +30053,7 @@ fn lock_x86() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -30125,7 +30125,7 @@ fn lock_script() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
 
@@ -30262,7 +30262,7 @@ fn lock_script_path() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
 
@@ -30398,7 +30398,7 @@ fn lock_script_editable_path_dependency_change() -> Result<()> {
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
 
@@ -30482,7 +30482,7 @@ fn lock_script_editable_path_dependency_change() -> Result<()> {
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
 
@@ -30554,7 +30554,7 @@ fn lock_script_initialize() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -30662,7 +30662,7 @@ fn lock_pytorch_cpu() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12.[X]"
         resolution-markers = [
@@ -31315,7 +31315,7 @@ fn lock_pytorch_index_preferences() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10.0"
         resolution-markers = [
@@ -31782,7 +31782,7 @@ fn lock_intel_mac() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
         resolution-markers = [
@@ -32173,7 +32173,7 @@ fn lock_pytorch_local_preference() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12.[X]"
         resolution-markers = [
@@ -32508,7 +32508,7 @@ fn windows_arm() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.12.*"
         resolution-markers = [
@@ -32585,7 +32585,7 @@ fn windows_amd64_required() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.12.*"
         required-markers = [
@@ -32659,7 +32659,7 @@ fn windows_arm64_required() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.12.*"
         required-markers = [
@@ -32727,7 +32727,7 @@ fn lock_empty_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -32834,7 +32834,7 @@ fn lock_empty_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -32905,7 +32905,7 @@ fn lock_invalid_fork_markers() -> Result<()> {
 
     context.temp_dir.child("uv.lock").write_str(
         r#"
-        version = 1
+        version = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "python_full_version >= '3.10' and platform_python_implementation == 'CPython'",
@@ -32997,7 +32997,7 @@ fn lock_omit_wheels_exclude_newer() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -33150,7 +33150,7 @@ fn lock_requires_python_empty_lock_file() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.13.0"
         resolution-markers = [
@@ -33226,7 +33226,7 @@ fn lock_requires_python_empty_lock_file() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.13.2"
         resolution-markers = [
@@ -33408,7 +33408,7 @@ async fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Resu
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -33501,7 +33501,7 @@ async fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()>
 
     let lock = context.temp_dir.child("uv.lock");
     lock.write_str(&format!(r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -33594,7 +33594,7 @@ async fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result
 
     let lock = context.temp_dir.child("uv.lock");
     lock.write_str(&format!(r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -33687,7 +33687,7 @@ async fn lock_trailing_slash_index_url_in_lockfile_and_pyproject_toml() -> Resul
 
     let lock = context.temp_dir.child("uv.lock");
     lock.write_str(&format!(r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -33783,7 +33783,7 @@ fn lock_trailing_slash_find_links() -> Result<()> {
     }, {
             assert_snapshot!(
                 lock, @r#"
-            version = 1
+            version = 2
             revision = 3
             requires-python = ">=3.12"
 
@@ -33864,7 +33864,7 @@ fn lock_trailing_slash_find_links() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -33995,7 +33995,7 @@ fn lock_exclude_newer_package_disable() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -34083,7 +34083,7 @@ fn lock_exclude_newer_package() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -35077,7 +35077,7 @@ fn lock_android() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -35177,7 +35177,7 @@ fn lock_required_intersection() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -35268,7 +35268,7 @@ fn lock_refresh() -> Result<()> {
     // Write a `uv.lock` that accidentally omits the `anyio` wheel, and uses an outdated revision.
     context.temp_dir.child("uv.lock").write_str(
         r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -35335,7 +35335,7 @@ fn lock_refresh() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
 
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -35402,7 +35402,7 @@ fn lock_refresh() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -35851,7 +35851,7 @@ fn lock_supported_environment_abi3_wheel() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [

@@ -143,7 +143,7 @@ fn lock_build_dependencies() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 4
         requires-python = ">=3.12"
 
@@ -433,7 +433,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 4
         requires-python = ">=3.12"
 
@@ -1696,7 +1696,7 @@ fn lock_build_dependencies_preference() -> Result<()> {
     }, {
         assert_snapshot!(
             lock_initial, @r#"
-        version = 1
+        version = 2
         revision = 4
         requires-python = ">=3.12"
 
@@ -1853,7 +1853,7 @@ fn lock_build_dependencies_preference() -> Result<()> {
     }, {
         assert_snapshot!(
             lock_second, @r#"
-        version = 1
+        version = 2
         revision = 4
         requires-python = ">=3.12"
 
@@ -2079,7 +2079,7 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 4
         requires-python = ">=3.12"
 
@@ -2330,7 +2330,7 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
     }, {
         assert_snapshot!(
             lock_initial, @r#"
-        version = 1
+        version = 2
         revision = 4
         requires-python = ">=3.12"
 
@@ -2564,7 +2564,7 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 4
         requires-python = ">=3.12"
 
@@ -5703,7 +5703,7 @@ fn lock_build_dependencies_fork() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 4
         requires-python = ">=3.12"
 
@@ -6177,7 +6177,7 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 4
         requires-python = ">=3.12"
 
@@ -6898,7 +6898,7 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 4
         requires-python = ">=3.12"
 
@@ -7243,7 +7243,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 4
         requires-python = ">=3.12"
 
@@ -8346,7 +8346,7 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 4
         requires-python = ">=3.12"
 
@@ -8542,7 +8542,7 @@ fn lock_build_dependencies_no_build_disables_locking() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -9226,7 +9226,7 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(lock, @r#"
-        version = 1
+        version = 2
         revision = 4
         requires-python = ">=3.12"
 
@@ -10551,7 +10551,7 @@ fn lock_build_dependencies_on_then_off_forced_rewrite() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 

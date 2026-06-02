@@ -85,7 +85,7 @@ mod map;
 mod tree;
 
 /// The current version of the lockfile format.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 /// The current revision of the lockfile format.
 const REVISION: u32 = 3;
@@ -2415,7 +2415,7 @@ impl Lock {
 
     /// Returns whether the lockfile can contain build dependencies.
     pub fn supports_build_dependencies(&self) -> bool {
-        (self.version(), self.revision()) >= (1, BUILD_DEPENDENCIES_REVISION)
+        (self.version(), self.revision()) >= (VERSION, BUILD_DEPENDENCIES_REVISION)
     }
 
     /// Returns `true` if this [`Lock`] includes entries for empty `dependency-group` metadata.
@@ -10644,7 +10644,7 @@ mod tests {
     #[test]
     fn runtime_resolution_selector_round_trip() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[resolution]]
@@ -10684,7 +10684,7 @@ source = { virtual = "." }
     #[test]
     fn package_selector_target_expression_round_trip() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -10804,7 +10804,7 @@ sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd8
     #[test]
     fn dependency_selector_combines_resolution_and_target() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[resolution]]
@@ -10866,7 +10866,7 @@ source = { virtual = "." }
     #[test]
     fn dependency_selector_rejects_unknown_resolution() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -10900,7 +10900,7 @@ sdist = { url = "https://example.com/debug.tar.gz", hash = "sha256:37dd54208da7e
     #[test]
     fn dependency_selector_rejects_context_outside_build_graph() {
         let data = r#"
-version = 1
+version = 2
 revision = 4
 requires-python = ">=3.12"
 
@@ -10954,7 +10954,7 @@ sdist = { url = "https://example.com/d.tar.gz", hash = "sha256:37dd54208da7e1cd8
     #[test]
     fn scoped_build_edge_rejects_context_outside_owning_build_graph() {
         let data = r#"
-version = 1
+version = 2
 revision = 4
 requires-python = ">=3.12"
 
@@ -11027,7 +11027,7 @@ sdist = { url = "https://example.com/y.tar.gz", hash = "sha256:37dd54208da7e1cd8
     #[test]
     fn scoped_build_edge_rejects_package_outside_owning_build_graph() {
         let data = r#"
-version = 1
+version = 2
 revision = 4
 requires-python = ">=3.12"
 
@@ -11075,7 +11075,7 @@ sdist = { url = "https://example.com/c.tar.gz", hash = "sha256:37dd54208da7e1cd8
     #[test]
     fn dependency_selector_rejects_unknown_activation_package() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[resolution]]
@@ -11122,7 +11122,7 @@ sdist = { url = "https://example.com/c.tar.gz", hash = "sha256:37dd54208da7e1cd8
     #[test]
     fn dependency_selector_rejects_unknown_field() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -11150,7 +11150,7 @@ unknown field `resoluton`, expected one of `resolution`, `resolutions`, `target`
     #[test]
     fn target_selector_rejects_unknown_field() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[resolution]]
@@ -11174,7 +11174,7 @@ unknown field `makrer`, expected one of `marker`, `active`, `inactive`, `any-of`
     #[test]
     fn runtime_resolution_rejects_unknown_activation_package() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[resolution]]
@@ -11197,7 +11197,7 @@ source = { virtual = "." }
     #[test]
     fn duplicate_resolution_ids_are_rejected() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[resolution]]
@@ -11333,7 +11333,7 @@ target = { marker = "sys_platform == 'darwin'" }
     #[test]
     fn build_resolution_source_packages_can_have_multiple_contexts() {
         let data = r#"
-version = 1
+version = 2
 revision = 4
 requires-python = ">=3.12"
 
@@ -11412,7 +11412,7 @@ sdist = { url = "https://example.com/c-2.tar.gz", hash = "sha256:37dd54208da7e1c
     #[test]
     fn package_resolution_id_scopes_build_dependency_traversal() {
         let data = r#"
-version = 1
+version = 2
 revision = 4
 requires-python = ">=3.12"
 
@@ -11513,7 +11513,7 @@ dependencies = [
     #[test]
     fn runtime_resolution_requires_target() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[resolution]]
@@ -11530,7 +11530,7 @@ kind = "runtime"
     #[test]
     fn runtime_resolution_rejects_operation() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[resolution]]
@@ -11549,7 +11549,7 @@ target = { marker = "sys_platform == 'linux'" }
     #[test]
     fn runtime_resolution_rejects_mode() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[resolution]]
@@ -11568,7 +11568,7 @@ target = { marker = "sys_platform == 'linux'" }
     #[test]
     fn runtime_resolution_rejects_executor() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[resolution]]
@@ -11587,7 +11587,7 @@ target = { marker = "sys_platform == 'linux'" }
     #[test]
     fn runtime_resolution_rejects_source_package() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[resolution]]
@@ -11606,7 +11606,7 @@ target = { marker = "sys_platform == 'linux'" }
     #[test]
     fn runtime_resolution_rejects_roots() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[resolution]]
@@ -11625,7 +11625,7 @@ roots = [{ name = "a" }]
     #[test]
     fn build_resolution_requires_operation() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[resolution]]
@@ -11652,7 +11652,7 @@ sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd8
     #[test]
     fn build_resolution_requires_mode() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[resolution]]
@@ -11679,7 +11679,7 @@ sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd8
     #[test]
     fn build_resolution_requires_source_package() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[resolution]]
@@ -11698,7 +11698,7 @@ mode = "isolated"
     #[test]
     fn build_resolution_rejects_empty_executor() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[resolution]]
@@ -11727,7 +11727,7 @@ sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd8
     #[test]
     fn build_resolution_preserves_executor() {
         let data = r#"
-version = 1
+version = 2
 revision = 4
 requires-python = ">=3.12"
 
@@ -11772,7 +11772,7 @@ sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd8
     #[test]
     fn build_resolution_roots_drive_membership() {
         let data = r#"
-version = 1
+version = 2
 revision = 4
 requires-python = ">=3.12"
 
@@ -11822,7 +11822,7 @@ sdist = { url = "https://example.com/c.tar.gz", hash = "sha256:37dd54208da7e1cd8
     #[test]
     fn build_resolution_records_must_cover_captured_build_dependencies() {
         let data = r#"
-version = 1
+version = 2
 revision = 4
 requires-python = ">=3.12"
 
@@ -11862,7 +11862,7 @@ sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd8
     #[test]
     fn scoped_build_dependencies_require_resolution_record() {
         let data = r#"
-version = 1
+version = 2
 revision = 4
 requires-python = ">=3.12"
 
@@ -11894,7 +11894,7 @@ sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd8
     #[test]
     fn build_resolution_records_must_cover_captured_build_dependencies_without_existing_records() {
         let data = r#"
-version = 1
+version = 2
 revision = 4
 requires-python = ">=3.12"
 
@@ -11923,7 +11923,7 @@ sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd8
     #[test]
     fn dependency_selector_preserves_correlated_marker_and_conflict() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -11975,7 +11975,7 @@ sdist = { url = "https://example.com/debug.tar.gz", hash = "sha256:37dd54208da7e
     #[test]
     fn missing_dependency_source_unambiguous() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -12001,7 +12001,7 @@ version = "0.1.0"
     #[test]
     fn missing_dependency_version_unambiguous() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -12027,7 +12027,7 @@ source = { registry = "https://pypi.org/simple" }
     #[test]
     fn missing_dependency_source_version_unambiguous() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -12052,7 +12052,7 @@ name = "a"
     #[test]
     fn missing_dependency_source_ambiguous() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -12084,7 +12084,7 @@ version = "0.1.0"
     #[test]
     fn build_dependency_source_ambiguous() {
         let data = r#"
-version = 1
+version = 2
 revision = 4
 requires-python = ">=3.12"
 
@@ -12140,7 +12140,7 @@ sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd8
     #[test]
     fn build_dependency_missing_source_ambiguous() {
         let data = r#"
-version = 1
+version = 2
 revision = 4
 requires-python = ">=3.12"
 
@@ -12171,7 +12171,7 @@ sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd8
     #[test]
     fn missing_dependency_version_ambiguous() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -12203,7 +12203,7 @@ source = { registry = "https://pypi.org/simple" }
     #[test]
     fn missing_dependency_source_version_ambiguous() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -12234,7 +12234,7 @@ name = "a"
     #[test]
     fn missing_dependency_version_dynamic() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -12264,7 +12264,7 @@ source = { editable = "path/to/a" }
     #[test]
     fn hash_optional_missing() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -12280,7 +12280,7 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4
     #[test]
     fn hash_optional_present() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -12296,7 +12296,7 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4
     #[test]
     fn hash_required_present() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -12312,7 +12312,7 @@ wheels = [{ url = "file:///foo/bar/anyio-4.3.0-py3-none-any.whl", hash = "sha256
     #[test]
     fn source_direct_no_subdir() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -12327,7 +12327,7 @@ source = { url = "https://burntsushi.net" }
     #[test]
     fn source_direct_has_subdir() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -12342,7 +12342,7 @@ source = { url = "https://burntsushi.net", subdirectory = "wat/foo/bar" }
     #[test]
     fn source_directory() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -12357,7 +12357,7 @@ source = { directory = "path/to/dir" }
     #[test]
     fn source_editable() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -12374,7 +12374,7 @@ source = { editable = "path/to/dir" }
     #[test]
     fn registry_source_windows_drive_letter() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]

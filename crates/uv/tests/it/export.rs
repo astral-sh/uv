@@ -366,7 +366,7 @@ fn requirements_txt_simplifies_selected_root_extra_markers_from_lock() -> Result
     let lock = context.temp_dir.child("uv.lock");
     lock.write_str(
         r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -659,7 +659,7 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
         {
             insta::assert_snapshot!(
                 lock, @r#"
-            version = 1
+            version = 2
             revision = 3
             requires-python = ">=3.12"
             resolution-markers = [
@@ -1679,7 +1679,7 @@ fn requirements_txt_non_project_fork() -> Result<()> {
         {
             insta::assert_snapshot!(
                 lock, @r#"
-            version = 1
+            version = 2
             revision = 3
             requires-python = ">=3.12"
             resolution-markers = [
@@ -2853,7 +2853,7 @@ fn requirements_txt_script() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
         resolution-markers = [
@@ -2972,7 +2972,7 @@ fn requirements_txt_script() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
         resolution-markers = [
@@ -5210,7 +5210,7 @@ fn export_lock_workspace_mismatch_with_frozen() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("uv.lock");
     pyproject_toml.write_str(
         r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 

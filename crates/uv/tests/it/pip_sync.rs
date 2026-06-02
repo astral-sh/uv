@@ -2475,7 +2475,7 @@ fn sync_editable() -> Result<()> {
 
     // Edit the sources and make sure the changes are respected without syncing again.
     let python_version_1 = indoc::indoc! {r"
-        version = 1
+        version = 2
    "};
     fs_err::write(&python_source_file, python_version_1)?;
 

@@ -92,7 +92,7 @@ fn extra_basic() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -286,7 +286,7 @@ fn extra_basic_three_extras() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -761,7 +761,7 @@ fn extra_multiple_independent() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -911,7 +911,7 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -1788,7 +1788,7 @@ fn extra_depends_on_conflicting_extra_transitive() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -1977,7 +1977,7 @@ fn group_basic() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -2132,7 +2132,7 @@ fn group_default() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -2377,7 +2377,7 @@ fn groups_respect_supported_environments_when_filtering_wheels() -> Result<()> {
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         supported-markers = [
@@ -2529,7 +2529,7 @@ fn mixed() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -2699,7 +2699,7 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -2849,7 +2849,7 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -2998,7 +2998,7 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -3175,7 +3175,7 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -3555,7 +3555,7 @@ fn shared_optional_dependency_extra1() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -3706,7 +3706,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -3858,7 +3858,7 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -4014,7 +4014,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.11.*"
         conflicts = [[
@@ -4163,7 +4163,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.11.*"
         conflicts = [[
@@ -4317,7 +4317,7 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.11.*"
         conflicts = [[
@@ -4469,7 +4469,7 @@ fn shared_dependency_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -4655,7 +4655,7 @@ fn shared_dependency_group() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -4842,7 +4842,7 @@ fn shared_dependency_mixed() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -5071,7 +5071,7 @@ conflicts = [
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.11.*"
         conflicts = [[
@@ -5285,7 +5285,7 @@ fn jinja_no_conflict_markers1() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -5455,7 +5455,7 @@ fn jinja_no_conflict_markers2() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -5670,7 +5670,7 @@ fn collision_extra() -> Result<()> {
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -5910,7 +5910,7 @@ fn extra_inferences() -> Result<()> {
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -8401,7 +8401,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -8639,7 +8639,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10"
         resolution-markers = [
@@ -11415,7 +11415,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10"
         resolution-markers = [
@@ -14484,7 +14484,7 @@ fn overlapping_resolution_markers() -> Result<()> {
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.10.*"
         conflicts = [[
@@ -15634,7 +15634,7 @@ fn conditional_sources_keep_default_platform_specific_transitive_dependencies() 
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.12.*"
         conflicts = [[
@@ -16460,7 +16460,7 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -16929,7 +16929,7 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -17432,7 +17432,7 @@ fn do_not_simplify_if_not_all_conflict_extras_satisfy_the_marker_by_themselves()
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.12.*"
         conflicts = [[
@@ -17720,7 +17720,7 @@ fn many_pairwise_conflicts_shared_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -17887,7 +17887,7 @@ fn project_level_conflict_with_extra() -> Result<()> {
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -18075,7 +18075,7 @@ fn project_level_conflict_with_extras_and_cross_dependency() -> Result<()> {
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -18328,7 +18328,7 @@ fn project_level_conflict_with_group() -> Result<()> {
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[

@@ -1486,7 +1486,7 @@ fn workspace_inherit_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
