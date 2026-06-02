@@ -7,7 +7,6 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_errors::ErrorWithHints;
 use uv_fs::Simplified;
-use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -38,7 +37,6 @@ pub(crate) async fn find(
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let environment_preference = if system {
         EnvironmentPreference::OnlySystem
@@ -84,7 +82,6 @@ pub(crate) async fn find(
         environment_preference,
         python_preference,
         cache,
-        preview,
     )?;
     python
         .download_and_warn_if_outdated_prerelease(
@@ -138,7 +135,6 @@ pub(crate) async fn find_script(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let interpreter = match ScriptInterpreter::discover(
         script,
@@ -152,7 +148,6 @@ pub(crate) async fn find_script(
         Some(false),
         cache,
         printer,
-        preview,
     )
     .await
     {

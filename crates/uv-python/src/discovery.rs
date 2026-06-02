@@ -18,7 +18,6 @@ use uv_pep440::{
     LowerBound, Prerelease, UpperBound, Version, VersionSpecifier, VersionSpecifiers,
     release_specifiers_to_ranges,
 };
-use uv_preview::Preview;
 use uv_static::EnvVars;
 use uv_warnings::{warn_user_once, write_warning_chain};
 use which::{which, which_all};
@@ -308,9 +307,8 @@ impl uv_errors::Hint for Error {
 /// - Discovered virtual environment (e.g. `.venv` in a parent directory)
 ///
 /// Notably, "system" environments are excluded. See [`python_executables_from_installed`].
-fn python_executables_from_virtual_environments<'a>(
-    preview: Preview,
-) -> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
+fn python_executables_from_virtual_environments<'a>()
+-> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
     let from_active_environment = iter::once_with(|| {
         virtualenv_from_env()
             .into_iter()
@@ -321,7 +319,7 @@ fn python_executables_from_virtual_environments<'a>(
 
     // N.B. we prefer the conda environment over discovered virtual environments
     let from_conda_environment = iter::once_with(move || {
-        conda_environment_from_env(CondaEnvironmentKind::Child, preview)
+        conda_environment_from_env(CondaEnvironmentKind::Child)
             .into_iter()
             .map(virtualenv_python_executable)
             .map(|path| Ok((PythonSource::CondaPrefix, path)))
@@ -536,7 +534,6 @@ fn python_executables<'a>(
     platform: PlatformRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
-    preview: Preview,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
     // Always read from `UV_INTERNAL__PARENT_INTERPRETER` — it could be a system interpreter
     let from_parent_interpreter = iter::once_with(|| {
@@ -548,14 +545,14 @@ fn python_executables<'a>(
 
     // Check if the base conda environment is active
     let from_base_conda_environment = iter::once_with(move || {
-        conda_environment_from_env(CondaEnvironmentKind::Base, preview)
+        conda_environment_from_env(CondaEnvironmentKind::Base)
             .into_iter()
             .map(virtualenv_python_executable)
             .map(|path| Ok((PythonSource::BaseCondaPrefix, path)))
     })
     .flatten();
 
-    let from_virtual_environments = python_executables_from_virtual_environments(preview);
+    let from_virtual_environments = python_executables_from_virtual_environments();
     let from_installed =
         python_executables_from_installed(version, implementation, platform, preference);
 
@@ -757,23 +754,16 @@ fn python_installations<'a>(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &'a Cache,
-    preview: Preview,
 ) -> impl Iterator<Item = Result<PythonInstallation, Error>> + 'a {
     let installations = python_installations_from_executables(
         // Perform filtering on the discovered executables based on their source. This avoids
         // unnecessary interpreter queries, which are generally expensive. We'll filter again
         // with `interpreter_satisfies_environment_preference` after querying.
-        python_executables(
-            version,
-            implementation,
-            platform,
-            environments,
-            preference,
-            preview,
-        )
-        .filter_ok(move |(source, path)| {
-            source_satisfies_environment_preference(*source, path, environments)
-        }),
+        python_executables(version, implementation, platform, environments, preference).filter_ok(
+            move |(source, path)| {
+                source_satisfies_environment_preference(*source, path, environments)
+            },
+        ),
         cache,
     )
     .filter_ok(move |installation| {
@@ -1044,7 +1034,6 @@ pub fn find_python_installations<'a>(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &'a Cache,
-    preview: Preview,
 ) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
     let sources = DiscoveryPreferences {
         python_preference: preference,
@@ -1136,7 +1125,6 @@ pub fn find_python_installations<'a>(
                 environments,
                 preference,
                 cache,
-                preview,
             )
             .map_ok(Ok)
         }),
@@ -1149,7 +1137,6 @@ pub fn find_python_installations<'a>(
                 environments,
                 preference,
                 cache,
-                preview,
             )
             .map_ok(Ok)
         }),
@@ -1166,7 +1153,6 @@ pub fn find_python_installations<'a>(
                     environments,
                     preference,
                     cache,
-                    preview,
                 )
                 .map_ok(Ok)
             })
@@ -1180,7 +1166,6 @@ pub fn find_python_installations<'a>(
                 environments,
                 preference,
                 cache,
-                preview,
             )
             .filter_ok(|installation| implementation.matches_interpreter(&installation.interpreter))
             .map_ok(Ok)
@@ -1198,7 +1183,6 @@ pub fn find_python_installations<'a>(
                     environments,
                     preference,
                     cache,
-                    preview,
                 )
                 .filter_ok(|installation| {
                     implementation.matches_interpreter(&installation.interpreter)
@@ -1222,7 +1206,6 @@ pub fn find_python_installations<'a>(
                     environments,
                     preference,
                     cache,
-                    preview,
                 )
                 .filter_ok(move |installation| {
                     request.satisfied_by_interpreter(&installation.interpreter)
@@ -1242,10 +1225,8 @@ pub(crate) fn find_python_installation(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &Cache,
-    preview: Preview,
 ) -> Result<FindPythonResult, Error> {
-    let installations =
-        find_python_installations(request, environments, preference, cache, preview);
+    let installations = find_python_installations(request, environments, preference, cache);
     let mut first_prerelease = None;
     let mut first_debug = None;
     let mut first_managed = None;
@@ -1403,7 +1384,6 @@ pub(crate) async fn find_best_python_installation(
     python_install_mirror: Option<&str>,
     pypy_install_mirror: Option<&str>,
     python_downloads_json_url: Option<&str>,
-    preview: Preview,
 ) -> Result<PythonInstallation, crate::Error> {
     debug!("Starting Python discovery for {request}");
     let original_request = request;
@@ -1438,7 +1418,7 @@ pub(crate) async fn find_best_python_installation(
                 String::new()
             }
         );
-        let result = find_python_installation(request, environments, preference, cache, preview);
+        let result = find_python_installation(request, environments, preference, cache);
         let error = match result {
             Ok(Ok(installation)) => {
                 warn_on_unsupported_python(installation.interpreter());

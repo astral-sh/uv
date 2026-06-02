@@ -216,7 +216,6 @@ pub(crate) async fn run(
                 &cache,
                 DryRun::Disabled,
                 printer,
-                preview,
             )
             .await?
             .into_environment()?;
@@ -387,7 +386,6 @@ pub(crate) async fn run(
                     &cache,
                     DryRun::Disabled,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_environment()?;
@@ -473,7 +471,6 @@ pub(crate) async fn run(
                     active.map_or(Some(false), Some),
                     &cache,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -665,7 +662,6 @@ pub(crate) async fn run(
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
-                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -711,7 +707,6 @@ pub(crate) async fn run(
                     &cache,
                     DryRun::Disabled,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_environment()?
@@ -907,7 +902,6 @@ pub(crate) async fn run(
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
-                    preview,
                 )
                 .await?;
 

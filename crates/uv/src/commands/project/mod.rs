@@ -783,7 +783,6 @@ impl ScriptInterpreter {
         active: Option<bool>,
         cache: &Cache,
         printer: Printer,
-        preview: Preview,
     ) -> Result<Self, ProjectError> {
         // For now, we assume that scripts are never evaluated in the context of a workspace.
         let workspace = None;
@@ -837,7 +836,6 @@ impl ScriptInterpreter {
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
-            preview,
         )
         .await?
         .into_interpreter();
@@ -1017,7 +1015,6 @@ impl ProjectInterpreter {
         active: Option<bool>,
         cache: &Cache,
         printer: Printer,
-        preview: Preview,
     ) -> Result<Self, ProjectError> {
         let WorkspacePython {
             source,
@@ -1117,7 +1114,6 @@ impl ProjectInterpreter {
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
-            preview,
         )
         .await?;
 
@@ -1444,7 +1440,6 @@ impl ProjectEnvironment {
         cache: &Cache,
         dry_run: DryRun,
         printer: Printer,
-        preview: Preview,
     ) -> Result<Self, ProjectError> {
         // Lock the project environment to avoid synchronization issues.
         let _lock = ProjectInterpreter::lock(workspace)
@@ -1480,7 +1475,6 @@ impl ProjectEnvironment {
             active,
             cache,
             printer,
-            preview,
         )
         .await?
         {
@@ -1683,7 +1677,6 @@ impl ScriptEnvironment {
         cache: &Cache,
         dry_run: DryRun,
         printer: Printer,
-        preview: Preview,
     ) -> Result<Self, ProjectError> {
         // Lock the script environment to avoid synchronization issues.
         let _lock = ScriptInterpreter::lock(script)
@@ -1709,7 +1702,6 @@ impl ScriptEnvironment {
             active,
             cache,
             printer,
-            preview,
         )
         .await?
         {
@@ -2691,7 +2683,6 @@ pub(crate) async fn init_script_python_requirement(
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     reporter: &PythonDownloadReporter,
-    preview: Preview,
 ) -> anyhow::Result<RequiresPython> {
     let python_request = if let Some(request) = python {
         // (1) Explicit request from user
@@ -2723,7 +2714,6 @@ pub(crate) async fn init_script_python_requirement(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
-        preview,
     )
     .await?
     .into_interpreter();

@@ -20,7 +20,6 @@ use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
@@ -63,7 +62,6 @@ pub(crate) async fn init(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     match init_kind {
         InitKind::Script => {
@@ -87,7 +85,6 @@ pub(crate) async fn init(
                 pin_python,
                 package,
                 no_config,
-                preview,
             )
             .await?;
 
@@ -164,7 +161,6 @@ pub(crate) async fn init(
                 no_config,
                 cache,
                 printer,
-                preview,
             ))
             .await?;
 
@@ -216,7 +212,6 @@ async fn init_script(
     pin_python: bool,
     package: bool,
     no_config: bool,
-    preview: Preview,
 ) -> Result<()> {
     if no_workspace {
         warn_user_once!("`--no-workspace` is a no-op for Python scripts, which are standalone");
@@ -269,7 +264,6 @@ async fn init_script(
         client_builder,
         cache,
         &reporter,
-        preview,
     )
     .await?;
 
@@ -306,7 +300,6 @@ async fn init_project(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<()> {
     // Discover the current workspace, if it exists.
     let workspace_cache = WorkspaceCache::default();
@@ -399,7 +392,6 @@ async fn init_project(
         python_preference,
         python_downloads,
         cache,
-        preview,
         workspace.as_ref(),
         &reporter,
         python_request,
@@ -505,7 +497,6 @@ async fn determine_requires_python(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
-    preview: Preview,
     workspace: Option<&Workspace>,
     reporter: &PythonDownloadReporter,
     python_request: Option<PythonRequest>,
@@ -569,7 +560,6 @@ async fn determine_requires_python(
                         install_mirrors.python_install_mirror.as_deref(),
                         install_mirrors.pypy_install_mirror.as_deref(),
                         install_mirrors.python_downloads_json_url.as_deref(),
-                        preview,
                     )
                     .await?
                     .into_interpreter();
@@ -597,7 +587,6 @@ async fn determine_requires_python(
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
-                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -668,7 +657,6 @@ async fn determine_requires_python(
                 install_mirrors.python_install_mirror.as_deref(),
                 install_mirrors.pypy_install_mirror.as_deref(),
                 install_mirrors.python_downloads_json_url.as_deref(),
-                preview,
             )
             .await?
             .into_interpreter();
@@ -698,7 +686,6 @@ async fn determine_requires_python(
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
-            preview,
         )
         .await?
         .into_interpreter();

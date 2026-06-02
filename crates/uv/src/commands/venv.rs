@@ -162,7 +162,6 @@ pub(crate) async fn venv(
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
-            preview,
         )
         .await?;
         report_interpreter(&python, false, printer)?;

@@ -88,7 +88,6 @@ pub(crate) async fn metadata(
             Some(false),
             cache,
             printer,
-            preview,
         )
         .await?
         .into_interpreter();
@@ -142,7 +141,6 @@ pub(crate) async fn metadata(
                     cache,
                     DryRun::Disabled,
                     printer,
-                    preview,
                 )
                 .await?;
                 let module_owners = collect_module_owners(

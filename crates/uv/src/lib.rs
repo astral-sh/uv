@@ -1014,7 +1014,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &client_builder.subcommand(vec!["pip".to_owned(), "uninstall".to_owned()]),
                 args.dry_run,
                 printer,
-                globals.preview,
             )
             .await
         }
@@ -1040,7 +1039,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.paths,
                 &cache,
                 printer,
-                globals.preview,
             )
         }
         Commands::Pip(PipNamespace {
@@ -1075,7 +1073,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.prefix,
                 &cache,
                 printer,
-                globals.preview,
             )
             .await
         }
@@ -1100,7 +1097,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.files,
                 &cache,
                 printer,
-                globals.preview,
             )
         }
         Commands::Pip(PipNamespace {
@@ -1133,7 +1129,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.system,
                 &cache,
                 printer,
-                globals.preview,
             )
             .await
         }
@@ -1155,7 +1150,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &args.settings.dependency_metadata,
                 &cache,
                 printer,
-                globals.preview,
             )
         }
         Commands::Pip(PipNamespace {
@@ -1717,7 +1711,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &client_builder.subcommand(vec!["python".to_owned(), "list".to_owned()]),
                 &cache,
                 printer,
-                globals.preview,
             )
             .await
         }
@@ -1820,7 +1813,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                     cli.top_level.no_config,
                     &cache,
                     printer,
-                    globals.preview,
                 )
                 .await
             } else {
@@ -1838,7 +1830,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                     &cache,
                     &workspace_cache,
                     printer,
-                    globals.preview,
                 )
                 .await
             }
@@ -1866,7 +1857,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &cache,
                 &workspace_cache,
                 printer,
-                globals.preview,
             ))
             .await
         }
@@ -2154,7 +2144,6 @@ async fn run_project(
                 no_config,
                 &cache,
                 printer,
-                globals.preview,
             ))
             .await
         }
