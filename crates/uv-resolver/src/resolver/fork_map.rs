@@ -1,7 +1,7 @@
 use rustc_hash::FxHashMap;
 
 use uv_distribution_types::{Requirement, RequirementSource};
-use uv_normalize::{GroupName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::{MarkerTree, RequirementOrigin};
 use uv_pypi_types::{ConflictItem, ConflictItemRef};
 
@@ -32,21 +32,47 @@ pub(super) struct ForkScope {
 impl ForkScope {
     /// Derives the fork scope implied by a requirement's marker and conflict state.
     pub(super) fn from_requirement(requirement: &Requirement) -> Self {
-        let conflict = Self::conflict_for_requirement(requirement);
-        let marker = conflict.as_ref().map_or(requirement.marker, |conflict| {
-            Self::marker_with_conflict(requirement.marker, conflict)
-        });
-        Self { marker, conflict }
+        let Some(conflict) = Self::conflict_for_requirement(requirement) else {
+            return Self {
+                marker: requirement.marker,
+                conflict: None,
+            };
+        };
+        Self::from_conflict(requirement.marker, conflict)
     }
 
-    /// Derives the marker for a dependency-group requirement.
-    pub(super) fn marker_for_group(
+    /// Derives the fork scope for an extra-gated URL-like requirement.
+    ///
+    /// Unlike registry requirements with an explicit index, URL-like requirements must retain
+    /// their raw optional-extra marker for lock marker coverage.
+    pub(super) fn from_extra(
+        marker: MarkerTree,
+        project_name: &PackageName,
+        extra: &ExtraName,
+    ) -> Self {
+        Self {
+            marker,
+            conflict: Some(ConflictItem::from((project_name.clone(), extra.clone()))),
+        }
+    }
+
+    /// Derives the fork scope for a dependency-group requirement.
+    pub(super) fn from_group(
         marker: MarkerTree,
         project_name: &PackageName,
         group: &GroupName,
-    ) -> MarkerTree {
-        let conflict = ConflictItem::from((project_name.clone(), group.clone()));
-        Self::marker_with_conflict(marker, &conflict)
+    ) -> Self {
+        Self::from_conflict(
+            marker,
+            ConflictItem::from((project_name.clone(), group.clone())),
+        )
+    }
+
+    fn from_conflict(marker: MarkerTree, conflict: ConflictItem) -> Self {
+        Self {
+            marker: Self::marker_with_conflict(marker, &conflict),
+            conflict: Some(conflict),
+        }
     }
 
     /// Returns the marker under which the entry is visible.
@@ -55,7 +81,7 @@ impl ForkScope {
     }
 
     /// Returns the conflict item that must remain enabled for this scope to match, if any.
-    fn conflict(&self) -> Option<ConflictItemRef<'_>> {
+    pub(super) fn conflict(&self) -> Option<ConflictItemRef<'_>> {
         self.conflict.as_ref().map(ConflictItem::as_ref)
     }
 
@@ -84,7 +110,7 @@ impl ForkScope {
         .combined()
     }
 
-    fn matches(&self, env: &ResolverEnvironment) -> bool {
+    pub(super) fn matches(&self, env: &ResolverEnvironment) -> bool {
         env.included_by_marker(self.marker)
             && self
                 .conflict()

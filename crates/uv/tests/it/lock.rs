@@ -25267,6 +25267,47 @@ fn lock_multiple_sources_index_extra_base_and_optional() -> Result<()> {
     Ok(())
 }
 
+/// A source selected by an optional dependency must still satisfy the
+/// unconditional production requirement.
+#[test]
+fn lock_multiple_sources_extra_preserves_production_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "alt" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (markers: extra == 'alt'):
+      ╰─▶ Because only iniconfig{extra == 'alt'}<2 is available and your project depends on iniconfig{extra == 'alt'}>=2, we can conclude that your project's requirements are unsatisfiable.
+          And because your project requires project[alt], we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    ");
+
+    Ok(())
+}
+
 /// Like `lock_multiple_sources_extra_base_and_optional`, but for dependency
 /// groups via `group = "X"` sources.
 ///
@@ -25715,7 +25756,7 @@ async fn lock_multiple_sources_index_group_conflicting_specifiers() -> Result<()
 
     ----- stderr -----
       × No solution found when resolving dependencies for split (markers: extra == 'group-7-project-alt'):
-      ╰─▶ Because only iniconfig{extra == 'group-7-project-alt'}==2.0.0 is available and your project depends on iniconfig{extra == 'group-7-project-alt'}<2, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because your project depends on iniconfig{extra == 'group-7-project-alt'}>=2 and iniconfig{extra == 'group-7-project-alt'}<2, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     ");
@@ -26009,6 +26050,222 @@ fn lock_multiple_sources_extra_multiple_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Conflicting extras with distinct sources must resolve in separate forks
+/// instead of being treated as an overlapping source selection.
+#[test]
+fn lock_multiple_sources_extra_conflicting_urls() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        old = ["iniconfig"]
+        new = ["iniconfig"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                { extra = "old" },
+                { extra = "new" },
+            ],
+        ]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "old" },
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", extra = "new" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Conflicting dependency groups with distinct sources must resolve in
+/// separate forks instead of being treated as an overlapping source selection.
+#[test]
+fn lock_multiple_sources_group_conflicting_urls() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [dependency-groups]
+        old = ["iniconfig"]
+        new = ["iniconfig"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                { group = "old" },
+                { group = "new" },
+            ],
+        ]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "old" },
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", group = "new" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Conflicting extras with distinct explicit indexes must resolve in separate
+/// forks instead of creating overlapping index selections.
+#[tokio::test]
+async fn lock_multiple_sources_index_extra_conflicting_indexes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let old_proxy = crate::pypi_proxy::start().await;
+    let new_proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        old = ["iniconfig"]
+        new = ["iniconfig"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                {{ extra = "old" }},
+                {{ extra = "new" }},
+            ],
+        ]
+
+        [tool.uv.sources]
+        iniconfig = [
+            {{ index = "old-index", extra = "old" }},
+            {{ index = "new-index", extra = "new" }},
+        ]
+
+        [[tool.uv.index]]
+        name = "old-index"
+        url = "{old_proxy_uri}/simple"
+        explicit = true
+
+        [[tool.uv.index]]
+        name = "new-index"
+        url = "{new_proxy_uri}/simple"
+        explicit = true
+        "#,
+        old_proxy_uri = old_proxy.uri(),
+        new_proxy_uri = new_proxy.uri(),
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Conflicting dependency groups with distinct explicit indexes must resolve
+/// in separate forks instead of creating overlapping index selections.
+#[tokio::test]
+async fn lock_multiple_sources_index_group_conflicting_indexes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let old_proxy = crate::pypi_proxy::start().await;
+    let new_proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [dependency-groups]
+        old = ["iniconfig"]
+        new = ["iniconfig"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                {{ group = "old" }},
+                {{ group = "new" }},
+            ],
+        ]
+
+        [tool.uv.sources]
+        iniconfig = [
+            {{ index = "old-index", group = "old" }},
+            {{ index = "new-index", group = "new" }},
+        ]
+
+        [[tool.uv.index]]
+        name = "old-index"
+        url = "{old_proxy_uri}/simple"
+        explicit = true
+
+        [[tool.uv.index]]
+        name = "new-index"
+        url = "{new_proxy_uri}/simple"
+        explicit = true
+        "#,
+        old_proxy_uri = old_proxy.uri(),
+        new_proxy_uri = new_proxy.uri(),
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
     ");
 
     Ok(())

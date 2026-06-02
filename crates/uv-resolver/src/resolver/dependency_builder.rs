@@ -135,10 +135,10 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
 
         for requirement in self.state.overrides.apply(self.state.requirements.iter()) {
             let requirement: &Requirement = requirement.as_ref();
-            let marker = ForkScope::from_requirement(requirement).marker();
+            let scope = self.complementary_source_scope(requirement);
 
             for requirement in
-                self.complementary_source_requirements(requirement, marker, false, python_marker)
+                self.complementary_source_requirements(requirement, &scope, false, python_marker)
             {
                 self.apply_complementary_source_requirement(
                     &requirement,
@@ -166,14 +166,10 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             if !self.can_synthesize_non_root_complementary_source(&raw_requirement) {
                 continue;
             }
-            if self.is_user_declared_conflict_source_with_base(&raw_requirement, base_requirements)
-            {
-                continue;
-            }
-            let marker = ForkScope::from_requirement(&raw_requirement).marker();
+            let scope = self.complementary_source_scope(&raw_requirement);
             let complementary_requirements = self.complementary_source_requirements(
                 &raw_requirement,
-                marker,
+                &scope,
                 raw_requirement.evaluate_markers(self.env.marker_environment(), &[]),
                 python_marker,
             );
@@ -206,17 +202,11 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                 if !self.can_synthesize_non_root_complementary_source(&raw_requirement) {
                     continue;
                 }
-                if self
-                    .is_user_declared_conflict_source_with_base(&raw_requirement, base_requirements)
-                {
-                    continue;
-                }
-                let marker =
-                    ForkScope::marker_for_group(raw_requirement.marker, parent_name, group);
+                let scope = ForkScope::from_group(raw_requirement.marker, parent_name, group);
 
                 let complementary_requirements = self.complementary_source_requirements(
                     &raw_requirement,
-                    marker,
+                    &scope,
                     false,
                     python_marker,
                 );
@@ -272,6 +262,8 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                 PubGrubPackage::from_base_preserving_marker(name.clone(), requirement.marker);
         }
 
+        self.preserve_base_constraint_on_source(base_index, &name, requirement.marker);
+
         if self.deps[base_index].package.marker().is_false() {
             self.deps[base_index].package = PubGrubPackage::from_base_preserving_marker(
                 name.clone(),
@@ -291,6 +283,31 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         }
 
         true
+    }
+
+    /// Preserves an unsourced production constraint on the sourced side of a split.
+    ///
+    /// The source-specific dependency may come from an optional dependency or dependency group
+    /// with a weaker version range than the production dependency. Keep the production range
+    /// active wherever both requirements apply.
+    fn preserve_base_constraint_on_source(
+        &mut self,
+        base_index: usize,
+        name: &PackageName,
+        source_marker: MarkerTree,
+    ) {
+        let mut marker = self.deps[base_index].package.marker();
+        if marker.is_false() {
+            return;
+        }
+        marker.and(source_marker);
+        if marker.is_false() {
+            return;
+        }
+
+        let mut constraint = self.deps[base_index].clone();
+        constraint.package = PubGrubPackage::from_base_preserving_marker(name.clone(), marker);
+        self.deps.push(constraint);
     }
 
     /// Adds the unsourced side of a root complementary-source split when root flattening only
@@ -332,7 +349,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
     fn complementary_source_requirements(
         &self,
         requirement: &Requirement,
-        marker: MarkerTree,
+        scope: &ForkScope,
         included_in_fork: bool,
         python_marker: MarkerTree,
     ) -> Vec<ComplementarySourceRequirement> {
@@ -343,6 +360,13 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         if !self.is_source_specific_base_requirement(requirement) {
             return Vec::new();
         }
+        if self.is_declared_conflict_scope(scope) {
+            return Vec::new();
+        }
+        if !scope.matches(self.env) {
+            return Vec::new();
+        }
+        let marker = scope.marker();
         // This path is specifically for extra/group-gated source splits.
         if marker.only_extras().is_true() {
             return Vec::new();
@@ -362,6 +386,37 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             .collect()
     }
 
+    /// Returns the fork scope for a source-specific requirement.
+    ///
+    /// URL-like sources do not carry a conflict item on their requirement source, so add one for
+    /// extra-gated sources when the declaring package's extra participates in a conflict.
+    fn complementary_source_scope(&self, requirement: &Requirement) -> ForkScope {
+        let scope = ForkScope::from_requirement(requirement);
+        if matches!(requirement.source, RequirementSource::Registry { .. }) {
+            return scope;
+        }
+        let Some(project_name) = self.package.name_no_root().or(self.state.project.as_ref()) else {
+            return scope;
+        };
+        let Some(extra) = Self::single_positive_extra(requirement.marker) else {
+            return scope;
+        };
+        ForkScope::from_extra(requirement.marker, project_name, &extra)
+    }
+
+    /// Returns whether a source is already isolated by a declared conflict.
+    ///
+    /// The normal extra or group dependency carries the source into the corresponding resolver
+    /// fork, so a complementary edge would only create a redundant conflict-only resolution fork.
+    fn is_declared_conflict_scope(&self, scope: &ForkScope) -> bool {
+        scope.conflict().is_some_and(|conflict| {
+            self.state
+                .conflicts
+                .iter()
+                .any(|set| set.contains(conflict.package(), conflict.kind()))
+        })
+    }
+
     /// Returns the marker that must be preserved on a source-specific edge with a complementary
     /// unsourced base requirement.
     fn complementary_group_source_marker(
@@ -378,11 +433,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         }
 
         let parent_name = self.package.name_no_root()?;
-        Some(ForkScope::marker_for_group(
-            requirement.marker,
-            parent_name,
-            group,
-        ))
+        Some(ForkScope::from_group(requirement.marker, parent_name, group).marker())
     }
 
     /// Returns the version range implied by a complementary requirement.
@@ -419,61 +470,6 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
 
         self.state.project.as_ref() == Some(package_name)
             || self.state.workspace_members.contains(package_name)
-    }
-
-    /// Returns `true` if a source-specific requirement with an unsourced base requirement is
-    /// already isolated by a user-declared conflict.
-    ///
-    /// Adding complementary non-root edges in those forks only narrows transitive dependencies
-    /// that the existing conflict machinery can keep shared. Requirements with a sibling source in
-    /// the same conflict set still need complementary edges to preserve both source branches.
-    fn is_user_declared_conflict_source_with_base(
-        &self,
-        requirement: &Requirement,
-        base_requirements: &[Requirement],
-    ) -> bool {
-        let RequirementSource::Registry {
-            conflict: Some(conflict),
-            ..
-        } = &requirement.source
-        else {
-            return false;
-        };
-
-        let Some(conflict_set) = self
-            .state
-            .conflicts
-            .iter()
-            .find(|set| set.contains(conflict.package(), conflict.as_ref().kind()))
-        else {
-            return false;
-        };
-        if !self.has_unsourced_base_requirement(base_requirements, &requirement.name) {
-            return false;
-        }
-
-        !self
-            .state
-            .overrides
-            .apply(base_requirements.iter())
-            .any(|candidate| {
-                let candidate: &Requirement = candidate.as_ref();
-                let RequirementSource::Registry {
-                    index: Some(_),
-                    conflict: Some(candidate_conflict),
-                    ..
-                } = &candidate.source
-                else {
-                    return false;
-                };
-
-                candidate.name == requirement.name
-                    && candidate_conflict != conflict
-                    && conflict_set.contains(
-                        candidate_conflict.package(),
-                        candidate_conflict.as_ref().kind(),
-                    )
-            })
     }
 
     /// Returns the positive extra referenced by `marker`, if it names exactly one extra.
