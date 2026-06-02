@@ -363,7 +363,9 @@ impl Workspace {
             options,
         )
         .await;
-        cache.insert(result.clone(), &workspace_root);
+        if options.members == MemberDiscovery::All {
+            cache.insert(result.clone(), &workspace_root);
+        }
         result
     }
 
@@ -1651,7 +1653,9 @@ impl ProjectWorkspace {
             options,
         )
         .await;
-        cache.insert(result.clone(), &workspace_root);
+        if options.members == MemberDiscovery::All {
+            cache.insert(result.clone(), &workspace_root);
+        }
 
         Ok(Self {
             project_root: project_path.to_path_buf(),
@@ -1943,7 +1947,9 @@ impl VirtualProject {
                 options,
             )
             .await;
-            cache.insert(result.clone(), &project_path);
+            if options.members == MemberDiscovery::All {
+                cache.insert(result.clone(), &project_path);
+            }
             Ok(Self::NonProject(result?))
         } else {
             // Otherwise it's a pyproject.toml that maybe contains dependency-groups
@@ -1960,7 +1966,9 @@ impl VirtualProject {
                 options,
             )
             .await;
-            cache.insert(result.clone(), &project_path);
+            if options.members == MemberDiscovery::All {
+                cache.insert(result.clone(), &project_path);
+            }
             Ok(Self::NonProject(result?))
         }
     }
@@ -2092,11 +2100,11 @@ mod tests {
     use assert_fs::prelude::*;
     use insta::{assert_json_snapshot, assert_snapshot};
 
-    use uv_normalize::GroupName;
+    use uv_normalize::{GroupName, PackageName};
     use uv_pypi_types::DependencyGroupSpecifier;
 
     use crate::pyproject::PyProjectToml;
-    use crate::workspace::{DiscoveryOptions, ProjectWorkspace, Workspace};
+    use crate::workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace, Workspace};
     use crate::{WorkspaceCache, WorkspaceError};
 
     async fn workspace_test(folder: &str) -> (ProjectWorkspace, String) {
@@ -2522,6 +2530,60 @@ mod tests {
         .expect("cached workspace member ignores invalid change in the meantime");
 
         assert!(Arc::ptr_eq(&root_workspace, &member_project.workspace));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn workspace_cache_does_not_store_partial_discovery() -> Result<()> {
+        let root = tempfile::TempDir::new()?;
+        let root = ChildPath::new(root.path());
+
+        root.child("pyproject.toml").write_str(
+            r#"
+            [project]
+            name = "albatross"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv.workspace]
+            members = ["packages/*"]
+            "#,
+        )?;
+
+        root.child("packages")
+            .child("seeds")
+            .child("pyproject.toml")
+            .write_str(
+                r#"
+            [project]
+            name = "seeds"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            "#,
+            )?;
+
+        let cache = WorkspaceCache::default();
+        let partial_options = DiscoveryOptions {
+            members: MemberDiscovery::None,
+            ..DiscoveryOptions::default()
+        };
+        let partial_project =
+            ProjectWorkspace::discover(root.as_ref(), &partial_options, &cache).await?;
+
+        assert_eq!(partial_project.workspace().packages().len(), 1);
+
+        let member_project = ProjectWorkspace::discover(
+            root.child("packages").child("seeds").as_ref(),
+            &DiscoveryOptions::default(),
+            &cache,
+        )
+        .await?;
+        let seeds = PackageName::from_str("seeds")?;
+
+        assert_eq!(member_project.project_name(), &seeds);
+        assert_eq!(member_project.workspace().packages().len(), 2);
+        assert!(member_project.workspace().packages().contains_key(&seeds));
 
         Ok(())
     }
