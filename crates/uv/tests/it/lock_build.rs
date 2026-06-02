@@ -3962,12 +3962,17 @@ fn lock_build_dependencies_isolates_shared_build_dependency_edges() -> Result<()
 
     let links_dir = context.temp_dir.child("links");
     links_dir.create_dir_all()?;
-    write_wheel_with_requires(
-        &links_dir.child("builder-1.0.0-py3-none-any.whl"),
-        "builder",
+    write_wheel(
+        &links_dir.child("nested_backend-1.0.0-py3-none-any.whl"),
+        "nested-backend",
         "1.0.0",
-        &["helper>=1"],
     )?;
+    let nested_backend_url = Url::from_file_path(
+        links_dir
+            .child("nested_backend-1.0.0-py3-none-any.whl")
+            .path(),
+    )
+    .expect("valid file URL");
     write_wheel(
         &links_dir.child("helper-1.0.0-py3-none-any.whl"),
         "helper",
@@ -3978,6 +3983,48 @@ fn lock_build_dependencies_isolates_shared_build_dependency_edges() -> Result<()
         "helper",
         "2.0.0",
     )?;
+
+    let builder_dir = context.temp_dir.child("builder");
+    builder_dir.create_dir_all()?;
+    builder_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "builder"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["helper>=1"]
+
+        [build-system]
+        requires = ["nested-backend @ {nested_backend_url}"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    builder_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "builder-1.0.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("builder.py", "")
+        wheel.writestr(
+            "builder-1.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: builder\nVersion: 1.0.0\nRequires-Dist: helper>=1\n",
+        )
+        wheel.writestr(
+            "builder-1.0.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("builder-1.0.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+    let builder_url = Url::from_directory_path(builder_dir.path()).expect("valid file URL");
 
     for (name, helper_version) in [("dep-a", "1.0.0"), ("dep-b", "2.0.0")] {
         let module_name = name.replace('-', "_");
@@ -3991,7 +4038,7 @@ fn lock_build_dependencies_isolates_shared_build_dependency_edges() -> Result<()
             requires-python = ">=3.12"
 
             [build-system]
-            requires = ["builder==1.0.0", "helper=={helper_version}"]
+            requires = ["builder @ {builder_url}", "helper=={helper_version}"]
             backend-path = ["."]
             build-backend = "build_backend"
             "#
@@ -4032,11 +4079,17 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["dep-a", "dep-b"]
+
+        [dependency-groups]
+        a = ["dep-a"]
+        b = ["dep-b"]
 
         [tool.uv.sources]
         dep-a = { path = "dep-a" }
         dep-b = { path = "dep-b" }
+
+        [tool.uv]
+        package = false
         "#,
     )?;
 
@@ -4056,6 +4109,34 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     }, {
         assert_snapshot!(resolution_sections(&lock), @r#"
         [[resolution]]
+        id = "build:builder:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "builder"
+        version = "1.0.0"
+        source = { directory = "[TEMP_DIR]/builder" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "nested-backend", version = "1.0.0" },
+        ]
+
+        [[resolution]]
+        id = "build:builder:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "builder"
+        version = "1.0.0"
+        source = { directory = "[TEMP_DIR]/builder" }
+        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
+        roots = [
+            { name = "nested-backend", version = "1.0.0" },
+        ]
+
+        [[resolution]]
         id = "build:dep-a:wheel:bootstrap:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
@@ -4064,7 +4145,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         name = "dep-a"
         executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
-            { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
+            { name = "builder", version = "1.0.0", source = { directory = "[TEMP_DIR]/builder" } },
             { name = "helper", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
         ]
 
@@ -4077,7 +4158,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         name = "dep-a"
         executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
-            { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
+            { name = "builder", version = "1.0.0", source = { directory = "[TEMP_DIR]/builder" } },
             { name = "helper", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
         ]
 
@@ -4090,7 +4171,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         name = "dep-b"
         executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
-            { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" }, resolution-id = "build:dep-b:wheel:bootstrap:[BUILD-ID]" },
+            { name = "builder", version = "1.0.0", source = { directory = "[TEMP_DIR]/builder" }, resolution-id = "build:dep-b:wheel:bootstrap:[BUILD-ID]" },
             { name = "helper", version = "2.0.0", source = { registry = "[TEMP_DIR]/links" } },
         ]
 
@@ -4103,7 +4184,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         name = "dep-b"
         executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
-            { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" }, resolution-id = "build:dep-b:wheel:build:[BUILD-ID]" },
+            { name = "builder", version = "1.0.0", source = { directory = "[TEMP_DIR]/builder" }, resolution-id = "build:dep-b:wheel:build:[BUILD-ID]" },
             { name = "helper", version = "2.0.0", source = { registry = "[TEMP_DIR]/links" } },
         ]
         "#);
@@ -4117,14 +4198,47 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         lock.contains(r#"resolution-id = "build:dep-b:wheel:build:"#),
         "{lock}"
     );
+    let scoped_builders = lock
+        .split("[[package]]")
+        .filter(|package| {
+            package.starts_with("\nname = \"builder\"") && package.contains("resolution-id = ")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(scoped_builders.len(), 2, "{lock}");
+    assert!(
+        scoped_builders
+            .iter()
+            .all(|package| package.contains(r#"{ name = "nested-backend""#)),
+        "{lock}"
+    );
     assert!(!lock.contains("build-dependency-packages"), "{lock}");
+
+    let missing_backend_url =
+        Url::from_file_path(context.temp_dir.child("missing-backend.whl").path())
+            .expect("valid file URL");
+    builder_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "builder"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["helper>=1"]
+
+        [build-system]
+        requires = ["missing-backend @ {missing_backend_url}"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
 
     uv_snapshot!(context.filters(), context
         .sync()
-        .arg("--find-links")
-        .arg(links_dir.path())
+        .arg("--no-cache")
         .arg("--no-index")
         .arg("--frozen")
+        .arg("--no-default-groups")
+        .arg("--group")
+        .arg("b")
         .arg("--preview-features")
         .arg("lock-build-dependencies"), @"
     success: true
@@ -4132,9 +4246,8 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + dep-a==0.1.0 (from file://[TEMP_DIR]/dep-a)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + dep-b==0.1.0 (from file://[TEMP_DIR]/dep-b)
     ");
 

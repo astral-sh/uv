@@ -1681,8 +1681,6 @@ impl Lock {
             package.dependencies = edges.dependencies;
             package.optional_dependencies = edges.optional_dependencies;
             package.dependency_groups.clear();
-            package.build_dependencies.clear();
-            package.build_dependencies_resolved = false;
             package.build_dependency_packages = None;
             scoped_packages.push(package);
         }
@@ -1781,11 +1779,9 @@ impl Lock {
 
         // Set build-dependencies references and build-requires metadata on source packages.
         for package in &mut self.packages {
-            if package.id.resolution_id.is_none() {
-                if let Some(deps) = lookup_build_key_value(&build_dep_refs, package, root) {
-                    package.build_dependencies.clone_from(deps);
-                    package.build_dependencies_resolved = true;
-                }
+            if let Some(deps) = lookup_build_key_value(&build_dep_refs, package, root) {
+                package.build_dependencies.clone_from(deps);
+                package.build_dependencies_resolved = true;
             }
             package.build_dependency_packages = None;
 
@@ -1879,9 +1875,10 @@ impl Lock {
         package: &Package,
         stage: BuildResolutionStage,
     ) -> Option<&ResolutionRecord> {
+        let package_id = package.id.unscoped();
         self.resolutions.iter().find(|resolution| {
             resolution.kind == ResolutionKind::Build
-                && resolution.package_id.as_ref() == Some(&package.id)
+                && resolution.package_id.as_ref() == Some(&package_id)
                 && resolution.stage.unwrap_or(BuildResolutionStage::Build) == stage
         })
     }
@@ -1904,9 +1901,10 @@ impl Lock {
         let mut legacy_target = None;
         let mut legacy_fallback = None;
         let mut has_records = false;
+        let package_id = package.id.unscoped();
         for resolution in self.resolutions.iter().filter(|resolution| {
             resolution.kind == ResolutionKind::Build
-                && resolution.package_id.as_ref() == Some(&package.id)
+                && resolution.package_id.as_ref() == Some(&package_id)
                 && resolution.stage.unwrap_or(BuildResolutionStage::Build) == stage
         }) {
             has_records = true;
@@ -4838,9 +4836,10 @@ impl TryFrom<LockWire> for Lock {
             .filter(|resolution| resolution.kind == ResolutionKind::Build)
         {
             if let Some(package_id) = resolution.package_id.as_ref() {
+                let package_id = package_id.unscoped();
                 build_resolution_package_ids.insert(package_id.clone());
                 build_resolution_contexts_by_package
-                    .entry(package_id.clone())
+                    .entry(package_id)
                     .or_default()
                     .insert(resolution.id.clone());
             }
@@ -4849,7 +4848,7 @@ impl TryFrom<LockWire> for Lock {
         for package in &lock.packages {
             if lock.supports_build_dependencies()
                 && package.build_dependency_packages.is_some()
-                && !build_resolution_package_ids.contains(&package.id)
+                && !build_resolution_package_ids.contains(&package.id.unscoped())
             {
                 let id = build_resolution_context_id(&build_key_from_package_id(&package.id));
                 return Err(LockErrorKind::InvalidResolutionRecord {
@@ -4860,7 +4859,7 @@ impl TryFrom<LockWire> for Lock {
             }
             if lock.supports_build_dependencies()
                 && package.build_dependencies_resolved
-                && !build_resolution_package_ids.contains(&package.id)
+                && !build_resolution_package_ids.contains(&package.id.unscoped())
             {
                 let id = build_resolution_context_id(&build_key_from_package_id(&package.id));
                 return Err(LockErrorKind::InvalidResolutionRecord {
@@ -4893,7 +4892,7 @@ impl TryFrom<LockWire> for Lock {
             }
             if let Some(build_dependency_packages) = &package.build_dependency_packages {
                 let build_resolution_contexts =
-                    build_resolution_contexts_by_package.get(&package.id);
+                    build_resolution_contexts_by_package.get(&package.id.unscoped());
                 let expected_build_resolution_context =
                     build_resolution_context_id(&build_key_from_package_id(&package.id));
                 for (package_id, edges) in build_dependency_packages {
