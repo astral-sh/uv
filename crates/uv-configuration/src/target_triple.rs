@@ -359,12 +359,12 @@ pub enum TargetTriple {
     X8664LinuxAndroid,
 
     /// A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12.
-    // See https://pyodide.org/en/stable/development/abi/312.html
+    /// See <https://pyodide.org/en/stable/development/abi/312.html>
     #[cfg_attr(feature = "clap", value(name = "wasm32-pyodide2024"))]
     Wasm32Pyodide2024,
 
     /// A wasm32 target using the Pyodide 2025 platform. Meant for use with Python 3.13.
-    // See https://pyodide.org/en/stable/development/abi/313.html
+    /// See <https://pyodide.org/en/stable/development/abi/313.html>
     #[cfg_attr(feature = "clap", value(name = "wasm32-pyodide2025"))]
     Wasm32Pyodide2025,
 
