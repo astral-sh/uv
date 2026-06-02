@@ -15835,6 +15835,50 @@ fn check_locked_version_valid_forked_resolution() -> Result<()> {
     Ok(())
 }
 
+/// Test that `uv lock --locked --offline` accepts a valid lockfile when a marker-scoped constraint
+/// is disjoint from the only transitive path to a package.
+#[test]
+fn check_locked_version_valid_disjoint_constraint_offline_locked() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0 ; sys_platform == 'win32'"]
+
+        [tool.uv]
+        constraint-dependencies = ["idna<3.4 ; sys_platform == 'linux'"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    context.cache_dir.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Test that `uv lock --locked --offline` accepts a valid forked dependency-group lockfile
 /// without trying to re-resolve it.
 ///

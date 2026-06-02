@@ -10,7 +10,7 @@ use std::sync::{Arc, LazyLock};
 use itertools::Itertools;
 use jiff::Timestamp;
 use owo_colors::OwoColorize;
-use petgraph::graph::NodeIndex;
+use petgraph::graph::{Graph, NodeIndex};
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::Serializer;
@@ -58,6 +58,7 @@ use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::{Editability, WorkspaceMember};
 
 use crate::fork_strategy::ForkStrategy;
+use crate::graph_ops::marker_reachability;
 pub(crate) use crate::lock::export::PylockTomlPackage;
 pub use crate::lock::export::RequirementsTxtExport;
 pub use crate::lock::export::{
@@ -1824,11 +1825,22 @@ impl Lock {
             },
         );
         let overrides = Overrides::from_requirements(overrides.to_vec());
-        for requirement in overrides
-            .apply(requirements.iter())
-            .chain(constraints.iter().map(Cow::Borrowed))
+        let effective_requirements = overrides.apply(requirements.iter()).collect::<Vec<_>>();
+        let effective_dependency_groups = overrides
+            .apply(dependency_groups.values().flatten())
+            .collect::<Vec<_>>();
+        let package_reachability = self.package_reachability(
+            packages.keys(),
+            effective_requirements
+                .iter()
+                .map(Cow::as_ref)
+                .chain(effective_dependency_groups.iter().map(Cow::as_ref)),
+        );
+        for requirement in effective_requirements
+            .iter()
+            .map(Cow::as_ref)
+            .chain(constraints.iter())
         {
-            let requirement = requirement.as_ref();
             let RequirementSource::Registry { specifier, .. } = &requirement.source else {
                 continue;
             };
@@ -1843,7 +1855,12 @@ impl Lock {
                 let Some(version) = &package.id.version else {
                     continue;
                 };
-                if requirement_marker_for_package(requirement, package).is_false() {
+                let Some(reachability) = package_reachability.get(&package.id) else {
+                    continue;
+                };
+                let mut marker = requirement_marker_for_package(requirement, package);
+                marker.and(reachability.pep508());
+                if marker.is_false() {
                     continue;
                 }
                 if !specifier.contains(version) {
@@ -2391,6 +2408,85 @@ impl Lock {
         }
 
         Ok(SatisfiesResult::Satisfied)
+    }
+
+    /// Determine the markers under which each package is reachable from a workspace root or
+    /// lock-level requirement.
+    fn package_reachability<'lock, 'a>(
+        &'lock self,
+        root_names: impl IntoIterator<Item = &'a PackageName>,
+        root_requirements: impl IntoIterator<Item = &'a Requirement>,
+    ) -> FxHashMap<&'lock PackageId, UniversalMarker> {
+        let mut graph = Graph::<(), UniversalMarker>::new();
+        let root_index = graph.add_node(());
+        let mut package_indices =
+            FxHashMap::with_capacity_and_hasher(self.packages.len(), FxBuildHasher);
+
+        for package in &self.packages {
+            let package_index = graph.add_node(());
+            package_indices.insert(&package.id, package_index);
+
+            // Ensure that only explicit roots are considered reachable.
+            graph.add_edge(root_index, package_index, UniversalMarker::FALSE);
+        }
+
+        for package in &self.packages {
+            let parent_index = package_indices[&package.id];
+            for dependency in package
+                .dependencies
+                .iter()
+                .chain(package.optional_dependencies.values().flatten())
+                .chain(package.dependency_groups.values().flatten())
+            {
+                let Some(&child_index) = package_indices.get(&dependency.package_id) else {
+                    continue;
+                };
+                graph.add_edge(parent_index, child_index, dependency.complexified_marker);
+            }
+        }
+
+        for root_name in root_names {
+            for package in self
+                .packages
+                .iter()
+                .filter(|package| package.name() == root_name)
+            {
+                graph.add_edge(
+                    root_index,
+                    package_indices[&package.id],
+                    UniversalMarker::TRUE,
+                );
+            }
+        }
+
+        for requirement in root_requirements {
+            for package in self
+                .packages
+                .iter()
+                .filter(|package| package.name() == &requirement.name)
+            {
+                let marker = requirement_marker_for_package(requirement, package);
+                if marker.is_false() {
+                    continue;
+                }
+                graph.add_edge(
+                    root_index,
+                    package_indices[&package.id],
+                    UniversalMarker::new(marker, ConflictMarker::TRUE),
+                );
+            }
+        }
+
+        let reachability = marker_reachability(&graph, &[]);
+        package_indices
+            .into_iter()
+            .filter_map(|(package_id, index)| {
+                reachability
+                    .get(&index)
+                    .copied()
+                    .map(|marker| (package_id, marker))
+            })
+            .collect()
     }
 
     async fn source_tree_requires_dist<Context: BuildContext>(
