@@ -16165,6 +16165,46 @@ fn check_locked_version_violates_non_project_dependency_group_specifier() -> Res
     Ok(())
 }
 
+/// Test that `uv lock --locked --offline` accepts a valid non-project dependency-group lockfile
+/// when an inactive extra-marked requirement has a disjoint specifier.
+#[test]
+fn check_locked_version_valid_inactive_extra_dependency_group_offline_locked() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [dependency-groups]
+        dev = ["iniconfig<2 ; extra == 'foo'", "iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 1 package in [TIME]
+    ");
+
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    context.cache_dir.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Test that `uv lock --check` detects a marker-scoped specifier violation in a local package.
 ///
 /// The local package `a` legitimately resolves to `markupsafe 1.1.1` on non-Windows and

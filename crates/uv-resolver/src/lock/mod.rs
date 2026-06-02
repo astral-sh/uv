@@ -1825,9 +1825,13 @@ impl Lock {
             },
         );
         let overrides = Overrides::from_requirements(overrides.to_vec());
-        let effective_requirements = overrides.apply(requirements.iter()).collect::<Vec<_>>();
+        let effective_requirements = overrides
+            .apply(requirements.iter())
+            .filter(|requirement| requirement.evaluate_markers(None, &[]))
+            .collect::<Vec<_>>();
         let effective_dependency_groups = overrides
             .apply(dependency_groups.values().flatten())
+            .filter(|requirement| requirement.evaluate_markers(None, &[]))
             .collect::<Vec<_>>();
         let package_reachability = self.package_reachability(
             packages.keys(),
@@ -1841,7 +1845,12 @@ impl Lock {
             .map(Cow::as_ref)
             .chain(effective_dependency_groups.iter().map(Cow::as_ref))
             .map(|requirement| (requirement, false))
-            .chain(constraints.iter().map(|requirement| (requirement, true)))
+            .chain(
+                constraints
+                    .iter()
+                    .filter(|requirement| requirement.evaluate_markers(None, &[]))
+                    .map(|requirement| (requirement, true)),
+            )
         {
             let RequirementSource::Registry { specifier, .. } = &requirement.source else {
                 continue;
