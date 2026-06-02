@@ -16,17 +16,17 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::ResolverMarkerEnvironment;
 
-use crate::lock::{Dependency, HashedDist, LockErrorKind, Package, TagPolicy};
+use crate::lock::{HashedDist, LockErrorKind, Package, TagPolicy};
 use crate::{Lock, LockError};
 
 fn newly_activated_extras<'lock>(
-    dep: &'lock Dependency,
+    package: &'lock PackageName,
+    extras: impl Iterator<Item = &'lock ExtraName>,
     activated_extras: &[(&'lock PackageName, &'lock ExtraName)],
 ) -> Vec<(&'lock PackageName, &'lock ExtraName)> {
-    dep.extra
-        .iter()
+    extras
         .filter_map(|extra| {
-            let key = (&dep.package_id.name, extra);
+            let key = (package, extra);
             (!activated_extras.contains(&key)).then_some(key)
         })
         .collect()
@@ -165,7 +165,11 @@ pub trait Installable<'lock> {
                 })
                 .flatten()
             {
-                let additional_activated_extras = newly_activated_extras(dep, &activated_extras);
+                let additional_activated_extras = newly_activated_extras(
+                    &dep.package_id.name,
+                    dep.extra.iter(),
+                    &activated_extras,
+                );
                 if !dep.complexified_marker.evaluate(
                     marker_env,
                     activated_projects.iter().copied(),
@@ -177,6 +181,7 @@ pub trait Installable<'lock> {
                 ) {
                     continue;
                 }
+                activated_extras.extend(additional_activated_extras);
 
                 let dep_dist = self.lock().find_by_id(&dep.package_id);
 
@@ -339,6 +344,12 @@ pub trait Installable<'lock> {
             // Add the edge.
             petgraph.add_edge(root, index, Edge::Dev(group.clone()));
 
+            activated_extras.extend(newly_activated_extras(
+                &dist.id.name,
+                dependency.extras.iter(),
+                &activated_extras,
+            ));
+
             // Push its dependencies on the queue.
             if seen.insert((&dist.id, None)) {
                 queue.push_back((dist, None));
@@ -391,8 +402,11 @@ pub trait Installable<'lock> {
                     Either::Right(package.dependencies.iter())
                 };
                 for dep in deps {
-                    let additional_activated_extras =
-                        newly_activated_extras(dep, &activated_extras);
+                    let additional_activated_extras = newly_activated_extras(
+                        &dep.package_id.name,
+                        dep.extra.iter(),
+                        &activated_extras,
+                    );
                     if !dep.complexified_marker.evaluate(
                         marker_env,
                         activated_projects.iter().copied(),
