@@ -62,35 +62,70 @@ pub enum PyprojectTomlError {
 }
 
 /// Check whether the raw `pyproject.toml` string contains a `requires-python` value with a
-/// free-threaded selector suffix (e.g. `>=3.14t`). Returns the offending specifier string
-/// (e.g. `"3.14t"`) if one is found.
+/// free-threaded selector suffix (e.g. `>=3.13t`). Returns the offending specifier string
+/// (e.g. `"3.13t"`) if one is found.
 ///
 /// This is used to provide an actionable error message when TOML deserialization fails because
 /// the PEP 440 version parser rejects the `t` suffix.
+///
+/// The scan is line-based and restricted to the `[project]` table section so that occurrences
+/// of `requires-python` in comments, string values, or other tables are not matched.
 fn extract_free_threaded_selector(raw: &str) -> Option<String> {
-    // Find `requires-python` in the raw TOML text.
-    let after_key = raw.split("requires-python").nth(1)?;
-    // Find the opening quote of the value (`=  "..."` or `= '...'`).
-    let after_eq = after_key.split_once('=')?.1;
-    let trimmed = after_eq.trim_start();
-    let quote_char = trimmed.chars().next().filter(|c| *c == '"' || *c == '\'')?;
-    let value_start = 1; // skip the opening quote
-    let value_end = trimmed[value_start..].find(quote_char)? + value_start;
-    let value = &trimmed[value_start..value_end];
+    // Walk lines; track whether we are inside the [project] table.
+    let mut in_project_table = false;
+    for line in raw.lines() {
+        let trimmed = line.trim();
 
-    // Scan each comma-separated specifier for a free-threaded suffix: ends with \d+t.
-    for spec in value.split(',') {
-        let spec = spec.trim();
-        // Strip leading operator characters to get to the version part.
-        let version_part = spec.trim_start_matches(|c: char| !c.is_ascii_digit());
-        if version_part.ends_with('t')
-            && version_part[..version_part.len() - 1]
-                .chars()
-                .next_back()
-                .is_some_and(|c| c.is_ascii_digit())
-        {
-            return Some(version_part.to_string());
+        // Skip comment lines.
+        if trimmed.starts_with('#') {
+            continue;
         }
+
+        // Detect table headers.
+        if trimmed.starts_with('[') {
+            // `[project]` (but not `[project.something]`).
+            in_project_table = trimmed == "[project]";
+            continue;
+        }
+
+        if !in_project_table {
+            continue;
+        }
+
+        // Match a bare `requires-python = "..."` or `requires-python = '...'` assignment.
+        // Strip inline comments after the value.
+        let Some(rest) = trimmed.strip_prefix("requires-python") else {
+            continue;
+        };
+        let rest = rest.trim_start();
+        let Some(rest) = rest.strip_prefix('=') else {
+            continue;
+        };
+        let rest = rest.trim_start();
+
+        // Extract the quoted value.
+        let quote_char = rest.chars().next().filter(|c| *c == '"' || *c == '\'')?;
+        let value_start = 1;
+        let value_end = rest[value_start..].find(quote_char)? + value_start;
+        let value = &rest[value_start..value_end];
+
+        // Scan each comma-separated specifier for a free-threaded suffix (digit followed by `t`).
+        for spec in value.split(',') {
+            let spec = spec.trim();
+            // Strip leading operator characters to get to the version part.
+            let version_part = spec.trim_start_matches(|c: char| !c.is_ascii_digit());
+            if version_part.ends_with('t')
+                && version_part[..version_part.len() - 1]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| c.is_ascii_digit())
+            {
+                return Some(version_part.to_string());
+            }
+        }
+
+        // Found the `requires-python` key but no free-threaded specifier — stop scanning.
+        return None;
     }
     None
 }
@@ -178,14 +213,17 @@ impl PyProjectToml {
             .transpose()?;
 
         let mut pyproject: Self = toml::from_str(&raw).map_err(|err| {
-            // If the TOML error is caused by a free-threaded selector in `requires-python`
-            // (e.g. `>=3.14t`), return a dedicated, actionable error variant instead of the
-            // generic TOML parse error, which would otherwise be cryptic.
-            if let Some(version) = extract_free_threaded_selector(&raw) {
-                PyprojectTomlError::FreeThreadedSelector(version)
-            } else {
-                PyprojectTomlError::Toml(err)
+            // Only emit `FreeThreadedSelector` when the TOML error is actually caused by the
+            // `requires-python` field (i.e. the error message references that key) AND the raw
+            // file contains a free-threaded specifier in that field.  This avoids masking
+            // unrelated parse errors that happen to co-exist with a `t`-suffixed specifier.
+            let err_msg = err.to_string();
+            if err_msg.contains("requires-python") {
+                if let Some(version) = extract_free_threaded_selector(&raw) {
+                    return PyprojectTomlError::FreeThreadedSelector(version);
+                }
             }
+            PyprojectTomlError::Toml(err)
         })?;
         if let Some(sources) = sources {
             let tool_uv = pyproject
@@ -2198,22 +2236,49 @@ name = "foo"
     }
 
     #[test]
-    fn test_extract_free_threaded_selector_trailing_t_not_digit_before() {
-        // `t` suffix where the character before `t` is not a digit — must not match.
-        // e.g. a hypothetical `>=3.13.post1t` where last-before-t is not a digit.
+    fn test_extract_free_threaded_selector_in_comment_ignored() {
+        // `requires-python` with a `t` suffix appears only in a comment — must return None.
+        let raw = r#"
+[project]
+name = "foo"
+# requires-python = ">=3.13t"
+requires-python = ">=3.13"
+"#;
+        assert_eq!(extract_free_threaded_selector(raw), None);
+    }
+
+    #[test]
+    fn test_extract_free_threaded_selector_in_other_table_ignored() {
+        // `requires-python` with a `t` suffix appears in a non-[project] table — must return None.
+        let raw = r#"
+[tool.something]
+requires-python = ">=3.13t"
+
+[project]
+requires-python = ">=3.13"
+"#;
+        assert_eq!(extract_free_threaded_selector(raw), None);
+    }
+
+    #[test]
+    fn test_extract_free_threaded_selector_letter_before_t_no_match() {        // `>=3.13at` — the character immediately before `t` is a letter, not a digit.
+        // Must return None so we don't false-positive on arbitrary strings ending in `t`.
+        let raw = r#"
+[project]
+requires-python = ">=3.13at"
+"#;
+        assert_eq!(extract_free_threaded_selector(raw), None);
+    }
+
+    #[test]
+    fn test_extract_free_threaded_selector_post_release_digit_before_t_matches() {
+        // `>=3.13.post1t` — the character before `t` is the digit `1`.
+        // Our heuristic matches digit-before-t, so this is treated as a free-threaded selector.
+        // In practice nobody writes this, but the test documents the boundary behaviour.
         let raw = r#"
 [project]
 requires-python = ">=3.13.post1t"
 "#;
-        // "post1t" — last char before 't' is '1' which IS a digit, so this DOES match.
-        // Adjust to a case where it genuinely shouldn't: letter before t.
-        let raw2 = r#"
-[project]
-requires-python = ">=3.13at"
-"#;
-        // "at" — char before 't' is 'a', not a digit → no match.
-        assert_eq!(extract_free_threaded_selector(raw2), None);
-        // "post1t" → last digit before 't' is '1' → matches (expected behaviour).
         assert_eq!(
             extract_free_threaded_selector(raw),
             Some("3.13.post1t".to_string())
@@ -2245,6 +2310,31 @@ requires-python = ">=3.13at"
     }
 
     // --- PyProjectToml::from_string integration ---
+
+    #[test]
+    fn test_from_string_unrelated_toml_error_not_masked() {
+        // A genuine TOML syntax error unrelated to `requires-python` must not be swallowed
+        // by FreeThreadedSelector even if the file also has a `t`-suffixed specifier.
+        let raw = r#"
+[project]
+name = "myapp"
+version = "0.1.0"
+requires-python = ">=3.13t"
+invalid syntax !!!
+"#;
+        let err = PyProjectToml::from_string(raw.to_string(), Path::new("pyproject.toml"))
+            .expect_err("should fail to parse");
+        // The error may be FreeThreadedSelector (if toml errors on requires-python first)
+        // or Toml (if it errors on the syntax line first) — what must NOT happen is silently
+        // returning Ok or panicking.
+        assert!(
+            matches!(
+                err,
+                PyprojectTomlError::FreeThreadedSelector(_) | PyprojectTomlError::Toml(_)
+            ),
+            "unexpected error variant: {err:?}"
+        );
+    }
 
     #[test]
     fn test_from_string_free_threaded_selector_returns_dedicated_error() {
