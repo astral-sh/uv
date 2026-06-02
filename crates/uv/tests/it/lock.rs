@@ -24949,6 +24949,10 @@ fn lock_multiple_sources_extra() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+        conflicts = [[
+            { package = "project", extra = "cpu" },
+            { package = "project", extra = "cpu" },
+        ]]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -25054,6 +25058,10 @@ fn lock_multiple_sources_extra_base_and_optional() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+        conflicts = [[
+            { package = "project", extra = "alt" },
+            { package = "project", extra = "alt" },
+        ]]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -25107,6 +25115,29 @@ fn lock_multiple_sources_extra_base_and_optional() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    ");
+
+    // Locks created before source activation contexts were persisted can silently install the
+    // fallback source. Treat them as stale so they are regenerated.
+    let lock = context.read("uv.lock");
+    context.temp_dir.child("uv.lock").write_str(&lock.replace(
+        r#"conflicts = [[
+    { package = "project", extra = "alt" },
+    { package = "project", extra = "alt" },
+]]
+
+"#,
+        "",
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -25213,6 +25244,10 @@ fn lock_multiple_sources_index_extra_base_and_optional() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+        conflicts = [[
+            { package = "project", extra = "cu118" },
+            { package = "project", extra = "cu118" },
+        ]]
 
         [options]
         exclude-newer = "2025-01-30T00:00:00Z"
@@ -25415,6 +25450,10 @@ fn lock_multiple_sources_group_base_and_group() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+        conflicts = [[
+            { package = "project", group = "alt" },
+            { package = "project", group = "alt" },
+        ]]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -25524,6 +25563,10 @@ fn lock_multiple_sources_index_group_base_and_group() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+        conflicts = [[
+            { package = "project", group = "cu118" },
+            { package = "project", group = "cu118" },
+        ]]
 
         [options]
         exclude-newer = "2025-01-30T00:00:00Z"
@@ -25679,6 +25722,13 @@ fn lock_multiple_sources_index_group_repeated_root_groups() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+        conflicts = [[
+            { package = "project", group = "cu118a" },
+            { package = "project", group = "cu118a" },
+        ], [
+            { package = "project", group = "cu118b" },
+            { package = "project", group = "cu118b" },
+        ]]
 
         [options]
         exclude-newer = "2025-01-30T00:00:00Z"
@@ -25935,6 +25985,10 @@ fn lock_multiple_sources_extra_and_platform_marker() -> Result<()> {
             "sys_platform != 'linux'",
             "sys_platform == 'linux'",
         ]
+        conflicts = [[
+            { package = "project", extra = "alt" },
+            { package = "project", extra = "alt" },
+        ]]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -26051,6 +26105,13 @@ fn lock_multiple_sources_extra_multiple_urls() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+        conflicts = [[
+            { package = "project", extra = "alt" },
+            { package = "project", extra = "alt" },
+        ], [
+            { package = "project", extra = "dev" },
+            { package = "project", extra = "dev" },
+        ]]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -36187,6 +36248,13 @@ fn lock_path_dependency_explicit_index_optional_extra_source_multiple_extras() -
         version = 1
         revision = 3
         requires-python = ">=3.12"
+        conflicts = [[
+            { package = "pkg-a", extra = "cu118" },
+            { package = "pkg-a", extra = "cu118" },
+        ], [
+            { package = "pkg-a", extra = "cu124" },
+            { package = "pkg-a", extra = "cu124" },
+        ]]
 
         [options]
         exclude-newer = "2025-01-30T00:00:00Z"

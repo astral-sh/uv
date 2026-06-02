@@ -1262,6 +1262,13 @@ impl ValidatedLock {
                 debug!("Existing `uv.lock` satisfies workspace requirements");
                 Ok(Self::Satisfies(lock))
             }
+            SatisfiesResult::MismatchedSourceActivationContexts(expected, actual) => {
+                debug!(
+                    "Resolving despite existing lockfile due to mismatched source activation contexts:\n  Requested: {:?}\n  Existing: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Versions(lock))
+            }
             SatisfiesResult::MismatchedMembers(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched members:\n  Requested: {:?}\n  Existing: {:?}",

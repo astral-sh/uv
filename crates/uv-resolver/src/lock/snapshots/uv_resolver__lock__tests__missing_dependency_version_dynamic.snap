@@ -10,6 +10,7 @@ Ok(
         conflicts: Conflicts(
             [],
         ),
+        source_activation_contexts: {},
         supported_environments: [],
         required_environments: [],
         requires_python: RequiresPython {

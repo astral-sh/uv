@@ -49,8 +49,8 @@ use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_pypi_types::{
-    ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
-    ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ConflictItem, ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes,
+    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
@@ -277,6 +277,8 @@ pub struct Lock {
     fork_markers: Vec<UniversalMarker>,
     /// The conflicting groups/extras specified by the user.
     conflicts: Conflicts,
+    /// Source-selection contexts encoded as degenerate conflict sets for older lockfile readers.
+    source_activation_contexts: BTreeSet<ConflictItem>,
     /// The list of supported environments specified by the user.
     supported_environments: Vec<MarkerTree>,
     /// The list of required platforms specified by the user.
@@ -480,6 +482,7 @@ impl Lock {
             options,
             ResolverManifest::default(),
             Conflicts::empty(),
+            BTreeSet::new(),
             supported_environments,
             vec![],
             fork_markers,
@@ -496,6 +499,7 @@ impl Lock {
         options: ResolverOptions,
         manifest: ResolverManifest,
         conflicts: Conflicts,
+        source_activation_contexts: BTreeSet<ConflictItem>,
         supported_environments: Vec<MarkerTree>,
         required_environments: Vec<MarkerTree>,
         fork_markers: Vec<UniversalMarker>,
@@ -645,6 +649,7 @@ impl Lock {
             revision,
             fork_markers,
             conflicts,
+            source_activation_contexts,
             supported_environments,
             required_environments,
             requires_python,
@@ -666,8 +671,34 @@ impl Lock {
     /// Record the conflicting groups that were used to generate this lock.
     #[must_use]
     pub fn with_conflicts(mut self, conflicts: Conflicts) -> Self {
+        self.source_activation_contexts = self.expected_source_activation_contexts(&conflicts);
         self.conflicts = conflicts;
         self
+    }
+
+    /// Return source-selection contexts that older lockfile readers must activate.
+    fn expected_source_activation_contexts(&self, conflicts: &Conflicts) -> BTreeSet<ConflictItem> {
+        if !conflicts.is_empty() {
+            return BTreeSet::new();
+        }
+
+        let mut contexts = BTreeSet::new();
+        for package in &self.packages {
+            for dependency in package
+                .dependencies
+                .iter()
+                .chain(package.optional_dependencies.values().flatten())
+                .chain(package.dependency_groups.values().flatten())
+            {
+                if let Ok((included, excluded)) =
+                    dependency.complexified_marker.conflict().filter_rules()
+                {
+                    contexts.extend(included);
+                    contexts.extend(excluded);
+                }
+            }
+        }
+        contexts
     }
 
     /// Record the required platforms that were used to generate this lock.
@@ -1128,23 +1159,32 @@ impl Lock {
             doc.insert("required-markers", value(required_environments));
         }
 
-        if !self.conflicts.is_empty() {
+        if !self.conflicts.is_empty() || !self.source_activation_contexts.is_empty() {
+            let conflict_item = |item: &ConflictItem| {
+                let mut table = InlineTable::new();
+                table.insert("package", Value::from(item.package().to_string()));
+                match item.kind() {
+                    ConflictKind::Project => {}
+                    ConflictKind::Extra(extra) => {
+                        table.insert("extra", Value::from(extra.to_string()));
+                    }
+                    ConflictKind::Group(group) => {
+                        table.insert("group", Value::from(group.to_string()));
+                    }
+                }
+                table
+            };
             let mut list = Array::new();
             for set in self.conflicts.iter() {
-                list.push(each_element_on_its_line_array(set.iter().map(|item| {
-                    let mut table = InlineTable::new();
-                    table.insert("package", Value::from(item.package().to_string()));
-                    match item.kind() {
-                        ConflictKind::Project => {}
-                        ConflictKind::Extra(extra) => {
-                            table.insert("extra", Value::from(extra.to_string()));
-                        }
-                        ConflictKind::Group(group) => {
-                            table.insert("group", Value::from(group.to_string()));
-                        }
-                    }
-                    table
-                })));
+                list.push(each_element_on_its_line_array(
+                    set.iter().map(conflict_item),
+                ));
+            }
+            for context in &self.source_activation_contexts {
+                let item = conflict_item(context);
+                list.push(each_element_on_its_line_array(
+                    [item.clone(), item].into_iter(),
+                ));
             }
             doc.insert("conflicts", value(list));
         }
@@ -1618,6 +1658,15 @@ impl Lock {
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<SatisfiesResult<'_>, LockError> {
+        let expected_source_activation_contexts =
+            self.expected_source_activation_contexts(&self.conflicts);
+        if expected_source_activation_contexts != self.source_activation_contexts {
+            return Ok(SatisfiesResult::MismatchedSourceActivationContexts(
+                expected_source_activation_contexts,
+                &self.source_activation_contexts,
+            ));
+        }
+
         let mut queue: VecDeque<&Package> = VecDeque::new();
         let mut seen = FxHashSet::default();
 
@@ -2413,6 +2462,8 @@ impl<'tags> TagPolicy<'tags> {
 pub enum SatisfiesResult<'lock> {
     /// The lockfile satisfies the requirements.
     Satisfied,
+    /// The lockfile uses different source activation contexts.
+    MismatchedSourceActivationContexts(BTreeSet<ConflictItem>, &'lock BTreeSet<ConflictItem>),
     /// The lockfile uses a different set of workspace members.
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
     /// A workspace member switched from virtual to non-virtual or vice versa.
@@ -2665,6 +2716,24 @@ struct LockWire {
     packages: Vec<PackageWire>,
 }
 
+/// Split source activation contexts from user-declared conflicts.
+fn split_source_activation_contexts(conflicts: &Conflicts) -> (Conflicts, BTreeSet<ConflictItem>) {
+    let mut user_conflicts = Conflicts::empty();
+    let mut source_activation_contexts = BTreeSet::new();
+    for set in conflicts.iter() {
+        let mut items = set.iter();
+        let Some(item) = items.next() else {
+            continue;
+        };
+        if items.next().is_none() {
+            source_activation_contexts.insert(item.clone());
+        } else {
+            user_conflicts.push(set.clone());
+        }
+    }
+    (user_conflicts, source_activation_contexts)
+}
+
 impl TryFrom<LockWire> for Lock {
     type Error = LockError;
 
@@ -2711,6 +2780,8 @@ impl TryFrom<LockWire> for Lock {
         if options.exclude_newer.exclude_newer_span.is_some() {
             options.exclude_newer.exclude_newer = None;
         }
+        let (conflicts, source_activation_contexts) =
+            split_source_activation_contexts(&wire.conflicts.unwrap_or_else(Conflicts::empty));
         let lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
@@ -2718,7 +2789,8 @@ impl TryFrom<LockWire> for Lock {
             wire.requires_python,
             options,
             wire.manifest,
-            wire.conflicts.unwrap_or_else(Conflicts::empty),
+            conflicts,
+            source_activation_contexts,
             supported_environments,
             required_environments,
             fork_markers,
