@@ -5046,6 +5046,100 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     assert!(!lock.contains("build-dependency-packages"), "{lock}");
 
     uv_snapshot!(context.filters(), context
+        .workspace_metadata()
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies,workspace-metadata"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
+      "members": [
+        {
+          "name": "project",
+          "path": "[TEMP_DIR]/",
+          "id": "project==0.1.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "resolution": {
+        "builder==1.0.0@registry+[TEMP_DIR]/links": {
+          "name": "builder",
+          "version": "1.0.0",
+          "source": {
+            "registry": {
+              "path": "[TEMP_DIR]/links"
+            }
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "leaf==2.0.0@registry+[TEMP_DIR]/links"
+            }
+          ],
+          "wheels": [
+            {
+              "path": "[TEMP_DIR]/links/builder-1.0.0-py3-none-any.whl",
+              "filename": "builder-1.0.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "dep==0.1.0@directory+[TEMP_DIR]/dep": {
+          "name": "dep",
+          "version": "0.1.0",
+          "source": {
+            "directory": "[TEMP_DIR]/dep"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "leaf==2.0.0@registry+[TEMP_DIR]/links": {
+          "name": "leaf",
+          "version": "2.0.0",
+          "source": {
+            "registry": {
+              "path": "[TEMP_DIR]/links"
+            }
+          },
+          "kind": "package",
+          "dependencies": [],
+          "wheels": [
+            {
+              "path": "[TEMP_DIR]/links/leaf-2.0.0-py3-none-any.whl",
+              "filename": "leaf-2.0.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "project==0.1.0@virtual+[TEMP_DIR]/": {
+          "name": "project",
+          "version": "0.1.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "builder==1.0.0@registry+[TEMP_DIR]/links"
+            },
+            {
+              "id": "dep==0.1.0@directory+[TEMP_DIR]/dep"
+            }
+          ]
+        }
+      }
+    }
+
+    ----- stderr -----
+    "#);
+
+    uv_snapshot!(context.filters(), context
         .sync()
         .arg("--find-links")
         .arg(links_dir.path())
