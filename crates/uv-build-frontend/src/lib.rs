@@ -7,7 +7,6 @@ mod pipreqs;
 
 use std::borrow::Cow;
 use std::ffi::OsString;
-use std::fmt::Formatter;
 use std::fmt::Write;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -20,8 +19,8 @@ use fs_err as fs;
 use indoc::formatdoc;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
-use serde::de::{self, IntoDeserializer, SeqAccess, Visitor, value};
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
+use serde::de::{self, IntoDeserializer};
 use tempfile::TempDir;
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
@@ -49,6 +48,7 @@ use uv_types::{
 };
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
+use uv_workspace::pyproject::BackendPath;
 
 pub use crate::error::{Error, MissingHeaderCause};
 
@@ -113,54 +113,6 @@ struct ToolUv {
     workspace: Option<de::IgnoredAny>,
     /// To warn users about ignored build backend settings.
     build_backend: Option<de::IgnoredAny>,
-}
-
-impl BackendPath {
-    /// Return an iterator over the paths in the backend path.
-    fn iter(&self) -> impl Iterator<Item = &str> {
-        self.0.iter().map(String::as_str)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct BackendPath(Vec<String>);
-
-impl<'de> Deserialize<'de> for BackendPath {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct StringOrVec;
-
-        impl<'de> Visitor<'de> for StringOrVec {
-            type Value = Vec<String>;
-
-            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-                formatter.write_str("list of strings")
-            }
-
-            fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                // Allow exactly `backend-path = "."`, as used in `flit_core==2.3.0`.
-                if s == "." {
-                    Ok(vec![".".to_string()])
-                } else {
-                    Err(de::Error::invalid_value(de::Unexpected::Str(s), &self))
-                }
-            }
-
-            fn visit_seq<S>(self, seq: S) -> Result<Self::Value, S::Error>
-            where
-                S: SeqAccess<'de>,
-            {
-                Deserialize::deserialize(value::SeqAccessDeserializer::new(seq))
-            }
-        }
-
-        deserializer.deserialize_any(StringOrVec).map(BackendPath)
-    }
 }
 
 /// `[build-backend]` from pyproject.toml

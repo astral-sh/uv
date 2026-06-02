@@ -23,7 +23,7 @@ use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults,
     InstallTarget,
 };
-use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
+use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist, StaticBuildSystem};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
@@ -971,14 +971,14 @@ impl Lock {
         self
     }
 
-    /// Return statically known build requirements after lowering local source configuration.
-    async fn lowered_build_requires<Context: BuildContext>(
+    /// Return the statically known build system after lowering local source configuration.
+    async fn lowered_build_system<Context: BuildContext>(
         &self,
         package: &Package,
         root: &Path,
         database: &DistributionDatabase<'_, Context>,
         build_hasher: &HashStrategy,
-    ) -> Result<Option<Vec<Requirement>>, LockError> {
+    ) -> Result<Option<StaticBuildSystem>, LockError> {
         if !matches!(
             package.id.source,
             Source::Path(_) | Source::Directory(_) | Source::Editable(_) | Source::Virtual(_)
@@ -990,7 +990,7 @@ impl Lock {
         };
         let dist = Dist::Source(source_dist.clone());
         database
-            .get_static_build_requires(&source_dist, build_hasher.get(&dist))
+            .get_static_build_system(&source_dist, build_hasher.get(&dist))
             .await
             .map_err(|err| {
                 LockErrorKind::Resolution {
@@ -1121,6 +1121,7 @@ impl Lock {
             BTreeMap::new();
         let mut build_requires_map: BTreeMap<BuildPackageKey, BTreeSet<Requirement>> =
             BTreeMap::new();
+        let mut build_system_map: BTreeMap<BuildPackageKey, PackageBuildSystem> = BTreeMap::new();
         let mut new_packages: Vec<Package> = Vec::new();
         let contextual_build_packages = build_resolutions
             .keys()
@@ -1327,16 +1328,22 @@ impl Lock {
         // source packages that are only reachable through build graphs are validated too.
         self.packages.extend(new_packages);
 
-        // Extract lowered build requirements to store in metadata for satisfies() checks.
+        // Extract the lowered build system to store in metadata for satisfies() checks.
         for package in &self.packages {
             let key = build_key_for_package(package, root);
 
-            let static_build_requires = self
-                .lowered_build_requires(package, root, database, build_hasher)
+            let static_build_system = self
+                .lowered_build_system(package, root, database, build_hasher)
                 .await?;
-            let has_explicit_build_requires = static_build_requires.is_some();
+            let has_explicit_build_requires = static_build_system.is_some();
             let mut build_requires = BTreeSet::new();
-            for requirement in static_build_requires.into_iter().flatten() {
+            if let Some(static_build_system) = static_build_system.as_ref() {
+                build_system_map.insert(key.clone(), PackageBuildSystem::from(static_build_system));
+            }
+            for requirement in static_build_system
+                .into_iter()
+                .flat_map(|build_system| build_system.requires)
+            {
                 let requirement = match requirement.relative_to(root) {
                     Ok(requirement) => requirement,
                     Err(err) => {
@@ -1789,6 +1796,9 @@ impl Lock {
             if let Some(build_requires) = lookup_build_key_value(&build_requires_map, package, root)
             {
                 package.metadata.build_requires = Some(build_requires.clone());
+            }
+            if let Some(build_system) = lookup_build_key_value(&build_system_map, package, root) {
+                package.metadata.build_system = Some(build_system.clone());
             }
 
             // Ensure build dependencies are sorted and deduplicated.
@@ -3414,11 +3424,12 @@ impl Lock {
         Ok(SatisfiesResult::Satisfied)
     }
 
-    /// Check whether the current build requirements still match what's stored in the lock's
+    /// Check whether the current build system still matches what's stored in the lock's
     /// `[package.metadata]`.
-    fn satisfies_build_requires<'lock>(
+    fn satisfies_build_system<'lock>(
         &self,
         current_requires: Option<BTreeSet<Requirement>>,
+        current_build_system: Option<PackageBuildSystem>,
         package: &'lock Package,
         root: &Path,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
@@ -3444,8 +3455,10 @@ impl Lock {
             })
             .transpose()?;
 
-        if current_build_requires != stored_build_requires {
-            return Ok(SatisfiesResult::MismatchedBuildRequires(
+        if current_build_requires != stored_build_requires
+            || current_build_system != package.metadata.build_system
+        {
+            return Ok(SatisfiesResult::MismatchedBuildSystem(
                 &package.id.name,
                 package.id.version.as_ref(),
             ));
@@ -3836,14 +3849,19 @@ impl Lock {
                 }
             }
 
-            // Validate mutable build requirements and configured extra build requirements
+            // Validate mutable build systems and configured extra build requirements
             // before metadata validation, since a changed build environment can otherwise
             // fail while trying to extract package metadata instead of reporting the stale lock.
-            if self.supports_build_dependencies() || package.metadata.build_requires.is_some() {
-                let mut build_requires = self
-                    .lowered_build_requires(package, root, database, hasher)
-                    .await?
-                    .map(|requires| requires.into_iter().collect::<BTreeSet<_>>());
+            if self.supports_build_dependencies()
+                || package.metadata.build_requires.is_some()
+                || package.metadata.build_system.is_some()
+            {
+                let build_system = self
+                    .lowered_build_system(package, root, database, hasher)
+                    .await?;
+                let current_build_system = build_system.as_ref().map(PackageBuildSystem::from);
+                let mut build_requires = build_system
+                    .map(|build_system| build_system.requires.into_iter().collect::<BTreeSet<_>>());
 
                 let extra_build_requires = extra_build_requires
                     .get(&package.id.name)
@@ -3854,16 +3872,22 @@ impl Lock {
                         .get_or_insert_with(BTreeSet::new)
                         .extend(extra_build_requires.iter().cloned().map(Requirement::from));
                 }
-                if build_requires.is_some() || package.metadata.build_requires.is_some() {
-                    match self.satisfies_build_requires(build_requires, package, root) {
+                if build_requires.is_some()
+                    || package.metadata.build_requires.is_some()
+                    || current_build_system.is_some()
+                    || package.metadata.build_system.is_some()
+                {
+                    match self.satisfies_build_system(
+                        build_requires,
+                        current_build_system,
+                        package,
+                        root,
+                    ) {
                         Ok(SatisfiesResult::Satisfied) => {}
                         Ok(result) => return Ok(result),
                         Err(err) => {
-                            debug!(
-                                "Failed to check `build-system.requires` for `{}`: {err}",
-                                package.id
-                            );
-                            return Ok(SatisfiesResult::MismatchedBuildRequires(
+                            debug!("Failed to check `build-system` for `{}`: {err}", package.id);
+                            return Ok(SatisfiesResult::MismatchedBuildSystem(
                                 &package.id.name,
                                 package.id.version.as_ref(),
                             ));
@@ -4402,9 +4426,8 @@ pub enum SatisfiesResult<'lock> {
         BTreeMap<GroupName, BTreeSet<Requirement>>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
     ),
-    /// A package in the lockfile contains different `build-system.requires` metadata
-    /// than expected.
-    MismatchedBuildRequires(&'lock PackageName, Option<&'lock Version>),
+    /// A package in the lockfile contains different `build-system` metadata than expected.
+    MismatchedBuildSystem(&'lock PackageName, Option<&'lock Version>),
     /// The lockfile was captured with different settings that affect build requirements.
     MismatchedBuildSettings,
     /// The lockfile is missing a version.
@@ -6013,6 +6036,7 @@ impl Package {
                 provides_extra: Box::default(),
                 dependency_groups: BTreeMap::default(),
                 build_requires: None,
+                build_system: None,
             },
         })
     }
@@ -6786,6 +6810,21 @@ impl Package {
                 metadata_table.insert("provides-extras", value(provides_extras));
             }
 
+            if let Some(build_system) = &self.metadata.build_system {
+                let mut build_system_table = InlineTable::new();
+                build_system_table.insert(
+                    "build-backend",
+                    Value::from(build_system.build_backend.clone()),
+                );
+                if !build_system.backend_path.is_empty() {
+                    build_system_table.insert(
+                        "backend-path",
+                        Value::from(Array::from_iter(build_system.backend_path.iter().cloned())),
+                    );
+                }
+                metadata_table.insert("build-system", value(build_system_table));
+            }
+
             if let Some(build_requires) = &self.metadata.build_requires {
                 let build_requires = build_requires
                     .iter()
@@ -7023,6 +7062,25 @@ struct PackageMetadata {
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
     #[serde(default, rename = "build-requires")]
     build_requires: Option<BTreeSet<Requirement>>,
+    #[serde(default, rename = "build-system")]
+    build_system: Option<PackageBuildSystem>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct PackageBuildSystem {
+    build_backend: String,
+    #[serde(default)]
+    backend_path: Vec<String>,
+}
+
+impl From<&StaticBuildSystem> for PackageBuildSystem {
+    fn from(build_system: &StaticBuildSystem) -> Self {
+        Self {
+            build_backend: build_system.build_backend.clone(),
+            backend_path: build_system.backend_path.clone(),
+        }
+    }
 }
 
 impl PackageMetadata {
@@ -7055,6 +7113,7 @@ impl PackageMetadata {
             provides_extra: metadata.provides_extra.clone(),
             dependency_groups,
             build_requires: None,
+            build_system: None,
         })
     }
 }
@@ -10703,6 +10762,7 @@ mod tests {
                 .replace("                        contexts: {},\n", "")
                 .replace("        resolutions: [],\n", "")
                 .replace("                    build_requires: None,\n", "")
+                .replace("                    build_system: None,\n", "")
                 .replace("            build_settings: None,\n", "");
             insta::assert_snapshot!(expr);
         }};

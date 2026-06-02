@@ -40,6 +40,17 @@ use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
 use crate::{Error, LocalWheel, Reporter, RequiresDist};
 
+/// Statically known fields from a source distribution's `[build-system]` table.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StaticBuildSystem {
+    /// Lowered PEP 508 dependencies required to execute the build system.
+    pub requires: Vec<Requirement>,
+    /// The effective PEP 517 backend.
+    pub build_backend: String,
+    /// The ordered in-tree backend paths.
+    pub backend_path: Vec<String>,
+}
+
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
 ///
@@ -173,15 +184,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
     }
 
-    /// Return static build requirements from a source distribution, if available.
+    /// Return the static build system from a source distribution, if available.
     #[instrument(skip_all, fields(%source))]
-    pub async fn get_static_build_requires(
+    pub async fn get_static_build_system(
         &self,
         source: &SourceDist,
         hashes: HashPolicy<'_>,
-    ) -> Result<Option<Vec<Requirement>>, Error> {
+    ) -> Result<Option<StaticBuildSystem>, Error> {
         self.builder
-            .download_build_requires(&BuildableSource::Dist(source), hashes, &self.client)
+            .download_build_system(&BuildableSource::Dist(source), hashes, &self.client)
             .await
     }
 

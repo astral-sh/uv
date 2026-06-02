@@ -1359,14 +1359,15 @@ async fn resolve_all_possible_builds(
                 && database
                     .is_direct_build(&source_dist, build_hasher.get(&dist), uv_version::version())
                     .await?;
-            let build_requirements = if direct_build {
+            let build_system = if direct_build {
                 None
             } else {
                 database
-                    .get_static_build_requires(&source_dist, build_hasher.get(&dist))
+                    .get_static_build_system(&source_dist, build_hasher.get(&dist))
                     .await?
             };
-            let has_explicit_build_system = build_requirements.is_some();
+            let has_explicit_build_system = build_system.is_some();
+            let build_requirements = build_system.map(|build_system| build_system.requires);
 
             if !direct_build && resolve_backend_hook_requirements {
                 database
@@ -1895,14 +1896,14 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedBuildRequires(name, version) => {
+            SatisfiesResult::MismatchedBuildSystem(name, version) => {
                 if let Some(version) = version {
                     debug!(
-                        "Resolving despite existing lockfile due to mismatched `build-system.requires` for: `{name}=={version}`"
+                        "Resolving despite existing lockfile due to mismatched `build-system` for: `{name}=={version}`"
                     );
                 } else {
                     debug!(
-                        "Resolving despite existing lockfile due to mismatched `build-system.requires` for: `{name}`"
+                        "Resolving despite existing lockfile due to mismatched `build-system` for: `{name}`"
                     );
                 }
                 Ok(Self::Preferable(lock))

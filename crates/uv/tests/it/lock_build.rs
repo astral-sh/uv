@@ -246,6 +246,7 @@ fn lock_build_dependencies() -> Result<()> {
         ]
 
         [package.metadata]
+        build-system = { build-backend = "setuptools.build_meta" }
         build-requires = [{ name = "setuptools", specifier = ">=42" }]
 
         [[package]]
@@ -1160,6 +1161,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         ]
 
         [package.metadata]
+        build-system = { build-backend = "setuptools.build_meta" }
         build-requires = [
             { name = "anyio", marker = "sys_platform == 'linux'" },
             { name = "iniconfig", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -7316,6 +7318,7 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         ]
 
         [package.metadata]
+        build-system = { build-backend = "setuptools.build_meta" }
         build-requires = [
             { name = "setuptools", specifier = ">=42" },
             { name = "wheel" },
@@ -7352,6 +7355,151 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+/// Verify that changing the PEP 517 backend identity invalidates the locked build graph.
+#[test]
+fn lock_build_dependencies_stale_build_backend() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    let backend = r#"
+from pathlib import Path
+
+def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+    dist_info = Path(metadata_directory) / "dep-0.1.0.dist-info"
+    dist_info.mkdir()
+    (dist_info / "METADATA").write_text(
+        "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n"
+    )
+    return dist_info.name
+"#;
+    dep_dir.child("backend_a.py").write_str(backend)?;
+    dep_dir.child("backend_b.py").write_str(backend)?;
+    for path in ["path-a", "path-b"] {
+        dep_dir.child(path).create_dir_all()?;
+        dep_dir.child(path).child("backend.py").write_str(backend)?;
+    }
+
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "backend_a"
+        "#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(
+        dep.contains(r#"build-system = { build-backend = "backend_a", backend-path = ["."] }"#),
+        "{dep}"
+    );
+
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "backend_b"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["path-a"]
+        build-backend = "backend"
+        "#,
+    )?;
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["path-b"]
+        build-backend = "backend"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     Ok(())
 }

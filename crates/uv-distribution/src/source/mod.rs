@@ -34,7 +34,7 @@ use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildInfo, BuildVariables, BuildableSource, ConfigSettings, DirectorySourceUrl,
     ExtraBuildRequirement, GitDirectorySourceUrl, GitPathSourceUrl, HashPolicy, Hashed, IndexUrl,
-    PathSourceUrl, Requirement, RequirementSource, RequiresPython, SourceDist, SourceUrl,
+    PathSourceUrl, RequirementSource, RequiresPython, SourceDist, SourceUrl,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry, write_atomic};
@@ -55,7 +55,7 @@ use crate::hash::http_hash_algorithms;
 use crate::metadata::{ArchiveMetadata, BuildRequires, GitWorkspaceMember, Metadata};
 use crate::source::built_wheel_metadata::{BuiltWheelFile, BuiltWheelMetadata};
 use crate::source::revision::Revision;
-use crate::{Reporter, RequiresDist};
+use crate::{Reporter, RequiresDist, StaticBuildSystem};
 
 mod built_wheel_metadata;
 mod revision;
@@ -624,13 +624,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(metadata)
     }
 
-    /// Download a [`SourceDist`] and return its static build requirements, if available.
-    pub(crate) async fn download_build_requires(
+    /// Download a [`SourceDist`] and return its static build system, if available.
+    pub(crate) async fn download_build_system(
         &self,
         source: &BuildableSource<'_>,
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
-    ) -> Result<Option<Vec<Requirement>>, Error> {
+    ) -> Result<Option<StaticBuildSystem>, Error> {
         match source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
                 let cache_shard = self.build_context.cache().shard(
@@ -646,7 +646,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .to_file_path()
                         .map_err(|()| Error::NonFileUrl(url.clone()))?;
                     return self
-                        .archive_build_requires(
+                        .archive_build_system(
                             source,
                             &PathSourceUrl {
                                 url: &url,
@@ -661,7 +661,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .await;
                 }
 
-                self.url_build_requires(
+                self.url_build_system(
                     source,
                     &url,
                     Some(&dist.index),
@@ -680,7 +680,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     WheelCache::Url(&dist.url).root(),
                 );
 
-                self.url_build_requires(
+                self.url_build_system(
                     source,
                     &dist.url,
                     None,
@@ -698,7 +698,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     CacheBucket::SourceDistributions,
                     WheelCache::Path(&dist.url).root(),
                 );
-                self.archive_build_requires(
+                self.archive_build_system(
                     source,
                     &PathSourceUrl::from(dist),
                     &cache_shard,
@@ -709,7 +709,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await
             }
             BuildableSource::Dist(SourceDist::Directory(dist)) => {
-                self.source_tree_build_requires(
+                self.source_tree_build_system(
                     &dist.install_path,
                     Some(&dist.name),
                     client.unmanaged.credentials_cache(),
@@ -717,17 +717,25 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await
             }
             BuildableSource::Dist(SourceDist::GitDirectory(dist)) => {
-                self.git_build_requires(source, &GitDirectorySourceUrl::from(dist), hashes, client)
+                self.git_directory_build_system(
+                    source,
+                    &GitDirectorySourceUrl::from(dist),
+                    hashes,
+                    client,
+                )
+                .await
+            }
+            BuildableSource::Dist(SourceDist::GitPath(dist)) => {
+                self.git_archive_build_system(source, &GitPathSourceUrl::from(dist), hashes, client)
                     .await
             }
-            BuildableSource::Dist(SourceDist::GitPath(_)) => Ok(None),
             BuildableSource::Url(SourceUrl::Direct(resource)) => {
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
                     WheelCache::Url(resource.url).root(),
                 );
 
-                self.url_build_requires(
+                self.url_build_system(
                     source,
                     resource.url,
                     None,
@@ -745,12 +753,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     CacheBucket::SourceDistributions,
                     WheelCache::Path(resource.url).root(),
                 );
-                self.archive_build_requires(source, resource, &cache_shard, hashes, client)
+                self.archive_build_system(source, resource, &cache_shard, hashes, client)
                     .boxed_local()
                     .await
             }
             BuildableSource::Url(SourceUrl::Directory(resource)) => {
-                self.source_tree_build_requires(
+                self.source_tree_build_system(
                     resource.install_path,
                     source.name(),
                     client.unmanaged.credentials_cache(),
@@ -758,10 +766,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await
             }
             BuildableSource::Url(SourceUrl::GitDirectory(resource)) => {
-                self.git_build_requires(source, resource, hashes, client)
+                self.git_directory_build_system(source, resource, hashes, client)
                     .await
             }
-            BuildableSource::Url(SourceUrl::GitPath(_)) => Ok(None),
+            BuildableSource::Url(SourceUrl::GitPath(resource)) => {
+                self.git_archive_build_system(source, resource, hashes, client)
+                    .await
+            }
         }
     }
 
@@ -1647,8 +1658,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         })
     }
 
-    /// Return the static build requirements from a remote source distribution.
-    async fn url_build_requires<'data>(
+    /// Return the static build system from a remote source distribution.
+    async fn url_build_system<'data>(
         &self,
         source: &BuildableSource<'data>,
         url: &'data DisplaySafeUrl,
@@ -1658,7 +1669,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         ext: SourceDistExtension,
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
-    ) -> Result<Option<Vec<Requirement>>, Error> {
+    ) -> Result<Option<StaticBuildSystem>, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
         let revision = self
             .url_revision(source, ext, url, index, cache_shard, hashes, client)
@@ -1701,7 +1712,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             || source_dist_entry.path().to_path_buf(),
             |subdirectory| source_dist_entry.path().join(subdirectory),
         );
-        self.source_tree_build_requires(
+        self.source_tree_build_system(
             &source_tree,
             source.name(),
             client.unmanaged.credentials_cache(),
@@ -1767,15 +1778,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(check_direct_build(&source_tree, uv_version).is_ok())
     }
 
-    /// Return the static build requirements from a local source distribution archive.
-    async fn archive_build_requires(
+    /// Return the static build system from a local source distribution archive.
+    async fn archive_build_system(
         &self,
         source: &BuildableSource<'_>,
         resource: &PathSourceUrl<'_>,
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
-    ) -> Result<Option<Vec<Requirement>>, Error> {
+    ) -> Result<Option<StaticBuildSystem>, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
         let LocalRevisionPointer { revision, .. } = self
             .archive_revision(source, resource, cache_shard, hashes)
@@ -1796,7 +1807,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?;
         }
 
-        self.source_tree_build_requires(
+        self.source_tree_build_system(
             source_entry.path(),
             source.name(),
             client.unmanaged.credentials_cache(),
@@ -1836,13 +1847,57 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(check_direct_build(source_entry.path(), uv_version).is_ok())
     }
 
-    /// Return lowered static build requirements from a local source tree.
-    async fn source_tree_build_requires(
+    /// Return the static build system from an archive stored in a Git repository.
+    async fn git_archive_build_system(
+        &self,
+        source: &BuildableSource<'_>,
+        resource: &GitPathSourceUrl<'_>,
+        hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
+    ) -> Result<Option<StaticBuildSystem>, Error> {
+        let fetch = self
+            .build_context
+            .git()
+            .fetch(
+                resource.git,
+                client.unmanaged.git_http_settings(resource.git.url()),
+                self.build_context.cache().bucket(CacheBucket::Git),
+                self.reporter
+                    .clone()
+                    .map(|reporter| reporter.into_git_reporter()),
+            )
+            .await?;
+        let git_sha = fetch.git().precise().expect("Exact commit after checkout");
+        let cache_shard = self.build_context.cache().shard(
+            CacheBucket::SourceDistributions,
+            WheelCache::Git(resource.url, git_sha.as_short_str()).root(),
+        );
+        let revision = self
+            .git_archive_revision(source, resource, &fetch, &cache_shard, hashes)
+            .await?;
+        if !revision.satisfies(hashes) {
+            return Err(Error::hash_mismatch(
+                source.to_string(),
+                hashes.digests(),
+                revision.hashes(),
+            ));
+        }
+
+        self.source_tree_build_system(
+            cache_shard.entry(SOURCE).path(),
+            source.name(),
+            client.unmanaged.credentials_cache(),
+        )
+        .await
+    }
+
+    /// Return the lowered static build system from a local source tree.
+    async fn source_tree_build_system(
         &self,
         source_tree: &Path,
         package_name: Option<&PackageName>,
         credentials_cache: &CredentialsCache,
-    ) -> Result<Option<Vec<Requirement>>, Error> {
+    ) -> Result<Option<StaticBuildSystem>, Error> {
         let pyproject_toml = source_tree.join("pyproject.toml");
         let content = match fs::read_to_string(&pyproject_toml).await {
             Ok(content) => content,
@@ -1864,33 +1919,42 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(None);
         };
 
+        let uv_workspace::pyproject::BuildSystem {
+            requires,
+            build_backend,
+            backend_path,
+        } = build_system;
         let build_requires = uv_pypi_types::BuildRequires {
             name,
-            requires_dist: build_system.requires,
+            requires_dist: requires,
         };
-        Ok(Some(
-            BuildRequires::from_project_maybe_workspace(
-                build_requires,
-                source_tree,
-                self.build_context.locations(),
-                self.build_context.sources(),
-                true,
-                self.build_context.workspace_cache(),
-                credentials_cache,
-            )
-            .await?
-            .requires_dist,
-        ))
+        let requires = BuildRequires::from_project_maybe_workspace(
+            build_requires,
+            source_tree,
+            self.build_context.locations(),
+            self.build_context.sources(),
+            true,
+            self.build_context.workspace_cache(),
+            credentials_cache,
+        )
+        .await?
+        .requires_dist;
+        Ok(Some(StaticBuildSystem {
+            requires,
+            build_backend: build_backend
+                .unwrap_or_else(|| "setuptools.build_meta:__legacy__".to_string()),
+            backend_path: backend_path.map_or_else(Vec::new, |path| path.into_inner()),
+        }))
     }
 
-    /// Return the static build requirements from a Git source distribution.
-    async fn git_build_requires(
+    /// Return the static build system from a Git source tree.
+    async fn git_directory_build_system(
         &self,
         source: &BuildableSource<'_>,
         resource: &GitDirectorySourceUrl<'_>,
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
-    ) -> Result<Option<Vec<Requirement>>, Error> {
+    ) -> Result<Option<StaticBuildSystem>, Error> {
         if hashes.requires_validation() {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
@@ -1912,7 +1976,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             || fetch.path().to_path_buf(),
             |subdirectory| fetch.path().join(subdirectory),
         );
-        self.source_tree_build_requires(
+        self.source_tree_build_system(
             &source_tree,
             source.name(),
             client.unmanaged.credentials_cache(),
