@@ -27,9 +27,11 @@ use uv_fs::{PortablePath, Simplified};
 use uv_static::EnvVars;
 #[cfg(feature = "test-git")]
 use uv_test::decode_token;
+use uv_test::find_links::FindLinksServer;
+use uv_test::packse::PackseServer;
 use uv_test::{
-    DEFAULT_PYTHON_VERSION, TestContext, apply_filters, build_vendor_links_url, download_to_disk,
-    get_bin, packse_index_url, uv_snapshot, venv_bin_path,
+    DEFAULT_PYTHON_VERSION, TestContext, apply_filters, download_to_disk, get_bin, uv_snapshot,
+    venv_bin_path,
 };
 
 fn write_tar_gz(file: File, entries: &[(&str, &str)]) -> Result<()> {
@@ -4274,6 +4276,7 @@ fn install_git_source_respects_offline_mode() {
 #[test]
 fn build_prerelease_hint() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/transitive-package-only-prereleases-in-range.toml");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -4283,12 +4286,12 @@ fn build_prerelease_hint() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["transitive-package-only-prereleases-in-range-a"]
+        requires = ["a"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
     let mut command = context.pip_install();
-    command.arg("--index-url").arg(packse_index_url()).arg(".");
+    command.arg("--index-url").arg(server.index_url()).arg(".");
     command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
 
     uv_snapshot!(
@@ -4303,11 +4306,11 @@ fn build_prerelease_hint() -> Result<()> {
     Resolved 1 package in [TIME]
       × Failed to build `project @ file://[TEMP_DIR]/`
       ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `transitive-package-only-prereleases-in-range-a`
-      ╰─▶ Because only transitive-package-only-prereleases-in-range-b<=0.1 is available and transitive-package-only-prereleases-in-range-a==0.1.0 depends on transitive-package-only-prereleases-in-range-b>0.1, we can conclude that transitive-package-only-prereleases-in-range-a==0.1.0 cannot be used.
-          And because only transitive-package-only-prereleases-in-range-a==0.1.0 is available and you require transitive-package-only-prereleases-in-range-a, we can conclude that your requirements are unsatisfiable.
+      ├─▶ No solution found when resolving: `a`
+      ╰─▶ Because only b<=0.1 is available and a==0.1.0 depends on b>0.1, we can conclude that a==0.1.0 cannot be used.
+          And because only a==0.1.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
 
-    hint: Only pre-releases of `transitive-package-only-prereleases-in-range-b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically. Add `transitive-package-only-prereleases-in-range-b>=1.0.0a1` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
+    hint: Only pre-releases of `b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically. Add `b>=1.0.0a1` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
     "
     );
 
@@ -6862,6 +6865,7 @@ fn already_installed_remote_dependencies() {
 #[test]
 fn already_installed_dependent_editable() {
     let context = uv_test::test_context!("3.12");
+    let vendor = FindLinksServer::vendor();
     let root_path = context
         .workspace_root
         .join("test/packages/dependent_locals");
@@ -6890,7 +6894,7 @@ fn already_installed_dependent_editable() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(vendor.url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6931,7 +6935,7 @@ fn already_installed_dependent_editable() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(vendor.url()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6968,6 +6972,7 @@ fn already_installed_dependent_editable() {
 #[test]
 fn already_installed_local_path_dependent() {
     let context = uv_test::test_context!("3.12");
+    let vendor = FindLinksServer::vendor();
     let root_path = context
         .workspace_root
         .join("test/packages/dependent_locals");
@@ -6994,7 +6999,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(vendor.url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7050,7 +7055,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(vendor.url()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7092,7 +7097,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(vendor.url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7117,7 +7122,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(vendor.url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15836,11 +15841,12 @@ fn abi_compatibility_on_nondebug_python_with_debug_wheel() {
 #[test]
 fn warn_on_bz2_wheel() {
     let context = uv_test::test_context!("3.14");
+    let vendor = FindLinksServer::vendor();
 
     uv_snapshot!(
         context.filters(),
         context.pip_install()
-            .arg("futzed_bz2 @ https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_bz2-0.1.0-py3-none-any.whl"),
+            .arg(format!("futzed_bz2 @ {}/futzed_bz2-0.1.0-py3-none-any.whl", vendor.url())),
         @"
     success: true
     exit_code: 0
@@ -15848,10 +15854,10 @@ fn warn_on_bz2_wheel() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: One or more file entries in 'https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_bz2-0.1.0-py3-none-any.whl' use the 'bzip2' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the 'stored', 'DEFLATE', or 'zstd' compression methods.
+    warning: One or more file entries in 'http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl' use the 'bzip2' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the 'stored', 'DEFLATE', or 'zstd' compression methods.
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + futzed-bz2==0.1.0 (from https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_bz2-0.1.0-py3-none-any.whl)
+     + futzed-bz2==0.1.0 (from http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl)
     "
     );
 }
@@ -15859,20 +15865,21 @@ fn warn_on_bz2_wheel() {
 #[test]
 fn warn_on_lzma_wheel() {
     let context = uv_test::test_context!("3.14");
+    let vendor = FindLinksServer::vendor();
 
     uv_snapshot!(
         context.filters(),
         context.pip_install()
-            .arg("futzed_lzma @ https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_lzma-0.1.0-py3-none-any.whl"),
+            .arg(format!("futzed_lzma @ {}/futzed_lzma-0.1.0-py3-none-any.whl", vendor.url())),
         @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `futzed-lzma @ https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_lzma-0.1.0-py3-none-any.whl`
+      × Failed to download `futzed-lzma @ http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
       ├─▶ Request failed after 3 retries in [TIME]
-      ├─▶ Failed to read metadata: `https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_lzma-0.1.0-py3-none-any.whl`
+      ├─▶ Failed to read metadata: `http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
       ├─▶ Failed to read from zip file
       ├─▶ an upstream reader returned an error: stream/file format not recognized
       ╰─▶ stream/file format not recognized

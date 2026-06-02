@@ -26,7 +26,7 @@ use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
-use uv_test::{packse_index_url, uv_snapshot, venv_bin_path};
+use uv_test::{uv_snapshot, venv_bin_path};
 
 /// Add a PyPI requirement.
 #[test]
@@ -5106,6 +5106,7 @@ fn add_lower_bound_optional() -> Result<()> {
 /// Omit the local segment when adding dependencies (since `>=1.2.3+local` is invalid).
 #[test]
 fn add_lower_bound_local() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("local/local-simple.toml");
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -5117,8 +5118,8 @@ fn add_lower_bound_local() -> Result<()> {
         dependencies = []
     "#})?;
 
-    // Adding `torch` should include a lower-bound, but no local segment.
-    uv_snapshot!(context.filters(), context.add().arg("local-simple-a").arg("--index").arg(packse_index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    // Adding `a` should include a lower-bound, but no local segment.
+    uv_snapshot!(context.filters(), context.add().arg("a").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5127,7 +5128,7 @@ fn add_lower_bound_local() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + local-simple-a==1.2.3+foo
+     + a==1.2.3+foo
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -5142,11 +5143,11 @@ fn add_lower_bound_local() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "local-simple-a>=1.2.3",
+            "a>=1.2.3",
         ]
 
         [[tool.uv.index]]
-        url = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/"
+        url = "http://[LOCALHOST]/simple/"
         "#
         );
     });
@@ -5163,12 +5164,12 @@ fn add_lower_bound_local() -> Result<()> {
         requires-python = ">=3.12"
 
         [[package]]
-        name = "local-simple-a"
+        name = "a"
         version = "1.2.3+foo"
-        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/local_simple_a-1.2.3+foo.tar.gz", hash = "sha256:cd1855a98a7b0dce1f4617f2f2089906936344392d4bdd7720503e9f3c0b1544" }
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.2.3+foo.tar.gz", hash = "sha256:d8c42806a0bf7b47451778ed2a909a2f9d22fe3a4bac673934fc8fb2537a886a", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/local_simple_a-1.2.3+foo-py3-none-any.whl", hash = "sha256:9a430e6d5e9cd3ab906ea412b00ea8a1bad7c59fd64df2278a2527a60a665751" },
+            { url = "http://[LOCALHOST]/files/a-1.2.3+foo-py3-none-any.whl", hash = "sha256:2fd8eec176cad72b6c4372682485914aff65d215fb8cd71c85e9ed4511fa8bbe", upload-time = "2024-03-24T00:00:00Z" },
         ]
 
         [[package]]
@@ -5176,11 +5177,11 @@ fn add_lower_bound_local() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "local-simple-a" },
+            { name = "a" },
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "local-simple-a", specifier = ">=1.2.3" }]
+        requires-dist = [{ name = "a", specifier = ">=1.2.3" }]
         "#
         );
     });

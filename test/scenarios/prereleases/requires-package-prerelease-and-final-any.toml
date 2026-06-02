@@ -1,0 +1,16 @@
+name = "requires-package-prerelease-and-final-any"
+description = "The user requires any version of package `a` has a prerelease version available and an older non-prerelease version."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+explanation = "Since the user did not provide a prerelease specifier, the older stable version should be selected."
+
+[expected.packages]
+a = "0.1.0"
+
+[packages.a.versions."0.1.0"]
+
+[packages.a.versions."1.0.0a1"]

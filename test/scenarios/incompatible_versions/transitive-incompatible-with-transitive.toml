@@ -1,0 +1,18 @@
+name = "transitive-incompatible-with-transitive"
+description = "The user requires package `a` and `b`; `a` and `b` require different versions of `c`"
+
+[root]
+requires = ["a", "b"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.0.0"]
+requires = ["c==1.0.0"]
+
+[packages.b.versions."1.0.0"]
+requires = ["c==2.0.0"]
+
+[packages.c.versions."1.0.0"]
+
+[packages.c.versions."2.0.0"]
