@@ -26,7 +26,7 @@ use uv_workspace::VirtualProject;
 use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::pyproject_mut::Error;
 use uv_workspace::{
-    DiscoveryOptions, WorkspaceCache, WorkspaceError,
+    DiscoveryOptions, WorkspaceCache, WorkspaceError, WorkspaceErrorKind,
     pyproject_mut::{DependencyTarget, PyProjectTomlMut},
 };
 
@@ -398,7 +398,7 @@ impl uv_errors::Hint for MissingProjectVersionError {
 /// Add hint to use `uv self version` when workspace discovery fails due to missing pyproject.toml
 /// and --project was not explicitly passed
 fn hint_uv_self_version(err: WorkspaceError, explicit_project: bool) -> anyhow::Error {
-    if matches!(err, WorkspaceError::MissingPyprojectToml) && !explicit_project {
+    if matches!(err.as_ref(), WorkspaceErrorKind::MissingPyprojectToml) && !explicit_project {
         MissingProjectVersionError { err }.into()
     } else {
         err.into()

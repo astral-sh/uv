@@ -45,7 +45,7 @@ use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::child::run_to_completion;
 
@@ -561,20 +561,24 @@ pub(crate) async fn run(
                         Some(project)
                     }
                 }
-                Err(WorkspaceError::MissingPyprojectToml | WorkspaceError::NonWorkspace(_)) => {
-                    // If the user runs with `--no-project` and we can't find a project, warn.
-                    if no_project {
-                        warn!("`--no-project` was provided, but no project was found");
-                    }
-                    None
-                }
                 Err(err) => {
-                    // If the user runs with `--no-project`, ignore the error.
-                    if no_project {
-                        warn!("Ignoring project discovery error due to `--no-project`: {err}");
+                    if matches!(
+                        err.as_ref(),
+                        WorkspaceErrorKind::MissingPyprojectToml
+                            | WorkspaceErrorKind::NonWorkspace(_)
+                    ) {
+                        if no_project {
+                            warn!("`--no-project` was provided, but no project was found");
+                        }
                         None
                     } else {
-                        return Err(err.into());
+                        // If the user runs with `--no-project`, ignore the error.
+                        if no_project {
+                            warn!("Ignoring project discovery error due to `--no-project`: {err}");
+                            None
+                        } else {
+                            return Err(err.into());
+                        }
                     }
                 }
             }
