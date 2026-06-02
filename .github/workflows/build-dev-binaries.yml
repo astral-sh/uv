@@ -24,9 +24,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
-
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
@@ -52,9 +49,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
-
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
@@ -79,9 +73,6 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
 
       - name: "Setup armv7"
         run: |
@@ -115,9 +106,6 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
 
       - name: "Setup musl"
         run: |
@@ -277,8 +265,6 @@ jobs:
         run: rustup default ${MSRV}
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
