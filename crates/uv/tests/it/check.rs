@@ -140,7 +140,7 @@ fn check_missing_pyproject_toml() -> Result<()> {
     All checks passed!
 
     ----- stderr -----
-    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     warning: `--group dev` has no effect when used outside of a project
     warning: `--frozen` has no effect when used outside of a project
     warning: `--no-sync` has no effect when used outside of a project
@@ -185,7 +185,7 @@ fn check_no_project() -> Result<()> {
     All checks passed!
 
     ----- stderr -----
-    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     ");
 
     // Project-only settings are ignored when project discovery is disabled.
@@ -207,7 +207,7 @@ fn check_no_project() -> Result<()> {
     All checks passed!
 
     ----- stderr -----
-    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     warning: `--extra foo` has no effect when used alongside `--no-project`
     warning: `--group bar` has no effect when used alongside `--no-project`
     warning: `--locked` has no effect when used alongside `--no-project`
