@@ -250,6 +250,17 @@ fn lock_build_dependencies() -> Result<()> {
         build-requires = [{ name = "setuptools", specifier = ">=42" }]
 
         [[package]]
+        name = "flit-core"
+        version = "3.9.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = []
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+        ]
+
+        [[package]]
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
@@ -264,6 +275,7 @@ fn lock_build_dependencies() -> Result<()> {
         name = "setuptools"
         version = "69.2.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -276,6 +288,10 @@ fn lock_build_dependencies() -> Result<()> {
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
@@ -1123,6 +1139,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "anyio"
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         dependencies = [
             { name = "idna" },
             { name = "sniffio" },
@@ -1141,6 +1158,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "calver"
         version = "2022.6.26"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -1173,6 +1191,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "flit-core"
         version = "3.9.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = []
         sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
         wheels = [
@@ -1183,6 +1202,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "hatch-vcs"
         version = "0.4.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         dependencies = [
             { name = "hatchling", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:iniconfig:wheel:bootstrap:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -1200,6 +1220,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         version = "0.4.0"
         source = { registry = "https://pypi.org/simple" }
         resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]"
+        build-only = true
         dependencies = [
             { name = "hatchling", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -1216,6 +1237,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "hatchling"
         version = "1.22.4"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         dependencies = [
             { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "pathspec", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -1237,6 +1259,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
         ]
@@ -1249,6 +1272,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "hatch-vcs", version = "0.4.0", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "hatchling", version = "1.22.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -1262,6 +1286,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "packaging"
         version = "24.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
@@ -1275,6 +1300,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "pathspec"
         version = "0.12.1"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
         ]
@@ -1287,6 +1313,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "pluggy"
         version = "1.4.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:pluggy:wheel:build:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -1313,6 +1340,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "setuptools"
         version = "69.2.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
             { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -1327,6 +1355,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "setuptools-scm"
         version = "8.0.4"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         dependencies = [
             { name = "packaging", marker = "sys_platform == 'linux'" },
             { name = "setuptools", marker = "sys_platform == 'linux'" },
@@ -1348,6 +1377,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         version = "8.0.4"
         source = { registry = "https://pypi.org/simple" }
         resolution-id = "build:iniconfig:wheel:bootstrap:[BUILD-ID]"
+        build-only = true
         dependencies = [
             { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -1369,6 +1399,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         version = "8.0.4"
         source = { registry = "https://pypi.org/simple" }
         resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]"
+        build-only = true
         dependencies = [
             { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -1390,6 +1421,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         version = "8.0.4"
         source = { registry = "https://pypi.org/simple" }
         resolution-id = "build:pluggy:wheel:bootstrap:[BUILD-ID]"
+        build-only = true
         dependencies = [
             { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -1411,6 +1443,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         version = "8.0.4"
         source = { registry = "https://pypi.org/simple" }
         resolution-id = "build:pluggy:wheel:build:[BUILD-ID]"
+        build-only = true
         dependencies = [
             { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -1431,6 +1464,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "sniffio"
         version = "1.3.1"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
             { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
@@ -1445,6 +1479,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "trove-classifiers"
         version = "2024.3.3"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "calver", version = "2022.6.26", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -1459,6 +1494,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
@@ -1472,6 +1508,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
             { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -1828,7 +1865,19 @@ fn lock_build_dependencies_preference() -> Result<()> {
         ]
 
         [package.metadata]
+        build-system = { build-backend = "setuptools.build_meta" }
         build-requires = [{ name = "setuptools", specifier = ">=42" }]
+
+        [[package]]
+        name = "flit-core"
+        version = "3.9.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = []
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+        ]
 
         [[package]]
         name = "project"
@@ -1845,6 +1894,7 @@ fn lock_build_dependencies_preference() -> Result<()> {
         name = "setuptools"
         version = "69.2.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -1857,6 +1907,10 @@ fn lock_build_dependencies_preference() -> Result<()> {
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
@@ -1985,7 +2039,19 @@ fn lock_build_dependencies_preference() -> Result<()> {
         ]
 
         [package.metadata]
+        build-system = { build-backend = "setuptools.build_meta" }
         build-requires = [{ name = "setuptools", specifier = ">=42" }]
+
+        [[package]]
+        name = "flit-core"
+        version = "3.9.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = []
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+        ]
 
         [[package]]
         name = "project"
@@ -2002,6 +2068,7 @@ fn lock_build_dependencies_preference() -> Result<()> {
         name = "setuptools"
         version = "69.2.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -2014,6 +2081,10 @@ fn lock_build_dependencies_preference() -> Result<()> {
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
@@ -2367,6 +2438,7 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         ]
 
         [package.metadata]
+        build-system = { build-backend = "setuptools.build_meta" }
         build-requires = [{ name = "setuptools", specifier = ">=42" }]
 
         [[package]]
@@ -2377,7 +2449,19 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         ]
 
         [package.metadata]
+        build-system = { build-backend = "setuptools.build_meta" }
         build-requires = [{ name = "setuptools", specifier = ">=42" }]
+
+        [[package]]
+        name = "flit-core"
+        version = "3.9.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = []
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+        ]
 
         [[package]]
         name = "project"
@@ -2398,6 +2482,7 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         name = "setuptools"
         version = "69.2.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -2410,6 +2495,10 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
@@ -2593,7 +2682,19 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         ]
 
         [package.metadata]
+        build-system = { build-backend = "setuptools.build_meta" }
         build-requires = [{ name = "setuptools", specifier = ">=42" }]
+
+        [[package]]
+        name = "flit-core"
+        version = "3.9.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = []
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+        ]
 
         [[package]]
         name = "project"
@@ -2610,6 +2711,7 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         name = "setuptools"
         version = "69.2.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -2622,6 +2724,10 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
@@ -2827,7 +2933,19 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         ]
 
         [package.metadata]
+        build-system = { build-backend = "setuptools.build_meta" }
         build-requires = [{ name = "setuptools", specifier = ">=42" }]
+
+        [[package]]
+        name = "flit-core"
+        version = "3.9.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = []
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+        ]
 
         [[package]]
         name = "project"
@@ -2844,6 +2962,7 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         name = "setuptools"
         version = "69.2.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -2856,6 +2975,10 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
@@ -6577,6 +6700,20 @@ fn lock_build_dependencies_fork() -> Result<()> {
         ]
 
         [[package]]
+        name = "calver"
+        version = "2022.6.26"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/b5/00/96cbed7c019c49ee04b8a08357a981983db7698ae6de402e57097cefc9ad/calver-2022.6.26.tar.gz", hash = "sha256:e05493a3b17517ef1748fbe610da11f10485faa7c416b9d33fd4a52d74894f8b", size = 6670, upload-time = "2022-06-26T23:25:10.382Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f7/39/e421c06f42ca00fa9cf8929c2466e58a837e8e97b8ab3ff4f4ff9a15e33e/calver-2022.6.26-py3-none-any.whl", hash = "sha256:a1d7fcdd67797afc52ee36ffb8c8adf6643173864306547bfd1380cbce6310a0", size = 7049, upload-time = "2022-06-26T23:25:07.692Z" },
+        ]
+
+        [[package]]
         name = "dep"
         source = { directory = "dep" }
         build-dependencies = [
@@ -6584,7 +6721,52 @@ fn lock_build_dependencies_fork() -> Result<()> {
         ]
 
         [package.metadata]
+        build-system = { build-backend = "setuptools.build_meta" }
         build-requires = [{ name = "setuptools", specifier = ">=42" }]
+
+        [[package]]
+        name = "flit-core"
+        version = "3.9.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = []
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+        ]
+
+        [[package]]
+        name = "hatch-vcs"
+        version = "0.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        dependencies = [
+            { name = "hatchling" },
+            { name = "setuptools-scm" },
+        ]
+        build-dependencies = [
+            { name = "hatchling", version = "1.22.4" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/f5/c9/54bb4fa27b4e4a014ef3bb17710cdf692b3aa2cbc7953da885f1bf7e06ea/hatch_vcs-0.4.0.tar.gz", hash = "sha256:093810748fe01db0d451fabcf2c1ac2688caefd232d4ede967090b1c1b07d9f7", size = 10917, upload-time = "2023-11-06T06:24:57.228Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/82/0f/6cbd9976160bc334add63bc2e7a58b1433a31b34b7cda6c5de6dd983d9a7/hatch_vcs-0.4.0-py3-none-any.whl", hash = "sha256:b8a2b6bee54cf6f9fc93762db73890017ae59c9081d1038a41f16235ceaf8b2c", size = 8412, upload-time = "2023-11-06T06:24:55.389Z" },
+        ]
+
+        [[package]]
+        name = "hatchling"
+        version = "1.22.4"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        dependencies = [
+            { name = "packaging" },
+            { name = "pathspec" },
+            { name = "pluggy" },
+            { name = "trove-classifiers" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/4f/2a/c34d71531d1e1c9a5029bb73eb3816285befd0fffd7c63ffa0544253dca8/hatchling-1.22.4.tar.gz", hash = "sha256:8a2dcec96d7fb848382ef5848e5ac43fdae641f35a08a3fab5116bd495f3416e", size = 62758, upload-time = "2024-03-24T02:00:59.122Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/49/63/2d56d6356f9f8b906aa68335cbf5b1b54c69873a2e271eda2ddba319c1ae/hatchling-1.22.4-py3-none-any.whl", hash = "sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc", size = 82032, upload-time = "2024-03-24T02:00:57.534Z" },
+        ]
 
         [[package]]
         name = "iniconfig"
@@ -6593,6 +6775,48 @@ fn lock_build_dependencies_fork() -> Result<()> {
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+
+        [[package]]
+        name = "packaging"
+        version = "24.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882, upload-time = "2024-03-10T09:39:28.33Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488, upload-time = "2024-03-10T09:39:25.947Z" },
+        ]
+
+        [[package]]
+        name = "pathspec"
+        version = "0.12.1"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712", size = 51043, upload-time = "2023-12-10T22:30:45Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08", size = 31191, upload-time = "2023-12-10T22:30:43.14Z" },
+        ]
+
+        [[package]]
+        name = "pluggy"
+        version = "1.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "setuptools-scm", version = "8.0.4" },
+            { name = "setuptools-scm", version = "8.0.4", extra = ["toml"] },
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/54/c6/43f9d44d92aed815e781ca25ba8c174257e27253a94630d21be8725a2b59/pluggy-1.4.0.tar.gz", hash = "sha256:8c85c2876142a764e5b7548e7d9a0e0ddb46f5185161049a79b7e974454223be", size = 65812, upload-time = "2024-01-24T13:45:15.875Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/a5/5b/0cc789b59e8cc1bf288b38111d002d8c5917123194d45b29dcdac64723cc/pluggy-1.4.0-py3-none-any.whl", hash = "sha256:7db9f7b503d67d1c5b95f59773ebb58a8c1c288129a88665838012cfb07b8981", size = 20120, upload-time = "2024-01-24T13:45:14.227Z" },
         ]
 
         [[package]]
@@ -6615,6 +6839,7 @@ fn lock_build_dependencies_fork() -> Result<()> {
         name = "setuptools"
         version = "69.2.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -6624,9 +6849,59 @@ fn lock_build_dependencies_fork() -> Result<()> {
         ]
 
         [[package]]
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        dependencies = [
+            { name = "packaging" },
+            { name = "setuptools" },
+            { name = "typing-extensions" },
+        ]
+        build-dependencies = [
+            { name = "setuptools", version = "69.2.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/0e/a3/b9a8b0adfe672bf0df5901707aa929d30a97ee390ba651910186776746d2/setuptools_scm-8.0.4-py3-none-any.whl", hash = "sha256:b47844cd2a84b83b3187a5782c71128c28b4c94cad8bfb871da2784a5cb54c4f", size = 42137, upload-time = "2023-10-02T15:14:31.281Z" },
+        ]
+
+        [[package]]
+        name = "trove-classifiers"
+        version = "2024.3.3"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "calver", version = "2022.6.26" },
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/13/11/e13906315b498cb8f5ce5a7ff39fc35941e8291e914158157937fd1c095d/trove-classifiers-2024.3.3.tar.gz", hash = "sha256:df7edff9c67ff86b733628998330b180e81d125b1e096536d83ac0fd79673fdc", size = 15982, upload-time = "2024-03-03T20:17:38.634Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/bb/81/a16cb58f719e68d0cce72fb9afd6f0f50c0e474d7b8dc267c8309c3e2793/trove_classifiers-2024.3.3-py3-none-any.whl", hash = "sha256:3a84096861b385ec422c79995d1f6435dde47a9b63adaa3c886e53232ba7e6e0", size = 13377, upload-time = "2024-03-03T20:17:34.101Z" },
+        ]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z" },
+        ]
+
+        [[package]]
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
@@ -7064,6 +7339,20 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         ]
 
         [[package]]
+        name = "calver"
+        version = "2022.6.26"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/b5/00/96cbed7c019c49ee04b8a08357a981983db7698ae6de402e57097cefc9ad/calver-2022.6.26.tar.gz", hash = "sha256:e05493a3b17517ef1748fbe610da11f10485faa7c416b9d33fd4a52d74894f8b", size = 6670, upload-time = "2022-06-26T23:25:10.382Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f7/39/e421c06f42ca00fa9cf8929c2466e58a837e8e97b8ab3ff4f4ff9a15e33e/calver-2022.6.26-py3-none-any.whl", hash = "sha256:a1d7fcdd67797afc52ee36ffb8c8adf6643173864306547bfd1380cbce6310a0", size = 7049, upload-time = "2022-06-26T23:25:07.692Z" },
+        ]
+
+        [[package]]
         name = "dep"
         source = { directory = "dep" }
         build-dependencies = [
@@ -7073,10 +7362,61 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         ]
 
         [package.metadata]
+        build-system = { build-backend = "setuptools.build_meta" }
         build-requires = [
             { name = "iniconfig" },
             { name = "setuptools", specifier = ">=42" },
             { name = "wheel" },
+        ]
+
+        [[package]]
+        name = "flit-core"
+        version = "3.9.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = []
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+        ]
+
+        [[package]]
+        name = "hatch-vcs"
+        version = "0.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        dependencies = [
+            { name = "hatchling" },
+            { name = "setuptools-scm" },
+        ]
+        build-dependencies = [
+            { name = "hatchling", version = "1.22.4" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/f5/c9/54bb4fa27b4e4a014ef3bb17710cdf692b3aa2cbc7953da885f1bf7e06ea/hatch_vcs-0.4.0.tar.gz", hash = "sha256:093810748fe01db0d451fabcf2c1ac2688caefd232d4ede967090b1c1b07d9f7", size = 10917, upload-time = "2023-11-06T06:24:57.228Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/82/0f/6cbd9976160bc334add63bc2e7a58b1433a31b34b7cda6c5de6dd983d9a7/hatch_vcs-0.4.0-py3-none-any.whl", hash = "sha256:b8a2b6bee54cf6f9fc93762db73890017ae59c9081d1038a41f16235ceaf8b2c", size = 8412, upload-time = "2023-11-06T06:24:55.389Z" },
+        ]
+
+        [[package]]
+        name = "hatchling"
+        version = "1.22.4"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        dependencies = [
+            { name = "packaging" },
+            { name = "pathspec" },
+            { name = "pluggy" },
+            { name = "trove-classifiers" },
+        ]
+        build-dependencies = [
+            { name = "packaging", version = "24.0" },
+            { name = "pathspec", version = "0.12.1" },
+            { name = "pluggy", version = "1.4.0" },
+            { name = "trove-classifiers", version = "2024.3.3" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/4f/2a/c34d71531d1e1c9a5029bb73eb3816285befd0fffd7c63ffa0544253dca8/hatchling-1.22.4.tar.gz", hash = "sha256:8a2dcec96d7fb848382ef5848e5ac43fdae641f35a08a3fab5116bd495f3416e", size = 62758, upload-time = "2024-03-24T02:00:59.122Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/49/63/2d56d6356f9f8b906aa68335cbf5b1b54c69873a2e271eda2ddba319c1ae/hatchling-1.22.4-py3-none-any.whl", hash = "sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc", size = 82032, upload-time = "2024-03-24T02:00:57.534Z" },
         ]
 
         [[package]]
@@ -7086,6 +7426,48 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+
+        [[package]]
+        name = "packaging"
+        version = "24.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882, upload-time = "2024-03-10T09:39:28.33Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488, upload-time = "2024-03-10T09:39:25.947Z" },
+        ]
+
+        [[package]]
+        name = "pathspec"
+        version = "0.12.1"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712", size = 51043, upload-time = "2023-12-10T22:30:45Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08", size = 31191, upload-time = "2023-12-10T22:30:43.14Z" },
+        ]
+
+        [[package]]
+        name = "pluggy"
+        version = "1.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "setuptools-scm", version = "8.0.4" },
+            { name = "setuptools-scm", version = "8.0.4", extra = ["toml"] },
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/54/c6/43f9d44d92aed815e781ca25ba8c174257e27253a94630d21be8725a2b59/pluggy-1.4.0.tar.gz", hash = "sha256:8c85c2876142a764e5b7548e7d9a0e0ddb46f5185161049a79b7e974454223be", size = 65812, upload-time = "2024-01-24T13:45:15.875Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/a5/5b/0cc789b59e8cc1bf288b38111d002d8c5917123194d45b29dcdac64723cc/pluggy-1.4.0-py3-none-any.whl", hash = "sha256:7db9f7b503d67d1c5b95f59773ebb58a8c1c288129a88665838012cfb07b8981", size = 20120, upload-time = "2024-01-24T13:45:14.227Z" },
         ]
 
         [[package]]
@@ -7116,12 +7498,73 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         name = "setuptools"
         version = "69.2.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+        ]
+
+        [[package]]
+        name = "setuptools-scm"
+        version = "8.0.4"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        dependencies = [
+            { name = "packaging" },
+            { name = "setuptools" },
+            { name = "typing-extensions" },
+        ]
+        build-dependencies = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/0e/a3/b9a8b0adfe672bf0df5901707aa929d30a97ee390ba651910186776746d2/setuptools_scm-8.0.4-py3-none-any.whl", hash = "sha256:b47844cd2a84b83b3187a5782c71128c28b4c94cad8bfb871da2784a5cb54c4f", size = 42137, upload-time = "2023-10-02T15:14:31.281Z" },
+        ]
+
+        [[package]]
+        name = "trove-classifiers"
+        version = "2024.3.3"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "calver", version = "2022.6.26" },
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/13/11/e13906315b498cb8f5ce5a7ff39fc35941e8291e914158157937fd1c095d/trove-classifiers-2024.3.3.tar.gz", hash = "sha256:df7edff9c67ff86b733628998330b180e81d125b1e096536d83ac0fd79673fdc", size = 15982, upload-time = "2024-03-03T20:17:38.634Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/bb/81/a16cb58f719e68d0cce72fb9afd6f0f50c0e474d7b8dc267c8309c3e2793/trove_classifiers-2024.3.3-py3-none-any.whl", hash = "sha256:3a84096861b385ec422c79995d1f6435dde47a9b63adaa3c886e53232ba7e6e0", size = 13377, upload-time = "2024-03-03T20:17:34.101Z" },
+        ]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z" },
+        ]
+
+        [[package]]
+        name = "wheel"
+        version = "0.43.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
         ]
         "#
         );
@@ -7546,6 +7989,17 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         ]
 
         [[package]]
+        name = "flit-core"
+        version = "3.9.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = []
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+        ]
+
+        [[package]]
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
@@ -7557,9 +8011,26 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         requires-dist = [{ name = "dep", directory = "dep" }]
 
         [[package]]
+        name = "setuptools"
+        version = "69.2.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+        ]
+
+        [[package]]
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
@@ -8614,6 +9085,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         name = "anyio"
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         dependencies = [
             { name = "idna" },
             { name = "sniffio" },
@@ -8632,6 +9104,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         name = "calver"
         version = "2022.6.26"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -8652,6 +9125,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         ]
 
         [package.metadata]
+        build-system = { build-backend = "setuptools.build_meta" }
         build-requires = [
             { name = "anyio", marker = "sys_platform == 'linux'" },
             { name = "iniconfig", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -8663,6 +9137,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         name = "flit-core"
         version = "3.9.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = []
         sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
         wheels = [
@@ -8673,6 +9148,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         name = "hatch-vcs"
         version = "0.4.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         dependencies = [
             { name = "hatchling", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:iniconfig:wheel:bootstrap:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -8690,9 +9166,13 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         version = "0.4.0"
         source = { registry = "https://pypi.org/simple" }
         resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]"
+        build-only = true
         dependencies = [
             { name = "hatchling", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+        build-dependencies = [
+            { name = "hatchling", version = "1.22.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/f5/c9/54bb4fa27b4e4a014ef3bb17710cdf692b3aa2cbc7953da885f1bf7e06ea/hatch_vcs-0.4.0.tar.gz", hash = "sha256:093810748fe01db0d451fabcf2c1ac2688caefd232d4ede967090b1c1b07d9f7", size = 10917, upload-time = "2023-11-06T06:24:57.228Z" }
         wheels = [
@@ -8703,6 +9183,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         name = "hatchling"
         version = "1.22.4"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         dependencies = [
             { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "pathspec", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -8724,6 +9205,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
         ]
@@ -8736,6 +9218,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "hatch-vcs", version = "0.4.0", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "hatchling", version = "1.22.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -8749,6 +9232,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         name = "packaging"
         version = "24.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
@@ -8762,6 +9246,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         name = "pathspec"
         version = "0.12.1"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
         ]
@@ -8774,6 +9259,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         name = "pluggy"
         version = "1.4.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:pluggy:wheel:build:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -8800,6 +9286,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         name = "setuptools"
         version = "69.2.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
             { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -8814,6 +9301,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         name = "setuptools-scm"
         version = "8.0.4"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         dependencies = [
             { name = "packaging", marker = "sys_platform == 'linux'" },
             { name = "setuptools", marker = "sys_platform == 'linux'" },
@@ -8835,10 +9323,17 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         version = "8.0.4"
         source = { registry = "https://pypi.org/simple" }
         resolution-id = "build:iniconfig:wheel:bootstrap:[BUILD-ID]"
+        build-only = true
         dependencies = [
             { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+        build-dependencies = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
         wheels = [
@@ -8850,10 +9345,17 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         version = "8.0.4"
         source = { registry = "https://pypi.org/simple" }
         resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]"
+        build-only = true
         dependencies = [
             { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+        build-dependencies = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
         wheels = [
@@ -8865,10 +9367,17 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         version = "8.0.4"
         source = { registry = "https://pypi.org/simple" }
         resolution-id = "build:pluggy:wheel:bootstrap:[BUILD-ID]"
+        build-only = true
         dependencies = [
             { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+        build-dependencies = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
         wheels = [
@@ -8880,10 +9389,17 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         version = "8.0.4"
         source = { registry = "https://pypi.org/simple" }
         resolution-id = "build:pluggy:wheel:build:[BUILD-ID]"
+        build-only = true
         dependencies = [
             { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+        build-dependencies = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
         wheels = [
@@ -8894,6 +9410,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         name = "sniffio"
         version = "1.3.1"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
             { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
@@ -8908,6 +9425,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         name = "trove-classifiers"
         version = "2024.3.3"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "calver", version = "2022.6.26", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -8922,6 +9440,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'linux'" },
@@ -8935,6 +9454,7 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
             { name = "flit-core", version = "3.9.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
@@ -9133,9 +9653,21 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         ]
 
         [package.metadata]
+        build-system = { build-backend = "setuptools.build_meta" }
         build-requires = [
             { name = "setuptools", specifier = ">=42" },
             { name = "wheel" },
+        ]
+
+        [[package]]
+        name = "flit-core"
+        version = "3.9.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = []
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
         ]
 
         [[package]]
@@ -9162,12 +9694,26 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         name = "setuptools"
         version = "69.2.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+        ]
+
+        [[package]]
+        name = "wheel"
+        version = "0.43.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
         ]
         "#
         );
@@ -10012,6 +10558,7 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         source = { directory = "dep" }
 
         [package.metadata]
+        build-system = { build-backend = "setuptools.build_meta" }
         build-requires = [{ name = "setuptools", specifier = ">=42" }]
 
         [[package]]
@@ -10024,7 +10571,19 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         ]
 
         [package.metadata]
+        build-system = { build-backend = "setuptools.build_meta" }
         build-requires = [{ name = "setuptools", specifier = ">=42" }]
+
+        [[package]]
+        name = "flit-core"
+        version = "3.9.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = []
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+        ]
 
         [[package]]
         name = "project"
@@ -10045,6 +10604,7 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         name = "setuptools"
         version = "69.2.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -10057,6 +10617,10 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
+        build-only = true
+        build-dependencies = [
+            { name = "flit-core", version = "3.9.0" },
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
