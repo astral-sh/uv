@@ -179,6 +179,10 @@ pub trait Installable<'lock> {
                     continue;
                 }
 
+                // Dependency-group edges can activate extras that are required to evaluate later
+                // source-selection markers.
+                activated_extras.extend(additional_activated_extras);
+
                 let dep_dist = self.lock().find_by_id(&dep.package_id);
 
                 // Add the package to the graph.
