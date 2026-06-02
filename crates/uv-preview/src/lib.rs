@@ -270,7 +270,7 @@ impl PreviewFeature {
             Self::PackageConflicts => "package-conflicts",
             Self::ExtraBuildDependencies => "extra-build-dependencies",
             Self::DetectModuleConflicts => "detect-module-conflicts",
-            Self::Format => "format",
+            Self::Format => "format-command",
             Self::NativeAuth => "native-auth",
             Self::S3Endpoint => "s3-endpoint",
             Self::CacheSize => "cache-size",
@@ -288,14 +288,14 @@ impl PreviewFeature {
             Self::SpecialCondaEnvNames => "special-conda-env-names",
             Self::RelocatableEnvsDefault => "relocatable-envs-default",
             Self::PublishRequireNormalized => "publish-require-normalized",
-            Self::Audit => "audit",
+            Self::Audit => "audit-command",
             Self::ProjectDirectoryMustExist => "project-directory-must-exist",
             Self::IndexExcludeNewer => "index-exclude-newer",
             Self::AzureEndpoint => "azure-endpoint",
             Self::TomlBackwardsCompatibility => "toml-backwards-compatibility",
             Self::MalwareCheck => "malware-check",
             Self::VenvSafeClear => "venv-safe-clear",
-            Self::Check => "check",
+            Self::Check => "check-command",
         }
     }
 }
@@ -323,7 +323,7 @@ impl FromStr for PreviewFeature {
             "package-conflicts" => Self::PackageConflicts,
             "extra-build-dependencies" => Self::ExtraBuildDependencies,
             "detect-module-conflicts" => Self::DetectModuleConflicts,
-            "format" => Self::Format,
+            "format" | "format-command" => Self::Format,
             "native-auth" => Self::NativeAuth,
             "s3-endpoint" => Self::S3Endpoint,
             "gcs-endpoint" => Self::GcsEndpoint,
@@ -341,14 +341,14 @@ impl FromStr for PreviewFeature {
             "special-conda-env-names" => Self::SpecialCondaEnvNames,
             "relocatable-envs-default" => Self::RelocatableEnvsDefault,
             "publish-require-normalized" => Self::PublishRequireNormalized,
-            "audit" => Self::Audit,
+            "audit" | "audit-command" => Self::Audit,
             "project-directory-must-exist" => Self::ProjectDirectoryMustExist,
             "index-exclude-newer" => Self::IndexExcludeNewer,
             "azure-endpoint" => Self::AzureEndpoint,
             "toml-backwards-compatibility" => Self::TomlBackwardsCompatibility,
             "malware-check" => Self::MalwareCheck,
             "venv-safe-clear" => Self::VenvSafeClear,
-            "check" => Self::Check,
+            "check" | "check-command" => Self::Check,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -558,7 +558,7 @@ mod tests {
             PreviewFeature::DetectModuleConflicts.as_str(),
             "detect-module-conflicts"
         );
-        assert_eq!(PreviewFeature::Format.as_str(), "format");
+        assert_eq!(PreviewFeature::Format.as_str(), "format-command");
         assert_eq!(PreviewFeature::NativeAuth.as_str(), "native-auth");
         assert_eq!(PreviewFeature::S3Endpoint.as_str(), "s3-endpoint");
         assert_eq!(PreviewFeature::CacheSize.as_str(), "cache-size");
@@ -609,7 +609,8 @@ mod tests {
         );
         assert_eq!(PreviewFeature::MalwareCheck.as_str(), "malware-check");
         assert_eq!(PreviewFeature::VenvSafeClear.as_str(), "venv-safe-clear");
-        assert_eq!(PreviewFeature::Check.as_str(), "check");
+        assert_eq!(PreviewFeature::Audit.as_str(), "audit-command");
+        assert_eq!(PreviewFeature::Check.as_str(), "check-command");
     }
 
     #[test]
