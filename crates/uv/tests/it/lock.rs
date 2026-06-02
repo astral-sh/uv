@@ -25112,6 +25112,56 @@ fn lock_multiple_sources_extra_base_and_optional() -> Result<()> {
     Ok(())
 }
 
+/// An extra-only constraint on a URL source should not constrain the production
+/// dependency that resolves from the default index.
+#[test]
+fn lock_multiple_sources_extra_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig"]
+
+        [tool.uv]
+        constraint-dependencies = ["iniconfig<2 ; extra == 'alt'"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "alt" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Like `lock_multiple_sources_extra_base_and_optional`, but with an explicit
 /// index instead of a URL. The index must remain scoped to the extra.
 ///
@@ -25252,6 +25302,58 @@ fn lock_multiple_sources_index_extra_base_and_optional() -> Result<()> {
         "#
         );
     });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// An extra-scoped explicit-index requirement should not constrain the
+/// production dependency that resolves from the default index.
+#[test]
+fn lock_multiple_sources_index_extra_different_specifier() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["jinja2>=3.1.5"]
+
+        [project.optional-dependencies]
+        cu118 = ["jinja2==3.1.4"]
+
+        [tool.uv.sources]
+        jinja2 = [
+            { index = "torch-cu118", extra = "cu118" },
+        ]
+
+        [[tool.uv.index]]
+        name = "torch-cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
@@ -35880,12 +35982,7 @@ fn lock_path_dependency_explicit_index_optional_extra_source_constraint() -> Res
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies for split (markers: extra == 'extra-5-pkg-a-cu118'):
-      ╰─▶ Because only the following versions of jinja2{extra == 'extra-5-pkg-a-cu118'} are available:
-              jinja2{extra == 'extra-5-pkg-a-cu118'}==3.1.2
-              jinja2{extra == 'extra-5-pkg-a-cu118'}==3.1.3
-              jinja2{extra == 'extra-5-pkg-a-cu118'}==3.1.4
-          and pkg-a==0.1.0 depends on jinja2{extra == 'extra-5-pkg-a-cu118'}, we can conclude that pkg-a==0.1.0 depends on jinja2.
-          And because pkg-a==0.1.0 depends on jinja2>3.1.4, we can conclude that pkg-a==0.1.0 cannot be used.
+      ╰─▶ Because only jinja2{extra == 'extra-5-pkg-a-cu118'}<=3.1.4 is available and pkg-a==0.1.0 depends on jinja2{extra == 'extra-5-pkg-a-cu118'}>3.1.4, we can conclude that pkg-a==0.1.0 cannot be used.
           And because only pkg-a==0.1.0 is available and your project depends on pkg-a, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.

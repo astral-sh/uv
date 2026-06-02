@@ -2140,16 +2140,53 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     None,
                     Some(parent_package),
                 ));
-                source_constraints.extend(
-                    self.constraints_for_requirement(
-                        Cow::Borrowed(requirement),
+                for constraint in self.constraints_for_requirement(
+                    Cow::Borrowed(requirement),
+                    variant.extra.as_ref(),
+                    env,
+                    python_marker,
+                    python_requirement,
+                ) {
+                    let source = DependencySource::from_requirement(&constraint);
+                    let marker = UniversalMarker::from_source_scope(
+                        constraint.marker,
+                        project_name,
                         variant.extra.as_ref(),
-                        env,
-                        python_marker,
-                        python_requirement,
-                    )
-                    .map(Cow::into_owned),
-                );
+                        variant.group.as_ref(),
+                    );
+                    let source_extra_scopes = UniversalMarker::source_extra_scopes(
+                        constraint.marker,
+                        project_name,
+                        variant.extra.as_ref(),
+                        conflict_scoped,
+                        &self.conflicts,
+                    );
+                    let edge_marker = UniversalMarker::source_edge_marker(
+                        constraint.marker,
+                        project_name,
+                        variant.extra.as_ref(),
+                        variant.group.as_ref(),
+                        conflict_scoped,
+                    );
+                    source_constraints.extend(PubGrubDependency::from_requirement_with_marker(
+                        &self.conflicts,
+                        constraint,
+                        marker.combined(),
+                        DependencySourceContext {
+                            extra_scopes: source_extra_scopes,
+                            conflict: Self::source_conflict_item(
+                                project_name,
+                                variant.extra.as_ref(),
+                                variant.group.as_ref(),
+                            ),
+                            edge_marker: Some(edge_marker),
+                            ..DependencySourceContext::default()
+                        },
+                        source,
+                        None,
+                        Some(parent_package),
+                    ));
+                }
             }
             let markers = source_markers.entry(requirement.name.clone()).or_default();
             if let Some((_, existing)) = markers
@@ -2227,14 +2264,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             .collect::<Vec<_>>();
 
         dependencies.extend(source_dependencies);
-        for constraint in source_constraints {
-            dependencies.extend(PubGrubDependency::from_requirement(
-                &self.conflicts,
-                Cow::Owned(constraint),
-                None,
-                Some(parent_package),
-            ));
-        }
+        dependencies.extend(source_constraints);
 
         dependencies
     }
@@ -2303,12 +2333,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // An extra-scoped explicit index changes where a registry requirement is resolved,
             // but the requirement itself remains valid outside that source scope. Preserve an
             // unscoped dependency so the extra package can point at the default-index
-            // distribution in the complementary fork.
+            // distribution in the complementary fork. The selected requirement's version
+            // specifier only applies inside the extra; the production dependency constrains the
+            // default-index distribution.
             if extra.is_some() && matches!(source, DependencySource::ExplicitIndex(_)) {
                 let marker = requirement.marker.simplify_extras_with(|_| true);
+                let mut fallback = requirement.clone().into_owned();
+                if let RequirementSource::Registry { specifier, .. } = &mut fallback.source {
+                    *specifier = VersionSpecifiers::empty();
+                }
                 dependencies.extend(PubGrubDependency::from_requirement_with_marker(
                     &self.conflicts,
-                    requirement.clone(),
+                    Cow::Owned(fallback),
                     marker,
                     DependencySourceContext {
                         edge_marker: Some(marker),
