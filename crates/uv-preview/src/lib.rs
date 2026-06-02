@@ -558,7 +558,7 @@ mod tests {
             PreviewFeature::DetectModuleConflicts.as_str(),
             "detect-module-conflicts"
         );
-        assert_eq!(PreviewFeature::Format.as_str(), "format");
+        assert_eq!(PreviewFeature::Format.as_str(), "format-command");
         assert_eq!(PreviewFeature::NativeAuth.as_str(), "native-auth");
         assert_eq!(PreviewFeature::S3Endpoint.as_str(), "s3-endpoint");
         assert_eq!(PreviewFeature::CacheSize.as_str(), "cache-size");
@@ -609,7 +609,8 @@ mod tests {
         );
         assert_eq!(PreviewFeature::MalwareCheck.as_str(), "malware-check");
         assert_eq!(PreviewFeature::VenvSafeClear.as_str(), "venv-safe-clear");
-        assert_eq!(PreviewFeature::Check.as_str(), "check");
+        assert_eq!(PreviewFeature::Audit.as_str(), "audit-command");
+        assert_eq!(PreviewFeature::Check.as_str(), "check-command");
     }
 
     #[test]
