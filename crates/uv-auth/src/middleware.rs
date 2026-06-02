@@ -718,23 +718,19 @@ impl AuthMiddleware {
         } else {
             (FetchUrl::Realm(Realm::from(&**url)), username)
         };
-        // Google Artifact Registry credentials have their own expiry-aware cache for both hits and
-        // misses. Avoid storing a miss for the entire invocation so a transient ADC or `gcloud`
-        // failure can be retried after that cache expires.
-        let memoize_fetch = !ArtifactRegistryProvider::is_artifact_registry(url);
-        if memoize_fetch
-            && let Some(credentials) = self.cache().fetches.register_or_wait(&key).await
-        {
+        if let Some(credentials) = self.cache().fetches.register_or_wait(&key).await {
             if credentials.is_some() {
                 trace!("Using credentials from previous fetch for {}", key.0);
-            } else {
-                trace!(
-                    "Skipping fetch of credentials for {}, previous attempt failed",
-                    key.0
-                );
+                return credentials;
             }
+            trace!(
+                "Skipping fetch of credentials for {}, previous attempt failed",
+                key.0
+            );
 
-            return credentials;
+            return self
+                .fetch_artifact_registry_credentials(url, requested_username)
+                .await;
         }
 
         // Support for known providers, like Hugging Face and S3.
@@ -965,9 +961,26 @@ impl AuthMiddleware {
             None
         };
 
-        let credentials = if let Some(credentials) = credentials {
-            Some(Authentication::from(credentials))
-        } else if self.keyring.is_none()
+        let credentials = credentials.map(Authentication::from).map(Arc::new);
+
+        // Register the fetch for this key. Google Artifact Registry credentials are checked
+        // separately because the provider has its own expiry-aware cache for both hits and misses.
+        self.cache().fetches.done(key, credentials.clone());
+
+        if credentials.is_some() {
+            return credentials;
+        }
+
+        self.fetch_artifact_registry_credentials(url, requested_username)
+            .await
+    }
+
+    async fn fetch_artifact_registry_credentials(
+        &self,
+        url: &DisplaySafeUrl,
+        requested_username: Option<&str>,
+    ) -> Option<Arc<Authentication>> {
+        if self.keyring.is_none()
             && ArtifactRegistryProvider::is_artifact_registry(url)
             && ArtifactRegistryProvider::supports_username(requested_username)
             && self
@@ -977,21 +990,12 @@ impl AuthMiddleware {
                 .is_some()
         {
             debug!("Found Google Artifact Registry credentials for {url}");
-            Some(Authentication::from(
+            Some(Arc::new(Authentication::from(
                 self.artifact_registry_provider.clone(),
-            ))
+            )))
         } else {
             None
-        };
-
-        let credentials = credentials.map(Arc::new);
-
-        // Register the fetch for this key
-        if memoize_fetch {
-            self.cache().fetches.done(key, credentials.clone());
         }
-
-        credentials
     }
 }
 
@@ -1582,6 +1586,13 @@ mod tests {
                 .fetch_credentials(None, DisplaySafeUrl::ref_cast(&url), None, AuthPolicy::Auto)
                 .await
                 .is_none()
+        );
+        assert_eq!(
+            middleware
+                .cache()
+                .fetches
+                .get(&(FetchUrl::Realm(Realm::from(&url)), Username::none())),
+            Some(None)
         );
 
         provider.clear_cached_credentials().await;
