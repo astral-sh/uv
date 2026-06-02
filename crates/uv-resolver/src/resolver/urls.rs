@@ -43,7 +43,10 @@ impl Urls {
         let mut overrides = ForkMap::default();
 
         // Add all direct regular requirements and constraints URL.
-        for requirement in manifest.requirements_no_overrides(env, dependencies) {
+        for requirement in manifest
+            .requirements_no_overrides(env, dependencies)
+            .chain(manifest.potential_url_requirements_no_overrides(dependencies))
+        {
             let Some(url) = requirement.source.to_verbatim_parsed_url() else {
                 // Registry requirement
                 continue;
