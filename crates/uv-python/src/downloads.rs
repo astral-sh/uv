@@ -1370,8 +1370,9 @@ impl ManagedPythonDownload {
                 )?;
             }
 
-            // If the distribution is missing a `python` -> `pythonX.Y` symlink and the target is
-            // not windows, add it.
+            // If the distribution is missing a `python` -> `pythonX.Y` symlink, add it.
+            //
+            // We skip for Windows distributions, allowing cross-installs from Unix.
             //
             // Pyodide releases never contain this link by default.
             //
