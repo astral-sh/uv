@@ -326,7 +326,12 @@ impl Workspace {
         )
         .await
         {
-            Ok(workspace) => Ok(workspace),
+            Ok(workspace) => {
+                if options.members == MemberDiscovery::All {
+                    cache.insert(workspace.clone());
+                }
+                Ok(workspace)
+            }
             Err(error) => {
                 if options.members == MemberDiscovery::All {
                     cache.insert_none(workspace_root);
@@ -361,16 +366,13 @@ impl Workspace {
         package_name: &PackageName,
         pyproject_toml: PyProjectToml,
     ) -> Result<Option<Arc<Self>>, WorkspaceError> {
-        let slf = Arc::try_unwrap(self).unwrap_or_else(|slf| {
-            if cfg!(debug_assertions) {
-                panic!(
-                    "Cannot modify workspace still in use with {} references",
-                    Arc::strong_count(&slf)
-                );
-            } else {
-                (*slf).clone()
-            }
-        });
+        debug_assert_eq!(
+            Arc::strong_count(&self),
+            1,
+            "cannot modify workspace still in use",
+        );
+
+        let slf = Arc::unwrap_or_clone(self);
         let mut packages = slf.packages;
 
         let Some(member) = Arc::make_mut(&mut packages).get_mut(package_name) else {
@@ -999,11 +1001,7 @@ impl Workspace {
             indexes: workspace_indexes,
             pyproject_toml: workspace_pyproject_toml,
         };
-        let workspace = Arc::new(workspace);
-        if options.members == MemberDiscovery::All {
-            cache.insert(workspace.clone());
-        }
-        Ok(workspace)
+        Ok(Arc::new(workspace))
     }
 
     async fn collect_members_only(
@@ -1575,7 +1573,9 @@ impl ProjectWorkspace {
                 pyproject_toml: project_pyproject_toml.clone(),
             };
             let workspace = Arc::new(workspace);
-            cache.insert(workspace.clone());
+            if options.members == MemberDiscovery::All {
+                cache.insert(workspace.clone());
+            }
             return Ok(Self {
                 project_root: project_path.to_path_buf(),
                 project_name: project.name.clone(),
@@ -1609,7 +1609,12 @@ impl ProjectWorkspace {
         )
         .await
         {
-            Ok(workspace) => workspace,
+            Ok(workspace) => {
+                if options.members == MemberDiscovery::All {
+                    cache.insert(workspace.clone());
+                }
+                workspace
+            }
             Err(error) => {
                 if options.members == MemberDiscovery::All {
                     cache.insert_none(workspace_root);
@@ -1908,6 +1913,11 @@ impl VirtualProject {
                 cache,
             )
             .await?;
+
+            if options.members == MemberDiscovery::All {
+                cache.insert(workspace.clone());
+            }
+
             Ok(Self::NonProject(workspace))
         } else {
             // Otherwise it's a pyproject.toml that maybe contains dependency-groups
@@ -1927,6 +1937,10 @@ impl VirtualProject {
                 &WorkspaceCache::default(),
             )
             .await?;
+
+            if options.members == MemberDiscovery::All {
+                cache.insert(workspace.clone());
+            }
 
             Ok(Self::NonProject(workspace))
         }
@@ -1974,16 +1988,13 @@ impl VirtualProject {
                 Some(Self::Project(project))
             }
             Self::NonProject(workspace) => {
-                let workspace = Arc::try_unwrap(workspace).unwrap_or_else(|workspace| {
-                    if cfg!(debug_assertions) {
-                        panic!(
-                            "Cannot modify workspace still in use with {} references",
-                            Arc::strong_count(&workspace)
-                        );
-                    } else {
-                        (*workspace).clone()
-                    }
-                });
+                debug_assert_eq!(
+                    Arc::strong_count(&workspace),
+                    1,
+                    "cannot modify workspace still in use",
+                );
+
+                let workspace = Arc::unwrap_or_clone(workspace);
                 // If this is a non-project workspace root, then by definition the root isn't a
                 // member, so we can just update the top-level `pyproject.toml`.
                 let workspace = Workspace {
@@ -1997,6 +2008,8 @@ impl VirtualProject {
 
     /// Clone while detaching from the original workspace `Arc`, freeing the original state for
     /// modification.
+    ///
+    /// This is intended for rollbacks only.
     #[must_use]
     pub fn clone_detach(&self) -> Self {
         match self {

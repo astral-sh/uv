@@ -415,7 +415,6 @@ async fn find_target(
     workspace_cache: &WorkspaceCache,
 ) -> Result<VirtualProject> {
     // Find the project in the workspace.
-    // No workspace caching since `uv version` changes the workspace definition.
     let project = if let Some(package) = package {
         VirtualProject::discover_with_package(
             project_dir,
