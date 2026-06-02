@@ -16208,8 +16208,11 @@ fn check_locked_version_violates_non_project_dependency_group_specifier() -> Res
         dev = ["iniconfig!=2.0.0"]
         "#,
     )?;
-    let lock = context.read("uv.lock").replace(
-        r#"{ name = "iniconfig", specifier = "==2.0.0" }"#,
+    let lock = context.read("uv.lock");
+    let old_requirement = r#"{ name = "iniconfig", specifier = "==2.0.0" }"#;
+    assert!(lock.contains(old_requirement));
+    let lock = lock.replace(
+        old_requirement,
         r#"{ name = "iniconfig", specifier = "!=2.0.0" }"#,
     );
     context.temp_dir.child("uv.lock").write_str(&lock)?;
@@ -16327,12 +16330,13 @@ fn check_locked_version_violates_marker_scoped_local_dependency_specifier() -> R
     ");
 
     let lock = context.read("uv.lock");
+    let old_edge = r#"{ name = "markupsafe", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" }"#;
+    assert!(lock.contains(old_edge));
     let lock = lock.replace(
-        r#"{ name = "markupsafe", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" }"#,
+        old_edge,
         r#"{ name = "markupsafe", version = "2.1.5", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" }"#,
     );
-    let lock = lock.replace(
-        indoc! {r#"
+    let old_package = indoc! {r#"
         [[package]]
         name = "markupsafe"
         version = "1.1.1"
@@ -16341,8 +16345,13 @@ fn check_locked_version_violates_marker_scoped_local_dependency_specifier() -> R
             "sys_platform != 'win32'",
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/64db92e53b86efccfaea71321f597fa2e1b2bd3853d8ce658568f7a13094/MarkupSafe-1.1.1.tar.gz", hash = "sha256:29872e92839765e546828bb7754a68c418d927cd064fd4708fab9fe9c8bb116b", size = 19151, upload-time = "2019-02-24T01:05:32.989Z" }
-        "#},
-        indoc! {r#"
+
+        [[package]]
+        name = "markupsafe"
+        version = "2.0.0"
+        "#};
+    assert!(lock.contains(old_package));
+    let new_package = indoc! {r#"
         [[package]]
         name = "markupsafe"
         version = "2.1.5"
@@ -16351,8 +16360,13 @@ fn check_locked_version_violates_marker_scoped_local_dependency_specifier() -> R
             "sys_platform != 'win32'",
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/87/5b/aae44c6655f3801e81aa3eef09dbbf012431987ba564d7231722f68df02d/MarkupSafe-2.1.5.tar.gz", hash = "sha256:d283d37a890ba4c1ae73ffadf8046435c76e7bc2247bbb63c00bd1a709c6544b", size = 19384, upload-time = "2024-02-02T16:31:22.863Z" }
-        "#},
-    );
+
+        [[package]]
+        name = "markupsafe"
+        version = "2.0.0"
+        "#};
+    let lock = lock.replace(old_package, new_package);
+    assert!(!lock.contains("MarkupSafe-1.1.1"));
     context.temp_dir.child("uv.lock").write_str(&lock)?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
@@ -16410,8 +16424,11 @@ fn check_locked_version_violates_conflict_marked_dependency_specifier() -> Resul
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = context.read("uv.lock").replace(
-        r#"{ name = "iniconfig", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-7-project'" }"#,
+    let lock = context.read("uv.lock");
+    let old_edge = r#"{ name = "iniconfig", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-7-project'" }"#;
+    assert!(lock.contains(old_edge));
+    let lock = lock.replace(
+        old_edge,
         r#"{ name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-7-project'" }"#,
     );
     context.temp_dir.child("uv.lock").write_str(&lock)?;
@@ -16501,8 +16518,11 @@ fn check_locked_version_violates_conflict_forked_constraint_specifier() -> Resul
         build-backend = "uv_build"
         "#,
     )?;
-    let lock = context.read("uv.lock").replace(
-        r#"constraints = [{ name = "markupsafe", specifier = "<3" }]"#,
+    let lock = context.read("uv.lock");
+    let old_constraint = r#"constraints = [{ name = "markupsafe", specifier = "<3" }]"#;
+    assert!(lock.contains(old_constraint));
+    let lock = lock.replace(
+        old_constraint,
         r#"constraints = [{ name = "markupsafe", specifier = "<2.1.5" }]"#,
     );
     context.temp_dir.child("uv.lock").write_str(&lock)?;
