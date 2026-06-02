@@ -1,5 +1,6 @@
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock, mpsc};
 
 use crate::hash::{DirectoryDigest, DirectoryDigestFile, directory_digest};
 use crate::vendor::CloneableSeekableReader;
@@ -13,6 +14,18 @@ use rustc_hash::FxHashSet;
 use tracing::warn;
 use uv_configuration::initialize_rayon_once;
 use uv_warnings::warn_user_once;
+
+const LOCAL_FILE_HEADER_LENGTH: u64 = 30;
+const LOCAL_FILE_HEADER_LENGTH_USIZE: usize = 30;
+const LOCAL_FILE_HEADER_SIGNATURE: u32 = 0x0403_4b50;
+#[cfg(not(test))]
+const STORED_HASH_FAST_PATH_THRESHOLD: u64 = 8 * 1024 * 1024;
+#[cfg(test)]
+const STORED_HASH_FAST_PATH_THRESHOLD: u64 = 1;
+const STORED_HASH_BUFFER_SIZE: usize = 16 * 1024 * 1024;
+const PARALLEL_HASH_THRESHOLD: u64 = 8 * 1024 * 1024;
+const PARALLEL_HASH_BUFFER_SIZE: usize = 16 * 1024 * 1024;
+static HASH_THREAD_POOL: OnceLock<Option<rayon::ThreadPool>> = OnceLock::new();
 
 /// Unzip a `.zip` archive into the target directory.
 ///
@@ -37,21 +50,21 @@ pub fn unzip_and_hash(
     let archive = block_on(ZipFileReader::new(AllowStdIo::new(
         CloneableSeekableReader::new(reader),
     )))?;
-    unzip_archive(&archive, filename.display(), target)
+    unzip_archive(&archive, &filename, target)
 }
 
 fn unzip_archive<R>(
     archive: &ZipFileReader<AllowStdIo<R>>,
-    filename: impl std::fmt::Display,
+    filename: &Path,
     target: &Path,
 ) -> Result<(Vec<(PathBuf, u64)>, DirectoryDigest), Error>
 where
-    R: std::io::BufRead + std::io::Seek + Clone + Send + Sync,
+    R: std::io::BufRead + std::io::Seek + Clone + Send + Sync + Unpin,
     AllowStdIo<R>: Clone,
 {
     let directories = Mutex::new(FxHashSet::default());
     let skip_validation = insecure_no_validate();
-    let filename = filename.to_string();
+    let filename_display = filename.display().to_string();
     // Initialize the threadpool with the user settings.
     initialize_rayon_once();
     let archive = (*archive).clone();
@@ -74,7 +87,7 @@ where
             if !compression.is_well_known() {
                 warn_user_once!(
                     "One or more file entries in '{filename}' use the '{compression}' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the '{stored}', '{deflate}', or '{zstd}' compression methods.",
-                    filename = filename,
+                    filename = filename_display,
                     stored = CompressionMethod::Stored,
                     deflate = CompressionMethod::Deflated,
                     zstd = CompressionMethod::Zstd,
@@ -120,27 +133,37 @@ where
             } else {
                 std::io::BufWriter::new(outfile)
             };
-            let (copied, computed_crc32, digest) = block_on(async {
-                let mut file = archive.reader_with_entry(file_number).await?;
-                let mut writer = AllowStdIo::new(writer);
-                let mut hasher = blake3::Hasher::new();
-                let mut copied = 0;
-                let mut buffer = vec![0; 128 * 1024];
-                loop {
-                    let read = file
-                        .read(&mut buffer)
-                        .await
-                        .map_err(Error::io_or_compression)?;
-                    if read == 0 {
-                        break;
-                    }
-                    hasher.update(&buffer[..read]);
-                    writer.write_all(&buffer[..read]).await.map_err(Error::Io)?;
-                    copied += read as u64;
-                }
-                writer.flush().await.map_err(Error::Io)?;
-                Ok::<_, Error>((copied, file.compute_hash(), hasher.finalize()))
-            })?;
+            let use_stored_hash_fast_path = matches!(compression, CompressionMethod::Stored)
+                && size >= STORED_HASH_FAST_PATH_THRESHOLD
+                && entry.compressed_size() == size;
+            let (copied, computed_crc32, digest) = if use_stored_hash_fast_path {
+                let (copied, stored_digest) = std::thread::scope(|scope| {
+                    let stored_digest =
+                        scope.spawn(|| hash_stored_entry(filename, entry.header_offset(), size));
+                    let copied = block_on(copy_entry(&mut archive, file_number, writer, false));
+                    (copied, stored_digest.join())
+                });
+                let (copied, computed_crc32, digest) = copied?;
+                debug_assert!(digest.is_none());
+                let stored_digest = stored_digest.map_err(|_| thread_panic_error())??;
+                (copied, computed_crc32, stored_digest)
+            } else if size >= PARALLEL_HASH_THRESHOLD {
+                copy_entry_with_hash_thread(&mut archive, file_number, writer)?
+            } else {
+                let (copied, computed_crc32, digest) = block_on(copy_entry(
+                    &mut archive,
+                    file_number,
+                    writer,
+                    true,
+                ))?;
+                let Some(digest) = digest else {
+                    return Err(Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "missing digest for ZIP entry",
+                    )));
+                };
+                (copied, computed_crc32, digest)
+            };
 
             if copied != size && !skip_validation {
                 return Err(Error::BadUncompressedSize {
@@ -196,6 +219,177 @@ where
     }
 
     Ok((files, directory_digest(hash_files)))
+}
+
+async fn copy_entry<R>(
+    archive: &mut ZipFileReader<AllowStdIo<R>>,
+    file_number: usize,
+    writer: std::io::BufWriter<fs_err::File>,
+    hash_contents: bool,
+) -> Result<(u64, u32, Option<blake3::Hash>), Error>
+where
+    R: std::io::BufRead + std::io::Seek + Unpin,
+{
+    let mut file = archive.reader_with_entry(file_number).await?;
+    let mut writer = AllowStdIo::new(writer);
+    let mut hasher = hash_contents.then(blake3::Hasher::new);
+    let mut copied = 0;
+    let mut buffer = vec![0; 128 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .await
+            .map_err(Error::io_or_compression)?;
+        if read == 0 {
+            break;
+        }
+        if let Some(hasher) = hasher.as_mut() {
+            hasher.update(&buffer[..read]);
+        }
+        writer.write_all(&buffer[..read]).await.map_err(Error::Io)?;
+        copied += read as u64;
+    }
+    writer.flush().await.map_err(Error::Io)?;
+    Ok((
+        copied,
+        file.compute_hash(),
+        hasher.map(|hasher| hasher.finalize()),
+    ))
+}
+
+fn copy_entry_with_hash_thread<R>(
+    archive: &mut ZipFileReader<AllowStdIo<R>>,
+    file_number: usize,
+    writer: std::io::BufWriter<fs_err::File>,
+) -> Result<(u64, u32, blake3::Hash), Error>
+where
+    R: std::io::BufRead + std::io::Seek + Unpin,
+{
+    std::thread::scope(|scope| {
+        let (sender, receiver) = mpsc::sync_channel::<Vec<u8>>(1);
+        let hash_thread = scope.spawn(move || {
+            let mut hasher = blake3::Hasher::new();
+            while let Ok(chunk) = receiver.recv() {
+                hasher.update(&chunk);
+            }
+            hasher.finalize()
+        });
+
+        let copied = block_on(async {
+            let mut file = archive.reader_with_entry(file_number).await?;
+            let mut writer = AllowStdIo::new(writer);
+            let mut copied = 0;
+            loop {
+                let mut buffer = vec![0; PARALLEL_HASH_BUFFER_SIZE];
+                let read = file
+                    .read(&mut buffer)
+                    .await
+                    .map_err(Error::io_or_compression)?;
+                if read == 0 {
+                    break;
+                }
+                writer.write_all(&buffer[..read]).await.map_err(Error::Io)?;
+                copied += read as u64;
+                buffer.truncate(read);
+                sender.send(buffer).map_err(|_| {
+                    Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::BrokenPipe,
+                        "failed to send ZIP entry chunk to hash thread",
+                    ))
+                })?;
+            }
+            writer.flush().await.map_err(Error::Io)?;
+            Ok::<_, Error>((copied, file.compute_hash()))
+        });
+
+        drop(sender);
+        let digest = hash_thread.join().map_err(|_| thread_panic_error())?;
+        copied.map(|(copied, computed_crc32)| (copied, computed_crc32, digest))
+    })
+}
+
+fn hash_stored_entry(
+    filename: &Path,
+    header_offset: u64,
+    compressed_size: u64,
+) -> Result<blake3::Hash, Error> {
+    let mut file = fs_err::File::open(filename).map_err(Error::Io)?;
+    let data_offset = stored_entry_data_offset(&mut file, header_offset)?;
+    file.seek(SeekFrom::Start(data_offset)).map_err(Error::Io)?;
+
+    let mut hasher = blake3::Hasher::new();
+    let mut remaining = compressed_size;
+    let mut buffer = vec![0; STORED_HASH_BUFFER_SIZE];
+    while remaining > 0 {
+        let read_size = usize::try_from(remaining.min(buffer.len() as u64)).map_err(|_| {
+            Error::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "stored ZIP entry is too large to hash",
+            ))
+        })?;
+        file.read_exact(&mut buffer[..read_size])
+            .map_err(Error::Io)?;
+        update_hash_rayon(&mut hasher, &buffer[..read_size]);
+        remaining -= read_size as u64;
+    }
+
+    Ok(hasher.finalize())
+}
+
+fn thread_panic_error() -> Error {
+    Error::Io(std::io::Error::other("hash thread panicked"))
+}
+
+fn update_hash_rayon(hasher: &mut blake3::Hasher, bytes: &[u8]) {
+    match HASH_THREAD_POOL.get_or_init(build_hash_thread_pool) {
+        Some(pool) => {
+            pool.install(|| {
+                hasher.update_rayon(bytes);
+            });
+        }
+        None => {
+            hasher.update(bytes);
+        }
+    }
+}
+
+fn build_hash_thread_pool() -> Option<rayon::ThreadPool> {
+    let threads = std::thread::available_parallelism()
+        .map(|threads| threads.get().clamp(1, 4))
+        .unwrap_or(1);
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .thread_name(|index| format!("uv-extract-hash-{index}"))
+        .build()
+        .ok()
+}
+
+fn stored_entry_data_offset(file: &mut fs_err::File, header_offset: u64) -> Result<u64, Error> {
+    file.seek(SeekFrom::Start(header_offset))
+        .map_err(Error::Io)?;
+    let mut header = [0; LOCAL_FILE_HEADER_LENGTH_USIZE];
+    file.read_exact(&mut header).map_err(Error::Io)?;
+
+    let signature = u32::from_le_bytes([header[0], header[1], header[2], header[3]]);
+    if signature != LOCAL_FILE_HEADER_SIGNATURE {
+        return Err(Error::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "invalid ZIP local file header signature",
+        )));
+    }
+
+    let filename_length = u64::from(u16::from_le_bytes([header[26], header[27]]));
+    let extra_field_length = u64::from(u16::from_le_bytes([header[28], header[29]]));
+    header_offset
+        .checked_add(LOCAL_FILE_HEADER_LENGTH)
+        .and_then(|offset| offset.checked_add(filename_length))
+        .and_then(|offset| offset.checked_add(extra_field_length))
+        .ok_or_else(|| {
+            Error::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "ZIP local file header is too large",
+            ))
+        })
 }
 
 /// Extract the top-level directory from an unpacked archive.
