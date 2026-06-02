@@ -684,21 +684,67 @@ impl Lock {
 
         let mut contexts = BTreeSet::new();
         for package in &self.packages {
-            for dependency in package
-                .dependencies
+            let production_dependencies = package
+                .metadata
+                .requires_dist
                 .iter()
-                .chain(package.optional_dependencies.values().flatten())
-                .chain(package.dependency_groups.values().flatten())
-            {
-                if let Ok((included, excluded)) =
-                    dependency.complexified_marker.conflict().filter_rules()
-                {
-                    contexts.extend(included);
-                    contexts.extend(excluded);
+                .filter(|requirement| requirement.marker.evaluate_only_extras(&[]))
+                .map(|requirement| &requirement.name)
+                .collect::<FxHashSet<_>>();
+            for requirement in &package.metadata.requires_dist {
+                if production_dependencies.contains(&requirement.name) {
+                    Self::extend_source_activation_contexts(
+                        &package.id.name,
+                        requirement,
+                        &mut contexts,
+                    );
+                }
+            }
+            for (group, requirements) in &package.metadata.dependency_groups {
+                for requirement in requirements {
+                    if production_dependencies.contains(&requirement.name)
+                        && Self::extend_source_activation_contexts(
+                            &package.id.name,
+                            requirement,
+                            &mut contexts,
+                        )
+                    {
+                        contexts
+                            .insert(ConflictItem::from((package.id.name.clone(), group.clone())));
+                    }
                 }
             }
         }
         contexts
+    }
+
+    /// Add activation contexts for a requirement with an explicit source.
+    fn extend_source_activation_contexts(
+        package: &PackageName,
+        requirement: &Requirement,
+        contexts: &mut BTreeSet<ConflictItem>,
+    ) -> bool {
+        let has_explicit_source = match &requirement.source {
+            RequirementSource::Registry {
+                index, conflict, ..
+            } => index.is_some() || conflict.is_some(),
+            _ => true,
+        };
+        if !has_explicit_source {
+            return false;
+        }
+
+        requirement.marker.visit_extras(|_, extra| {
+            contexts.insert(ConflictItem::from((package.clone(), extra.clone())));
+        });
+        if let RequirementSource::Registry {
+            conflict: Some(conflict),
+            ..
+        } = &requirement.source
+        {
+            contexts.insert(conflict.clone());
+        }
+        true
     }
 
     /// Record the required platforms that were used to generate this lock.

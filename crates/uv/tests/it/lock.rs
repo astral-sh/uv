@@ -25117,18 +25117,46 @@ fn lock_multiple_sources_extra_base_and_optional() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    // Locks created before source activation contexts were persisted can silently install the
-    // fallback source. Treat them as stale so they are regenerated.
-    let lock = context.read("uv.lock");
-    context.temp_dir.child("uv.lock").write_str(&lock.replace(
-        r#"conflicts = [[
-    { package = "project", extra = "alt" },
-    { package = "project", extra = "alt" },
-]]
+    // Locks created before source-scoped dependency edges were persisted can silently install the
+    // alternate source without the extra. Treat them as stale so they are regenerated.
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
 
-"#,
-        "",
-    ))?;
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.optional-dependencies]
+        alt = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "iniconfig", specifier = ">=2" },
+            { name = "iniconfig", marker = "extra == 'alt'", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
+        ]
+        provides-extras = ["alt"]
+        "#,
+    )?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
