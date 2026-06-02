@@ -16,7 +16,9 @@ use uv_python::{
 };
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
+use uv_workspace::{
+    DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError, WorkspaceErrorKind,
+};
 
 use crate::commands::pip::loggers::{SummaryInstallLogger, SummaryResolveLogger};
 use crate::commands::pip::operations::Modifications;
@@ -75,12 +77,18 @@ pub(crate) async fn check(
             .await
         {
             Ok(project) => Some(project),
-            Err(
-                WorkspaceError::MissingPyprojectToml
-                | WorkspaceError::MissingProject(_)
-                | WorkspaceError::NonWorkspace(_),
-            ) => None,
-            Err(err) => return Err(err.into()),
+            Err(err) => {
+                if matches!(
+                    err.as_ref(),
+                    WorkspaceErrorKind::MissingPyprojectToml
+                        | WorkspaceErrorKind::MissingProject(_)
+                        | WorkspaceErrorKind::NonWorkspace(_),
+                ) {
+                    None
+                } else {
+                    return Err(err.into());
+                }
+            }
         }
     };
 
