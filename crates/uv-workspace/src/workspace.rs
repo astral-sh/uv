@@ -80,8 +80,8 @@ impl WorkspaceCache {
     ///
     /// Contract: There are no parallel workspace operations, this is the only thread operating on
     /// workspaces.
-    pub fn remove(&self, install_path: &Path) {
-        if let Some(Some(workspace)) = self.workspaces.remove(install_path) {
+    pub fn invalidate_workspace(&self, workspace: &Workspace) {
+        if let Some(Some(workspace)) = self.workspaces.remove(workspace.install_path()) {
             for member in workspace.packages.values() {
                 self.workspaces.remove(&member.root);
             }
@@ -1965,10 +1965,7 @@ impl VirtualProject {
         workspace_cache: &WorkspaceCache,
     ) -> Result<Option<Self>, WorkspaceError> {
         // Our modifying operations run on a single workspace, clear that workspace.
-        workspace_cache.remove(&self.workspace().install_path);
-        for member in self.workspace().packages.values() {
-            workspace_cache.remove(member.root());
-        }
+        workspace_cache.invalidate_workspace(self.workspace());
         Ok(match self {
             Self::Project(project) => {
                 let Some(project) = project.update_member(pyproject_toml)? else {
