@@ -1,6 +1,11 @@
 // The `unreachable_pub` is to silence false positives in RustRover.
 #![allow(dead_code, unreachable_pub)]
 
+pub mod find_links;
+mod http_server;
+pub mod packse;
+mod vendor;
+
 use std::borrow::BorrowMut;
 use std::ffi::OsString;
 use std::io::Write as _;
@@ -36,7 +41,6 @@ use uv_static::EnvVars;
 // Shared test timestamp for deterministic package availability and relative times.
 static TEST_TIMESTAMP: &str = "2024-03-25T00:00:00Z";
 
-pub const PACKSE_VERSION: &str = "0.3.59";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
@@ -46,26 +50,6 @@ pub const LATEST_PYTHON_3_13: &str = "3.13.13";
 pub const LATEST_PYTHON_3_12: &str = "3.12.13";
 pub const LATEST_PYTHON_3_11: &str = "3.11.15";
 pub const LATEST_PYTHON_3_10: &str = "3.10.20";
-
-/// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
-/// to prevent dependency confusion attacks against our test suite.
-pub fn build_vendor_links_url() -> String {
-    env::var(EnvVars::UV_TEST_PACKSE_INDEX)
-        .map(|url| format!("{}/vendor/", url.trim_end_matches('/')))
-        .ok()
-        .unwrap_or(format!(
-            "https://astral-sh.github.io/packse/{PACKSE_VERSION}/vendor/"
-        ))
-}
-
-pub fn packse_index_url() -> String {
-    env::var(EnvVars::UV_TEST_PACKSE_INDEX)
-        .map(|url| format!("{}/simple-html/", url.trim_end_matches('/')))
-        .ok()
-        .unwrap_or(format!(
-            "https://astral-sh.github.io/packse/{PACKSE_VERSION}/simple-html/"
-        ))
-}
 
 /// Create a new [`TestContext`] with the given Python version.
 ///
@@ -1057,19 +1041,6 @@ impl TestContext {
         // Destroy any remaining UNC prefixes (Windows only)
         filters.push((r"\\\\\?\\".to_string(), String::new()));
 
-        // Remove the version from the packse url in lockfile snapshots. This avoids having a huge
-        // diff any time we upgrade packse
-        filters.push((
-            format!("https://astral-sh.github.io/packse/{PACKSE_VERSION}"),
-            "https://astral-sh.github.io/packse/PACKSE_VERSION".to_string(),
-        ));
-        // Developer convenience
-        if let Ok(packse_test_index) = env::var(EnvVars::UV_TEST_PACKSE_INDEX) {
-            filters.push((
-                packse_test_index.trim_end_matches('/').to_string(),
-                "https://astral-sh.github.io/packse/PACKSE_VERSION".to_string(),
-            ));
-        }
         // For wiremock tests
         filters.push((r"127\.0\.0\.1:\d*".to_string(), "[LOCALHOST]".to_string()));
         // Avoid breaking the tests when bumping the uv version
@@ -1202,6 +1173,8 @@ impl TestContext {
             .env_remove(EnvVars::VIRTUAL_ENV)
             // Disable wrapping of uv output for readability / determinism in snapshots.
             .env(EnvVars::UV_NO_WRAP, "1")
+            // Avoid reading host system configuration unless a test opts in.
+            .env(EnvVars::UV_NO_SYSTEM_CONFIG, "1")
             // While we disable wrapping in uv above, invoked tools may still wrap their output so
             // we set a fixed `COLUMNS` value for isolation from terminal width.
             .env(EnvVars::COLUMNS, "100")
@@ -1427,6 +1400,16 @@ impl TestContext {
         command.arg("format");
         self.add_shared_options(&mut command, false);
         // Override to a more recent date for ruff version resolution
+        command.env(EnvVars::UV_EXCLUDE_NEWER, "2026-02-15T00:00:00Z");
+        command
+    }
+
+    /// Create a `uv check` command with options shared across scenarios.
+    pub fn check(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("check");
+        self.add_shared_options(&mut command, false);
+        // Override to a more recent date for ty version resolution
         command.env(EnvVars::UV_EXCLUDE_NEWER, "2026-02-15T00:00:00Z");
         command
     }

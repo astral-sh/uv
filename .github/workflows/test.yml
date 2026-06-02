@@ -53,7 +53,7 @@ jobs:
       - name: "Install secret service"
         run: |
           echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
-          sudo apt install -y --update gnome-keyring
+          sudo apt install -y gnome-keyring
 
       - name: "Start gnome-keyring"
         # run gnome-keyring with 'foobar' as password for the login keyring
@@ -63,7 +63,7 @@ jobs:
 
       - name: "Create btrfs filesystem"
         run: |
-          sudo apt install -y --update btrfs-progs
+          sudo apt install -y btrfs-progs
           truncate -s 1G /tmp/btrfs.img
           mkfs.btrfs /tmp/btrfs.img
           sudo mkdir /btrfs

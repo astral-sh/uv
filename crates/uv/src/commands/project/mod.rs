@@ -66,6 +66,7 @@ use crate::settings::{
 
 pub(crate) mod add;
 pub(crate) mod audit;
+pub(crate) mod check;
 pub(crate) mod environment;
 pub(crate) mod export;
 pub(crate) mod format;

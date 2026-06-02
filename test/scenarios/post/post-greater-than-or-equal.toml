@@ -1,0 +1,14 @@
+name = "post-greater-than-or-equal"
+description = "A greater-than-or-equal version constraint should match a post-release version."
+
+[root]
+requires = ["a>=1.2.3"]
+
+[expected]
+satisfiable = true
+explanation = "The version '1.2.3.post1' satisfies the constraint '>=1.2.3'."
+
+[expected.packages]
+a = "1.2.3.post1"
+
+[packages.a.versions."1.2.3.post1"]

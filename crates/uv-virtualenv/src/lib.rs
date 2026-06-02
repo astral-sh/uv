@@ -6,7 +6,7 @@ use thiserror::Error;
 use uv_fs::Simplified;
 use uv_python::{Interpreter, PythonEnvironment};
 
-pub use virtualenv::{OnExisting, RemovalReason};
+pub use virtualenv::{ClearNonVirtualenv, OnExisting, RemovalReason};
 
 mod virtualenv;
 
@@ -27,6 +27,11 @@ pub enum Error {
         /// The path to the existing environment.
         path: PathBuf,
     },
+    #[error("uv will not clear a directory that is not a virtual environment")]
+    ClearNonVirtualenv {
+        /// The non-virtual environment directory that would have been cleared.
+        path: PathBuf,
+    },
 }
 
 impl uv_errors::Hint for Error {
@@ -35,6 +40,9 @@ impl uv_errors::Hint for Error {
             Self::Exists { name, .. } => uv_errors::Hints::from(format!(
                 "Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing {name}",
             )),
+            Self::ClearNonVirtualenv { .. } => uv_errors::Hints::from(
+                "Use the `--force` flag to remove the existing directory anyway",
+            ),
             _ => uv_errors::Hints::none(),
         }
     }

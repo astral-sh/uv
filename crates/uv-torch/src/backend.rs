@@ -469,6 +469,7 @@ impl TorchStrategy {
                     | Os::Haiku { .. }
                     | Os::Android { .. }
                     | Os::Pyodide { .. }
+                    | Os::PyEmscripten { .. }
                     | Os::Ios { .. } => Either::Right(Either::Left(std::iter::once(
                         TorchBackend::Cpu.index_url(*source),
                     ))),
@@ -501,6 +502,7 @@ impl TorchStrategy {
                 | Os::Haiku { .. }
                 | Os::Android { .. }
                 | Os::Pyodide { .. }
+                | Os::PyEmscripten { .. }
                 | Os::Ios { .. } => Either::Right(Either::Left(std::iter::once(
                     TorchBackend::Cpu.index_url(*source),
                 ))),
@@ -519,6 +521,7 @@ impl TorchStrategy {
                 | Os::Haiku { .. }
                 | Os::Android { .. }
                 | Os::Pyodide { .. }
+                | Os::PyEmscripten { .. }
                 | Os::Ios { .. } => Either::Right(Either::Left(std::iter::once(
                     TorchBackend::Cpu.index_url(*source),
                 ))),

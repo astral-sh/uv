@@ -429,12 +429,12 @@ pub struct Uninstall {
 /// Source: <https://github.com/rust-lang/cargo/blob/b48c41aedbd69ee3990d62a0e2006edbb506a480/crates/cargo-util/src/paths.rs#L76C1-L109C2>
 fn normalize_path(path: &Path) -> PathBuf {
     let mut components = path.components().peekable();
-    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().copied() {
-        components.next();
-        PathBuf::from(c.as_os_str())
-    } else {
-        PathBuf::new()
-    };
+    let mut ret = components
+        .next_if_map_mut(|component| match component {
+            Component::Prefix(..) => Some(PathBuf::from(component.as_os_str())),
+            _ => None,
+        })
+        .unwrap_or_default();
 
     for component in components {
         match component {

@@ -1141,7 +1141,7 @@ impl TryFrom<SourcesWire> for Sources {
         match wire {
             SourcesWire::One(source) => Ok(Self(vec![source])),
             SourcesWire::Many(sources) => {
-                for (lhs, rhs) in sources.iter().zip(sources.iter().skip(1)) {
+                for [lhs, rhs] in sources.array_windows() {
                     if lhs.extra() != rhs.extra() {
                         continue;
                     }

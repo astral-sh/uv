@@ -1,9 +1,8 @@
 use anyhow::Result;
+use assert_fs::fixture::ChildPath;
 use insta::assert_snapshot;
 use std::path::Path;
-use std::process::Command;
 use uv_static::EnvVars;
-use uv_test::get_bin;
 
 // These tests just run `uv lock` on an assorted of ecosystem
 // projects.
@@ -83,18 +82,16 @@ fn airflow() -> Result<()> {
 /// is, there should be a directory at `./test/ecosystem/{name}` from the
 /// root of the `uv` repository.
 fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
-    let context = uv_test::test_context!(python_version);
+    let mut context = uv_test::test_context!(python_version);
     context.copy_ecosystem_project(name);
 
     // Cache source distribution builds to speed up the tests.
     let cache_dir =
         std::path::absolute(Path::new("../../target/ecosystem-test-caches").join(name))?;
+    context.cache_dir = ChildPath::new(cache_dir);
 
-    // Custom command since we need to change the cache dir.
-    let mut command = Command::new(get_bin!());
-    context.add_shared_env(&mut command, false);
+    let mut command = context.lock();
     command.env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER);
-    command.arg("lock").arg("--cache-dir").arg(&cache_dir);
 
     let (snapshot, _) = uv_test::run_and_format(
         &mut command,
