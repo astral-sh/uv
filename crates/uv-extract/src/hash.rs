@@ -1,5 +1,6 @@
 use blake2::digest::consts::U32;
 use sha2::Digest;
+use std::path::{Component, Path};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncReadExt, ReadBuf};
@@ -64,6 +65,87 @@ impl From<Hasher> for HashDigest {
             },
         }
     }
+}
+
+/// A digest of extracted directory contents, hex-encoded.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct DirectoryDigest(String);
+
+impl DirectoryDigest {
+    /// Create a new [`DirectoryDigest`] from a hex-encoded string.
+    pub(crate) fn new(hex: String) -> Self {
+        Self(hex)
+    }
+
+    /// Return the hex-encoded digest string.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for DirectoryDigest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+pub(crate) struct DirectoryDigestFile {
+    path: String,
+    size: u64,
+    executable: bool,
+    digest: blake3::Hash,
+}
+
+impl DirectoryDigestFile {
+    pub(crate) fn new(path: &Path, size: u64, executable: bool, digest: blake3::Hash) -> Self {
+        Self {
+            path: canonical_path(path),
+            size,
+            executable,
+            digest,
+        }
+    }
+}
+
+pub(crate) fn directory_digest(mut files: Vec<DirectoryDigestFile>) -> DirectoryDigest {
+    files.sort_unstable_by(|left, right| {
+        left.path
+            .cmp(&right.path)
+            .then_with(|| left.size.cmp(&right.size))
+            .then_with(|| left.executable.cmp(&right.executable))
+            .then_with(|| left.digest.as_bytes().cmp(right.digest.as_bytes()))
+    });
+
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(b"uv-extract-directory-digest-v1\0");
+    for file in files {
+        hasher.update(b"file\0");
+        update_bytes(&mut hasher, file.path.as_bytes());
+        hasher.update(&file.size.to_le_bytes());
+        hasher.update(&[u8::from(file.executable)]);
+        hasher.update(file.digest.as_bytes());
+    }
+    DirectoryDigest::new(hasher.finalize().to_hex().to_string())
+}
+
+fn update_bytes(hasher: &mut blake3::Hasher, bytes: &[u8]) {
+    let len = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+    hasher.update(&len.to_le_bytes());
+    hasher.update(bytes);
+}
+
+fn canonical_path(path: &Path) -> String {
+    let mut canonical = String::new();
+    for component in path.components() {
+        let Component::Normal(component) = component else {
+            continue;
+        };
+        if !canonical.is_empty() {
+            canonical.push('/');
+        }
+        canonical.push_str(component.to_string_lossy().as_ref());
+    }
+    canonical
 }
 
 pub struct HashReader<'a, R> {

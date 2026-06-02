@@ -378,13 +378,32 @@ impl Cache {
         path: impl AsRef<Path>,
     ) -> io::Result<ArchiveId> {
         // Create a unique ID for the artifact.
-        // TODO(charlie): Support content-addressed persistence via SHAs.
         let id = ArchiveId::new();
 
+        self.persist_with_id(temp_dir, path, id).await
+    }
+
+    /// Persist a temporary directory to the artifact store under a specific ID.
+    pub async fn persist_with_id(
+        &self,
+        temp_dir: impl AsRef<Path>,
+        path: impl AsRef<Path>,
+        id: ArchiveId,
+    ) -> io::Result<ArchiveId> {
         // Move the temporary directory into the directory store.
         let archive_entry = self.entry(CacheBucket::Archive, "", &id);
         fs_err::create_dir_all(archive_entry.dir())?;
-        uv_fs::rename_with_retry(temp_dir.as_ref(), archive_entry.path()).await?;
+        if archive_entry.path().exists() {
+            rm_rf(temp_dir.as_ref())?;
+        } else {
+            match uv_fs::rename_with_retry(temp_dir.as_ref(), archive_entry.path()).await {
+                Ok(()) => {}
+                Err(_) if archive_entry.path().exists() => {
+                    rm_rf(temp_dir.as_ref())?;
+                }
+                Err(err) => return Err(err),
+            }
+        }
 
         // Create a symlink to the directory store.
         fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;

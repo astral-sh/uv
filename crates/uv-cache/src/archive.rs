@@ -21,6 +21,11 @@ impl ArchiveId {
     pub(crate) fn new() -> Self {
         Self(uv_fastid::Id::insecure().to_string())
     }
+
+    /// Generate a content-addressed identifier for an extracted archive.
+    pub fn from_directory_digest(digest: &str) -> Self {
+        Self(format!("dirhash-{digest}"))
+    }
 }
 
 impl AsRef<Path> for ArchiveId {
