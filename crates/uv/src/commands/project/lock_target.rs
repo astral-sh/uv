@@ -10,7 +10,7 @@ use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
-use uv_resolver::{Lock, LockVersion, VERSION};
+use uv_resolver::{Lock, LockVersion, supports_lock_version};
 use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroup};
 use uv_workspace::{Editability, Workspace, WorkspaceMember};
@@ -300,11 +300,8 @@ impl<'lock> LockTarget<'lock> {
                 match result {
                     Ok(lock) => {
                         // If the lockfile uses an unsupported version, raise an error.
-                        if lock.version() != VERSION {
-                            return Err(ProjectError::UnsupportedLockVersion(
-                                VERSION,
-                                lock.version(),
-                            ));
+                        if !supports_lock_version(lock.version()) {
+                            return Err(ProjectError::UnsupportedLockVersion(lock.version()));
                         }
                         Ok(Some(lock))
                     }
@@ -312,9 +309,8 @@ impl<'lock> LockTarget<'lock> {
                         // If we failed to parse the lockfile, determine whether it's a supported
                         // version.
                         if let Ok(lock) = toml::from_str::<LockVersion>(&encoded) {
-                            if lock.version() != VERSION {
+                            if !supports_lock_version(lock.version()) {
                                 return Err(ProjectError::UnparsableLockVersion(
-                                    VERSION,
                                     lock.version(),
                                     err,
                                 ));

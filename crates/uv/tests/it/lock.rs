@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
@@ -23382,7 +23382,7 @@ fn lock_unsupported_version() -> Result<()> {
     // Validate schema, invalid version.
     context.temp_dir.child("uv.lock").write_str(
         r#"
-        version = 2
+        version = 3
         requires-python = ">=3.12"
 
         [options]
@@ -23416,13 +23416,13 @@ fn lock_unsupported_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The lockfile at `uv.lock` uses an unsupported schema version (v2, but only v1 is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
+    error: The lockfile at `uv.lock` uses an unsupported schema version (v3, but only v1 and v2 are supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
     ");
 
     // Invalid schema (`iniconfig` is referenced, but missing), invalid version.
     context.temp_dir.child("uv.lock").write_str(
         r#"
-        version = 2
+        version = 3
         requires-python = ">=3.12"
 
         [options]
@@ -23447,7 +23447,7 @@ fn lock_unsupported_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `uv.lock`, which uses an unsupported schema version (v2, but only v1 is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
+    error: Failed to parse `uv.lock`, which uses an unsupported schema version (v3, but only v1 and v2 are supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
       Caused by: Dependency `iniconfig` has missing `source` field but has more than one matching package
     ");
 
@@ -24946,7 +24946,7 @@ fn lock_multiple_sources_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -25051,7 +25051,7 @@ fn lock_multiple_sources_extra_base_and_optional() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -25112,6 +25112,42 @@ fn lock_multiple_sources_extra_base_and_optional() -> Result<()> {
     Ok(())
 }
 
+/// Source-split locks require install-graph behavior that version-1 readers do
+/// not understand, so they must use an incompatible lock version.
+#[test]
+fn lock_multiple_sources_extra_source_split_uses_incompatible_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "alt" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    let lock = context.read("uv.lock");
+    let Some(version) = lock.lines().next() else {
+        bail!("lockfile is empty");
+    };
+    assert_snapshot!(version, @"version = 2");
+
+    Ok(())
+}
+
 /// Like `lock_multiple_sources_extra_base_and_optional`, but with an explicit
 /// index instead of a URL. The base dependency should remain on the default
 /// index when the extra is disabled.
@@ -25161,7 +25197,7 @@ fn lock_multiple_sources_index_extra_base_and_optional() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -25352,7 +25388,7 @@ fn lock_multiple_sources_group_base_and_group() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -25461,7 +25497,7 @@ fn lock_multiple_sources_index_group_base_and_group() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -25617,7 +25653,7 @@ fn lock_multiple_sources_index_group_repeated_root_groups() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -25871,7 +25907,7 @@ fn lock_multiple_sources_extra_and_platform_marker() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
@@ -25990,7 +26026,7 @@ fn lock_multiple_sources_extra_multiple_urls() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -36415,7 +36451,7 @@ fn lock_path_dependency_explicit_index_optional_extra_source_multiple_extras() -
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 

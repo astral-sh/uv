@@ -78,11 +78,20 @@ mod installable;
 mod map;
 mod tree;
 
-/// The current version of the lockfile format.
+/// The lockfile version used when no incompatible activation-marker behavior is required.
 pub const VERSION: u32 = 1;
+
+/// The lockfile version used when dependency selection requires activation markers that version-1
+/// readers cannot evaluate.
+pub const ACTIVATION_MARKER_VERSION: u32 = 2;
 
 /// The current revision of the lockfile format.
 const REVISION: u32 = 3;
+
+/// Returns whether this uv version can read the given lockfile version.
+pub fn supports_lock_version(version: u32) -> bool {
+    matches!(version, VERSION | ACTIVATION_MARKER_VERSION)
+}
 
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
@@ -260,11 +269,8 @@ pub struct Lock {
     /// The (major) version of the lockfile format.
     ///
     /// Changes to the major version indicate backwards- and forwards-incompatible changes to the
-    /// lockfile format. A given uv version only supports a single major version of the lockfile
-    /// format.
-    ///
-    /// In other words, a version of uv that supports version 2 of the lockfile format will not be
-    /// able to read lockfiles generated under version 1 or 3.
+    /// lockfile format. Newer uv versions may continue to read older lockfile versions, but older
+    /// uv versions must reject lockfiles generated under a newer version.
     version: u32,
     /// The revision of the lockfile format.
     ///
@@ -472,7 +478,7 @@ impl Lock {
         // that canonical form rather than the raw resolver output.
         let fork_markers =
             canonicalize_universal_markers(&resolution.fork_markers, &requires_python);
-        let lock = Self::new(
+        let mut lock = Self::new(
             VERSION,
             REVISION,
             packages,
@@ -484,6 +490,7 @@ impl Lock {
             vec![],
             fork_markers,
         )?;
+        lock.update_version_for_activation_markers();
         Ok(lock)
     }
 
@@ -667,7 +674,43 @@ impl Lock {
     #[must_use]
     pub fn with_conflicts(mut self, conflicts: Conflicts) -> Self {
         self.conflicts = conflicts;
+        self.update_version_for_activation_markers();
         self
+    }
+
+    /// Selects an incompatible lock version when dependency markers require activation behavior
+    /// that version-1 readers do not support.
+    fn update_version_for_activation_markers(&mut self) {
+        let mut has_activation_markers = false;
+
+        for dependency in self.packages.iter().flat_map(|package| {
+            package
+                .dependencies
+                .iter()
+                .chain(package.optional_dependencies.values().flatten())
+                .chain(package.dependency_groups.values().flatten())
+        }) {
+            let conflict_marker = dependency.complexified_marker.conflict();
+            if conflict_marker.is_true() {
+                continue;
+            }
+            has_activation_markers = true;
+
+            // Version-1 readers only evaluate encoded conflict markers, never raw PEP 508 extra
+            // markers.
+            if conflict_marker.filter_rules().is_err() {
+                self.version = ACTIVATION_MARKER_VERSION;
+                return;
+            }
+        }
+
+        // Version-1 readers only collect the activation context when declared conflicts are
+        // present.
+        self.version = if has_activation_markers && self.conflicts.is_empty() {
+            ACTIVATION_MARKER_VERSION
+        } else {
+            VERSION
+        };
     }
 
     /// Record the required platforms that were used to generate this lock.

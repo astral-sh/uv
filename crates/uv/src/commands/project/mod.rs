@@ -152,14 +152,14 @@ pub(crate) enum ProjectError {
     LockWorkspaceMismatch(PackageName),
 
     #[error(
-        "The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
+        "The lockfile at `uv.lock` uses an unsupported schema version (v{0}, but only v1 and v2 are supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
     )]
-    UnsupportedLockVersion(u32, u32),
+    UnsupportedLockVersion(u32),
 
     #[error(
-        "Failed to parse `uv.lock`, which uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
+        "Failed to parse `uv.lock`, which uses an unsupported schema version (v{0}, but only v1 and v2 are supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
     )]
-    UnparsableLockVersion(u32, u32, #[source] toml::de::Error),
+    UnparsableLockVersion(u32, #[source] toml::de::Error),
 
     #[error("Failed to serialize `uv.lock`")]
     LockSerialization(#[from] toml_edit::ser::Error),
