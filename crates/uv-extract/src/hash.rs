@@ -1,14 +1,10 @@
 use blake2::digest::consts::U32;
-use rustc_hash::FxHashMap;
 use sha2::Digest;
-use std::cmp::Ordering;
-use std::io::{self, Read};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, Path};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncReadExt, ReadBuf};
 
-use crate::Error;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 
 #[derive(Debug)]
@@ -93,255 +89,43 @@ impl std::fmt::Display for DirectoryDigest {
     }
 }
 
-struct DirectoryDigestFile<'a> {
+pub(crate) struct DirectoryDigestFile {
     path: String,
     size: u64,
     executable: bool,
-    digest: DirectoryFileDigest<'a>,
+    digest: blake3::Hash,
 }
 
-impl<'a> DirectoryDigestFile<'a> {
-    fn from_blake3(path: String, size: u64, executable: bool, digest: blake3::Hash) -> Self {
+impl DirectoryDigestFile {
+    pub(crate) fn new(path: &Path, size: u64, executable: bool, digest: blake3::Hash) -> Self {
         Self {
-            path,
+            path: canonical_path(path),
             size,
             executable,
-            digest: DirectoryFileDigest::Blake3(digest),
-        }
-    }
-
-    fn from_record(path: String, size: u64, executable: bool, hash: &'a str, crc32: u32) -> Self {
-        Self {
-            path,
-            size,
-            executable,
-            digest: DirectoryFileDigest::Record { hash, crc32 },
-        }
-    }
-}
-
-enum DirectoryFileDigest<'a> {
-    Blake3(blake3::Hash),
-    Record { hash: &'a str, crc32: u32 },
-}
-
-impl DirectoryFileDigest<'_> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match (self, other) {
-            (Self::Blake3(left), Self::Blake3(right)) => left.as_bytes().cmp(right.as_bytes()),
-            (
-                Self::Record {
-                    hash: left_hash,
-                    crc32: left_crc32,
-                },
-                Self::Record {
-                    hash: right_hash,
-                    crc32: right_crc32,
-                },
-            ) => left_hash
-                .cmp(right_hash)
-                .then_with(|| left_crc32.cmp(right_crc32)),
-            (Self::Blake3(_), Self::Record { .. }) => Ordering::Less,
-            (Self::Record { .. }, Self::Blake3(_)) => Ordering::Greater,
-        }
-    }
-
-    fn update(&self, hasher: &mut blake3::Hasher) {
-        match self {
-            Self::Blake3(digest) => {
-                hasher.update(b"blake3\0");
-                hasher.update(digest.as_bytes());
-            }
-            Self::Record { hash, crc32 } => {
-                hasher.update(b"record\0");
-                update_bytes(hasher, hash.as_bytes());
-                hasher.update(&crc32.to_le_bytes());
-            }
-        }
-    }
-}
-
-pub(crate) struct ExtractedDirectoryFile {
-    path: PathBuf,
-    canonical_path: String,
-    size: u64,
-    executable: bool,
-    crc32: u32,
-    digest: Option<blake3::Hash>,
-}
-
-impl ExtractedDirectoryFile {
-    pub(crate) fn new(
-        path: PathBuf,
-        size: u64,
-        executable: bool,
-        crc32: u32,
-        digest: Option<blake3::Hash>,
-    ) -> Self {
-        let canonical_path = canonical_path(&path);
-        Self::from_canonical_path(path, canonical_path, size, executable, crc32, digest)
-    }
-
-    pub(crate) fn from_canonical_path(
-        path: PathBuf,
-        canonical_path: String,
-        size: u64,
-        executable: bool,
-        crc32: u32,
-        digest: Option<blake3::Hash>,
-    ) -> Self {
-        Self {
-            path,
-            canonical_path,
-            size,
-            executable,
-            crc32,
             digest,
         }
     }
-
-    fn is_record(&self) -> bool {
-        Self::is_record_path(&self.canonical_path)
-    }
-
-    fn is_record_path(path: &str) -> bool {
-        path.ends_with(".dist-info/RECORD")
-    }
-
-    fn into_directory_digest_file<'a>(
-        self,
-        target: &Path,
-        record_hashes: &'a RecordDirectoryHashes,
-    ) -> Result<DirectoryDigestFile<'a>, Error> {
-        if let Some(hash) = record_hashes.get(&self.canonical_path, self.size) {
-            return Ok(DirectoryDigestFile::from_record(
-                self.canonical_path,
-                self.size,
-                self.executable,
-                hash,
-                self.crc32,
-            ));
-        }
-
-        let digest = match self.digest {
-            Some(digest) => digest,
-            None => hash_file(&target.join(&self.path))?,
-        };
-
-        Ok(DirectoryDigestFile::from_blake3(
-            self.canonical_path,
-            self.size,
-            self.executable,
-            digest,
-        ))
-    }
 }
 
-#[derive(Debug, Default)]
-pub(crate) struct RecordDirectoryHashes {
-    hashes: FxHashMap<String, RecordHash>,
-}
-
-#[derive(Debug)]
-struct RecordHash {
-    hash: String,
-    size: Option<u64>,
-}
-
-impl RecordDirectoryHashes {
-    pub(crate) fn empty() -> Self {
-        Self::default()
-    }
-
-    pub(crate) fn from_reader(reader: impl Read) -> Result<Self, Error> {
-        let mut hashes = FxHashMap::default();
-        let mut reader = csv::ReaderBuilder::new()
-            .has_headers(false)
-            .flexible(true)
-            .from_reader(reader);
-
-        for record in reader.records() {
-            let record =
-                record.map_err(|err| Error::Io(io::Error::new(io::ErrorKind::InvalidData, err)))?;
-            let Some(path) = record.get(0).and_then(record_canonical_path) else {
-                continue;
-            };
-            let Some(hash) = record.get(1).filter(is_valid_record_hash) else {
-                continue;
-            };
-            let size = match record.get(2).filter(|size| !size.is_empty()) {
-                Some(size) => {
-                    let Ok(size) = size.parse::<u64>() else {
-                        continue;
-                    };
-                    Some(size)
-                }
-                None => None,
-            };
-            hashes.insert(
-                path,
-                RecordHash {
-                    hash: hash.to_string(),
-                    size,
-                },
-            );
-        }
-
-        Ok(Self { hashes })
-    }
-
-    pub(crate) fn from_extracted_files(
-        target: &Path,
-        files: &[ExtractedDirectoryFile],
-    ) -> Result<Self, Error> {
-        let Some(record_file) = files.iter().find(|file| file.is_record()) else {
-            return Ok(Self::empty());
-        };
-        let file = fs_err::File::open(target.join(&record_file.path)).map_err(Error::Io)?;
-        Self::from_reader(file)
-    }
-
-    pub(crate) fn has_usable_canonical_hash(&self, path: &str, size: u64) -> bool {
-        self.get(path, size).is_some()
-    }
-
-    fn get(&self, path: &str, size: u64) -> Option<&str> {
-        let hash = self.hashes.get(path)?;
-        if hash.size.is_some_and(|expected| expected != size) {
-            return None;
-        }
-        Some(&hash.hash)
-    }
-}
-
-pub(crate) fn directory_digest(
-    target: &Path,
-    files: Vec<ExtractedDirectoryFile>,
-    record_hashes: &RecordDirectoryHashes,
-) -> Result<DirectoryDigest, Error> {
-    let mut files = files
-        .into_iter()
-        .map(|file| file.into_directory_digest_file(target, record_hashes))
-        .collect::<Result<Vec<_>, Error>>()?;
-
+pub(crate) fn directory_digest(mut files: Vec<DirectoryDigestFile>) -> DirectoryDigest {
     files.sort_unstable_by(|left, right| {
         left.path
             .cmp(&right.path)
             .then_with(|| left.size.cmp(&right.size))
             .then_with(|| left.executable.cmp(&right.executable))
-            .then_with(|| left.digest.cmp(&right.digest))
+            .then_with(|| left.digest.as_bytes().cmp(right.digest.as_bytes()))
     });
 
     let mut hasher = blake3::Hasher::new();
-    hasher.update(b"uv-extract-directory-digest-v2\0");
+    hasher.update(b"uv-extract-directory-digest-v1\0");
     for file in files {
         hasher.update(b"file\0");
         update_bytes(&mut hasher, file.path.as_bytes());
         hasher.update(&file.size.to_le_bytes());
         hasher.update(&[u8::from(file.executable)]);
-        file.digest.update(&mut hasher);
+        hasher.update(file.digest.as_bytes());
     }
-    Ok(DirectoryDigest::new(hasher.finalize().to_hex().to_string()))
+    DirectoryDigest::new(hasher.finalize().to_hex().to_string())
 }
 
 fn update_bytes(hasher: &mut blake3::Hasher, bytes: &[u8]) {
@@ -350,59 +134,18 @@ fn update_bytes(hasher: &mut blake3::Hasher, bytes: &[u8]) {
     hasher.update(bytes);
 }
 
-pub(crate) fn canonical_path(path: &Path) -> String {
-    let mut components = Vec::new();
+fn canonical_path(path: &Path) -> String {
+    let mut canonical = String::new();
     for component in path.components() {
-        match component {
-            Component::Normal(component) => {
-                components.push(component.to_string_lossy());
-            }
-            Component::CurDir => {}
-            Component::ParentDir => {
-                components.pop();
-            }
-            Component::Prefix(_) | Component::RootDir => {}
+        let Component::Normal(component) = component else {
+            continue;
+        };
+        if !canonical.is_empty() {
+            canonical.push('/');
         }
+        canonical.push_str(component.to_string_lossy().as_ref());
     }
-    components.join("/")
-}
-
-fn record_canonical_path(path: &str) -> Option<String> {
-    if path.contains('\0') {
-        return None;
-    }
-    let path = PathBuf::from(path);
-    let mut depth = 0usize;
-    for component in path.components() {
-        match component {
-            Component::Prefix(_) | Component::RootDir => return None,
-            Component::ParentDir => depth = depth.checked_sub(1)?,
-            Component::Normal(_) => depth += 1,
-            Component::CurDir => {}
-        }
-    }
-    Some(canonical_path(&path))
-}
-
-fn is_valid_record_hash(hash: &&str) -> bool {
-    let Some((algorithm, digest)) = hash.split_once('=') else {
-        return false;
-    };
-    !algorithm.is_empty() && !digest.is_empty()
-}
-
-fn hash_file(path: &Path) -> Result<blake3::Hash, Error> {
-    let mut file = fs_err::File::open(path).map_err(Error::Io)?;
-    let mut hasher = blake3::Hasher::new();
-    let mut buffer = [0; 128 * 1024];
-    loop {
-        let read = file.read(&mut buffer).map_err(Error::Io)?;
-        if read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..read]);
-    }
-    Ok(hasher.finalize())
+    canonical
 }
 
 pub struct HashReader<'a, R> {
