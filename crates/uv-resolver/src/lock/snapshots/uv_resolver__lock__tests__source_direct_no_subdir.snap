@@ -4,7 +4,7 @@ expression: result
 ---
 Ok(
     Lock {
-        version: 1,
+        version: 2,
         revision: 0,
         fork_markers: [],
         conflicts: Conflicts(
