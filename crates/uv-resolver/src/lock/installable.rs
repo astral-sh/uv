@@ -64,6 +64,15 @@ pub trait Installable<'lock> {
         let mut activated_projects: Vec<&PackageName> = vec![];
         let mut activated_extras: Vec<(&PackageName, &ExtraName)> = vec![];
         let mut activated_groups: Vec<(&PackageName, &GroupName)> = vec![];
+        let needs_activation_context = !self.lock().conflicts().is_empty()
+            || self.lock().packages.iter().any(|package| {
+                package
+                    .dependencies
+                    .iter()
+                    .chain(package.optional_dependencies.values().flatten())
+                    .chain(package.dependency_groups.values().flatten())
+                    .any(|dependency| !dependency.complexified_marker.conflict().is_true())
+            });
 
         let root = petgraph.add_node(Node::Root);
 
@@ -74,7 +83,7 @@ pub trait Installable<'lock> {
         // marker. But at that point, we don't know the full set of activated extras; this is only
         // computed below. We somehow need to add the dependency groups _after_ we've computed all
         // enabled extras, but the groups themselves could depend on the set of enabled extras.
-        if !self.lock().conflicts().is_empty() {
+        if needs_activation_context {
             for root_name in self.roots() {
                 let dist = self
                     .lock()
@@ -157,8 +166,9 @@ pub trait Installable<'lock> {
                 .flatten()
             {
                 let additional_activated_extras = newly_activated_extras(dep, &activated_extras);
-                if !dep.complexified_marker.evaluate(
+                if !dep.complexified_marker.evaluate_for_package(
                     marker_env,
+                    &dist.id.name,
                     activated_projects.iter().copied(),
                     activated_extras
                         .iter()
@@ -347,7 +357,7 @@ pub trait Installable<'lock> {
         // activated extras. This includes the extras explicitly enabled on
         // the CLI (which were gathered above) and the extras enabled via
         // dependency specifications like `foo[extra]`. We need to do this
-        // to correctly support conflicting extras.
+        // to correctly support conflicting extras and source-selection markers.
         //
         // In particular, the way conflicting extras works is by forking the
         // resolver based on the extras that are declared as conflicting. But
@@ -366,12 +376,7 @@ pub trait Installable<'lock> {
         // if it's enabled, we need to traverse the entire dependency graph
         // first to inspect which extras are enabled!
         //
-        // Of course, we don't need to do this at all if there aren't any
-        // conflicts. In which case, we skip all of this and just do the one
-        // traversal below.
-        if !self.lock().conflicts().is_empty() {
-            let mut activated_extras_set: BTreeSet<(&PackageName, &ExtraName)> =
-                activated_extras.iter().copied().collect();
+        if needs_activation_context {
             let mut queue = queue.clone();
             let mut seen = seen.clone();
             while let Some((package, extra)) = queue.pop_front() {
@@ -389,8 +394,9 @@ pub trait Installable<'lock> {
                 for dep in deps {
                     let additional_activated_extras =
                         newly_activated_extras(dep, &activated_extras);
-                    if !dep.complexified_marker.evaluate(
+                    if !dep.complexified_marker.evaluate_for_package(
                         marker_env,
+                        &package.id.name,
                         activated_projects.iter().copied(),
                         activated_extras
                             .iter()
@@ -421,7 +427,6 @@ pub trait Installable<'lock> {
                     // there are, we raise an error. ---AG
 
                     for key in additional_activated_extras {
-                        activated_extras_set.insert(key);
                         activated_extras.push(key);
                     }
                     let dep_dist = self.lock().find_by_id(&dep.package_id);
@@ -436,6 +441,11 @@ pub trait Installable<'lock> {
                     }
                 }
             }
+        }
+
+        if !self.lock().conflicts().is_empty() {
+            let activated_extras_set: BTreeSet<(&PackageName, &ExtraName)> =
+                activated_extras.iter().copied().collect();
             // At time of writing, it's somewhat expected that the set of
             // conflicting extras is pretty small. With that said, the
             // time complexity of the following routine is pretty gross.
@@ -477,8 +487,9 @@ pub trait Installable<'lock> {
                 Either::Right(package.dependencies.iter())
             };
             for dep in deps {
-                if !dep.complexified_marker.evaluate(
+                if !dep.complexified_marker.evaluate_for_package(
                     marker_env,
+                    &package.id.name,
                     activated_projects.iter().copied(),
                     activated_extras.iter().copied(),
                     activated_groups.iter().copied(),
