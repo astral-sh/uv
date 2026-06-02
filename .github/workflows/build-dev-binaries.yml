@@ -61,6 +61,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
+
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
@@ -140,6 +143,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
 
       - name: "Setup musl"
         run: sudo apt-get install musl-tools
@@ -341,6 +347,8 @@ jobs:
         run: rustup default ${MSRV}
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
