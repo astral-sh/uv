@@ -31,7 +31,9 @@ use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceError};
+use uv_workspace::{
+    DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceErrorKind,
+};
 
 use crate::commands::ExitStatus;
 use crate::commands::project::{find_requires_python, init_script_python_requirement};
@@ -334,7 +336,7 @@ async fn init_project(
         .await
         {
             Ok(workspace) => {
-                // Ignore the current workspace, if `--no-workspace` was provided.
+                // Ignore the current workspace if `--no-workspace` was provided.
                 if no_workspace {
                     debug!("Ignoring discovered workspace due to `--no-workspace`");
                     None
@@ -342,25 +344,28 @@ async fn init_project(
                     Some(workspace)
                 }
             }
-            Err(WorkspaceError::MissingPyprojectToml | WorkspaceError::NonWorkspace(_)) => {
-                // If the user runs with `--no-workspace` and we can't find a workspace, warn.
-                if no_workspace {
-                    warn!("`--no-workspace` was provided, but no workspace was found");
-                }
-                None
-            }
             Err(err) => {
-                // If the user runs with `--no-workspace`, ignore the error.
-                if no_workspace {
-                    warn!("Ignoring workspace discovery error due to `--no-workspace`: {err}");
+                if matches!(
+                    err.as_ref(),
+                    WorkspaceErrorKind::MissingPyprojectToml | WorkspaceErrorKind::NonWorkspace(_)
+                ) {
+                    if no_workspace {
+                        warn!("`--no-workspace` was provided, but no workspace was found");
+                    }
                     None
                 } else {
-                    return Err(err).with_context(|| {
-                        format!(
-                            "Failed to discover parent workspace; use `{}` to ignore",
-                            "uv init --no-workspace".green()
-                        )
-                    });
+                    // If the user runs with `--no-workspace`, ignore the error.
+                    if no_workspace {
+                        warn!("Ignoring workspace discovery error due to `--no-workspace`: {err}");
+                        None
+                    } else {
+                        return Err(err).with_context(|| {
+                            format!(
+                                "Failed to discover parent workspace; use `{}` to ignore",
+                                "uv init --no-workspace".green()
+                            )
+                        });
+                    }
                 }
             }
         }

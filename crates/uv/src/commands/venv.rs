@@ -33,7 +33,7 @@ use uv_types::{
 };
 use uv_virtualenv::OnExisting;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
@@ -95,19 +95,20 @@ pub(crate) async fn venv(
             .await
         {
             Ok(project) => Some(project),
-            Err(WorkspaceError::MissingProject(_)) => None,
-            Err(WorkspaceError::MissingPyprojectToml) => None,
-            Err(WorkspaceError::NonWorkspace(_)) => None,
-            Err(WorkspaceError::Toml(path, err)) => {
-                warn_user!(
-                    "Failed to parse `{}` during environment creation:\n{}",
-                    path.user_display().cyan(),
-                    textwrap::indent(&err.to_string(), "  ")
-                );
-                None
-            }
             Err(err) => {
-                warn_user!("{err}");
+                match err.as_ref() {
+                    WorkspaceErrorKind::MissingProject(_)
+                    | WorkspaceErrorKind::MissingPyprojectToml
+                    | WorkspaceErrorKind::NonWorkspace(_) => {}
+                    WorkspaceErrorKind::Toml(path, err) => {
+                        warn_user!(
+                            "Failed to parse `{}` during environment creation:\n{}",
+                            path.user_display().cyan(),
+                            textwrap::indent(&err.to_string(), "  ")
+                        );
+                    }
+                    _ => warn_user!("{err}"),
+                }
                 None
             }
         }
