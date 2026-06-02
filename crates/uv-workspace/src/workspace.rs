@@ -322,7 +322,6 @@ impl Workspace {
             workspace_pyproject_toml,
             current_project,
             options,
-            cache,
         )
         .await
         {
@@ -921,7 +920,6 @@ impl Workspace {
         workspace_pyproject_toml: PyProjectToml,
         current_project: Option<WorkspaceMember>,
         options: &DiscoveryOptions,
-        cache: &WorkspaceCache,
     ) -> Result<Arc<Self>, WorkspaceError> {
         trace!(
             "Discovering workspace members for: `{}`",
@@ -1605,7 +1603,6 @@ impl ProjectWorkspace {
             workspace_pyproject_toml,
             Some(current_project),
             options,
-            cache,
         )
         .await
         {
@@ -1910,7 +1907,6 @@ impl VirtualProject {
                 pyproject_toml,
                 None,
                 options,
-                cache,
             )
             .await?;
 
@@ -1932,9 +1928,6 @@ impl VirtualProject {
                 pyproject_toml,
                 None,
                 options,
-                // Avoid populating the shared cache with a synthetic workspace that
-                // `Workspace::discover` would reject as missing a `[project]` table.
-                &WorkspaceCache::default(),
             )
             .await?;
 
