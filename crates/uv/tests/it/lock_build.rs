@@ -1202,6 +1202,9 @@ fn lock_build_dependencies_universal() -> Result<()> {
             { name = "hatchling", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools-scm", version = "8.0.4", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:iniconfig:wheel:build:[BUILD-ID]", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
         ]
+        build-dependencies = [
+            { name = "hatchling", version = "1.22.4", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/f5/c9/54bb4fa27b4e4a014ef3bb17710cdf692b3aa2cbc7953da885f1bf7e06ea/hatch_vcs-0.4.0.tar.gz", hash = "sha256:093810748fe01db0d451fabcf2c1ac2688caefd232d4ede967090b1c1b07d9f7", size = 10917, upload-time = "2023-11-06T06:24:57.228Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/82/0f/6cbd9976160bc334add63bc2e7a58b1433a31b34b7cda6c5de6dd983d9a7/hatch_vcs-0.4.0-py3-none-any.whl", hash = "sha256:b8a2b6bee54cf6f9fc93762db73890017ae59c9081d1038a41f16235ceaf8b2c", size = 8412, upload-time = "2023-11-06T06:24:55.389Z" },
@@ -1348,6 +1351,12 @@ fn lock_build_dependencies_universal() -> Result<()> {
             { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
         ]
+        build-dependencies = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/0e/a3/b9a8b0adfe672bf0df5901707aa929d30a97ee390ba651910186776746d2/setuptools_scm-8.0.4-py3-none-any.whl", hash = "sha256:b47844cd2a84b83b3187a5782c71128c28b4c94cad8bfb871da2784a5cb54c4f", size = 42137, upload-time = "2023-10-02T15:14:31.281Z" },
@@ -1362,6 +1371,12 @@ fn lock_build_dependencies_universal() -> Result<()> {
             { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+        build-dependencies = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
         wheels = [
@@ -1378,6 +1393,12 @@ fn lock_build_dependencies_universal() -> Result<()> {
             { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
         ]
+        build-dependencies = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/0e/a3/b9a8b0adfe672bf0df5901707aa929d30a97ee390ba651910186776746d2/setuptools_scm-8.0.4-py3-none-any.whl", hash = "sha256:b47844cd2a84b83b3187a5782c71128c28b4c94cad8bfb871da2784a5cb54c4f", size = 42137, upload-time = "2023-10-02T15:14:31.281Z" },
@@ -1392,6 +1413,12 @@ fn lock_build_dependencies_universal() -> Result<()> {
             { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+        ]
+        build-dependencies = [
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0", marker = "sys_platform == 'linux'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "wheel", version = "0.43.0", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
         wheels = [
