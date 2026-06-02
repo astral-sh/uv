@@ -268,6 +268,12 @@ pub trait Installable<'lock> {
             // Add the edge.
             petgraph.add_edge(root, index, Edge::Prod);
 
+            activated_extras.extend(newly_activated_extras(
+                &dist.id.name,
+                dependency.extras.iter(),
+                &activated_extras,
+            ));
+
             // Push its dependencies on the queue.
             if seen.insert((&dist.id, None)) {
                 queue.push_back((dist, None));

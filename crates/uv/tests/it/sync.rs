@@ -10545,6 +10545,78 @@ fn sync_multiple_sources_group_activates_extra_url() -> Result<()> {
 }
 
 #[test]
+fn sync_script_manifest_extra_selects_url_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", extra = "alt" },
+        ]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    child.child("src/child/__init__.py").touch()?;
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child[alt]"]
+        #
+        # [tool.uv.sources]
+        # child = { path = "child" }
+        # ///
+    "#})?;
+
+    context
+        .lock()
+        .arg("--script")
+        .arg("script.py")
+        .assert()
+        .success();
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .sync()
+            .arg("--script")
+            .arg("script.py")
+            .arg("--locked"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
 fn sync_multiple_sources_extra_url_platform_fallback() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
