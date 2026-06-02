@@ -91,6 +91,11 @@ impl Urls {
         Self { overrides, regular }
     }
 
+    /// Returns `true` if there are no allowed URLs.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.overrides.is_empty() && self.regular.is_empty()
+    }
+
     /// Return an iterator over the allowed URLs for the given package.
     ///
     /// If we have a URL override, apply it unconditionally for registry and URL requirements.

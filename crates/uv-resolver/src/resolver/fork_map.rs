@@ -125,6 +125,11 @@ impl<T> Default for ForkMap<T> {
 }
 
 impl<T> ForkMap<T> {
+    /// Returns `true` if the map contains no values.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// Associate a value with the [`Requirement`] in a given fork.
     pub(crate) fn add(&mut self, requirement: &Requirement, value: T) {
         self.0

@@ -131,6 +131,10 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
     /// `ResolverState::requirements`, so this pass mutates the already-added dependencies in place
     /// instead of synthesizing new ones from raw metadata.
     pub(super) fn rewrite_root_complementary_sources(&mut self) {
+        if self.state.urls.is_empty() && self.state.indexes.is_empty() {
+            return;
+        }
+
         let python_marker = self.python_requirement.to_marker_tree();
 
         for requirement in self.state.overrides.apply(self.state.requirements.iter()) {
@@ -159,6 +163,10 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         base_requirements: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Box<[Requirement]>>,
     ) {
+        if self.state.urls.is_empty() && self.state.indexes.is_empty() {
+            return;
+        }
+
         let python_marker = self.python_requirement.to_marker_tree();
 
         for requirement in self.state.overrides.apply(base_requirements.iter()) {

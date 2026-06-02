@@ -41,6 +41,11 @@ impl Indexes {
         Self(indexes)
     }
 
+    /// Returns `true` if there are no explicit indexes.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// Returns `true` if the map contains any indexes for a package.
     pub(crate) fn contains_key(&self, name: &PackageName) -> bool {
         self.0.contains_key(name)
