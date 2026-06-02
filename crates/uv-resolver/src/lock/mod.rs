@@ -21,7 +21,7 @@ use url::Url;
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults,
-    InstallTarget,
+    InstallTarget, Overrides,
 };
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
 use uv_distribution_filename::{
@@ -1823,7 +1823,12 @@ impl Lock {
                 map
             },
         );
-        for requirement in requirements.iter().chain(constraints.iter()) {
+        let overrides = Overrides::from_requirements(overrides.to_vec());
+        for requirement in overrides
+            .apply(requirements.iter())
+            .chain(constraints.iter().map(Cow::Borrowed))
+        {
+            let requirement = requirement.as_ref();
             let RequirementSource::Registry { specifier, .. } = &requirement.source else {
                 continue;
             };
@@ -2345,9 +2350,11 @@ impl Lock {
             for (group, deps) in &package.dependency_groups {
                 if let Some(group_reqs) = package.metadata.dependency_groups.get(group) {
                     for dep in deps {
-                        if let Some(result) =
-                            check_dep_against_requirements(dep, group_reqs.iter(), &[])
-                        {
+                        if let Some(result) = check_dep_against_requirements(
+                            dep,
+                            overrides.apply(group_reqs.iter()),
+                            &[],
+                        ) {
                             return Ok(result);
                         }
                     }
@@ -2361,7 +2368,7 @@ impl Lock {
                 for dep in deps {
                     if let Some(result) = check_dep_against_requirements(
                         dep,
-                        package.metadata.requires_dist.iter(),
+                        overrides.apply(package.metadata.requires_dist.iter()),
                         std::slice::from_ref(extra),
                     ) {
                         return Ok(result);
@@ -2373,9 +2380,11 @@ impl Lock {
             // `requires-dist` entries that are active without any extras and
             // overlap with the dependency edge's marker.
             for dep in &package.dependencies {
-                if let Some(result) =
-                    check_dep_against_requirements(dep, package.metadata.requires_dist.iter(), &[])
-                {
+                if let Some(result) = check_dep_against_requirements(
+                    dep,
+                    overrides.apply(package.metadata.requires_dist.iter()),
+                    &[],
+                ) {
                     return Ok(result);
                 }
             }
@@ -2534,13 +2543,14 @@ fn requirement_applies_to_dependency(
 /// Returns `Some(SatisfiesResult)` if a violation is found, `None` otherwise.
 fn check_dep_against_requirements<'lock, 'a>(
     dep: &'lock Dependency,
-    requirements: impl Iterator<Item = &'a Requirement>,
+    requirements: impl Iterator<Item = Cow<'a, Requirement>>,
     active_extras: &[ExtraName],
 ) -> Option<SatisfiesResult<'lock>> {
     let Some(version) = &dep.package_id.version else {
         return None;
     };
     for requirement in requirements {
+        let requirement = requirement.as_ref();
         if !requirement_applies_to_dependency(requirement, dep, active_extras) {
             continue;
         }

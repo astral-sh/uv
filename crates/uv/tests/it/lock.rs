@@ -15884,6 +15884,94 @@ fn check_locked_version_valid_forked_dependency_group_resolution_offline_locked(
     Ok(())
 }
 
+/// Test that `uv lock --locked --offline` accepts a valid lockfile when an override replaces a
+/// dependency specifier.
+#[test]
+fn check_locked_version_valid_override_offline_locked() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig<2"]
+
+        [tool.uv]
+        override-dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    context.cache_dir.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that `uv lock --locked --offline` accepts a valid script lockfile when an override replaces
+/// a manifest requirement specifier.
+#[test]
+fn check_locked_version_valid_script_override_offline_locked() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #   "iniconfig<2",
+        # ]
+        #
+        # [tool.uv]
+        # override-dependencies = ["iniconfig==2.0.0"]
+        # ///
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    context.cache_dir.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py").arg("--locked").arg("--offline"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Test that `uv lock --check` detects when a locked version violates a
 /// specifier in `dependency-groups` (dev dependencies).
 ///
