@@ -291,13 +291,14 @@ mod tests {
                 .as_ref()
                 .map(|paths| env::join_paths(paths).unwrap());
 
-            let mut run_vars = vec![
-                // Ensure `PATH` is used
-                (EnvVars::UV_PYTHON_SEARCH_PATH, None),
+            let mut run_vars: Vec<(&str, Option<&OsStr>)> = EnvVars::all_names()
+                .iter()
+                .copied()
+                .map(|name| (name, None))
+                .collect();
+            run_vars.extend([
                 // Keep discovery hermetic by disabling registry-based sources unless a test opts in.
                 (EnvVars::UV_PYTHON_NO_REGISTRY, Some(OsStr::new("1"))),
-                // Ignore active virtual environments (i.e. that the dev is using)
-                (EnvVars::VIRTUAL_ENV, None),
                 (EnvVars::PATH, path.as_deref()),
                 // Use the temporary python directory
                 (
@@ -306,10 +307,8 @@ mod tests {
                 ),
                 // Set a working directory
                 (EnvVars::PWD, Some(self.workdir.path().as_os_str())),
-            ];
-            for (key, value) in vars {
-                run_vars.push((key, *value));
-            }
+            ]);
+            run_vars.extend(vars.iter().copied());
             with_vars(&run_vars, closure)
         }
 
