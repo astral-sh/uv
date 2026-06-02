@@ -195,6 +195,11 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         let Some(parent_name) = self.package.name_no_root() else {
             return;
         };
+        // Dependency groups are not transitive, so groups from ordinary path
+        // dependencies cannot participate in the lock.
+        if !self.is_project_or_workspace_member(parent_name) {
+            return;
+        }
 
         for (group, requirements) in dependency_groups {
             for requirement in self.state.overrides.apply(requirements.iter()) {
@@ -468,6 +473,11 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             return false;
         };
 
+        self.is_project_or_workspace_member(package_name)
+    }
+
+    /// Returns `true` if `package_name` belongs to the project or workspace being resolved.
+    fn is_project_or_workspace_member(&self, package_name: &PackageName) -> bool {
         self.state.project.as_ref() == Some(package_name)
             || self.state.workspace_members.contains(package_name)
     }

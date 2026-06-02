@@ -36007,6 +36007,74 @@ async fn lock_path_dependency_explicit_index_workspace_member() -> Result<()> {
     Ok(())
 }
 
+/// Test that unrequested dependency groups from ordinary path dependencies do
+/// not participate in universal resolution.
+#[tokio::test]
+async fn lock_path_dependency_explicit_index_unrequested_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    // Create a path dependency with a production dependency that resolves from
+    // PyPI and an unrequested group that points to an empty explicit index.
+    let pkg_a = context.temp_dir.child("pkg_a");
+    fs_err::create_dir_all(&pkg_a)?;
+
+    let pyproject_toml = pkg_a.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [dependency-groups]
+        alt = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            {{ index = "alt-index", group = "alt" }},
+        ]
+
+        [[tool.uv.index]]
+        name = "alt-index"
+        url = "{proxy_uri}/empty/simple"
+        explicit = true
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    // Create a project that only depends on pkg_a's production dependencies.
+    let pkg_b = context.temp_dir.child("pkg_b");
+    fs_err::create_dir_all(&pkg_b)?;
+
+    let pyproject_toml = pkg_b.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = { path = "../pkg_a/", editable = true }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_b), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Test that complementary dependencies synthesized from a path dependency's
 /// optional extras preserve explicit indexes.
 #[test]
