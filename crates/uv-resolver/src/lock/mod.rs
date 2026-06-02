@@ -2105,9 +2105,10 @@ impl Lock {
         &self,
         resolution: &Resolution,
         workspace_root: &Path,
-        tags: &Tags,
+        executor_tags: &Tags,
         build_options: &BuildOptions,
-        markers: &MarkerEnvironment,
+        target_markers: &MarkerEnvironment,
+        executor_markers: &MarkerEnvironment,
     ) -> Result<BTreeMap<BuildPackageKey, LockedBuildResolution>, LockError> {
         let package_by_id = self.package_by_id();
         let runtime_package_ids: FxHashSet<PackageId> = resolution
@@ -2130,7 +2131,7 @@ impl Lock {
             .collect();
         let mut build_resolution_roots: FxHashSet<PackageId> = FxHashSet::default();
         let mut queue: VecDeque<PackageId> = selected_package_ids.iter().cloned().collect();
-        let tag_policy = TagPolicy::Required(tags);
+        let tag_policy = TagPolicy::Required(executor_tags);
 
         while let Some(package_id) = queue.pop_front() {
             let Some(package) = package_by_id.get(&package_id) else {
@@ -2145,7 +2146,7 @@ impl Lock {
 
             let build_resolution_record = self.build_resolution_record_for_package_in_markers(
                 package,
-                markers,
+                target_markers,
                 BuildResolutionStage::Build,
             )?;
             let build_dependencies = build_resolution_record
@@ -2158,7 +2159,7 @@ impl Lock {
                 package,
                 build_dependencies,
                 &package_by_id,
-                Some(markers),
+                Some(executor_markers),
                 Some(&runtime_package_ids),
                 resolution_context,
             ) else {
@@ -2172,7 +2173,7 @@ impl Lock {
                     workspace_root,
                     tag_policy,
                     build_options,
-                    markers,
+                    executor_markers,
                 )?;
                 if matches!(dist, Dist::Source(_))
                     && !dependency_package.build_dependencies.is_empty()
@@ -2188,7 +2189,7 @@ impl Lock {
         for package in &self.packages {
             let build_resolution_record = self.build_resolution_record_for_package_in_markers(
                 package,
-                markers,
+                target_markers,
                 BuildResolutionStage::Build,
             )?;
             let build_dependencies = build_resolution_record
@@ -2209,7 +2210,7 @@ impl Lock {
                 package,
                 build_dependencies,
                 &package_by_id,
-                Some(markers),
+                Some(executor_markers),
                 Some(&runtime_package_ids),
                 resolution_context,
             ) else {
@@ -2222,8 +2223,12 @@ impl Lock {
                 };
 
                 // Add this package to the resolution graph.
-                let HashedDist { dist, hashes } =
-                    dep_package.to_dist(workspace_root, tag_policy, build_options, markers)?;
+                let HashedDist { dist, hashes } = dep_package.to_dist(
+                    workspace_root,
+                    tag_policy,
+                    build_options,
+                    executor_markers,
+                )?;
                 let version = dep_package.version().cloned();
                 let resolved_dist = ResolvedDist::Installable {
                     dist: std::sync::Arc::new(dist),
@@ -2250,7 +2255,7 @@ impl Lock {
                         if let Some(marker) = build_dependency.marker() {
                             let complexified = self.requires_python.complexify_markers(*marker);
                             if !UniversalMarker::from_combined(complexified)
-                                .evaluate_no_extras(markers)
+                                .evaluate_no_extras(executor_markers)
                             {
                                 continue;
                             }
@@ -2265,14 +2270,14 @@ impl Lock {
                             workspace_root,
                             tag_policy,
                             build_options,
-                            markers,
+                            executor_markers,
                         )?;
                         let mut dependency_graph = petgraph::graph::DiGraph::new();
                         let Some(dependency_ids) = self.build_dependency_package_ids_from(
                             package,
                             std::slice::from_ref(build_dependency),
                             &package_by_id,
-                            Some(markers),
+                            Some(executor_markers),
                             Some(&runtime_package_ids),
                             resolution_context,
                         ) else {
@@ -2286,7 +2291,7 @@ impl Lock {
                                 workspace_root,
                                 tag_policy,
                                 build_options,
-                                markers,
+                                executor_markers,
                             )?;
                             dependency_graph.add_node(Node::Dist {
                                 dist: ResolvedDist::Installable {
@@ -2314,7 +2319,7 @@ impl Lock {
 
             let bootstrap_resolution_record = self.build_resolution_record_for_package_in_markers(
                 package,
-                markers,
+                target_markers,
                 BuildResolutionStage::Bootstrap,
             )?;
             let bootstrap_direct_dependencies =

@@ -3781,6 +3781,154 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     Ok(())
 }
 
+/// Verify that build resolution records are selected for the target platform,
+/// while their dependencies are evaluated for the build host.
+#[test]
+fn lock_build_dependencies_replay_separates_target_and_executor_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let (host_marker, target_platform, target_marker) = if cfg!(target_os = "windows") {
+        (
+            "sys_platform == 'win32'",
+            "linux",
+            "sys_platform == 'linux'",
+        )
+    } else if cfg!(target_os = "macos") {
+        (
+            "sys_platform == 'darwin'",
+            "windows",
+            "sys_platform == 'win32'",
+        )
+    } else {
+        (
+            "sys_platform == 'linux'",
+            "windows",
+            "sys_platform == 'win32'",
+        )
+    };
+
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all()?;
+    child_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    child_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "child-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("child/__init__.py", "")
+        wheel.writestr(
+            "child-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "child-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("child-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "child",
+            "anyio==3.7.1 ; {host_marker}",
+            "anyio==4.0.0 ; {target_marker}",
+        ]
+
+        [tool.uv.sources]
+        child = {{ path = "child" }}
+
+        [tool.uv.extra-build-dependencies]
+        child = [{{ requirement = "anyio", match-runtime = true }}]
+        "#
+        ))?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .assert()
+        .success();
+
+    child_dir.child("build_backend.py").write_str(
+        r#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    assert version("anyio") == "4.0.0"
+    filename = "child-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("child/__init__.py", "")
+        wheel.writestr(
+            "child-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "child-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("child-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--python-platform")
+        .arg(target_platform)
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
 /// Verify that build dependency edges are scoped to each isolated source build
 /// when the same build package resolves a transitive dependency differently.
 #[test]
