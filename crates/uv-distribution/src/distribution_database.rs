@@ -6,10 +6,11 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use futures::{FutureExt, TryStreamExt};
-use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
+use http_content_range::{ContentRange, ContentRangeBytes, ContentRangeUnbound};
+use tokio::io::{AsyncRead, AsyncSeekExt, AsyncWriteExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{Instrument, info_span, instrument, warn};
+use tracing::{Instrument, debug, info_span, instrument, warn};
 use url::Url;
 
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
@@ -892,8 +893,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
         let query_url = &url.clone();
+        let download_url = url.clone();
 
-        let download = |response: reqwest::Response| {
+        let download = |mut response: reqwest::Response| {
             async {
                 let size = size.or_else(|| content_length(&response));
 
@@ -902,11 +904,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .as_ref()
                     .map(|reporter| (reporter, reporter.on_download_start(dist.name(), size)));
 
-                let reader = response
-                    .bytes_stream()
-                    .map_err(|err| self.handle_response_errors(err))
-                    .into_async_read();
-
                 // Download the wheel to a temporary file.
                 let temp_file = tempfile::tempfile_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
@@ -914,24 +911,94 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     // It's an unnamed file on Linux so that's the best approximation.
                     fs_err::File::from_parts(temp_file, self.build_context.cache().root()),
                 ));
+                let mut resumed_at = None;
 
-                match progress {
-                    Some((reporter, progress)) => {
-                        // Wrap the reader in a progress reporter. This will report 100% progress
-                        // after the download is complete, even if we still have to unzip and hash
-                        // part of the file.
-                        let mut reader =
-                            ProgressReader::new(reader.compat(), progress, &**reporter);
+                loop {
+                    let supports_range_requests = response.status()
+                        == reqwest::StatusCode::PARTIAL_CONTENT
+                        || response
+                            .headers()
+                            .get(reqwest::header::ACCEPT_RANGES)
+                            .is_some_and(|value| value == "bytes");
 
-                        tokio::io::copy(&mut reader, &mut writer)
+                    // A server can advertise range requests but ignore one. In that case, the
+                    // response is a complete download and must replace the partial bytes.
+                    let replaces_partial_download = resumed_at.is_some()
+                        && response.status() != reqwest::StatusCode::PARTIAL_CONTENT;
+                    if replaces_partial_download {
+                        writer
+                            .get_mut()
+                            .set_len(0)
+                            .await
+                            .map_err(Error::CacheWrite)?;
+                        writer
+                            .seek(io::SeekFrom::Start(0))
                             .await
                             .map_err(Error::CacheWrite)?;
                     }
-                    None => {
-                        tokio::io::copy(&mut reader.compat(), &mut writer)
+
+                    let reader = response
+                        .bytes_stream()
+                        .map_err(|err| self.handle_response_errors(err))
+                        .into_async_read();
+
+                    let copy_result = match progress {
+                        Some((reporter, progress)) => {
+                            // Wrap the reader in a progress reporter. This will report 100%
+                            // progress after the download is complete, even if we still have to
+                            // unzip and hash part of the file.
+                            let mut reader =
+                                ProgressReader::new(reader.compat(), progress, &**reporter);
+
+                            tokio::io::copy(&mut reader, &mut writer)
+                                .await
+                                .map_err(Error::CacheWrite)
+                        }
+                        None => tokio::io::copy(&mut reader.compat(), &mut writer)
                             .await
-                            .map_err(Error::CacheWrite)?;
+                            .map_err(Error::CacheWrite),
+                    };
+
+                    let Err(err) = copy_result else {
+                        break;
+                    };
+                    // Only resume inline when range support is usable; otherwise let the outer
+                    // retry machinery retry the full download.
+                    if replaces_partial_download || !supports_range_requests {
+                        return Err(err);
                     }
+
+                    writer.flush().await.map_err(Error::CacheWrite)?;
+                    let offset = writer
+                        .get_mut()
+                        .stream_position()
+                        .await
+                        .map_err(Error::CacheWrite)?;
+                    if offset == 0 || resumed_at.is_some_and(|previous| offset <= previous) {
+                        return Err(err);
+                    }
+
+                    debug!("Resuming download of {download_url} at byte {offset}");
+                    let resumed_response = self
+                        .client
+                        .unmanaged
+                        .uncached_client(&download_url)
+                        .execute(self.request_with_offset(download_url.clone(), offset)?)
+                        .await?;
+                    resumed_response.error_for_status_ref()?;
+
+                    if resumed_response.status() == reqwest::StatusCode::PARTIAL_CONTENT
+                        && !content_range_starts_at(&resumed_response, offset)
+                    {
+                        warn!(
+                            "Invalid range request response from server that declares HTTP range \
+                             request support, abandoning resumed download: {download_url}"
+                        );
+                        return Err(err);
+                    }
+
+                    response = resumed_response;
+                    resumed_at = Some(offset);
                 }
 
                 // Unzip the wheel to a temporary directory.
@@ -1269,6 +1336,26 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .build()
     }
 
+    /// Returns a GET [`reqwest::Request`] with a `Range: bytes=<offset>-` header.
+    ///
+    /// Used to resume an interrupted download from `offset` bytes into the file.
+    fn request_with_offset(
+        &self,
+        url: DisplaySafeUrl,
+        offset: u64,
+    ) -> Result<reqwest::Request, reqwest::Error> {
+        self.client
+            .unmanaged
+            .uncached_client(&url)
+            .get(Url::from(url))
+            .header(
+                "accept-encoding",
+                reqwest::header::HeaderValue::from_static("identity"),
+            )
+            .header(reqwest::header::RANGE, format!("bytes={offset}-"))
+            .build()
+    }
+
     /// Return the [`ManagedClient`] used by this resolver.
     pub fn client(&self) -> &ManagedClient<'a> {
         &self.client
@@ -1324,6 +1411,25 @@ fn content_length(response: &reqwest::Response) -> Option<u64> {
         .get(reqwest::header::CONTENT_LENGTH)
         .and_then(|val| val.to_str().ok())
         .and_then(|val| val.parse::<u64>().ok())
+}
+
+/// Returns `true` if `response` is a range response starting at `offset`.
+fn content_range_starts_at(response: &reqwest::Response, offset: u64) -> bool {
+    let Some(content_range) = response
+        .headers()
+        .get(reqwest::header::CONTENT_RANGE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(ContentRange::parse)
+    else {
+        return false;
+    };
+
+    matches!(
+        content_range,
+        ContentRange::Bytes(ContentRangeBytes { first_byte, .. })
+            | ContentRange::UnboundBytes(ContentRangeUnbound { first_byte, .. })
+            if first_byte == offset
+    )
 }
 
 /// An asynchronous reader that reports progress as bytes are read.

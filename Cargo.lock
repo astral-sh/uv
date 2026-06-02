@@ -6332,6 +6332,7 @@ dependencies = [
  "either",
  "fs-err",
  "futures",
+ "http-content-range",
  "indoc",
  "insta",
  "owo-colors",
