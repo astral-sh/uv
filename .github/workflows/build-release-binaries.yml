@@ -112,8 +112,8 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          # Fold identical functions with Rust's bundled Mach-O LLD in optimized artifacts.
-          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
+          # Baseline measurement: use Rust's bundled Mach-O LLD without ICF.
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld"
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -147,8 +147,8 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          # Fold identical functions with Rust's bundled Mach-O LLD in optimized artifacts.
-          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
+          # Baseline measurement: use Rust's bundled Mach-O LLD without ICF.
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld"
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -183,8 +183,8 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          # Fold identical functions with Rust's bundled Mach-O LLD in optimized artifacts.
-          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
+          # Baseline measurement: use Rust's bundled Mach-O LLD without ICF.
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld"
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
@@ -224,8 +224,8 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          # Fold identical functions with Rust's bundled Mach-O LLD in optimized artifacts.
-          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
+          # Baseline measurement: use Rust's bundled Mach-O LLD without ICF.
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld"
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
@@ -395,8 +395,8 @@ jobs:
         env:
           CC: ${{ matrix.cc }}
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          # Rust's distributed x86_64 GNU target uses bundled LLD by default.
-          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-Wl,--icf=safe"
+          # Baseline measurement: Rust's distributed x86_64 GNU target uses bundled LLD by default.
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: ""
       - name: "Test wheel"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
@@ -443,7 +443,7 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-Wl,--icf=safe"
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: ""
       - name: "Test wheel uv-build"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
