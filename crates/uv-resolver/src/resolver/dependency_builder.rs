@@ -493,7 +493,6 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
     /// Returns the positive extra referenced by `marker`, if it names exactly one extra.
     fn single_positive_extra(marker: MarkerTree) -> Option<ExtraName> {
         let mut extra = None;
-        let mut has_negative = false;
         let mut has_multiple = false;
 
         marker.visit_extras(|operator, candidate| match operator {
@@ -502,11 +501,11 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                 None => extra = Some(candidate.clone()),
                 Some(_) => {}
             },
-            MarkerOperator::NotEqual => has_negative = true,
+            MarkerOperator::NotEqual => {}
             _ => {}
         });
 
-        if has_negative || has_multiple {
+        if has_multiple {
             return None;
         }
 

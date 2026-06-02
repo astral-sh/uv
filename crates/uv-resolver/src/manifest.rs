@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use either::Either;
 
 use uv_configuration::{Constraints, Excludes, Overrides};
-use uv_distribution_types::Requirement;
+use uv_distribution_types::{Requirement, RequirementSource};
 use uv_normalize::PackageName;
 use uv_types::RequestedRequirements;
 
@@ -168,6 +168,42 @@ impl Manifest {
                         requirement.evaluate_markers(env.marker_environment(), &[])
                     }),
             ),
+        }
+    }
+
+    /// Return inactive lookahead requirements that may apply for some subset of the requested
+    /// extras.
+    ///
+    /// [`Self::requirements_no_overrides`] evaluates all requested extras together. For URL
+    /// allow-listing, a direct URL must also remain available in a fork that activates only a
+    /// subset, such as `extra == 'alt' and extra != 'other'`.
+    pub(crate) fn potential_url_requirements_no_overrides<'a>(
+        &'a self,
+        env: &'a ResolverEnvironment,
+        mode: DependencyMode,
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
+        match mode {
+            DependencyMode::Transitive => {
+                Either::Left(self.lookaheads.iter().flat_map(move |lookahead| {
+                    self.overrides
+                        .apply(lookahead.requirements())
+                        .filter(|requirement| !self.excludes.contains(&requirement.name))
+                        .filter(|requirement| {
+                            !matches!(&requirement.source, RequirementSource::Registry { .. })
+                        })
+                        .filter(move |requirement| {
+                            !requirement
+                                .evaluate_markers(env.marker_environment(), lookahead.extras())
+                        })
+                        .filter(move |requirement| {
+                            let marker = requirement.marker.simplify_not_extras_with(|extra| {
+                                !lookahead.extras().contains(extra)
+                            });
+                            !marker.only_extras().is_false()
+                        })
+                }))
+            }
+            DependencyMode::Direct => Either::Right(std::iter::empty()),
         }
     }
 
