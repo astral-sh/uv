@@ -12,7 +12,9 @@ use tracing::{debug, warn};
 use uv_distribution_filename::SourceDistExtension;
 use uv_warnings::warn_user_once;
 
-use crate::hash::{DirectoryDigest, DirectoryDigestFile, directory_digest};
+use crate::hash::{
+    DirectoryDigest, ExtractedDirectoryFile, RecordDirectoryHashes, directory_digest,
+};
 use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
@@ -490,15 +492,16 @@ pub async fn unzip_and_hash<D: Display, R: tokio::io::AsyncRead + Unpin>(
                                 }
                             }
                         }
-                        if !is_dir && let Some(digest) = local_header.digest {
+                        if !is_dir {
                             let executable = entry
                                 .unix_permissions()
                                 .is_some_and(|mode| mode & 0o111 != 0);
-                            hash_files.push(DirectoryDigestFile::new(
-                                &relpath,
+                            hash_files.push(ExtractedDirectoryFile::new(
+                                relpath.clone(),
                                 local_header.uncompressed_size,
                                 executable,
-                                digest,
+                                local_header.crc32,
+                                local_header.digest,
                             ));
                         }
                     }
@@ -637,7 +640,8 @@ pub async fn unzip_and_hash<D: Display, R: tokio::io::AsyncRead + Unpin>(
         }
     }
 
-    Ok((files, directory_digest(hash_files)))
+    let record_hashes = RecordDirectoryHashes::from_extracted_files(target, &hash_files)?;
+    Ok((files, directory_digest(target, hash_files, &record_hashes)?))
 }
 
 /// Unpack the given tar archive into the destination directory.

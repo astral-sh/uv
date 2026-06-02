@@ -1,7 +1,11 @@
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use crate::hash::{DirectoryDigest, DirectoryDigestFile, directory_digest};
+use crate::hash::{
+    DirectoryDigest, ExtractedDirectoryFile, RecordDirectoryHashes, canonical_path,
+    directory_digest,
+};
 use crate::vendor::CloneableSeekableReader;
 use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
 use async_zip::base::read::seek::ZipFileReader;
@@ -37,13 +41,15 @@ pub fn unzip_and_hash(
     let archive = block_on(ZipFileReader::new(AllowStdIo::new(
         CloneableSeekableReader::new(reader),
     )))?;
-    unzip_archive(&archive, filename.display(), target)
+    let record_hashes = record_hashes_from_archive(&archive)?;
+    unzip_archive(&archive, filename.display(), target, &record_hashes)
 }
 
 fn unzip_archive<R>(
     archive: &ZipFileReader<AllowStdIo<R>>,
     filename: impl std::fmt::Display,
     target: &Path,
+    record_hashes: &RecordDirectoryHashes,
 ) -> Result<(Vec<(PathBuf, u64)>, DirectoryDigest), Error>
 where
     R: std::io::BufRead + std::io::Seek + Clone + Send + Sync,
@@ -115,6 +121,8 @@ where
             let size = entry.uncompressed_size();
             let unix_permissions = entry.unix_permissions();
             let executable = unix_permissions.is_some_and(|mode| mode & 0o111 != 0);
+            let canonical_name = canonical_path(&enclosed_name);
+            let has_record_hash = record_hashes.has_usable_canonical_hash(&canonical_name, size);
             let writer = if let Ok(size) = usize::try_from(size) {
                 std::io::BufWriter::with_capacity(std::cmp::min(size, 1024 * 1024), outfile)
             } else {
@@ -123,7 +131,11 @@ where
             let (copied, computed_crc32, digest) = block_on(async {
                 let mut file = archive.reader_with_entry(file_number).await?;
                 let mut writer = AllowStdIo::new(writer);
-                let mut hasher = blake3::Hasher::new();
+                let mut hasher = if has_record_hash {
+                    None
+                } else {
+                    Some(blake3::Hasher::new())
+                };
                 let mut copied = 0;
                 let mut buffer = vec![0; 128 * 1024];
                 loop {
@@ -134,12 +146,14 @@ where
                     if read == 0 {
                         break;
                     }
-                    hasher.update(&buffer[..read]);
+                    if let Some(hasher) = hasher.as_mut() {
+                        hasher.update(&buffer[..read]);
+                    }
                     writer.write_all(&buffer[..read]).await.map_err(Error::Io)?;
                     copied += read as u64;
                 }
                 writer.flush().await.map_err(Error::Io)?;
-                Ok::<_, Error>((copied, file.compute_hash(), hasher.finalize()))
+                Ok::<_, Error>((copied, file.compute_hash(), hasher.map(|hasher| hasher.finalize())))
             })?;
 
             if copied != size && !skip_validation {
@@ -181,7 +195,14 @@ where
                 }
             }
 
-            let hash_file = DirectoryDigestFile::new(&enclosed_name, size, executable, digest);
+            let hash_file = ExtractedDirectoryFile::from_canonical_path(
+                enclosed_name.clone(),
+                canonical_name,
+                size,
+                executable,
+                computed_crc32,
+                digest,
+            );
             Ok(Some(((enclosed_name, size), hash_file)))
         })
         // Filter out directories and skipped dangerous paths, we only want to collect the files.
@@ -195,7 +216,48 @@ where
         hash_files.push(hash_file);
     }
 
-    Ok((files, directory_digest(hash_files)))
+    Ok((files, directory_digest(target, hash_files, record_hashes)?))
+}
+
+fn record_hashes_from_archive<R>(
+    archive: &ZipFileReader<AllowStdIo<R>>,
+) -> Result<RecordDirectoryHashes, Error>
+where
+    R: std::io::BufRead + std::io::Seek + Clone + Send + Sync,
+    AllowStdIo<R>: Clone,
+{
+    let mut archive = (*archive).clone();
+    for file_number in 0..archive.file().entries().len() {
+        let entry = archive.file().entries()[file_number].clone();
+        if entry.dir()? {
+            continue;
+        }
+        let Ok(file_name) = entry.filename().as_str() else {
+            continue;
+        };
+        let Some(enclosed_name) = crate::stream::enclosed_name(file_name) else {
+            continue;
+        };
+        if !enclosed_name
+            .to_string_lossy()
+            .as_ref()
+            .ends_with(".dist-info/RECORD")
+        {
+            continue;
+        }
+
+        let contents = block_on(async {
+            let mut file = archive.reader_with_entry(file_number).await?;
+            let mut contents = Vec::new();
+            file.read_to_end(&mut contents)
+                .await
+                .map_err(Error::io_or_compression)?;
+            Ok::<_, Error>(contents)
+        })?;
+        return RecordDirectoryHashes::from_reader(Cursor::new(contents));
+    }
+
+    Ok(RecordDirectoryHashes::empty())
 }
 
 /// Extract the top-level directory from an unpacked archive.
@@ -236,6 +298,7 @@ mod tests {
     #[test]
     fn directory_digest_is_stable_across_archive_metadata_and_order()
     -> Result<(), Box<dyn std::error::Error>> {
+        let record = b"example/__init__.py,sha256=init,10\nexample-1.0.0.dist-info/METADATA,sha256=metadata,29\nexample-1.0.0.dist-info/RECORD,,\n";
         let first_entries = [
             ZipEntry {
                 path: "example/__init__.py",
@@ -247,8 +310,18 @@ mod tests {
                 contents: b"Name: example\nVersion: 1.0.0\n",
                 mode: 0o100_644,
             },
+            ZipEntry {
+                path: "example-1.0.0.dist-info/RECORD",
+                contents: record,
+                mode: 0o100_644,
+            },
         ];
         let second_entries = [
+            ZipEntry {
+                path: "example-1.0.0.dist-info/RECORD",
+                contents: record,
+                mode: 0o100_644,
+            },
             ZipEntry {
                 path: "example-1.0.0.dist-info/METADATA",
                 contents: b"Name: example\nVersion: 1.0.0\n",
@@ -282,8 +355,8 @@ mod tests {
             unzip_and_hash(fs_err::File::open(&second_archive_path)?, &second_extract)?;
 
         assert_eq!(first_digest, second_digest);
-        assert_eq!(first_files.len(), 2);
-        assert_eq!(second_files.len(), 2);
+        assert_eq!(first_files.len(), 3);
+        assert_eq!(second_files.len(), 3);
         assert_eq!(
             fs_err::read(first_extract.join("example/__init__.py"))?,
             b"VALUE = 1\n"
@@ -305,7 +378,7 @@ mod tests {
         })?;
 
         assert_eq!(first_digest, stream_digest);
-        assert_eq!(stream_files.len(), 2);
+        assert_eq!(stream_files.len(), 3);
         assert_eq!(
             fs_err::read(stream_extract.join("example/__init__.py"))?,
             b"VALUE = 1\n"
