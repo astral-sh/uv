@@ -368,12 +368,12 @@ pub trait Installable<'lock> {
         }
 
         // Below, we traverse the dependency graph in a breadth first manner
-        // twice. It's only in the second traversal that we actually build
-        // up our resolution graph. In the first traversal, we accumulate all
-        // activated extras. This includes the extras explicitly enabled on
-        // the CLI (which were gathered above) and the extras enabled via
-        // dependency specifications like `foo[extra]`. We need to do this
-        // to correctly support conflicting extras and source-selection markers.
+        // until the activated extras stabilize. It's only in the final
+        // traversal that we actually build up our resolution graph. The
+        // activation traversal includes the extras explicitly enabled on the
+        // CLI (which were gathered above) and the extras enabled via dependency
+        // specifications like `foo[extra]`. We need to do this to correctly
+        // support conflicting extras and source-selection markers.
         //
         // In particular, the way conflicting extras works is by forking the
         // resolver based on the extras that are declared as conflicting. But
@@ -393,71 +393,73 @@ pub trait Installable<'lock> {
         // first to inspect which extras are enabled!
         //
         if needs_activation_context {
-            let mut queue = queue.clone();
-            let mut seen = seen.clone();
-            while let Some((package, extra)) = queue.pop_front() {
-                let deps = if let Some(extra) = extra {
-                    Either::Left(
-                        package
-                            .optional_dependencies
-                            .get(extra)
-                            .into_iter()
-                            .flatten(),
-                    )
-                } else {
-                    Either::Right(package.dependencies.iter())
-                };
-                for dep in deps {
-                    let additional_activated_extras = newly_activated_extras(
-                        &dep.package_id.name,
-                        dep.extra.iter(),
-                        &activated_extras,
-                    );
-                    if !dep.complexified_marker.evaluate(
-                        marker_env,
-                        activated_projects.iter().copied(),
-                        activated_extras
-                            .iter()
-                            .chain(additional_activated_extras.iter())
-                            .copied(),
-                        activated_groups.iter().copied(),
-                    ) {
-                        continue;
-                    }
-                    // It is, I believe, possible to be here for a dependency that
-                    // will ultimately not be included in the final resolution.
-                    // Specifically, carrying on from the example in the comments
-                    // above, we might visit `torch` first and thus not know if
-                    // the `cpu` feature is enabled or not, and thus, the marker
-                    // evaluation above will pass.
-                    //
-                    // So is this a problem? Well, this is the main reason why we
-                    // do two graph traversals. On the second traversal below, we
-                    // will have seen all of the enabled extras, and so `torch`
-                    // will be excluded.
-                    //
-                    // But could this lead to a bigger list of activated extras
-                    // than we actually have? I believe that is indeed possible,
-                    // but I think it is only a problem if it leads to extras that
-                    // *conflict* with one another being simultaneously enabled.
-                    // However, after this first traversal, we check our set of
-                    // accumulated extras to ensure that there are no conflicts. If
-                    // there are, we raise an error. ---AG
+            let root_activated_extras = activated_extras.clone();
+            let mut seen_activation_contexts = FxHashSet::default();
 
-                    for key in additional_activated_extras {
-                        activated_extras.push(key);
-                    }
-                    let dep_dist = self.lock().find_by_id(&dep.package_id);
-                    // Push its dependencies on the queue.
-                    if seen.insert((&dep.package_id, None)) {
-                        queue.push_back((dep_dist, None));
-                    }
-                    for extra in &dep.extra {
-                        if seen.insert((&dep.package_id, Some(extra))) {
-                            queue.push_back((dep_dist, Some(extra)));
+            loop {
+                let activation_context = activated_extras.iter().copied().collect::<BTreeSet<_>>();
+                if !seen_activation_contexts.insert(activation_context.clone()) {
+                    return Err(LockErrorKind::UnstableActivationContext.into());
+                }
+
+                let mut next_activated_extras = root_activated_extras.clone();
+                let mut queue = queue.clone();
+                let mut seen = seen.clone();
+                while let Some((package, extra)) = queue.pop_front() {
+                    let deps = if let Some(extra) = extra {
+                        Either::Left(
+                            package
+                                .optional_dependencies
+                                .get(extra)
+                                .into_iter()
+                                .flatten(),
+                        )
+                    } else {
+                        Either::Right(package.dependencies.iter())
+                    };
+                    for dep in deps {
+                        let additional_activated_extras = newly_activated_extras(
+                            &dep.package_id.name,
+                            dep.extra.iter(),
+                            &next_activated_extras,
+                        );
+                        if !dep.complexified_marker.evaluate(
+                            marker_env,
+                            activated_projects.iter().copied(),
+                            activated_extras
+                                .iter()
+                                .chain(additional_activated_extras.iter())
+                                .copied(),
+                            activated_groups.iter().copied(),
+                        ) {
+                            continue;
+                        }
+
+                        for key in additional_activated_extras {
+                            next_activated_extras.push(key);
+                        }
+                        let dep_dist = self.lock().find_by_id(&dep.package_id);
+                        // Push its dependencies on the queue.
+                        if seen.insert((&dep.package_id, None)) {
+                            queue.push_back((dep_dist, None));
+                        }
+                        for extra in &dep.extra {
+                            if seen.insert((&dep.package_id, Some(extra))) {
+                                queue.push_back((dep_dist, Some(extra)));
+                            }
                         }
                     }
                 }
+
+                let next_activation_context = next_activated_extras
+                    .iter()
+                    .copied()
+                    .collect::<BTreeSet<_>>();
+                if next_activation_context == activation_context {
+                    activated_extras = next_activated_extras;
+                    break;
+                }
+                activated_extras = next_activated_extras;
             }
         }
 

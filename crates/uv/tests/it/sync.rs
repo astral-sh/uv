@@ -10656,6 +10656,208 @@ fn sync_multiple_sources_extra_url_platform_fallback() -> Result<()> {
     Ok(())
 }
 
+/// Extras requested only by an excluded source branch should not affect source
+/// selection elsewhere in the install graph.
+#[test]
+fn sync_multiple_sources_excluded_branch_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["b", "p", "q"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["b", "p", "q"]
+
+        [tool.uv.sources]
+        b = { workspace = true }
+        p = { workspace = true }
+        q = { workspace = true }
+        "#,
+    )?;
+
+    let b = context.temp_dir.child("b");
+    b.create_dir_all()?;
+    b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna==3.6"]
+
+        [project.optional-dependencies]
+        feature = ["idna==3.6"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        idna = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", extra = "feature" },
+        ]
+        "#,
+    )?;
+
+    let p = context.temp_dir.child("p");
+    p.create_dir_all()?;
+    p.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "p"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig==1.1.1"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "alt" },
+        ]
+        "#,
+    )?;
+
+    let q = context.temp_dir.child("q");
+    q.create_dir_all()?;
+    q.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "q"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["p[alt]"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        p = { workspace = true }
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        conflicts = [
+            [
+                { package = "b", extra = "feature" },
+                { package = "b", extra = "feature" },
+            ],
+            [
+                { package = "p", extra = "alt" },
+                { package = "p", extra = "alt" },
+            ],
+        ]
+
+        [[package]]
+        name = "b"
+        version = "0.1.0"
+        source = { virtual = "b" }
+        dependencies = [
+            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra != 'extra-1-b-feature'" },
+            { name = "idna", version = "3.6", source = { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl" }, marker = "extra == 'extra-1-b-feature'" },
+        ]
+
+        [package.optional-dependencies]
+        feature = [
+            { name = "idna", version = "3.6", source = { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl" }, marker = "extra == 'extra-1-b-feature'" },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f" },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f" },
+        ]
+
+        [[package]]
+        name = "iniconfig"
+        version = "1.1.1"
+        source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3" },
+        ]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "b", extra = ["feature"] },
+        ]
+
+        [[package]]
+        name = "p"
+        version = "0.1.0"
+        source = { virtual = "p" }
+        dependencies = [
+            { name = "iniconfig", version = "1.1.1", source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }, marker = "extra == 'extra-1-p-alt'" },
+            { name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "extra != 'extra-1-p-alt'" },
+        ]
+
+        [package.optional-dependencies]
+        alt = [
+            { name = "iniconfig", version = "1.1.1", source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }, marker = "extra == 'extra-1-p-alt'" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "b" },
+            { name = "p" },
+            { name = "q" },
+        ]
+
+        [[package]]
+        name = "q"
+        version = "0.1.0"
+        source = { virtual = "q" }
+        dependencies = [
+            { name = "p", extra = ["alt"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + idna==3.6
+     + iniconfig==1.1.1 (from https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl)
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn sync_derivation_chain() -> Result<()> {
     let context = uv_test::test_context!("3.12");

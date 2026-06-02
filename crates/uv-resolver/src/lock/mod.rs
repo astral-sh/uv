@@ -6729,6 +6729,9 @@ enum LockErrorKind {
         package2: PackageName,
         extra2: ExtraName,
     },
+    /// An error that occurs when activated extras cannot be determined from the lockfile.
+    #[error("Could not determine a stable set of activated extras from the lockfile")]
+    UnstableActivationContext,
     #[error(transparent)]
     GitUrlParse(#[from] GitUrlParseError),
     #[error("Failed to read `{path}`")]
