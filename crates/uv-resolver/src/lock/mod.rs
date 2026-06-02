@@ -1810,11 +1810,11 @@ impl Lock {
             }
         }
 
-        // Validate that locked versions satisfy the top-level requirements, dependency groups, and
-        // constraints specifiers.
+        // Validate that locked versions satisfy the top-level requirements, dependency groups,
+        // constraints, and overrides specifiers.
         //
         // Requirements and dependency groups apply only to their corresponding forks. Constraints
-        // apply to every reachable fork whose marker overlaps with the constraint marker.
+        // and overrides apply to every reachable fork whose marker overlaps with their marker.
         //
         // Build a name-based index to avoid O(requirements × packages) scanning.
         let packages_by_name: FxHashMap<&PackageName, Vec<&Package>> = self.packages.iter().fold(
@@ -1840,7 +1840,7 @@ impl Lock {
                 .map(Cow::as_ref)
                 .chain(effective_dependency_groups.iter().map(Cow::as_ref)),
         );
-        for (requirement, is_constraint) in effective_requirements
+        for (requirement, applies_to_all_forks) in effective_requirements
             .iter()
             .map(Cow::as_ref)
             .chain(effective_dependency_groups.iter().map(Cow::as_ref))
@@ -1848,6 +1848,7 @@ impl Lock {
             .chain(
                 constraints
                     .iter()
+                    .chain(overrides.requirements())
                     .filter(|requirement| requirement.evaluate_markers(None, &[]))
                     .map(|requirement| (requirement, true)),
             )
@@ -1869,9 +1870,9 @@ impl Lock {
                 let Some(reachability) = package_reachability.get(&package.id) else {
                     continue;
                 };
-                let marker = if is_constraint {
-                    // Constraints apply across conflict-separated forks, so retain the full
-                    // reachability marker instead of projecting it to a PEP 508 marker.
+                let marker = if applies_to_all_forks {
+                    // Constraints and overrides apply across conflict-separated forks, so retain
+                    // the full reachability marker instead of projecting it to a PEP 508 marker.
                     UniversalMarker::new(requirement.marker, ConflictMarker::TRUE)
                 } else {
                     UniversalMarker::new(
