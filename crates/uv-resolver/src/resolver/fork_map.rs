@@ -3,7 +3,7 @@ use rustc_hash::FxHashMap;
 use uv_distribution_types::{Requirement, RequirementSource};
 use uv_normalize::PackageName;
 use uv_pep508::{MarkerTree, RequirementOrigin};
-use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKind};
+use uv_pypi_types::{ConflictItem, ConflictItemRef};
 
 use crate::ResolverEnvironment;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
@@ -32,13 +32,12 @@ struct ForkScope {
 impl ForkScope {
     /// Derive the scope under which a requirement should be visible in forked resolution.
     ///
-    /// Group conflicts are folded into the marker so group-scoped entries only appear in forks
-    /// where that group is active.
+    /// Source conflicts are folded into the marker so scoped entries only appear in forks where
+    /// that source context is active.
     fn from_requirement(requirement: &Requirement) -> Self {
         let conflict = Self::conflict_for_requirement(requirement);
         let marker = conflict
             .as_ref()
-            .filter(|conflict_item| matches!(conflict_item.kind(), ConflictKind::Group(_)))
             .map_or(requirement.marker, |conflict_item| {
                 UniversalMarker::new(
                     requirement.marker.without_extras(),

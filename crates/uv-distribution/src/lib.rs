@@ -4,7 +4,7 @@ pub use error::Error;
 pub use index::{BuiltWheelIndex, RegistryWheelIndex};
 pub use metadata::{
     ArchiveMetadata, BuildRequires, FlatRequiresDist, LoweredExtraBuildDependencies,
-    LoweredRequirement, LoweringError, Metadata, MetadataError, RequiresDist,
+    LoweredRequirement, LoweringError, Metadata, MetadataError, RequiresDist, SourceVariant,
     SourcedDependencyGroups,
 };
 pub use reporter::Reporter;

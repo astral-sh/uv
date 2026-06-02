@@ -7,7 +7,10 @@ use uv_pep440::Version;
 use uv_redacted::DisplaySafeUrl;
 use uv_torch::TorchBackend;
 
-use crate::pubgrub::{DependencySource, PubGrubDependency, PubGrubPackage, PubGrubPackageInner};
+use crate::pubgrub::{
+    DependencySource, DependencySourceContext, PubGrubDependency, PubGrubPackage,
+    PubGrubPackageInner,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct SystemDependency {
@@ -49,6 +52,7 @@ impl From<SystemDependency> for PubGrubDependency {
             package: PubGrubPackage::from(PubGrubPackageInner::System(value.name)),
             version: Ranges::singleton(value.version),
             parent: None,
+            source_context: DependencySourceContext::default(),
             source: DependencySource::Unspecified,
         }
     }

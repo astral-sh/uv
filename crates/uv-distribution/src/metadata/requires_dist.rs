@@ -6,7 +6,7 @@ use rustc_hash::FxHashSet;
 
 use uv_auth::CredentialsCache;
 use uv_configuration::NoSources;
-use uv_distribution_types::{IndexLocations, Requirement};
+use uv_distribution_types::{IndexLocations, Requirement, RequirementSource};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_workspace::dependency_groups::FlatDependencyGroups;
@@ -14,7 +14,7 @@ use uv_workspace::pyproject::{Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace, WorkspaceCache};
 
 use crate::Metadata;
-use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
+use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError, SourceVariant};
 
 #[derive(Debug, Clone)]
 pub struct RequiresDist {
@@ -22,6 +22,8 @@ pub struct RequiresDist {
     pub requires_dist: Box<[Requirement]>,
     pub provides_extra: Box<[ExtraName]>,
     pub dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
+    /// Extra- or group-conditioned source variants for production dependencies.
+    pub source_variants: Box<[SourceVariant]>,
     pub dynamic: bool,
 }
 
@@ -88,6 +90,7 @@ impl RequiresDist {
             requires_dist,
             provides_extra: metadata.provides_extra,
             dependency_groups: BTreeMap::default(),
+            source_variants: Box::default(),
             dynamic: metadata.dynamic,
         })
     }
@@ -132,6 +135,37 @@ impl RequiresDist {
         // Now that we've resolved the dependency groups, we can validate that each source references
         // a valid extra or group, if present.
         Self::validate_sources(project_sources, &metadata, &dependency_groups)?;
+
+        // Lower conditional sources against production dependencies. These variants are consumed
+        // only during resolution; the regular lowered requirements remain unchanged for metadata
+        // and lockfile output.
+        let source_variants = metadata
+            .requires_dist
+            .iter()
+            .filter(|requirement| requirement.marker.top_level_extra_name().is_none())
+            .filter(|requirement| !no_sources.for_package(&requirement.name))
+            .cloned()
+            .flat_map(|requirement| {
+                let requirement_name = requirement.name.clone();
+                LoweredRequirement::source_variants(
+                    requirement,
+                    Some(&metadata.name),
+                    project_workspace.project_root(),
+                    project_sources,
+                    project_indexes,
+                    locations,
+                    project_workspace.workspace(),
+                    git_member,
+                    editable,
+                    credentials_cache,
+                )
+                .map(move |requirement| {
+                    requirement.map_err(|err| {
+                        MetadataError::LoweringError(requirement_name.clone(), Box::new(err))
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Lower the dependency groups.
         let dependency_groups = dependency_groups
@@ -219,13 +253,92 @@ impl RequiresDist {
             })
             .collect::<Result<Box<_>, _>>()?;
 
+        let source_variants = Self::apply_selected_source_requirements(
+            source_variants,
+            &requires_dist,
+            &dependency_groups,
+        );
+
         Ok(Self {
             name: metadata.name,
             requires_dist,
             dependency_groups,
             provides_extra: metadata.provides_extra,
+            source_variants: source_variants.into_boxed_slice(),
             dynamic: metadata.dynamic,
         })
+    }
+
+    /// Use the selected extra or group dependencies for a source variant.
+    ///
+    /// A selector source replaces the production dependency in that context. Each selected
+    /// dependency declaration therefore defines the source, version range, and applicability of a
+    /// variant, while the production declaration remains on the complementary source branch.
+    fn apply_selected_source_requirements(
+        source_variants: Vec<SourceVariant>,
+        requires_dist: &[Requirement],
+        dependency_groups: &BTreeMap<GroupName, Box<[Requirement]>>,
+    ) -> Vec<SourceVariant> {
+        let mut variants = Vec::new();
+        for variant in source_variants {
+            let selected = if let Some(extra) = variant.extra.as_ref() {
+                requires_dist
+                    .iter()
+                    .filter(|requirement| {
+                        requirement.name == variant.requirement.name
+                            && requirement.marker.top_level_extra_name().as_deref() == Some(extra)
+                            && Self::same_source(&requirement.source, &variant.requirement.source)
+                    })
+                    .collect::<Vec<_>>()
+            } else if let Some(group) = variant.group.as_ref() {
+                dependency_groups
+                    .get(group)
+                    .into_iter()
+                    .flatten()
+                    .filter(|requirement| {
+                        requirement.name == variant.requirement.name
+                            && Self::same_source(&requirement.source, &variant.requirement.source)
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                variants.push(variant);
+                continue;
+            };
+
+            for selected in selected {
+                let mut requirement = variant.requirement.clone();
+                requirement.source.clone_from(&selected.source);
+                requirement.marker.and(selected.marker);
+                if requirement.marker.is_false() {
+                    continue;
+                }
+                variants.push(SourceVariant {
+                    requirement,
+                    extra: variant.extra.clone(),
+                    group: variant.group.clone(),
+                });
+            }
+        }
+        variants
+    }
+
+    /// Return whether two requirement sources identify the same URL or index, ignoring versions.
+    fn same_source(left: &RequirementSource, right: &RequirementSource) -> bool {
+        match (left, right) {
+            (
+                RequirementSource::Registry {
+                    index: left_index,
+                    conflict: left_conflict,
+                    ..
+                },
+                RequirementSource::Registry {
+                    index: right_index,
+                    conflict: right_conflict,
+                    ..
+                },
+            ) => left_index == right_index && left_conflict == right_conflict,
+            _ => left == right,
+        }
     }
 
     /// Validate the sources for a given [`uv_pypi_types::RequiresDist`].
@@ -295,6 +408,7 @@ impl From<Metadata> for RequiresDist {
             requires_dist: metadata.requires_dist,
             provides_extra: metadata.provides_extra,
             dependency_groups: metadata.dependency_groups,
+            source_variants: metadata.source_variants,
             dynamic: metadata.dynamic,
         }
     }
@@ -636,6 +750,60 @@ mod test {
                 .await
                 .is_ok()
         );
+    }
+
+    #[tokio::test]
+    async fn source_variants_preserve_selected_requirements() -> anyhow::Result<()> {
+        let input = indoc! {r#"
+            [project]
+            name = "foo"
+            version = "0.0.0"
+            dependencies = ["iniconfig>=2"]
+
+            [project.optional-dependencies]
+            alt = [
+              "iniconfig<2 ; sys_platform == 'linux'",
+              "iniconfig>=2 ; sys_platform == 'win32'",
+            ]
+
+            [tool.uv.sources]
+            iniconfig = { index = "alt", extra = "alt" }
+
+            [[tool.uv.index]]
+            name = "alt"
+            url = "https://example.com/simple"
+            explicit = true
+        "#};
+        let temp_dir = TempDir::new()?;
+        let requires_dist = requires_dist_from_pyproject_toml(temp_dir.path(), input).await?;
+        let mut variants = requires_dist
+            .source_variants
+            .iter()
+            .filter_map(|variant| {
+                variant
+                    .requirement
+                    .source
+                    .version_specifiers()
+                    .map(|specifier| {
+                        format!(
+                            "{specifier} ; {}",
+                            variant
+                                .requirement
+                                .marker
+                                .try_to_string()
+                                .unwrap_or_else(|| "true".to_string())
+                        )
+                    })
+            })
+            .collect::<Vec<_>>();
+        variants.sort();
+
+        assert_snapshot!(variants.join("\n"), @r"
+        <2 ; sys_platform == 'linux' and extra == 'alt'
+        >=2 ; sys_platform == 'win32' and extra == 'alt'
+        ");
+
+        Ok(())
     }
 
     #[tokio::test]

@@ -21,12 +21,12 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
 use uv_configuration::{Constraints, Excludes, Overrides};
-use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_distribution::{ArchiveMetadata, DistributionDatabase, SourceVariant};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
     IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
+    RequirementSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -51,8 +51,8 @@ use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::preferences::{PreferenceSource, Preferences};
 use crate::pubgrub::{
-    DependencySource, PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
-    PubGrubPython,
+    DependencySource, DependencySourceContext, PubGrubDependency, PubGrubPackage,
+    PubGrubPackageInner, PubGrubPriorities, PubGrubPython,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolverOutput;
@@ -951,6 +951,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 package,
                 version: _,
                 parent: _,
+                source_context: _,
                 source: _,
             } = dependency;
             let url = package.name().and_then(|name| state.fork_urls.get(name));
@@ -1918,16 +1919,50 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     python_requirement,
                 );
 
-                requirements
+                let requirements = requirements
                     .filter(|requirement| !self.excludes.contains(&requirement.name))
-                    .flat_map(|requirement| {
-                        PubGrubDependency::from_requirement(
-                            &self.conflicts,
-                            requirement,
-                            group.as_ref(),
-                            Some(package),
-                        )
-                    })
+                    .collect::<Vec<_>>();
+
+                let dependencies = if extra.is_none()
+                    && group.is_none()
+                    && env.marker_environment().is_none()
+                    && !metadata.source_variants.is_empty()
+                {
+                    self.dependencies_with_source_variants(
+                        requirements,
+                        &metadata.source_variants,
+                        name,
+                        package,
+                        env,
+                        python_requirement,
+                    )
+                } else if env.marker_environment().is_none() && (extra.is_some() || group.is_some())
+                {
+                    self.dependencies_with_scoped_sources(
+                        requirements,
+                        &metadata.source_variants,
+                        name,
+                        extra.as_ref(),
+                        group.as_ref(),
+                        package,
+                        env,
+                    )
+                } else {
+                    requirements
+                        .into_iter()
+                        .flat_map(|requirement| {
+                            PubGrubDependency::from_requirement(
+                                &self.conflicts,
+                                requirement,
+                                group.as_ref(),
+                                Some(package),
+                            )
+                        })
+                        .collect()
+                };
+
+                dependencies
+                    .into_iter()
                     .chain(system_dependencies)
                     .collect()
             }
@@ -1950,6 +1985,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }),
                             version: Range::singleton(version.clone()),
                             parent: None,
+                            source_context: DependencySourceContext::default(),
                             source: DependencySource::Unspecified,
                         })
                         .collect(),
@@ -1978,6 +2014,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     }),
                                     version: Range::singleton(version.clone()),
                                     parent: None,
+                                    source_context: DependencySourceContext::default(),
                                     source: DependencySource::Unspecified,
                                 })
                         })
@@ -2004,6 +2041,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }),
                             version: Range::singleton(version.clone()),
                             parent: None,
+                            source_context: DependencySourceContext::default(),
                             source: DependencySource::Unspecified,
                         })
                         .collect(),
@@ -2011,6 +2049,313 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         };
         Ok(Dependencies::Available(dependencies))
+    }
+
+    /// Annotate production dependencies with their conditional source variants.
+    ///
+    /// Production dependencies remain ordinary solver requirements. Selector-based variants add an
+    /// additional dependency to establish URL or index identity in the relevant fork, while graph
+    /// edges reflect the source selected in that fork.
+    fn dependencies_with_source_variants(
+        &self,
+        requirements: Vec<Cow<'_, Requirement>>,
+        source_variants: &[SourceVariant],
+        project_name: &PackageName,
+        parent_package: &PubGrubPackage,
+        env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+    ) -> Vec<PubGrubDependency> {
+        let python_marker = python_requirement.to_marker_tree();
+        let mut selector_markers = FxHashMap::<PackageName, MarkerTree>::default();
+        let mut selector_solver_markers = FxHashMap::<PackageName, UniversalMarker>::default();
+        let mut source_markers =
+            FxHashMap::<PackageName, Vec<(DependencySource, MarkerTree)>>::default();
+        let mut source_dependencies = Vec::new();
+        let mut source_constraints = Vec::new();
+        for variant in source_variants {
+            let requirement = &variant.requirement;
+            if self.excludes.contains(&requirement.name)
+                || self.overrides.get(&requirement.name).is_some()
+            {
+                continue;
+            }
+
+            let source = DependencySource::from_source(&requirement.source);
+            if source == DependencySource::Unspecified {
+                continue;
+            }
+            if source.verbatim_url().is_some() && !self.urls.any_url(&requirement.name) {
+                continue;
+            }
+            let conflict_scoped = Self::source_is_conflict_scoped(requirement);
+            let marker = UniversalMarker::source_edge_marker(
+                requirement.marker,
+                project_name,
+                variant.extra.as_ref(),
+                variant.group.as_ref(),
+                conflict_scoped,
+            );
+            let solver_marker = UniversalMarker::from_source_scope(
+                requirement.marker,
+                project_name,
+                variant.extra.as_ref(),
+                variant.group.as_ref(),
+            );
+            if variant.extra.is_some() || variant.group.is_some() {
+                selector_markers
+                    .entry(requirement.name.clone())
+                    .or_insert(MarkerTree::FALSE)
+                    .or(marker);
+            }
+            if !solver_marker.is_false()
+                && !python_marker.is_disjoint(solver_marker.pep508())
+                && env.included_by_marker(solver_marker.combined())
+            {
+                selector_solver_markers
+                    .entry(requirement.name.clone())
+                    .or_insert(UniversalMarker::FALSE)
+                    .or(solver_marker);
+                let source_extra_scopes = UniversalMarker::source_extra_scopes(
+                    requirement.marker,
+                    project_name,
+                    variant.extra.as_ref(),
+                    conflict_scoped,
+                    &self.conflicts,
+                );
+                source_dependencies.extend(PubGrubDependency::from_requirement_with_marker(
+                    &self.conflicts,
+                    Cow::Owned(requirement.clone()),
+                    solver_marker.combined(),
+                    DependencySourceContext {
+                        extra_scopes: source_extra_scopes,
+                        conflict: Self::source_conflict_item(
+                            project_name,
+                            variant.extra.as_ref(),
+                            variant.group.as_ref(),
+                        ),
+                        edge_marker: Some(marker),
+                        ..DependencySourceContext::default()
+                    },
+                    source.clone(),
+                    None,
+                    Some(parent_package),
+                ));
+                source_constraints.extend(
+                    self.constraints_for_requirement(
+                        Cow::Borrowed(requirement),
+                        variant.extra.as_ref(),
+                        env,
+                        python_marker,
+                        python_requirement,
+                    )
+                    .map(Cow::into_owned),
+                );
+            }
+            let markers = source_markers.entry(requirement.name.clone()).or_default();
+            if let Some((_, existing)) = markers
+                .iter_mut()
+                .find(|(existing_source, _)| existing_source == &source)
+            {
+                existing.or(marker);
+            } else {
+                markers.push((source, marker));
+            }
+        }
+
+        let mut dependencies = requirements
+            .into_iter()
+            .flat_map(|requirement| {
+                let edge_marker = selector_markers
+                    .get(&requirement.name)
+                    .map(|selector_marker| {
+                        let mut marker = requirement.marker;
+                        marker.and(selector_marker.negate());
+                        marker
+                    });
+                let source_edge_markers = source_markers
+                    .get(&requirement.name)
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_boxed_slice();
+
+                if let Some(selector_marker) = selector_solver_markers.get(&requirement.name) {
+                    let requirement_marker = requirement.marker;
+                    let source = DependencySource::from_requirement(&requirement);
+                    let mut marker = UniversalMarker::from_source_scope(
+                        requirement_marker,
+                        project_name,
+                        None,
+                        None,
+                    );
+                    marker.and(selector_marker.negate());
+                    if marker.is_false() || !env.included_by_marker(marker.combined()) {
+                        return Vec::new();
+                    }
+                    PubGrubDependency::from_requirement_with_marker(
+                        &self.conflicts,
+                        requirement,
+                        marker.combined(),
+                        DependencySourceContext {
+                            edge_marker: Some(edge_marker.unwrap_or(requirement_marker)),
+                            ..DependencySourceContext::default()
+                        },
+                        source,
+                        None,
+                        Some(parent_package),
+                    )
+                    .collect()
+                } else if edge_marker.is_none() && source_edge_markers.is_empty() {
+                    PubGrubDependency::from_requirement(
+                        &self.conflicts,
+                        requirement,
+                        None,
+                        Some(parent_package),
+                    )
+                    .collect::<Vec<_>>()
+                } else {
+                    PubGrubDependency::from_requirement_with_edge_markers(
+                        &self.conflicts,
+                        requirement,
+                        edge_marker,
+                        source_edge_markers,
+                        None,
+                        Some(parent_package),
+                    )
+                    .collect()
+                }
+            })
+            .collect::<Vec<_>>();
+
+        dependencies.extend(source_dependencies);
+        for constraint in source_constraints {
+            dependencies.extend(PubGrubDependency::from_requirement(
+                &self.conflicts,
+                Cow::Owned(constraint),
+                None,
+                Some(parent_package),
+            ));
+        }
+
+        dependencies
+    }
+
+    /// Return the extra or group whose activation selects a source.
+    fn source_conflict_item(
+        project_name: &PackageName,
+        extra: Option<&ExtraName>,
+        group: Option<&GroupName>,
+    ) -> Option<ConflictItem> {
+        extra
+            .map(|extra| ConflictItem::from((project_name.clone(), extra.clone())))
+            .or_else(|| {
+                group.map(|group| ConflictItem::from((project_name.clone(), group.clone())))
+            })
+    }
+
+    /// Return whether a registry source is scoped by an extra or group conflict item.
+    fn source_is_conflict_scoped(requirement: &Requirement) -> bool {
+        matches!(
+            &requirement.source,
+            RequirementSource::Registry {
+                conflict: Some(_),
+                ..
+            }
+        )
+    }
+
+    /// Scope source-bearing optional and group dependencies to the context that introduced them.
+    ///
+    /// Source identity is stateful during resolution. Keeping these edges scoped prevents a URL or
+    /// explicit index from being installed into a fork before the corresponding extra or group is
+    /// active.
+    fn dependencies_with_scoped_sources(
+        &self,
+        requirements: Vec<Cow<'_, Requirement>>,
+        source_variants: &[SourceVariant],
+        project_name: &PackageName,
+        extra: Option<&ExtraName>,
+        group: Option<&GroupName>,
+        parent_package: &PubGrubPackage,
+        env: &ResolverEnvironment,
+    ) -> Vec<PubGrubDependency> {
+        let mut dependencies = Vec::new();
+        for requirement in requirements {
+            let source = DependencySource::from_source(&requirement.source);
+            let source_variant = source_variants.iter().any(|variant| {
+                variant.requirement.name == requirement.name
+                    && DependencySource::from_source(&variant.requirement.source) == source
+                    && if variant.extra.is_some() || variant.group.is_some() {
+                        variant.extra.as_ref() == extra && variant.group.as_ref() == group
+                    } else {
+                        variant.requirement.marker == requirement.marker
+                    }
+            });
+            if !source_variant || source == DependencySource::Unspecified {
+                dependencies.extend(PubGrubDependency::from_requirement(
+                    &self.conflicts,
+                    requirement,
+                    group,
+                    Some(parent_package),
+                ));
+                continue;
+            }
+
+            // An extra-scoped explicit index changes where a registry requirement is resolved,
+            // but the requirement itself remains valid outside that source scope. Preserve an
+            // unscoped dependency so the extra package can point at the default-index
+            // distribution in the complementary fork.
+            if extra.is_some() && matches!(source, DependencySource::ExplicitIndex(_)) {
+                let marker = requirement.marker.simplify_extras_with(|_| true);
+                dependencies.extend(PubGrubDependency::from_requirement_with_marker(
+                    &self.conflicts,
+                    requirement.clone(),
+                    marker,
+                    DependencySourceContext {
+                        edge_marker: Some(marker),
+                        ..DependencySourceContext::default()
+                    },
+                    DependencySource::Unspecified,
+                    group,
+                    Some(parent_package),
+                ));
+            }
+
+            let marker =
+                UniversalMarker::from_source_scope(requirement.marker, project_name, extra, group);
+            let conflict_scoped = Self::source_is_conflict_scoped(&requirement);
+            let source_extra_scopes = UniversalMarker::source_extra_scopes(
+                requirement.marker,
+                project_name,
+                extra,
+                conflict_scoped,
+                &self.conflicts,
+            );
+            let edge_marker = UniversalMarker::source_edge_marker(
+                requirement.marker,
+                project_name,
+                extra,
+                group,
+                conflict_scoped,
+            );
+            if marker.is_false() || !env.included_by_marker(marker.combined()) {
+                continue;
+            }
+            dependencies.extend(PubGrubDependency::from_requirement_with_marker(
+                &self.conflicts,
+                requirement,
+                marker.combined(),
+                DependencySourceContext {
+                    extra_scopes: source_extra_scopes,
+                    conflict: Self::source_conflict_item(project_name, extra, group),
+                    edge_marker: Some(edge_marker),
+                    ..DependencySourceContext::default()
+                },
+                source,
+                group,
+                Some(parent_package),
+            ));
+        }
+        dependencies
     }
 
     /// The regular and dev dependencies filtered by Python version and the markers of this fork,
@@ -2914,6 +3259,13 @@ pub(crate) struct ForkState {
     /// This keeps track of the set of versions for each package that we've
     /// already visited during resolution. This avoids doing redundant work.
     added_dependencies: FxHashMap<Id<PubGrubPackage>, FxHashSet<Version>>,
+    /// Package extras that were scoped only to isolate source identity.
+    source_extra_scopes: FxHashSet<ConflictItem>,
+    /// Markers to persist on dependency edges after PubGrub resolution.
+    dependency_edge_markers: FxHashMap<(PubGrubPackage, PubGrubPackage), MarkerTree>,
+    /// Markers to persist when dependency edges resolve through a specific source.
+    dependency_source_edge_markers:
+        FxHashMap<(PubGrubPackage, PubGrubPackage), Vec<(DependencySource, MarkerTree)>>,
     /// The marker expression that created this state.
     ///
     /// The root state always corresponds to a marker expression that is always
@@ -2966,6 +3318,9 @@ impl ForkState {
             fork_indexes: ForkIndexes::default(),
             priorities: PubGrubPriorities::default(),
             added_dependencies: FxHashMap::default(),
+            source_extra_scopes: FxHashSet::default(),
+            dependency_edge_markers: FxHashMap::default(),
+            dependency_source_edge_markers: FxHashMap::default(),
             env,
             python_requirement,
             conflict_tracker: ConflictTracker::default(),
@@ -2991,6 +3346,7 @@ impl ForkState {
                 package,
                 version,
                 parent: _,
+                source_context: _,
                 source,
             } = dependency;
 
@@ -3083,13 +3439,38 @@ impl ForkState {
         for_version: &Version,
         dependencies: Vec<PubGrubDependency>,
     ) {
+        let parent_package = self.pubgrub.package_store[for_package].clone();
         for dependency in &dependencies {
             let PubGrubDependency {
                 package,
                 version,
                 parent: _,
+                source_context,
                 source: _,
             } = dependency;
+
+            self.source_extra_scopes
+                .extend(source_context.extra_scopes.iter().cloned());
+            if let Some(edge_marker) = source_context.edge_marker {
+                self.dependency_edge_markers
+                    .entry((parent_package.clone(), package.clone()))
+                    .and_modify(|marker| marker.or(edge_marker))
+                    .or_insert(edge_marker);
+            }
+            for (source, marker) in &source_context.source_edge_markers {
+                let markers = self
+                    .dependency_source_edge_markers
+                    .entry((parent_package.clone(), package.clone()))
+                    .or_default();
+                if let Some((_, existing)) = markers
+                    .iter_mut()
+                    .find(|(existing_source, _)| existing_source == source)
+                {
+                    existing.or(*marker);
+                } else {
+                    markers.push((source.clone(), *marker));
+                }
+            }
 
             let Some(base_package) = package.base_package() else {
                 continue;
@@ -3109,6 +3490,7 @@ impl ForkState {
                     package,
                     version,
                     parent: _,
+                    source_context: _,
                     source: _,
                 } = dependency;
                 (package, version)
@@ -3251,6 +3633,37 @@ impl ForkState {
         (url, index)
     }
 
+    /// Return the graph marker for a dependency after its resolved source is known.
+    fn dependency_edge_marker(
+        &self,
+        parent: &PubGrubPackage,
+        dependency: &PubGrubPackage,
+        url: Option<&VerbatimParsedUrl>,
+        index: Option<&IndexUrl>,
+    ) -> MarkerTree {
+        if let Some(source_markers) = self
+            .dependency_source_edge_markers
+            .get(&(parent.clone(), dependency.clone()))
+        {
+            let mut marker = MarkerTree::FALSE;
+            let mut matched = false;
+            for (source, source_marker) in source_markers {
+                if source.matches_resolution(url, index) {
+                    marker.or(*source_marker);
+                    matched = true;
+                }
+            }
+            if matched {
+                return marker;
+            }
+        }
+
+        self.dependency_edge_markers
+            .get(&(parent.clone(), dependency.clone()))
+            .copied()
+            .unwrap_or_else(|| dependency.marker())
+    }
+
     fn into_resolution(self) -> Resolution {
         let solution: FxHashMap<_, _> = self.pubgrub.partial_solution.extract_solution().collect();
         let edge_count: usize = solution
@@ -3307,7 +3720,7 @@ impl ForkState {
                         name: ref dependency_name,
                         extra: ref dependency_extra,
                         group: ref dependency_dev,
-                        marker: ref dependency_marker,
+                        marker: _,
                     } => {
                         debug_assert!(
                             dependency_extra.is_none(),
@@ -3327,6 +3740,12 @@ impl ForkState {
                         }
 
                         let (to_url, to_index) = self.source(dependency_name, dependency_version);
+                        let edge_marker = self.dependency_edge_marker(
+                            self_package,
+                            dependency_package,
+                            to_url,
+                            to_index,
+                        );
 
                         let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
@@ -3341,14 +3760,14 @@ impl ForkState {
                             to_index: to_index.cloned(),
                             to_extra: dependency_extra.clone(),
                             to_group: dependency_dev.clone(),
-                            marker: *dependency_marker,
+                            marker: edge_marker,
                         };
                         edges.push(edge);
                     }
 
                     PubGrubPackageInner::Marker {
                         name: ref dependency_name,
-                        marker: ref dependency_marker,
+                        marker: _,
                     } => {
                         // Ignore self-dependencies (e.g., `tensorflow-macos` depends on `tensorflow-macos`),
                         // but allow groups to depend on other groups, or on the package itself.
@@ -3359,6 +3778,12 @@ impl ForkState {
                         }
 
                         let (to_url, to_index) = self.source(dependency_name, dependency_version);
+                        let edge_marker = self.dependency_edge_marker(
+                            self_package,
+                            dependency_package,
+                            to_url,
+                            to_index,
+                        );
 
                         let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
@@ -3373,7 +3798,7 @@ impl ForkState {
                             to_index: to_index.cloned(),
                             to_extra: None,
                             to_group: None,
-                            marker: *dependency_marker,
+                            marker: edge_marker,
                         };
                         edges.push(edge);
                     }
@@ -3381,7 +3806,7 @@ impl ForkState {
                     PubGrubPackageInner::Extra {
                         name: ref dependency_name,
                         extra: ref dependency_extra,
-                        marker: ref dependency_marker,
+                        marker: _,
                     } => {
                         if self_group.is_none() {
                             debug_assert!(
@@ -3390,6 +3815,12 @@ impl ForkState {
                             );
                         }
                         let (to_url, to_index) = self.source(dependency_name, dependency_version);
+                        let edge_marker = self.dependency_edge_marker(
+                            self_package,
+                            dependency_package,
+                            to_url,
+                            to_index,
+                        );
 
                         // Insert an edge from the dependent package to the extra package.
                         let edge = ResolutionDependencyEdge {
@@ -3405,7 +3836,7 @@ impl ForkState {
                             to_index: to_index.cloned(),
                             to_extra: Some(dependency_extra.clone()),
                             to_group: None,
-                            marker: *dependency_marker,
+                            marker: edge_marker,
                         };
                         edges.push(edge);
 
@@ -3423,7 +3854,7 @@ impl ForkState {
                             to_index: to_index.cloned(),
                             to_extra: None,
                             to_group: None,
-                            marker: *dependency_marker,
+                            marker: edge_marker,
                         };
                         edges.push(edge);
                     }
@@ -3431,7 +3862,7 @@ impl ForkState {
                     PubGrubPackageInner::Group {
                         name: ref dependency_name,
                         group: ref dependency_group,
-                        marker: ref dependency_marker,
+                        marker: _,
                     } => {
                         debug_assert!(
                             self_name != Some(dependency_name),
@@ -3439,6 +3870,12 @@ impl ForkState {
                         );
 
                         let (to_url, to_index) = self.source(dependency_name, dependency_version);
+                        let edge_marker = self.dependency_edge_marker(
+                            self_package,
+                            dependency_package,
+                            to_url,
+                            to_index,
+                        );
 
                         // Add an edge from the dependent package to the dev package, but _not_ the
                         // base package.
@@ -3455,7 +3892,7 @@ impl ForkState {
                             to_index: to_index.cloned(),
                             to_extra: None,
                             to_group: Some(dependency_group.clone()),
-                            marker: *dependency_marker,
+                            marker: edge_marker,
                         };
                         edges.push(edge);
                     }
@@ -3497,6 +3934,7 @@ impl ForkState {
             edges,
             pins: self.pins,
             env: self.env,
+            source_extra_scopes: self.source_extra_scopes,
         }
     }
 }
@@ -3512,6 +3950,8 @@ pub(crate) struct Resolution {
     pub(crate) pins: FilePins,
     /// The environment setting this resolution was found under.
     pub(crate) env: ResolverEnvironment,
+    /// Package extras that were scoped only to isolate source identity.
+    pub(crate) source_extra_scopes: FxHashSet<ConflictItem>,
 }
 
 /// Package representation we used during resolution where each extra and also the dev-dependencies
@@ -3998,7 +4438,7 @@ struct Fork {
     /// it should be impossible for a package with a marker expression that is
     /// disjoint from the marker expression on this fork to be added.
     dependencies: Vec<PubGrubDependency>,
-    /// The conflicting groups in this fork.
+    /// The conflicting items in this fork.
     ///
     /// This exists to make some access patterns more efficient. Namely,
     /// it makes it easy to check whether there's a dependency with a
@@ -4031,7 +4471,7 @@ impl Fork {
 
     /// Add a dependency to this fork.
     fn add_dependency(&mut self, dep: PubGrubDependency) {
-        if let Some(conflicting_item) = dep.conflicting_item() {
+        for conflicting_item in dep.conflicting_items() {
             self.conflicts.insert(conflicting_item.to_owned());
         }
         self.dependencies.push(dep);
@@ -4043,16 +4483,9 @@ impl Fork {
     /// is removed.
     fn set_env(&mut self, env: ResolverEnvironment) {
         self.env = env;
-        self.dependencies.retain(|dep| {
-            let marker = dep.package.marker();
-            if self.env.included_by_marker(marker) {
-                return true;
-            }
-            if let Some(conflicting_item) = dep.conflicting_item() {
-                self.conflicts.remove(&conflicting_item);
-            }
-            false
-        });
+        self.dependencies
+            .retain(|dep| self.env.included_by_marker(dep.package.marker()));
+        self.rebuild_conflicts();
     }
 
     /// Returns true if any of the dependencies in this fork contain a
@@ -4061,9 +4494,9 @@ impl Fork {
         self.conflicts.contains(&item)
     }
 
-    /// Include or Exclude the given groups from this fork.
+    /// Include or exclude the given conflict items from this fork.
     ///
-    /// This removes all dependencies matching the given conflicting groups.
+    /// This removes all dependencies matching the excluded conflict items.
     ///
     /// If the exclusion rules would result in a fork with an unsatisfiable
     /// resolver environment, then this returns `None`.
@@ -4073,27 +4506,30 @@ impl Fork {
     ) -> Option<Self> {
         self.env = self.env.filter_by_group(rules)?;
         self.dependencies.retain(|dep| {
-            let Some(conflicting_item) = dep.conflicting_item() else {
-                return true;
-            };
-            if self.env.included_by_group(conflicting_item) {
-                return true;
-            }
-            match conflicting_item.kind() {
-                // We should not filter entire projects unless they're a top-level dependency
-                // Otherwise, we'll fail to solve for children of the project, like extras
-                ConflictKindRef::Project => {
-                    if dep.parent.is_some() {
-                        return true;
-                    }
+            !dep.conflicting_items().any(|conflicting_item| {
+                if self.env.included_by_group(conflicting_item) {
+                    return false;
                 }
-                ConflictKindRef::Group(_) => {}
-                ConflictKindRef::Extra(_) => {}
-            }
-            self.conflicts.remove(&conflicting_item);
-            false
+                match conflicting_item.kind() {
+                    // We should not filter entire projects unless they're a top-level dependency
+                    // Otherwise, we'll fail to solve for children of the project, like extras
+                    ConflictKindRef::Project => dep.parent.is_none(),
+                    ConflictKindRef::Group(_) | ConflictKindRef::Extra(_) => true,
+                }
+            })
         });
+        self.rebuild_conflicts();
         Some(self)
+    }
+
+    /// Recompute the conflict contexts represented by this fork's dependencies.
+    fn rebuild_conflicts(&mut self) {
+        self.conflicts.clear();
+        for dep in &self.dependencies {
+            for conflicting_item in dep.conflicting_items() {
+                self.conflicts.insert(conflicting_item.to_owned());
+            }
+        }
     }
 
     /// Compare forks, preferring forks with g `requires-python` requirements.

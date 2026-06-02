@@ -167,9 +167,41 @@ impl ResolverOutput {
             }
         }
 
+        let source_extra_scopes = resolutions
+            .iter()
+            .flat_map(|resolution| resolution.source_extra_scopes.iter().cloned())
+            .collect::<FxHashSet<_>>();
+        let solver_markers = resolutions
+            .iter()
+            .map(|resolution| resolution.env.try_universal_markers().unwrap_or_default())
+            .collect::<Vec<_>>();
+        let resolution_markers = resolutions
+            .iter()
+            .zip(&solver_markers)
+            .map(|(resolution, marker)| {
+                marker.without_source_extra_scopes(
+                    &source_extra_scopes,
+                    &resolution.source_extra_scopes,
+                )
+            })
+            .collect::<Vec<_>>();
         let mut seen = FxHashSet::default();
-        for resolution in resolutions {
-            let marker = resolution.env.try_universal_markers().unwrap_or_default();
+        for ((resolution, solver_marker), marker) in resolutions
+            .iter()
+            .zip(&solver_markers)
+            .zip(&resolution_markers)
+        {
+            if solver_marker.is_false() {
+                // This branch is impossible under its resolver conflict context.
+                continue;
+            }
+            // A source-only fallback has no user-visible resolution environment. Its dependency
+            // edge marker still describes when it applies.
+            let marker = if marker.is_false() {
+                UniversalMarker::TRUE
+            } else {
+                *marker
+            };
 
             // Add every edge to the graph, propagating the marker for the current fork, if
             // necessary.
@@ -186,22 +218,25 @@ impl ResolverOutput {
         // Extract the `Requires-Python` range, if provided.
         let requires_python = python.target().clone();
 
-        let fork_markers: Vec<UniversalMarker> = if let [resolution] = resolutions {
+        let mut fork_markers: Vec<UniversalMarker> = if let [marker] = resolution_markers.as_slice()
+        {
             // In the case of a singleton marker, we only include it if it's not
             // always true. Otherwise, we keep our `fork_markers` empty as there
             // are no forks.
-            resolution
-                .env
-                .try_universal_markers()
+            (!marker.is_true() && !marker.is_false())
+                .then_some(*marker)
                 .into_iter()
-                .filter(|marker| !marker.is_true())
                 .collect()
         } else {
-            resolutions
+            resolution_markers
                 .iter()
-                .map(|resolution| resolution.env.try_universal_markers().unwrap_or_default())
+                .copied()
+                .filter(|marker| !marker.is_false())
                 .collect()
         };
+        if fork_markers.iter().any(|marker| marker.is_true()) {
+            fork_markers.clear();
+        }
 
         // Compute and apply the marker reachability.
         let mut reachability = marker_reachability(&graph, &fork_markers);

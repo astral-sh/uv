@@ -14,8 +14,8 @@ use uv_workspace::{WorkspaceCache, WorkspaceError};
 
 pub use crate::metadata::build_requires::{BuildRequires, LoweredExtraBuildDependencies};
 pub use crate::metadata::dependency_groups::SourcedDependencyGroups;
-pub use crate::metadata::lowering::LoweredRequirement;
 pub use crate::metadata::lowering::LoweringError;
+pub use crate::metadata::lowering::{LoweredRequirement, SourceVariant};
 pub use crate::metadata::requires_dist::{FlatRequiresDist, RequiresDist};
 
 mod build_requires;
@@ -72,6 +72,8 @@ pub struct Metadata {
     pub requires_python: Option<VersionSpecifiers>,
     pub provides_extra: Box<[ExtraName]>,
     pub dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
+    /// Extra- or group-conditioned source variants for production dependencies.
+    pub source_variants: Box<[SourceVariant]>,
     pub dynamic: bool,
 }
 
@@ -88,6 +90,7 @@ impl Metadata {
             requires_python: metadata.requires_python,
             provides_extra: metadata.provides_extra,
             dependency_groups: BTreeMap::default(),
+            source_variants: Box::default(),
             dynamic: metadata.dynamic,
         }
     }
@@ -116,6 +119,7 @@ impl Metadata {
             requires_dist,
             provides_extra,
             dependency_groups,
+            source_variants,
             dynamic,
         } = RequiresDist::from_project_maybe_workspace(
             requires_dist,
@@ -137,6 +141,7 @@ impl Metadata {
             requires_python: metadata.requires_python,
             provides_extra,
             dependency_groups,
+            source_variants,
             dynamic,
         })
     }
