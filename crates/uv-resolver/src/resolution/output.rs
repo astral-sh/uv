@@ -186,32 +186,21 @@ impl ResolverOutput {
             })
             .collect::<Vec<_>>();
         let mut seen = FxHashSet::default();
-        for ((resolution, solver_marker), marker) in resolutions
-            .iter()
-            .zip(&solver_markers)
-            .zip(&resolution_markers)
-        {
+        for (resolution, solver_marker) in resolutions.iter().zip(&solver_markers) {
             if solver_marker.is_false() {
                 // This branch is impossible under its resolver conflict context.
                 continue;
             }
-            // A source-only fallback has no user-visible resolution environment. Its dependency
-            // edge marker still describes when it applies.
-            let marker = if marker.is_false() {
-                UniversalMarker::TRUE
-            } else {
-                *marker
-            };
 
-            // Add every edge to the graph, propagating the marker for the current fork, if
-            // necessary.
+            // Resolution markers omit source-only scopes, but dependency edges must retain the
+            // solver fork marker so selected and fallback source edges remain scoped.
             for edge in &resolution.edges {
-                if !seen.insert((edge, marker)) {
+                if !seen.insert((edge, *solver_marker)) {
                     // Insert each node only once.
                     continue;
                 }
 
-                Self::add_edge(&mut graph, &mut inverse, root_index, edge, marker);
+                Self::add_edge(&mut graph, &mut inverse, root_index, edge, *solver_marker);
             }
         }
 
