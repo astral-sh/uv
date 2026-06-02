@@ -1810,9 +1810,10 @@ impl Lock {
             }
         }
 
-        // Validate that locked versions satisfy the requirements and constraints specifiers.
+        // Validate that locked versions satisfy the top-level requirements, dependency groups, and
+        // constraints specifiers.
         //
-        // Requirements and constraints are global — they apply across all forks.
+        // Top-level requirements and constraints apply across all forks.
         // Every locked version that is applicable (i.e. whose fork markers overlap
         // with the requirement's markers) must satisfy the specifier.
         //
@@ -1839,6 +1840,7 @@ impl Lock {
         for requirement in effective_requirements
             .iter()
             .map(Cow::as_ref)
+            .chain(effective_dependency_groups.iter().map(Cow::as_ref))
             .chain(constraints.iter())
         {
             let RequirementSource::Registry { specifier, .. } = &requirement.source else {

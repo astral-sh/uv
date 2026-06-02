@@ -16113,6 +16113,58 @@ dev = [{ name = "iniconfig", specifier = ">=2" }]
     Ok(())
 }
 
+/// Test that `uv lock --check` detects when a locked version violates a dependency-group
+/// specifier on a non-project workspace root.
+#[test]
+fn check_locked_version_violates_non_project_dependency_group_specifier() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [dependency-groups]
+        dev = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 1 package in [TIME]
+    ");
+
+    // Change both the workspace requirement and the lock manifest while leaving the locked package
+    // at the now-forbidden version.
+    pyproject_toml.write_str(
+        r#"
+        [dependency-groups]
+        dev = ["iniconfig!=2.0.0"]
+        "#,
+    )?;
+    let lock = context.read("uv.lock").replace(
+        r#"{ name = "iniconfig", specifier = "==2.0.0" }"#,
+        r#"{ name = "iniconfig", specifier = "!=2.0.0" }"#,
+    );
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 1 package in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// Test that `uv lock --check` detects a marker-scoped specifier violation in a local package.
 ///
 /// The local package `a` legitimately resolves to `markupsafe 1.1.1` on non-Windows and
