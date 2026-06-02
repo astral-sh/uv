@@ -1894,28 +1894,62 @@ impl Lock {
     fn build_resolution_record_for_package_in_markers(
         &self,
         package: &Package,
-        markers: &MarkerEnvironment,
+        target_markers: &MarkerEnvironment,
+        executor_markers: &MarkerEnvironment,
+        executor_python: &Version,
         stage: BuildResolutionStage,
     ) -> Result<Option<&ResolutionRecord>, LockError> {
-        let mut fallback = None;
+        let mut executor_target = None;
+        let mut executor_fallback = None;
+        let mut legacy_target = None;
+        let mut legacy_fallback = None;
+        let mut has_records = false;
         for resolution in self.resolutions.iter().filter(|resolution| {
             resolution.kind == ResolutionKind::Build
                 && resolution.package_id.as_ref() == Some(&package.id)
                 && resolution.stage.unwrap_or(BuildResolutionStage::Build) == stage
         }) {
-            let Some(target) = resolution.target.as_ref() else {
-                fallback.get_or_insert(resolution);
+            has_records = true;
+            let has_executor = resolution.executor.is_some();
+            if !resolution.executor.as_ref().is_none_or(|executor| {
+                executor.matches(executor_markers, executor_python, &self.requires_python)
+            }) {
                 continue;
-            };
-            if target
-                .to_universal_marker(&self.requires_python, &resolution.id)?
-                .evaluate_no_extras(markers)
-            {
-                return Ok(Some(resolution));
             }
+
+            let matches_target = if let Some(target) = resolution.target.as_ref() {
+                target
+                    .to_universal_marker(&self.requires_python, &resolution.id)?
+                    .evaluate_no_extras(target_markers)
+            } else {
+                true
+            };
+            if !matches_target {
+                continue;
+            }
+
+            match (has_executor, resolution.target.is_some()) {
+                (true, true) => executor_target.get_or_insert(resolution),
+                (true, false) => executor_fallback.get_or_insert(resolution),
+                (false, true) => legacy_target.get_or_insert(resolution),
+                (false, false) => legacy_fallback.get_or_insert(resolution),
+            };
         }
 
-        Ok(fallback)
+        if let Some(resolution) = executor_target
+            .or(executor_fallback)
+            .or(legacy_target)
+            .or(legacy_fallback)
+        {
+            Ok(Some(resolution))
+        } else if has_records {
+            Err(LockErrorKind::MissingBuildResolution {
+                id: package.id.clone(),
+            }
+            .into())
+        } else {
+            Ok(None)
+        }
     }
 
     /// Walk the build dependency graph for a package, optionally filtering
@@ -2109,6 +2143,7 @@ impl Lock {
         build_options: &BuildOptions,
         target_markers: &MarkerEnvironment,
         executor_markers: &MarkerEnvironment,
+        executor_python: &Version,
     ) -> Result<BTreeMap<BuildPackageKey, LockedBuildResolution>, LockError> {
         let package_by_id = self.package_by_id();
         let runtime_package_ids: FxHashSet<PackageId> = resolution
@@ -2147,6 +2182,8 @@ impl Lock {
             let build_resolution_record = self.build_resolution_record_for_package_in_markers(
                 package,
                 target_markers,
+                executor_markers,
+                executor_python,
                 BuildResolutionStage::Build,
             )?;
             let build_dependencies = build_resolution_record
@@ -2187,9 +2224,14 @@ impl Lock {
         let mut resolutions = BTreeMap::new();
 
         for package in &self.packages {
+            if !build_resolution_roots.contains(&package.id) {
+                continue;
+            }
             let build_resolution_record = self.build_resolution_record_for_package_in_markers(
                 package,
                 target_markers,
+                executor_markers,
+                executor_python,
                 BuildResolutionStage::Build,
             )?;
             let build_dependencies = build_resolution_record
@@ -2197,9 +2239,6 @@ impl Lock {
                     resolution.dependencies.as_slice()
                 });
             if build_dependencies.is_empty() {
-                continue;
-            }
-            if !build_resolution_roots.contains(&package.id) {
                 continue;
             }
 
@@ -2320,6 +2359,8 @@ impl Lock {
             let bootstrap_resolution_record = self.build_resolution_record_for_package_in_markers(
                 package,
                 target_markers,
+                executor_markers,
+                executor_python,
                 BuildResolutionStage::Bootstrap,
             )?;
             let bootstrap_direct_dependencies =
@@ -5702,6 +5743,21 @@ impl ExecutorSelector {
         } else {
             Ok(())
         }
+    }
+
+    fn matches(
+        &self,
+        markers: &MarkerEnvironment,
+        python: &Version,
+        requires_python: &RequiresPython,
+    ) -> bool {
+        self.python
+            .as_ref()
+            .is_none_or(|expected| expected == python)
+            && self.marker.is_none_or(|marker| {
+                UniversalMarker::from_combined(marker.into_marker(requires_python))
+                    .evaluate_no_extras(markers)
+            })
     }
 
     fn to_toml(&self) -> InlineTable {
@@ -9928,6 +9984,13 @@ enum LockErrorKind {
         id: String,
         /// The parse error.
         message: &'static str,
+    },
+    /// An error that occurs when no captured build resolution matches the requested target and
+    /// executor.
+    #[error("The lockfile does not contain a build resolution for `{id}` compatible with the current target and build executor", id = id.cyan())]
+    MissingBuildResolution {
+        /// The package missing a compatible build resolution.
+        id: PackageId,
     },
     /// An error that occurs when multiple packages with the same
     /// ID were found.

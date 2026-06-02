@@ -837,6 +837,7 @@ pub(crate) async fn do_sync(
     // Extract locked build resolutions from the lock file for source builds.
     let locked_build_resolutions = {
         let build_tags = venv.interpreter().tags()?;
+        let build_python = venv.interpreter().python_minor_version();
         let map = target.lock().all_build_resolutions(
             &resolution,
             target.install_path(),
@@ -844,6 +845,7 @@ pub(crate) async fn do_sync(
             build_options,
             &marker_env,
             venv.interpreter().markers(),
+            &build_python,
         )?;
         LockedBuildResolutions::new(map)
     };

@@ -2966,6 +2966,31 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
      + sniffio==1.3.1
     ");
 
+    let lock = context.read("uv.lock");
+    let incompatible_lock = lock.replace(r#"python = "3.12""#, r#"python = "3.11""#);
+    assert_ne!(lock, incompatible_lock);
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&incompatible_lock)?;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--python-platform")
+        .arg(target_platform)
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The lockfile does not contain a build resolution for `child==0.1.0 @ directory+child` compatible with the current target and build executor
+    ");
+
     Ok(())
 }
 
