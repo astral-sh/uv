@@ -2146,7 +2146,7 @@ mod tests {
 
     use uv_errors::Hint;
 
-    use super::{PyprojectTomlError, PyProjectToml, extract_free_threaded_selector};
+    use super::{PyProjectToml, PyprojectTomlError, extract_free_threaded_selector};
 
     // --- extract_free_threaded_selector ---
 
@@ -2261,7 +2261,8 @@ requires-python = ">=3.13"
     }
 
     #[test]
-    fn test_extract_free_threaded_selector_letter_before_t_no_match() {        // `>=3.13at` — the character immediately before `t` is a letter, not a digit.
+    fn test_extract_free_threaded_selector_letter_before_t_no_match() {
+        // `>=3.13at` — the character immediately before `t` is a letter, not a digit.
         // Must return None so we don't false-positive on arbitrary strings ending in `t`.
         let raw = r#"
 [project]
@@ -2290,8 +2291,7 @@ requires-python = ">=3.13.post1t"
     #[test]
     fn test_hint_free_threaded_selector() {
         let err = PyprojectTomlError::FreeThreadedSelector("3.13t".to_string());
-        let hints = err.hints();
-        let hint_text = hints.iter().next().expect("expected at least one hint");
+        let hint_text = err.hints().into_iter().next().expect("expected at least one hint");
         assert!(
             hint_text.contains("uv python pin 3.13t"),
             "hint should suggest `uv python pin 3.13t`, got: {hint_text}"
@@ -2306,7 +2306,7 @@ requires-python = ">=3.13.post1t"
     fn test_hint_other_errors_are_empty() {
         // Non-FreeThreadedSelector variants must not emit hints.
         let err = PyprojectTomlError::MissingName;
-        assert!(err.hints().iter().next().is_none());
+        assert!(err.hints().is_empty());
     }
 
     // --- PyProjectToml::from_string integration ---
@@ -2381,8 +2381,7 @@ requires-python = "==3.13t"
             "expected FreeThreadedSelector(\"3.13t\"), got: {err:?}"
         );
         // Also verify the hint points to the right pin command.
-        let hints = err.hints();
-        let hint_text = hints.iter().next().expect("expected a hint");
+        let hint_text = err.hints().into_iter().next().expect("expected a hint");
         assert!(hint_text.contains("uv python pin 3.13t"));
     }
 }
