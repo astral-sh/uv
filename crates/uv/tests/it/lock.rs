@@ -16327,6 +16327,97 @@ fn check_locked_version_violates_conflict_marked_dependency_specifier() -> Resul
     Ok(())
 }
 
+/// Test that `uv lock --check` detects when a conflict-forked locked version violates a top-level
+/// constraint specifier.
+#[test]
+fn check_locked_version_violates_conflict_forked_constraint_specifier() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["markupsafe<2"]
+
+        [dependency-groups]
+        dev = ["markupsafe>=2"]
+
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+        conflicts = [
+          [
+            { group = "dev" },
+            { package = "project" },
+          ],
+        ]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Narrow the constraint in both the workspace and lock manifest while leaving the conflict
+    // fork at the now-forbidden version. The dev requirement can resolve to an older 2.x release,
+    // so the updated project remains satisfiable.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["markupsafe<2"]
+
+        [dependency-groups]
+        dev = ["markupsafe>=2"]
+
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<2.1.5"]
+        conflicts = [
+          [
+            { group = "dev" },
+            { package = "project" },
+          ],
+        ]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    let lock = context.read("uv.lock").replace(
+        r#"constraints = [{ name = "markupsafe", specifier = "<3" }]"#,
+        r#"constraints = [{ name = "markupsafe", specifier = "<2.1.5" }]"#,
+    );
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 3 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// This checks that markers that normalize to 'false', which are serialized
 /// to the lockfile as `python_full_version < '0'`, get read back as false.
 /// Otherwise `uv lock --check` will always fail.
