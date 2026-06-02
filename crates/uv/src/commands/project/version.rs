@@ -2,7 +2,7 @@ use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
@@ -22,11 +22,11 @@ use uv_pep440::{BumpCommand, PrereleaseKind, Version};
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
-use uv_workspace::VirtualProject;
 use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::pyproject_mut::Error;
 use uv_workspace::{
-    DiscoveryOptions, WorkspaceCache, WorkspaceError, WorkspaceErrorKind,
+    DiscoveryOptions, ProjectWorkspace, VirtualProject, WorkspaceCache, WorkspaceError,
+    WorkspaceErrorKind,
     pyproject_mut::{DependencyTarget, PyProjectTomlMut},
 };
 
@@ -425,20 +425,18 @@ async fn find_target(
         .await
         .map_err(|err| hint_uv_self_version(err, explicit_project))?
     } else {
-        let project =
-            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
-                .await
-                .map_err(|err| hint_uv_self_version(err, explicit_project))?;
-        match &project {
-            VirtualProject::Project(_) => project,
-            VirtualProject::NonProject(workspace) => bail!(
-                "No `project` table found in: {}",
-                workspace
-                    .install_path()
-                    .join("pyproject.toml")
-                    .simplified_display()
-            ),
-        }
+        // Configuration discovery may have cached errors from virtual workspace member discovery.
+        // `uv version` requires a project, so reject non-project roots before consulting that cache.
+        let project_workspace_cache = WorkspaceCache::default();
+        VirtualProject::Project(
+            ProjectWorkspace::discover(
+                project_dir,
+                &DiscoveryOptions::default(),
+                &project_workspace_cache,
+            )
+            .await
+            .map_err(|err| hint_uv_self_version(err, explicit_project))?,
+        )
     };
     Ok(project)
 }
