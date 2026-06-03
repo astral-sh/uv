@@ -802,6 +802,88 @@ fn run_pep723_script_metadata() -> Result<()> {
     Ok(())
 }
 
+/// Extras requested by a PEP 723 script must activate source-selection markers
+/// on the requested package.
+#[test]
+fn run_pep723_script_activates_dependency_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #   "typing-extensions[foo]",
+        # ]
+        # ///
+
+        from importlib.metadata import version
+
+        print(version("iniconfig"))
+       "#
+    })?;
+
+    let lockfile = context.temp_dir.child("main.py.lock");
+    lockfile.write_str(indoc! { r#"
+        version = 2
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [{ name = "typing-extensions", extras = ["foo"] }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "1.1.1"
+        source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3" },
+        ]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
+        ]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "extra != 'extra-17-typing-extensions-foo'" },
+            { name = "iniconfig", version = "1.1.1", source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }, marker = "extra == 'extra-17-typing-extensions-foo'" },
+        ]
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475" },
+        ]
+
+        [package.metadata]
+        provides-extras = ["foo"]
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("main.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1.1.1
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==1.1.1 (from https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl)
+     + typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
 /// Run a PEP 723-compatible script with a `[[tool.uv.index]]`.
 #[test]
 fn run_pep723_script_index() -> Result<()> {

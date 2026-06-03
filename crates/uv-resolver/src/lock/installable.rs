@@ -251,6 +251,19 @@ pub trait Installable<'lock> {
             }
 
             let root_name = &dependency.name;
+            let additional_activated_extras = dependency
+                .extras
+                .iter()
+                .filter_map(|extra| {
+                    let key = (root_name, extra);
+                    (!activated_extras.contains(&key)).then_some(key)
+                })
+                .collect::<Vec<_>>();
+
+            // Root-exclusive manifest requirements can activate extras that are required to
+            // evaluate later source-selection markers.
+            activated_extras.extend(additional_activated_extras);
+
             let dist = self
                 .lock()
                 .find_by_markers(root_name, marker_env)
