@@ -10620,11 +10620,50 @@ fn sync_multiple_sources_marker_only_extra_fallback() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_multiple_sources_marker_only_extra_selects_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [project.optional-dependencies]
+        cpu = []
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", marker = "extra == 'cpu'" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("cpu"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
     ");
 
     Ok(())

@@ -24983,20 +24983,12 @@ fn lock_multiple_sources_extra() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "extra != 'cpu' and extra != 'extra-7-project-cpu'" },
-            { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "extra == 'extra-7-project-cpu'" },
-        ]
-
-        [package.optional-dependencies]
-        cpu = [
+            { name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "extra != 'extra-7-project-cpu'" },
             { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "extra == 'extra-7-project-cpu'" },
         ]
 
         [package.metadata]
-        requires-dist = [
-            { name = "iniconfig", marker = "extra == 'cpu'", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
-            { name = "iniconfig", marker = "extra != 'cpu'" },
-        ]
+        requires-dist = [{ name = "iniconfig" }]
         provides-extras = ["cpu"]
         "#
         );

@@ -102,6 +102,9 @@ impl DependencySource {
 /// Resolution-only context for a dependency affected by conditional sources.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct DependencySourceContext {
+    /// Whether a URL source was declared directly as a conditional source variant.
+    pub(crate) allow_url: bool,
+
     /// Package extras that were scoped only to isolate source identity.
     ///
     /// These package-qualified extras can be translated back to ordinary extra markers when

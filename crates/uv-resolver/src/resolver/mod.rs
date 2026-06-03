@@ -2160,9 +2160,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if source == DependencySource::Unspecified {
                 continue;
             }
-            if source.verbatim_url().is_some() && !self.urls.any_url(&requirement.name) {
-                continue;
-            }
             let conflict_scoped = Self::source_is_conflict_scoped(requirement);
             let marker = UniversalMarker::source_edge_marker(
                 requirement.marker,
@@ -2202,6 +2199,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     Cow::Owned(requirement.clone()),
                     solver_marker.combined(),
                     DependencySourceContext {
+                        allow_url: true,
                         extra_scopes: source_extra_scopes,
                         conflict: Self::source_conflict_item(
                             project_name,
@@ -2247,6 +2245,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         constraint,
                         marker.combined(),
                         DependencySourceContext {
+                            allow_url: true,
                             extra_scopes: source_extra_scopes,
                             conflict: Self::source_conflict_item(
                                 project_name,
@@ -2452,6 +2451,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 requirement,
                 marker.combined(),
                 DependencySourceContext {
+                    allow_url: true,
                     extra_scopes: source_extra_scopes,
                     conflict: Self::source_conflict_item(project_name, extra, group),
                     edge_marker: Some(edge_marker),
@@ -3483,7 +3483,7 @@ impl ForkState {
                 package,
                 version,
                 parent: _,
-                source_context: _,
+                source_context,
                 source,
             } = dependency;
 
@@ -3493,9 +3493,16 @@ impl ForkState {
                 // requirement was a URL requirement. `Urls` applies canonicalization to this and
                 // override URLs to both URL and registry requirements, which we then check for
                 // conflicts using [`ForkUrl`].
-                for url in urls.get_url(&self.env, name, source.verbatim_url(), git)? {
+                if source_context.allow_url
+                    && let Some(url) = source.verbatim_url()
+                {
                     self.fork_urls.insert(name, url, &self.env)?;
                     has_url = true;
+                } else {
+                    for url in urls.get_url(&self.env, name, source.verbatim_url(), git)? {
+                        self.fork_urls.insert(name, url, &self.env)?;
+                        has_url = true;
+                    }
                 }
 
                 if let Some(index) = source.explicit_index() {
