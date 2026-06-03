@@ -20295,7 +20295,7 @@ fn lock_explicit_default_index() -> Result<()> {
         dependencies = ["iniconfig==2.0.0"]
 
         [tool.uv.sources]
-        iniconfig = { index = "test" }∆∆
+        iniconfig = { index = "test" }
 
         [[tool.uv.index]]
         name = "test"
