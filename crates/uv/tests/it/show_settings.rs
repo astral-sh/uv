@@ -3017,6 +3017,44 @@ fn preview_features() {
         .arg("--no-preview"),
         @""
     );
+
+    uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.version())
+            .arg("--show-settings")
+            .arg("--preview-features")
+            .arg("python-install-default,,python-upgrade"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value '' for '--preview-features <PREVIEW_FEATURES>': preview feature name cannot be empty
+
+    For more information, try '--help'.
+    "
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.version())
+            .arg("--show-settings")
+            .env(
+                EnvVars::UV_PREVIEW_FEATURES,
+                "python-install-default,,python-upgrade",
+            ),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value '' for '--preview-features <PREVIEW_FEATURES>': preview feature name cannot be empty
+
+    For more information, try '--help'.
+    "
+    );
 }
 
 #[test]
