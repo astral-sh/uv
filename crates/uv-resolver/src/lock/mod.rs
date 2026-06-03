@@ -1204,6 +1204,9 @@ impl Lock {
 
         // Seed from requirements attached directly to the lock (e.g., PEP 723 scripts).
         for requirement in self.requirements() {
+            if !requirement.evaluate_markers(None, &[]) {
+                continue;
+            }
             for package in self
                 .packages
                 .iter()

@@ -2464,6 +2464,105 @@ async fn audit_script_extras() {
     ");
 }
 
+/// Extras from inactive PEP 723 requirements must not be traversed during
+/// audit.
+#[tokio::test]
+async fn audit_script_inactive_requirement_does_not_activate_extra() {
+    let context = uv_test::test_context!("3.12");
+
+    let other = context.temp_dir.child("other");
+    other.create_dir_all().unwrap();
+    other
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "other"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        foo = ["iniconfig==1.1.1"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "foo" },
+        ]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})
+        .unwrap();
+    other.child("src/other/__init__.py").touch().unwrap();
+
+    let script = context.temp_dir.child("script.py");
+    script
+        .write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #   "other",
+        #   "other[foo] ; extra == 'foo'",
+        # ]
+        #
+        # [tool.uv.sources]
+        # other = { path = "other" }
+        # ///
+    "#})
+        .unwrap();
+
+    context
+        .lock()
+        .arg("--script")
+        .arg("script.py")
+        .assert()
+        .success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({
+            "queries": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
+                "version": "2.0.0"
+            }, {
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "other"
+                },
+                "version": "0.1.0"
+            }]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}, {"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 2 packages
+    ");
+}
+
 /// Audit a project whose index reports an adverse PEP 792 status (deprecated
 /// with reason) for a lockfile dependency.
 #[tokio::test]
