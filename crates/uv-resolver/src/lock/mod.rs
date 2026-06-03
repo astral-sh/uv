@@ -1132,7 +1132,7 @@ impl Lock {
             }
             if groups.prod() {
                 root_activated_contexts.insert(ConflictItem::from(package.id.name.clone()));
-                for extra in extras.extra_names(package.optional_dependencies.keys()) {
+                for extra in extras.extra_names(package.provides_extras().iter()) {
                     root_activated_contexts
                         .insert(ConflictItem::from((package.id.name.clone(), extra.clone())));
                     if seen.insert((&package.id, Some(extra))) {
