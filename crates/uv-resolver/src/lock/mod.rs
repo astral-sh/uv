@@ -671,8 +671,8 @@ impl Lock {
     /// Record the conflicting groups that were used to generate this lock.
     #[must_use]
     pub fn with_conflicts(mut self, conflicts: Conflicts) -> Self {
-        self.source_activation_contexts = self.expected_source_activation_contexts();
         self.conflicts = conflicts;
+        self.source_activation_contexts = self.expected_source_activation_contexts();
         self
     }
 
@@ -725,8 +725,57 @@ impl Lock {
                     }
                 }
             }
+            if matches!(&package.id.source, Source::Git(..)) {
+                self.extend_source_activation_contexts_from_edges(package, &mut contexts);
+            }
         }
         contexts
+    }
+
+    /// Add source activation contexts from locked dependency edges.
+    fn extend_source_activation_contexts_from_edges(
+        &self,
+        package: &Package,
+        contexts: &mut BTreeSet<ConflictItem>,
+    ) {
+        let dependencies = package
+            .dependencies
+            .iter()
+            .chain(package.optional_dependencies.values().flatten())
+            .chain(package.dependency_groups.values().flatten())
+            .collect::<Vec<_>>();
+        let sources = dependencies.iter().fold(
+            FxHashMap::<_, FxHashSet<_>>::default(),
+            |mut sources, dependency| {
+                sources
+                    .entry(&dependency.package_id.name)
+                    .or_default()
+                    .insert(&dependency.package_id.source);
+                sources
+            },
+        );
+
+        for dependency in dependencies {
+            if sources
+                .get(&dependency.package_id.name)
+                .is_none_or(|sources| sources.len() <= 1)
+            {
+                continue;
+            }
+            let Ok((included, excluded)) = dependency.complexified_marker.conflict().filter_rules()
+            else {
+                continue;
+            };
+            for context in included.into_iter().chain(excluded) {
+                if context.package() == &package.id.name
+                    && !self
+                        .conflicts
+                        .contains(context.package(), context.kind().as_ref())
+                {
+                    contexts.insert(context);
+                }
+            }
+        }
     }
 
     /// Return whether a requirement selects a source that differs from every production source.
