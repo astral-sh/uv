@@ -14,6 +14,7 @@ use crate::pubgrub::{DependencySource, PubGrubDependency, PubGrubPackage};
 use crate::python_requirement::PythonRequirement;
 use crate::resolver::environment::ResolverEnvironment;
 use crate::resolver::fork_map::ForkScope;
+use crate::universal_marker::encode_package_extras;
 
 use super::ResolverState;
 
@@ -199,7 +200,12 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             );
 
             for requirement in complementary_requirements {
-                let extra = Self::single_positive_extra(raw_requirement.marker);
+                let extra = Self::single_required_extra(raw_requirement.marker);
+                let needs_unsourced_complement = raw_requirement
+                    .evaluate_markers(self.env.marker_environment(), &[])
+                    && self
+                        .find_unsourced_base_index(&raw_requirement.name)
+                        .is_none();
                 let constraints = self.constraints_for_complementary_extra_source(
                     &raw_requirement,
                     requirement.marker,
@@ -211,6 +217,12 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                     &requirement,
                     ComplementarySourceAction::AddDependency,
                 ) {
+                    if needs_unsourced_complement
+                        && let Some(dependency) =
+                            self.unsourced_complement_dependency(base_requirements, &requirement)
+                    {
+                        self.deps.push(dependency);
+                    }
                     self.extend_requirements(constraints.into_iter().map(Cow::Owned));
                 }
             }
@@ -364,9 +376,12 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             return false;
         };
 
-        let Some((base_marker, base_version)) =
-            self.root_unsourced_complement(&name, requirement.marker)
-        else {
+        let Some((base_marker, base_version)) = self.unsourced_complement(
+            self.state.requirements.iter(),
+            &name,
+            requirement.marker,
+            None,
+        ) else {
             return false;
         };
 
@@ -454,7 +469,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                 scope
             };
         }
-        let Some(extra) = Self::single_positive_extra(requirement.marker) else {
+        let Some(extra) = Self::single_required_extra(requirement.marker) else {
             return if Self::has_extra(requirement.marker) {
                 ForkScope::from_package_marker(requirement.marker, project_name)
             } else {
@@ -537,8 +552,8 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             || self.state.workspace_members.contains(package_name)
     }
 
-    /// Returns the positive extra referenced by `marker`, if it names exactly one extra.
-    fn single_positive_extra(marker: MarkerTree) -> Option<ExtraName> {
+    /// Returns the positive extra required by `marker`, if it requires exactly one extra.
+    fn single_required_extra(marker: MarkerTree) -> Option<ExtraName> {
         let mut extra = None;
         let mut has_multiple = false;
 
@@ -556,7 +571,10 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             return None;
         }
 
-        extra
+        let extra = extra?;
+        let mut implication = marker;
+        implication.implies(Self::extra_marker(&extra));
+        implication.is_true().then_some(extra)
     }
 
     /// Returns whether `marker` references at least one extra.
@@ -673,18 +691,44 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             .collect()
     }
 
-    /// Returns the root source-agnostic requirement that covers the complement of a sourced edge.
-    fn root_unsourced_complement(
+    /// Returns a source-agnostic dependency that covers the complement of a sourced edge.
+    fn unsourced_complement_dependency(
         &self,
+        requirements: &[Requirement],
+        requirement: &ComplementarySourceRequirement,
+    ) -> Option<PubGrubDependency> {
+        let package = self.package.name_no_root()?;
+        let (marker, version) = self.unsourced_complement(
+            requirements.iter(),
+            &requirement.name,
+            requirement.marker,
+            Some(package),
+        )?;
+        Some(PubGrubDependency {
+            package: PubGrubPackage::from_base_preserving_marker(requirement.name.clone(), marker),
+            version,
+            parent: self.package.name_no_root().cloned(),
+            source: DependencySource::Unspecified,
+        })
+    }
+
+    /// Returns the source-agnostic requirement that covers the complement of a sourced edge.
+    fn unsourced_complement<'req>(
+        &self,
+        requirements: impl IntoIterator<Item = &'req Requirement>,
         name: &PackageName,
         source_marker: MarkerTree,
-    ) -> Option<(MarkerTree, Ranges<Version>)> {
+        package: Option<&PackageName>,
+    ) -> Option<(MarkerTree, Ranges<Version>)>
+    where
+        'a: 'req,
+    {
         let complement = source_marker.negate();
         let python_marker = self.python_requirement.to_marker_tree();
 
         self.state
             .overrides
-            .apply(self.state.requirements.iter())
+            .apply(requirements)
             .find_map(|requirement| {
                 let requirement: &Requirement = requirement.as_ref();
 
@@ -692,7 +736,9 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                     return None;
                 }
 
-                let mut marker = requirement.marker;
+                let mut marker = package.map_or(requirement.marker, |package| {
+                    encode_package_extras(requirement.marker, package)
+                });
                 marker.and(complement);
                 if marker.is_false()
                     || python_marker.is_disjoint(marker)
@@ -845,5 +891,16 @@ mod tests {
             );
 
         assert_eq!(scope, ForkScope::from_group(marker, &project_name, &group));
+    }
+
+    #[test]
+    fn disjunctive_source_marker_has_no_required_extra() {
+        let marker =
+            MarkerTree::from_str("extra == 'alt' or extra != 'other'").expect("valid marker");
+
+        assert_eq!(
+            DependencyBuilder::<EmptyInstalledPackages>::single_required_extra(marker),
+            None
+        );
     }
 }
