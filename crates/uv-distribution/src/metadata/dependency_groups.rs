@@ -141,6 +141,7 @@ impl SourcedDependencyGroups {
         let dependency_groups = dependency_groups
             .into_iter()
             .map(|(name, group)| {
+                let source_groups = group.source_groups;
                 let requirements = group
                     .requirements
                     .into_iter()
@@ -151,16 +152,15 @@ impl SourcedDependencyGroups {
                         } else {
                             let requirement_name = requirement.name.clone();
                             let group = name.clone();
-                            let extra = None;
 
-                            LoweredRequirement::from_requirement(
+                            LoweredRequirement::from_requirement_with_source_groups(
                                 requirement,
                                 project.project_name(),
                                 project.root(),
                                 project_sources,
                                 project_indexes,
-                                extra,
-                                Some(&group),
+                                &group,
+                                &source_groups,
                                 locations,
                                 project.workspace(),
                                 git_member,

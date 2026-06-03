@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::Path;
 use std::slice;
 
@@ -135,6 +135,10 @@ impl RequiresDist {
         // Now that we've resolved the dependency groups, we can validate that each source references
         // a valid extra or group, if present.
         Self::validate_sources(project_sources, &metadata, &dependency_groups)?;
+        let dependency_group_source_groups = dependency_groups
+            .iter()
+            .map(|(group, flat_group)| (group.clone(), flat_group.source_groups.clone()))
+            .collect::<BTreeMap<_, _>>();
 
         // Lower conditional sources against production dependencies. These variants are consumed
         // only during resolution; the regular lowered requirements remain unchanged for metadata
@@ -171,6 +175,7 @@ impl RequiresDist {
         let dependency_groups = dependency_groups
             .into_iter()
             .map(|(name, flat_group)| {
+                let source_groups = flat_group.source_groups;
                 let requirements = flat_group
                     .requirements
                     .into_iter()
@@ -181,16 +186,15 @@ impl RequiresDist {
                         } else {
                             let requirement_name = requirement.name.clone();
                             let group = name.clone();
-                            let extra = None;
 
-                            LoweredRequirement::from_requirement(
+                            LoweredRequirement::from_requirement_with_source_groups(
                                 requirement,
                                 Some(&metadata.name),
                                 project_workspace.project_root(),
                                 project_sources,
                                 project_indexes,
-                                extra,
-                                Some(&group),
+                                &group,
+                                &source_groups,
                                 locations,
                                 project_workspace.workspace(),
                                 git_member,
@@ -257,6 +261,7 @@ impl RequiresDist {
             source_variants,
             &requires_dist,
             &dependency_groups,
+            &dependency_group_source_groups,
         );
 
         Ok(Self {
@@ -278,6 +283,7 @@ impl RequiresDist {
         source_variants: Vec<SourceVariant>,
         requires_dist: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Box<[Requirement]>>,
+        dependency_group_source_groups: &BTreeMap<GroupName, BTreeSet<GroupName>>,
     ) -> Vec<SourceVariant> {
         let mut variants = Vec::new();
         for variant in source_variants {
@@ -289,13 +295,22 @@ impl RequiresDist {
                             && requirement.marker.top_level_extra_name().as_deref() == Some(extra)
                             && Self::same_source(&requirement.source, &variant.requirement.source)
                     })
+                    .map(|requirement| (None, requirement))
                     .collect::<Vec<_>>()
             } else if let Some(group) = variant.group.as_ref() {
                 dependency_groups
-                    .get(group)
-                    .into_iter()
-                    .flatten()
-                    .filter(|requirement| {
+                    .iter()
+                    .filter(|(selected_group, _)| {
+                        dependency_group_source_groups
+                            .get(*selected_group)
+                            .is_some_and(|source_groups| source_groups.contains(group))
+                    })
+                    .flat_map(|(selected_group, requirements)| {
+                        requirements
+                            .iter()
+                            .map(move |requirement| (Some(selected_group), requirement))
+                    })
+                    .filter(|(_, requirement)| {
                         requirement.name == variant.requirement.name
                             && Self::same_source(&requirement.source, &variant.requirement.source)
                     })
@@ -305,7 +320,7 @@ impl RequiresDist {
                 continue;
             };
 
-            for selected in selected {
+            for (selected_group, selected) in selected {
                 let mut requirement = variant.requirement.clone();
                 requirement.source.clone_from(&selected.source);
                 requirement.marker.and(selected.marker);
@@ -315,7 +330,7 @@ impl RequiresDist {
                 variants.push(SourceVariant {
                     requirement,
                     extra: variant.extra.clone(),
-                    group: variant.group.clone(),
+                    group: selected_group.cloned().or_else(|| variant.group.clone()),
                 });
             }
         }
@@ -327,16 +342,12 @@ impl RequiresDist {
         match (left, right) {
             (
                 RequirementSource::Registry {
-                    index: left_index,
-                    conflict: left_conflict,
-                    ..
+                    index: left_index, ..
                 },
                 RequirementSource::Registry {
-                    index: right_index,
-                    conflict: right_conflict,
-                    ..
+                    index: right_index, ..
                 },
-            ) => left_index == right_index && left_conflict == right_conflict,
+            ) => left_index == right_index,
             _ => left == right,
         }
     }

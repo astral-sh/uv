@@ -26184,6 +26184,70 @@ fn lock_multiple_sources_group_base_and_group() -> Result<()> {
     Ok(())
 }
 
+/// Group-scoped sources should apply to groups that include the selecting
+/// group.
+#[test]
+fn lock_multiple_sources_group_included_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [dependency-groups]
+        alt = ["iniconfig==1.1.1"]
+        all = [{ include-group = "alt" }]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "alt" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let conflicts = lock
+        .get("conflicts")
+        .map(ToString::to_string)
+        .unwrap_or_default();
+    assert_snapshot!(conflicts.trim(), @r#"
+    [[
+        { package = "project", group = "all" },
+        { package = "project", group = "all" },
+    ], [
+        { package = "project", group = "alt" },
+        { package = "project", group = "alt" },
+    ]]
+    "#);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--group").arg("all"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.1.1 (from https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl)
+    ");
+
+    Ok(())
+}
+
 /// Like `lock_multiple_sources_index_extra_base_and_optional`, but for
 /// dependency groups via `group = "X"` sources.
 ///

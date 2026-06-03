@@ -1,6 +1,6 @@
 use std::collections::btree_map::Entry;
 use std::str::FromStr;
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::BTreeMap, collections::BTreeSet, path::Path};
 
 use thiserror::Error;
 
@@ -21,6 +21,8 @@ pub struct FlatDependencyGroups(BTreeMap<GroupName, FlatDependencyGroup>);
 pub struct FlatDependencyGroup {
     pub requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
     pub requires_python: Option<VersionSpecifiers>,
+    /// The groups whose source selectors apply to these flattened requirements.
+    pub source_groups: BTreeSet<GroupName>,
 }
 
 impl FlatDependencyGroups {
@@ -76,11 +78,11 @@ impl FlatDependencyGroups {
         // way, and letting things include-group a group that isn't defined would be a
         // mess for other python tools.
         if let Some(dev_dependencies) = dev_dependencies {
-            dependency_groups
+            let group = dependency_groups
                 .entry(DEV_DEPENDENCIES.clone())
-                .or_insert_with(FlatDependencyGroup::default)
-                .requirements
-                .extend(dev_dependencies.clone());
+                .or_insert_with(FlatDependencyGroup::default);
+            group.requirements.extend(dev_dependencies.clone());
+            group.source_groups.insert(DEV_DEPENDENCIES.clone());
         }
 
         Ok(dependency_groups)
@@ -127,6 +129,7 @@ impl FlatDependencyGroups {
             parents.push(name);
             let mut requirements = Vec::with_capacity(specifiers.len());
             let mut requires_python_intersection = VersionSpecifiers::empty();
+            let mut source_groups = BTreeSet::from([name.clone()]);
             for specifier in *specifiers {
                 match specifier {
                     DependencyGroupSpecifier::Requirement(requirement) => {
@@ -145,6 +148,7 @@ impl FlatDependencyGroups {
                         resolve_group(resolved, groups, settings, include_group, parents)?;
                         if let Some(included) = resolved.get(include_group) {
                             requirements.extend(included.requirements.iter().cloned());
+                            source_groups.extend(included.source_groups.iter().cloned());
 
                             // Intersect the requires-python for this group with the included group's
                             requires_python_intersection = requires_python_intersection
@@ -196,6 +200,7 @@ impl FlatDependencyGroups {
                     } else {
                         Some(requires_python_intersection)
                     },
+                    source_groups,
                 },
             );
             Ok(())
@@ -221,6 +226,11 @@ impl FlatDependencyGroups {
     /// Return the requirements for a given group, if any.
     pub fn get(&self, group: &GroupName) -> Option<&FlatDependencyGroup> {
         self.0.get(group)
+    }
+
+    /// Iterate over the flattened dependency groups.
+    pub fn iter(&self) -> impl Iterator<Item = (&GroupName, &FlatDependencyGroup)> {
+        self.0.iter()
     }
 
     /// Return the entry for a given group, if any.

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -61,6 +61,7 @@ enum SourceSelection {
     Context {
         extra: Option<ExtraName>,
         group: Option<GroupName>,
+        source_groups: BTreeSet<GroupName>,
     },
     /// Select every source that is conditional on an extra or dependency group.
     Conditional,
@@ -97,6 +98,43 @@ impl LoweredRequirement {
             SourceSelection::Context {
                 extra: extra.cloned(),
                 group: group.cloned(),
+                source_groups: group.into_iter().cloned().collect(),
+            },
+            locations,
+            workspace,
+            git_member,
+            editable,
+            credentials_cache,
+        )
+        .map(|requirement| requirement.map(LoweredSourceRequirement::into_lowered_requirement))
+    }
+
+    /// Combine a dependency-group requirement with sources selected by that group or any group it
+    /// includes.
+    pub(crate) fn from_requirement_with_source_groups<'data>(
+        requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+        project_name: Option<&'data PackageName>,
+        project_dir: &'data Path,
+        project_sources: &'data BTreeMap<PackageName, Sources>,
+        project_indexes: &'data [Index],
+        group: &GroupName,
+        source_groups: &BTreeSet<GroupName>,
+        locations: &'data IndexLocations,
+        workspace: &'data Workspace,
+        git_member: Option<&'data GitWorkspaceMember<'data>>,
+        editable: bool,
+        credentials_cache: &'data CredentialsCache,
+    ) -> impl Iterator<Item = Result<Self, LoweringError>> + use<'data> + 'data {
+        Self::from_requirement_with_selection(
+            requirement,
+            project_name,
+            project_dir,
+            project_sources,
+            project_indexes,
+            SourceSelection::Context {
+                extra: None,
+                group: Some(group.clone()),
+                source_groups: source_groups.clone(),
             },
             locations,
             workspace,
@@ -151,10 +189,22 @@ impl LoweredRequirement {
     ) -> impl Iterator<Item = Result<LoweredSourceRequirement, LoweringError>> + use<'data> + 'data
     {
         let context = match selection {
-            SourceSelection::Context { extra, group } => Some((extra, group)),
+            SourceSelection::Context {
+                extra,
+                group,
+                source_groups,
+            } => Some((extra, group, source_groups)),
             SourceSelection::Conditional => None,
         };
         let include_remaining = context.is_some();
+        let context_extra = context
+            .as_ref()
+            .and_then(|(extra, _, _)| extra.as_ref())
+            .cloned();
+        let context_group = context
+            .as_ref()
+            .and_then(|(_, group, _)| group.as_ref())
+            .cloned();
 
         // Identify the source from the `tool.uv.sources` table.
         let (sources, origin) = if let Some(source) = project_sources.get(&requirement.name) {
@@ -170,7 +220,7 @@ impl LoweredRequirement {
             sources
                 .iter()
                 .filter(|source| match &context {
-                    Some((extra, group)) => {
+                    Some((extra, group, source_groups)) => {
                         if let Some(target) = source.extra() {
                             if extra.as_ref() != Some(target) {
                                 return false;
@@ -178,7 +228,7 @@ impl LoweredRequirement {
                         }
 
                         if let Some(target) = source.group() {
-                            if group.as_ref() != Some(target) {
+                            if !source_groups.contains(target) {
                                 return false;
                             }
                         }
@@ -359,8 +409,8 @@ impl LoweredRequirement {
                         Source::Registry {
                             index,
                             marker,
-                            extra,
-                            group,
+                            extra: _,
+                            group: _,
                         } => {
                             // Identify the named index from either the project indexes or the workspace indexes,
                             // in that order.
@@ -388,12 +438,16 @@ impl LoweredRequirement {
                                 format: index.format,
                             };
                             let conflict = project_name.and_then(|project_name| {
-                                if let Some(extra) = extra {
-                                    Some(ConflictItem::from((project_name.clone(), extra)))
+                                if source_extra.is_some() {
+                                    context_extra.clone().or_else(|| source_extra.clone()).map(
+                                        |extra| ConflictItem::from((project_name.clone(), extra)),
+                                    )
+                                } else if source_group.is_some() {
+                                    context_group.clone().or_else(|| source_group.clone()).map(
+                                        |group| ConflictItem::from((project_name.clone(), group)),
+                                    )
                                 } else {
-                                    group.map(|group| {
-                                        ConflictItem::from((project_name.clone(), group))
-                                    })
+                                    None
                                 }
                             });
                             let source = registry_source(&requirement, index, conflict);
