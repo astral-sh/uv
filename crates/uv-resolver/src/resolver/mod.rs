@@ -2024,7 +2024,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         dev_dependencies: &'a BTreeMap<GroupName, Box<[Requirement]>>,
         extra: Option<&'a ExtraName>,
         dev: Option<&'a GroupName>,
-        name: Option<&PackageName>,
+        name: Option<&'a PackageName>,
         env: &'a ResolverEnvironment,
         python_requirement: &'a PythonRequirement,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> {
@@ -2036,6 +2036,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Either::Left(Either::Left(self.requirements_for_extra(
                 dev_dependencies.get(dev).into_iter().flatten(),
                 extra,
+                name,
                 env,
                 python_marker,
                 python_requirement,
@@ -2048,6 +2049,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Either::Left(Either::Right(self.requirements_for_extra(
                 dependencies.iter(),
                 extra,
+                name,
                 env,
                 python_marker,
                 python_requirement,
@@ -2057,6 +2059,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .requirements_for_extra(
                     dependencies.iter(),
                     extra,
+                    name,
                     env,
                     python_marker,
                     python_requirement,
@@ -2078,6 +2081,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 for requirement in self.requirements_for_extra(
                     dependencies,
                     Some(&extra),
+                    name,
                     env,
                     python_marker,
                     python_requirement,
@@ -2147,6 +2151,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &'data self,
         dependencies: impl IntoIterator<Item = &'data Requirement> + 'parameters,
         extra: Option<&'parameters ExtraName>,
+        package: Option<&'parameters PackageName>,
         env: &'parameters ResolverEnvironment,
         python_marker: MarkerTree,
         python_requirement: &'parameters PythonRequirement,
@@ -2160,6 +2165,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Self::is_requirement_applicable(
                     requirement,
                     extra,
+                    package,
                     env,
                     python_marker,
                     python_requirement,
@@ -2181,6 +2187,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn is_requirement_applicable(
         requirement: &Requirement,
         extra: Option<&ExtraName>,
+        package: Option<&PackageName>,
         env: &ResolverEnvironment,
         python_marker: MarkerTree,
         python_requirement: &PythonRequirement,
@@ -2221,7 +2228,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // If we're in a fork in universal mode, ignore any dependency that isn't part of
         // this fork (but will be part of another fork).
-        if !env.included_by_marker(requirement.marker) {
+        if package.map_or_else(
+            || !env.included_by_marker(requirement.marker),
+            |package| !env.included_by_package_marker(requirement.marker, package),
+        ) {
             trace!("Skipping {requirement} because of {env}");
             return false;
         }

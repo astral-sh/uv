@@ -5,6 +5,7 @@ use itertools::Itertools;
 use tracing::trace;
 
 use uv_distribution_types::{RequiresPython, RequiresPythonRange};
+use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
 use uv_pypi_types::{
@@ -13,7 +14,7 @@ use uv_pypi_types::{
 
 use crate::pubgrub::{PubGrubDependency, PubGrubPackage};
 use crate::resolver::ForkState;
-use crate::universal_marker::{ConflictMarker, UniversalMarker};
+use crate::universal_marker::{ConflictMarker, UniversalMarker, encode_package_extras};
 use crate::{PythonRequirement, ResolveError};
 
 /// Represents one or more marker environments for a resolution.
@@ -182,6 +183,21 @@ impl ResolverEnvironment {
             Kind::Specific { .. } => true,
             Kind::Universal { ref markers, .. } => !markers.is_disjoint(marker),
         }
+    }
+
+    /// Returns `false` only when this environment is disjoint with a marker authored relative to
+    /// `package`.
+    ///
+    /// Universal resolution can contain both raw PEP 508 extra forks and package-scoped encoded
+    /// extra forks. Check both representations so an authored marker does not appear active in an
+    /// incompatible encoded fork.
+    pub(crate) fn included_by_package_marker(
+        &self,
+        marker: MarkerTree,
+        package: &PackageName,
+    ) -> bool {
+        self.included_by_marker(marker)
+            && self.included_by_marker(encode_package_extras(marker, package))
     }
 
     /// Returns true if the dependency represented by this forker may be

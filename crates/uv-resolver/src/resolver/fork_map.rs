@@ -6,7 +6,7 @@ use uv_pep508::{MarkerTree, RequirementOrigin};
 use uv_pypi_types::{ConflictItem, ConflictItemRef};
 
 use crate::ResolverEnvironment;
-use crate::universal_marker::{ConflictMarker, UniversalMarker};
+use crate::universal_marker::{ConflictMarker, UniversalMarker, encode_package_extras};
 
 /// A set of package names associated with a given fork.
 pub(crate) type ForkSet = ForkMap<()>;
@@ -25,7 +25,10 @@ struct Entry<T> {
 /// The fork visibility of an entry.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(super) struct ForkScope {
+    /// The marker to preserve when this scope propagates onto dependency edges.
     marker: MarkerTree,
+    /// The marker used to determine whether this scope is visible in a resolver fork.
+    fork_marker: MarkerTree,
     conflict: Option<ConflictItem>,
 }
 
@@ -35,6 +38,7 @@ impl ForkScope {
         let Some(conflict) = Self::conflict_for_requirement(requirement) else {
             return Self {
                 marker: requirement.marker,
+                fork_marker: requirement.marker,
                 conflict: None,
             };
         };
@@ -42,17 +46,20 @@ impl ForkScope {
     }
 
     /// Derives the fork scope for an extra-gated URL-like requirement.
-    ///
-    /// Unlike registry requirements with an explicit index, URL-like requirements must retain
-    /// their raw optional-extra marker for lock marker coverage.
     pub(super) fn from_extra(
         marker: MarkerTree,
         project_name: &PackageName,
         extra: &ExtraName,
     ) -> Self {
+        let conflict = ConflictItem::from((project_name.clone(), extra.clone()));
         Self {
-            marker,
-            conflict: Some(ConflictItem::from((project_name.clone(), extra.clone()))),
+            marker: UniversalMarker::new(
+                encode_package_extras(marker, project_name),
+                ConflictMarker::from_conflict_item(&conflict),
+            )
+            .combined(),
+            fork_marker: marker,
+            conflict: Some(conflict),
         }
     }
 
@@ -69,8 +76,10 @@ impl ForkScope {
     }
 
     fn from_conflict(marker: MarkerTree, conflict: ConflictItem) -> Self {
+        let marker = Self::marker_with_conflict(marker, &conflict);
         Self {
-            marker: Self::marker_with_conflict(marker, &conflict),
+            marker,
+            fork_marker: marker,
             conflict: Some(conflict),
         }
     }
@@ -111,7 +120,7 @@ impl ForkScope {
     }
 
     pub(super) fn matches(&self, env: &ResolverEnvironment) -> bool {
-        env.included_by_marker(self.marker)
+        env.included_by_marker(self.fork_marker)
             && self
                 .conflict()
                 .is_none_or(|conflict| env.included_by_group(conflict))
