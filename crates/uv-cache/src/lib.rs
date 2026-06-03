@@ -383,7 +383,10 @@ impl Cache {
         self.persist_with_id(temp_dir, path, id).await
     }
 
-    /// Persist a temporary directory to the artifact store under a specific ID.
+    /// Persist a temporary directory to the artifact store under a caller-selected ID.
+    ///
+    /// If another writer has already persisted the same ID, discard `temp_dir` and link `path` to
+    /// the existing archive entry. The ID must therefore uniquely identify the directory contents.
     pub async fn persist_with_id(
         &self,
         temp_dir: impl AsRef<Path>,

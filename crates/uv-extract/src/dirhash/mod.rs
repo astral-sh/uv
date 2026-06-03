@@ -18,20 +18,33 @@ const FRAME_SIZE: u8 = 4;
 const FRAME_EXECUTABLE: u8 = 5;
 const FRAME_CONTENT_BLAKE3: u8 = 6;
 
-/// A versioned digest of extracted directory contents.
+/// A versioned digest of the filesystem tree produced by extracting a ZIP archive.
 ///
-/// The digest is formatted as the path-safe `dirhash-v1-` prefix followed by the
-/// lowercase hexadecimal BLAKE3 digest.
+/// The digest is independent of ZIP entry order and metadata that does not affect the extracted
+/// tree, such as archive comments. It includes canonical relative paths, file sizes, executable
+/// bits, file contents, and explicit empty leaf directories. Non-empty directories are implied by
+/// their children.
+///
+/// Empty leaf directories are significant because they can affect Python namespace-package
+/// imports. For example, an empty `namespace/` directory can affect:
+///
+/// ```python
+/// import namespace
+/// ```
+///
+/// The digest is formatted as the path-safe `dirhash-v1-` prefix followed by the lowercase
+/// hexadecimal BLAKE3 digest.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct DirectoryDigest(String);
 
 impl DirectoryDigest {
-    /// Return the versioned digest string.
+    /// Return the complete versioned, path-safe digest string.
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
+/// The digest inputs for a regular file after ZIP extraction semantics have been applied.
 pub(crate) struct DirectoryDigestFile {
     path: String,
     size: u64,
@@ -50,7 +63,10 @@ impl DirectoryDigestFile {
     }
 }
 
-/// Return canonical paths for explicit directories that are empty in the extracted tree.
+/// Return the canonical paths of explicit archive directories that are empty in the extracted tree.
+///
+/// Parent directories containing an explicit directory or extracted file are omitted because their
+/// presence is already implied by that child.
 pub(crate) fn empty_directory_paths<'a>(
     directories: impl IntoIterator<Item = &'a Path>,
     files: impl IntoIterator<Item = &'a Path>,
@@ -154,6 +170,7 @@ fn frame_header(frame_type: u8, length: usize) -> [u8; 9] {
     header
 }
 
+/// Convert a sanitized archive path to the platform-independent representation used by the digest.
 fn canonical_path(path: &Path) -> String {
     let mut canonical = String::new();
     for component in path.components() {

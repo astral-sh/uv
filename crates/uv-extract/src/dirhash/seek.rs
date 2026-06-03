@@ -102,7 +102,10 @@ pub(crate) fn unzip_and_hash(
     Ok((files, directory_digest(hash_files, hash_directories)))
 }
 
-/// Reject entries that would write to the same output path.
+/// Reject entries that would write to the same sanitized output path.
+///
+/// This preflight runs before parallel extraction so duplicate entries cannot race to determine
+/// which contents are persisted or hashed.
 fn validate_unique_output_paths(entries: &[StoredZipEntry]) -> Result<(), Error> {
     let mut paths = FxHashSet::default();
     for (file_number, entry) in entries.iter().enumerate() {
@@ -290,6 +293,9 @@ fn buffered_file_writer(file: fs_err::File, size: u64) -> std::io::BufWriter<fs_
 }
 
 /// Copy an entry to disk while computing its content digest.
+///
+/// Small entries are hashed while copying. Large compressed entries move hashing to a dedicated
+/// thread, while large stored entries hash their raw archive bytes in parallel with extraction.
 fn copy_entry_with_digest<R>(
     archive: &mut ZipFileReader<AllowStdIo<R>>,
     entry: &StoredZipEntry,
@@ -403,6 +409,7 @@ fn directory_lock_error() -> Error {
     Error::Io(std::io::Error::other("directory set lock poisoned"))
 }
 
+/// Copy an entry, optionally hashing the same uncompressed bytes written to disk.
 async fn copy_entry<R>(
     archive: &mut ZipFileReader<AllowStdIo<R>>,
     file_number: usize,
@@ -587,6 +594,9 @@ where
 }
 
 /// Hash a stored entry's raw bytes from an already-open archive reader.
+///
+/// Stored entries have identical compressed and uncompressed contents, so a cloned seekable reader
+/// can hash the payload in parallel while the primary reader extracts and validates the entry.
 fn hash_stored_entry<R>(
     archive: &mut ZipFileReader<AllowStdIo<R>>,
     header_offset: u64,
@@ -626,6 +636,9 @@ where
 }
 
 /// Return the byte offset of a stored entry's payload from its local file header.
+///
+/// The central-directory offset points to the header, so the variable-length file name and extra
+/// field must be skipped before hashing the payload.
 async fn stored_entry_data_offset<R>(reader: &mut R, header_offset: u64) -> Result<u64, Error>
 where
     R: AsyncRead + AsyncSeek + Unpin,
@@ -663,6 +676,7 @@ fn thread_panic_error() -> Error {
     Error::Io(std::io::Error::other("hash thread panicked"))
 }
 
+/// Hash a large stored-entry chunk using the bounded hash pool when available.
 fn update_hash_rayon(hasher: &mut blake3::Hasher, bytes: &[u8]) {
     match HASH_THREAD_POOL.get_or_init(build_hash_thread_pool) {
         Some(pool) => {
@@ -676,6 +690,7 @@ fn update_hash_rayon(hasher: &mut blake3::Hasher, bytes: &[u8]) {
     }
 }
 
+/// Build a small pool for BLAKE3 chunk parallelism without occupying the extraction workers.
 fn build_hash_thread_pool() -> Option<rayon::ThreadPool> {
     let threads = std::thread::available_parallelism()
         .map(|threads| threads.get().clamp(1, 4))

@@ -1237,6 +1237,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Persist an extracted wheel into the archive store.
+    ///
+    /// A digest makes identical extracted trees converge on one archive entry. Without a digest,
+    /// persistence retains the existing behavior of assigning a unique archive ID.
     async fn persist_extracted_wheel(
         &self,
         temp_dir: tempfile::TempDir,

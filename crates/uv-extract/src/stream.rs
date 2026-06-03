@@ -80,7 +80,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
-    let (files, _digest) = unzip_and_hash(source_hint, reader, target).await?;
+    let (files, _digest) = Box::pin(unzip_and_hash(source_hint, reader, target)).await?;
     Ok(files)
 }
 

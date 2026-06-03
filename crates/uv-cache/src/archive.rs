@@ -22,7 +22,10 @@ impl ArchiveId {
         Self(uv_fastid::Id::insecure().to_string())
     }
 
-    /// Create an archive identifier from a versioned directory digest.
+    /// Use a versioned, path-safe directory digest as the complete archive identifier.
+    ///
+    /// This does not generate or hash an identifier. Callers must ensure that the digest uniquely
+    /// identifies the persisted directory contents.
     pub fn from_directory_digest(digest: &str) -> Self {
         Self(digest.to_string())
     }
