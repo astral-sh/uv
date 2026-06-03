@@ -25484,6 +25484,46 @@ fn lock_multiple_sources_recursive_extra() -> Result<()> {
     Ok(())
 }
 
+/// Recursive extras must preserve the source scope of the nested extra that
+/// introduced the selected dependency.
+#[test]
+fn lock_multiple_sources_recursive_extra_preserves_source_scope() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig==1.1.1"]
+        all = ["project[alt]"]
+
+        [tool.uv]
+        constraint-dependencies = ["iniconfig>=2 ; extra != 'alt'"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "alt" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// An unconditional source shared by production and optional dependencies does
 /// not need a source activation context.
 #[test]

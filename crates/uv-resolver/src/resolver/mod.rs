@@ -2114,10 +2114,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     requirement: requirement.into_owned(),
                     extra: Some(extra.clone()),
                     group: None,
+                    recursive_extra: Some(source_extra.clone()),
                 };
                 if !variants.iter().any(|existing| {
                     existing.extra == variant.extra
                         && existing.group == variant.group
+                        && existing.recursive_extra == variant.recursive_extra
                         && existing.requirement == variant.requirement
                 }) {
                     variants.push(variant);
@@ -2222,12 +2224,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     python_requirement,
                 ) {
                     let source = DependencySource::from_requirement(&constraint);
-                    let marker = UniversalMarker::from_source_scope(
+                    let mut marker = UniversalMarker::from_source_scope(
                         constraint.marker,
                         project_name,
                         variant.extra.as_ref(),
                         variant.group.as_ref(),
                     );
+                    if let Some(recursive_extra) = variant.recursive_extra.as_ref() {
+                        marker.and(UniversalMarker::from_source_scope(
+                            MarkerTree::TRUE,
+                            project_name,
+                            Some(recursive_extra),
+                            None,
+                        ));
+                    }
                     let source_extra_scopes = UniversalMarker::source_extra_scopes(
                         constraint.marker,
                         project_name,

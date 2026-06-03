@@ -45,6 +45,8 @@ pub struct SourceVariant {
     pub requirement: Requirement,
     pub extra: Option<ExtraName>,
     pub group: Option<GroupName>,
+    /// The nested extra that selected this source during recursive expansion.
+    pub recursive_extra: Option<ExtraName>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -768,6 +770,7 @@ impl LoweredSourceRequirement {
             requirement: self.requirement,
             extra: self.source_extra,
             group: self.source_group,
+            recursive_extra: None,
         }
     }
 }
