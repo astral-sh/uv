@@ -751,6 +751,25 @@ impl Lock {
                 .values()
                 .flatten()
                 .any(|requirement| !requirement.extras.is_empty());
+        let workspace_projects = self
+            .members()
+            .iter()
+            .chain(self.root().map(|package| &package.id.name))
+            .collect::<FxHashSet<_>>();
+        let group_activated_projects = self
+            .packages
+            .iter()
+            .flat_map(|package| package.dependency_groups.values().flatten())
+            .map(|dependency| &dependency.package_id.name)
+            .chain(
+                self.manifest
+                    .dependency_groups
+                    .values()
+                    .flatten()
+                    .map(|requirement| &requirement.name),
+            )
+            .filter(|package| workspace_projects.contains(package))
+            .collect::<FxHashSet<_>>();
 
         for dependency in self.packages.iter().flat_map(|package| {
             package
@@ -781,6 +800,9 @@ impl Lock {
                     || kind.group().is_some_and(|group| {
                         metadata_only_groups.contains(&(item.package(), group))
                     })
+                    || (kind.extra().is_none()
+                        && kind.group().is_none()
+                        && group_activated_projects.contains(item.package()))
             }) {
                 self.version = ACTIVATION_MARKER_VERSION;
                 return;

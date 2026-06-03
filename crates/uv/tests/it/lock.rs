@@ -25217,6 +25217,57 @@ fn lock_multiple_sources_group_activated_extra_uses_incompatible_version() -> Re
     Ok(())
 }
 
+/// Dependency-group edges that activate workspace projects require version-2
+/// source-marker handling.
+#[test]
+fn lock_multiple_sources_group_activated_project_uses_incompatible_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [dependency-groups]
+        install = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [dependency-groups]
+        use = ["anyio"]
+
+        [tool.uv]
+        conflicts = [[
+            { package = "child" },
+            { group = "use" },
+        ]]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    let lock = context.read("uv.lock");
+    let Some(version) = lock.lines().next() else {
+        bail!("lockfile is empty");
+    };
+    assert_snapshot!(version, @"version = 2");
+
+    Ok(())
+}
+
 /// Metadata-only dependency groups with synthesized production fallbacks
 /// require version-3 lock handling.
 #[test]
