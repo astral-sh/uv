@@ -50,7 +50,7 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
 /// Unzip a `.zip` archive into the target directory while computing a digest of the extracted files.
 ///
 /// Returns the list of unpacked files and their sizes, along with a digest over the canonicalized
-/// extracted file paths, executable bits, sizes, and contents.
+/// extracted file paths, executable bits, sizes, contents, and empty leaf directories.
 pub fn unzip_and_hash(
     reader: fs_err::File,
     target: &Path,
@@ -945,7 +945,8 @@ mod tests {
     }
 
     #[test]
-    fn directory_digest_includes_empty_directories() -> Result<(), Box<dyn std::error::Error>> {
+    fn directory_digest_includes_empty_leaf_directories() -> Result<(), Box<dyn std::error::Error>>
+    {
         let base_entries = [
             ZipEntry {
                 path: "example/__init__.py",
@@ -1041,6 +1042,63 @@ mod tests {
         assert_eq!(empty_directory_digest, stream_digest);
         assert_eq!(stream_file_count, 2);
         assert!(stream_extract.join("example/empty-data").is_dir());
+
+        Ok(())
+    }
+
+    #[test]
+    fn directory_digest_hashes_zip_symlinks_as_regular_files()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let symlink_entries = [ZipEntry {
+            path: "example/link",
+            contents: b"target.txt",
+            mode: 0o120_777,
+        }];
+        let regular_file_entries = [ZipEntry {
+            path: "example/link",
+            contents: b"target.txt",
+            mode: 0o100_777,
+        }];
+
+        let temp_dir = tempfile::tempdir()?;
+        let symlink_archive_path = temp_dir.path().join("symlink.whl");
+        let regular_file_archive_path = temp_dir.path().join("regular.whl");
+        fs_err::write(
+            &symlink_archive_path,
+            zip_archive(&symlink_entries, b"symlink archive comment"),
+        )?;
+        fs_err::write(
+            &regular_file_archive_path,
+            zip_archive(&regular_file_entries, b"regular file archive comment"),
+        )?;
+
+        let symlink_extract = temp_dir.path().join("symlink");
+        let regular_file_extract = temp_dir.path().join("regular");
+        fs_err::create_dir_all(&symlink_extract)?;
+        fs_err::create_dir_all(&regular_file_extract)?;
+
+        let (_symlink_files, symlink_digest) =
+            unzip_and_hash(fs_err::File::open(&symlink_archive_path)?, &symlink_extract)?;
+        let (_regular_file_files, regular_file_digest) = unzip_and_hash(
+            fs_err::File::open(&regular_file_archive_path)?,
+            &regular_file_extract,
+        )?;
+
+        assert_eq!(symlink_digest, regular_file_digest);
+        assert!(fs_err::symlink_metadata(symlink_extract.join("example/link"))?.is_file());
+        assert_eq!(
+            fs_err::read(symlink_extract.join("example/link"))?,
+            b"target.txt"
+        );
+
+        let stream_extract = temp_dir.path().join("stream-symlink");
+        fs_err::create_dir_all(&stream_extract)?;
+        let (stream_file_count, stream_digest) =
+            stream_unzip_and_hash(&symlink_archive_path, &stream_extract)?;
+
+        assert_eq!(stream_file_count, 1);
+        assert_eq!(symlink_digest, stream_digest);
+        assert!(fs_err::symlink_metadata(stream_extract.join("example/link"))?.is_file());
 
         Ok(())
     }

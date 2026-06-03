@@ -85,6 +85,10 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
 /// Unpack a `.zip` archive into the target directory while computing a digest of the extracted
 /// files.
 ///
+/// The digest includes regular-file paths, executable bits, sizes, contents, and empty leaf
+/// directories. ZIP entries are never followed as symlinks; non-directory entries are materialized
+/// and hashed as regular files.
+///
 /// See [`unzip`] for details.
 pub async fn unzip_and_hash<D: Display, R: tokio::io::AsyncRead + Unpin>(
     source_hint: D,

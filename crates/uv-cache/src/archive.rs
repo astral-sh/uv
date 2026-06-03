@@ -22,9 +22,9 @@ impl ArchiveId {
         Self(uv_fastid::Id::insecure().to_string())
     }
 
-    /// Generate a content-addressed identifier for an extracted archive.
+    /// Create an archive identifier from a versioned directory digest.
     pub fn from_directory_digest(digest: &str) -> Self {
-        Self(format!("dirhash-{digest}"))
+        Self(digest.to_string())
     }
 }
 
@@ -45,5 +45,16 @@ impl FromStr for ArchiveId {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self(s.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ArchiveId;
+
+    #[test]
+    fn directory_digest_is_already_a_complete_archive_id() {
+        let digest = "dirhash-v1-digest";
+        assert_eq!(ArchiveId::from_directory_digest(digest).to_string(), digest);
     }
 }
