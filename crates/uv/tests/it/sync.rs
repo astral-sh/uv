@@ -10889,7 +10889,7 @@ fn sync_multiple_sources_path_disjunctive_extra_platform_marker() -> Result<()> 
 
         [tool.uv.sources]
         ok = [
-            { path = "./ok-2.0.0-py3-none-any.whl", marker = "extra == 'alt' or sys_platform == 'win32'" },
+            { path = "./ok-2.0.0-py3-none-any.whl", marker = "extra == 'alt' or sys_platform == 'never'" },
         ]
 
         [[tool.uv.index]]
@@ -11346,10 +11346,10 @@ fn sync_multiple_sources_included_group_does_not_override_direct_requirement() -
         requires-python = ">=3.12"
 
         [dependency-groups]
-        inner = ["ok ; sys_platform == 'win32'"]
+        inner = ["ok ; sys_platform == 'never'"]
         outer = [
             { include-group = "inner" },
-            "ok ; sys_platform != 'win32'",
+            "ok ; sys_platform != 'never'",
         ]
 
         [tool.uv.sources]
