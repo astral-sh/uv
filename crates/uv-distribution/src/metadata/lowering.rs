@@ -66,6 +66,12 @@ enum SourceSelection {
     Conditional,
 }
 
+fn marker_references_extras(marker: MarkerTree) -> bool {
+    let mut references_extras = false;
+    marker.visit_extras(|_, _| references_extras = true);
+    references_extras
+}
+
 impl LoweredRequirement {
     /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
     pub(crate) fn from_requirement<'data>(
@@ -179,7 +185,7 @@ impl LoweredRequirement {
 
                         if extra.is_none()
                             && group.is_none()
-                            && !source.marker().only_extras().is_true()
+                            && marker_references_extras(source.marker())
                         {
                             return false;
                         }
@@ -189,7 +195,7 @@ impl LoweredRequirement {
                     None => {
                         source.extra().is_some()
                             || source.group().is_some()
-                            || !source.marker().only_extras().is_true()
+                            || marker_references_extras(source.marker())
                     }
                 })
                 .cloned()
