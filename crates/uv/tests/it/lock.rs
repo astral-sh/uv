@@ -25266,6 +25266,81 @@ fn lock_multiple_sources_metadata_group_uses_incompatible_version() -> Result<()
     Ok(())
 }
 
+/// Metadata-only extras require version-2 source-marker handling even when the
+/// lock contains unrelated declared conflicts.
+#[test]
+fn lock_multiple_sources_metadata_extra_uses_incompatible_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let default_index = context.temp_dir.child("default");
+    fs_err::create_dir_all(&default_index)?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        default_index.join("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    let explicit_index = context.temp_dir.child("explicit");
+    fs_err::create_dir_all(&explicit_index)?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        explicit_index.join("ok-2.0.0-py3-none-any.whl"),
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [project.optional-dependencies]
+        foo = []
+        bar = []
+        baz = []
+
+        [tool.uv]
+        conflicts = [
+            [
+                { extra = "bar" },
+                { extra = "baz" },
+            ],
+        ]
+
+        [tool.uv.sources]
+        ok = [
+            { index = "explicit", marker = "extra == 'foo'" },
+        ]
+
+        [[tool.uv.index]]
+        name = "explicit"
+        url = "./explicit"
+        format = "flat"
+        explicit = true
+
+        [[tool.uv.index]]
+        name = "default"
+        url = "./default"
+        format = "flat"
+        default = true
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    let lock = context.read("uv.lock");
+    let Some(version) = lock.lines().next() else {
+        bail!("lockfile is empty");
+    };
+    assert_snapshot!(version, @"version = 2");
+
+    Ok(())
+}
+
 /// Like `lock_multiple_sources_extra_base_and_optional`, but with an explicit
 /// index instead of a URL. The base dependency should remain on the default
 /// index when the extra is disabled.

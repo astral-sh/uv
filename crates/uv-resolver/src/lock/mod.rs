@@ -698,6 +698,17 @@ impl Lock {
                     .map(|group| (&package.id.name, group))
             })
             .collect::<FxHashSet<_>>();
+        let metadata_only_extras = self
+            .packages
+            .iter()
+            .flat_map(|package| {
+                package
+                    .provides_extras()
+                    .iter()
+                    .filter(|extra| !package.optional_dependencies.contains_key(*extra))
+                    .map(|extra| (&package.id.name, extra))
+            })
+            .collect::<FxHashSet<_>>();
         let has_group_activated_extras = self
             .packages
             .iter()
@@ -730,12 +741,15 @@ impl Lock {
                 return;
             };
 
-            // Version-1 readers only activate groups represented by resolved dependency-group
-            // edges, not groups present solely in package metadata.
+            // Version-1 readers only activate extras and groups represented by resolved
+            // dependency edges, not activation items present solely in package metadata.
             if include.iter().chain(&exclude).any(|item| {
-                item.kind()
-                    .group()
-                    .is_some_and(|group| metadata_only_groups.contains(&(item.package(), group)))
+                let kind = item.kind();
+                kind.extra()
+                    .is_some_and(|extra| metadata_only_extras.contains(&(item.package(), extra)))
+                    || kind.group().is_some_and(|group| {
+                        metadata_only_groups.contains(&(item.package(), group))
+                    })
             }) {
                 self.version = ACTIVATION_MARKER_VERSION;
                 return;
