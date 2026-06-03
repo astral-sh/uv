@@ -1260,16 +1260,15 @@ impl Lock {
         // conflict portion of each edge marker participate in selection.
         let mut activated_contexts = root_activated_contexts.clone();
         let mut seen_activation_contexts = FxHashSet::default();
-        loop {
+        let mut observed_activation_contexts = Vec::new();
+        let activation_contexts = loop {
             if !seen_activation_contexts.insert(activated_contexts.clone()) {
                 // An unstable activation graph has no single selected source context. Audit every
                 // context observed in the cycle rather than silently omitting a potentially
                 // affected package.
-                for activation_context in seen_activation_contexts {
-                    activated_contexts.extend(activation_context);
-                }
-                break;
+                break observed_activation_contexts;
             }
+            observed_activation_contexts.push(activated_contexts.clone());
 
             let mut next_activated_contexts = root_activated_contexts.clone();
             for (package, requirement) in &group_requirements {
@@ -1305,41 +1304,43 @@ impl Lock {
             );
 
             if next_activated_contexts == activated_contexts {
-                break;
+                break vec![activated_contexts];
             }
             activated_contexts = next_activated_contexts;
-        }
+        };
 
-        walk_dependencies(
-            self,
-            &workspace_member_ids,
-            groups,
-            queue,
-            seen,
-            |dep| {
-                source_edge_is_active(
-                    dep,
-                    &self.source_activation_contexts,
-                    &activated_contexts,
-                    &[],
-                )
-            },
-            |package, _| {
-                // Collect non-workspace packages that have version information and pass the
-                // caller's filter.
-                if workspace_member_ids.contains(&package.id) || !collect_filter(package) {
-                    return;
-                }
-                if let Some(version) = package.version() {
-                    visit(package, version);
-                } else {
-                    trace!(
-                        "Skipping audit for `{}` because it has no version information",
-                        package.name()
-                    );
-                }
-            },
-        );
+        for activated_contexts in activation_contexts {
+            walk_dependencies(
+                self,
+                &workspace_member_ids,
+                groups,
+                queue.clone(),
+                seen.clone(),
+                |dep| {
+                    source_edge_is_active(
+                        dep,
+                        &self.source_activation_contexts,
+                        &activated_contexts,
+                        &[],
+                    )
+                },
+                |package, _| {
+                    // Collect non-workspace packages that have version information and pass the
+                    // caller's filter.
+                    if workspace_member_ids.contains(&package.id) || !collect_filter(package) {
+                        return;
+                    }
+                    if let Some(version) = package.version() {
+                        visit(package, version);
+                    } else {
+                        trace!(
+                            "Skipping audit for `{}` because it has no version information",
+                            package.name()
+                        );
+                    }
+                },
+            );
+        }
     }
 
     /// Return the workspace root used to generate this lock.
