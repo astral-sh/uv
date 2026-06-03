@@ -51,13 +51,13 @@ impl FlatIndex {
     }
 
     /// Get the [`FlatDistributions`] for the given package name.
-    pub fn get(&self, package_name: &PackageName) -> Option<&FlatDistributions> {
+    pub(crate) fn get(&self, package_name: &PackageName) -> Option<&FlatDistributions> {
         self.index.get(package_name)
     }
 
     /// Whether any `--find-links` entries could not be resolved due to a lack of network
     /// connectivity.
-    pub fn offline(&self) -> bool {
+    pub(crate) fn offline(&self) -> bool {
         self.offline
     }
 }
@@ -70,7 +70,7 @@ pub struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);
 impl FlatDistributions {
     /// Collect all files from a `--find-links` target into a [`FlatIndex`].
     #[instrument(skip_all)]
-    pub fn from_entries(
+    pub(crate) fn from_entries(
         entries: Vec<FlatIndexEntry>,
         tags: Option<&Tags>,
         hasher: &HashStrategy,
@@ -85,13 +85,8 @@ impl FlatDistributions {
     }
 
     /// Returns an [`Iterator`] over the distributions.
-    pub fn iter(&self) -> impl Iterator<Item = (&Version, &PrioritizedDist)> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&Version, &PrioritizedDist)> {
         self.0.iter()
-    }
-
-    /// Removes the [`PrioritizedDist`] for the given version.
-    pub fn remove(&mut self, version: &Version) -> Option<PrioritizedDist> {
-        self.0.remove(version)
     }
 
     /// Add the given [`File`] to the [`FlatDistributions`] for the given package.

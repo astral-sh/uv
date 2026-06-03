@@ -101,7 +101,7 @@ impl PythonRequirement {
     /// than the current `Requires-Python` minimum.
     ///
     /// Returns `None` if the given range is not narrower than the current range.
-    pub fn narrow(&self, target: &RequiresPythonRange) -> Option<Self> {
+    pub(crate) fn narrow(&self, target: &RequiresPythonRange) -> Option<Self> {
         Some(Self {
             exact: self.exact.clone(),
             installed: self.installed.clone(),
@@ -114,7 +114,7 @@ impl PythonRequirement {
     ///
     /// For example, if the current requirement is `>=3.10`, and the split point is `3.11`, then
     /// the result will be `>=3.10 and <3.11` and `>=3.11`.
-    pub fn split(&self, at: Bound<Version>) -> Option<(Self, Self)> {
+    pub(crate) fn split(&self, at: Bound<Version>) -> Option<(Self, Self)> {
         let (lower, upper) = self.target.split(at)?;
         Some((
             Self {
@@ -134,27 +134,27 @@ impl PythonRequirement {
 
     /// Returns `true` if the minimum version of Python required by the target is greater than the
     /// installed version.
-    pub fn raises(&self, target: &RequiresPythonRange) -> bool {
+    pub(crate) fn raises(&self, target: &RequiresPythonRange) -> bool {
         target.lower() > self.target.range().lower()
     }
 
     /// Return the exact version of Python.
-    pub fn exact(&self) -> &Version {
+    pub(crate) fn exact(&self) -> &Version {
         &self.exact
     }
 
     /// Return the installed version of Python.
-    pub fn installed(&self) -> &RequiresPython {
+    pub(crate) fn installed(&self) -> &RequiresPython {
         &self.installed
     }
 
     /// Return the target version of Python.
-    pub fn target(&self) -> &RequiresPython {
+    pub(crate) fn target(&self) -> &RequiresPython {
         &self.target
     }
 
     /// Return the source of the [`PythonRequirement`].
-    pub fn source(&self) -> PythonRequirementSource {
+    pub(crate) fn source(&self) -> PythonRequirementSource {
         self.source
     }
 
@@ -170,7 +170,7 @@ impl PythonRequirement {
     /// Return a [`MarkerTree`] representing the Python requirement.
     ///
     /// See: [`RequiresPython::to_marker_tree`]
-    pub fn to_marker_tree(&self) -> MarkerTree {
+    pub(crate) fn to_marker_tree(&self) -> MarkerTree {
         self.target.to_marker_tree()
     }
 }

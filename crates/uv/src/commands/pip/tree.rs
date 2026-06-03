@@ -218,7 +218,7 @@ pub(crate) struct DisplayDependencyGraph<'env> {
 
 impl<'env> DisplayDependencyGraph<'env> {
     /// Create a new [`DisplayDependencyGraph`] for the set of installed distributions.
-    pub(crate) fn new(
+    fn new(
         depth: usize,
         prune: &[PackageName],
         package: &[PackageName],
@@ -620,7 +620,7 @@ impl<'env> DisplayDependencyGraph<'env> {
     }
 
     /// Depth-first traverse the nodes to render the tree.
-    pub(crate) fn render(&self) -> Vec<String> {
+    fn render(&self) -> Vec<String> {
         let mut path = Vec::new();
         let mut lines = Vec::with_capacity(self.graph.node_count());
         let mut visited =

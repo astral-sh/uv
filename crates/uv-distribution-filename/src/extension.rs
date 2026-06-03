@@ -102,7 +102,7 @@ impl SourceDistExtension {
     }
 
     /// Return the name for the extension.
-    pub fn name(&self) -> &'static str {
+    pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Tar => "tar",
             Self::TarBz2 => "tar.bz2",

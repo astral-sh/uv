@@ -1420,7 +1420,7 @@ impl PathArchivePointer {
     }
 
     /// Write an [`PathArchivePointer`] to the cache.
-    pub(crate) async fn write_to(&self, entry: &CacheEntry) -> Result<(), Error> {
+    async fn write_to(&self, entry: &CacheEntry) -> Result<(), Error> {
         write_atomic(entry.path(), rmp_serde::to_vec(&self)?)
             .await
             .map_err(Error::CacheWrite)

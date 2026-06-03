@@ -258,7 +258,7 @@ pub(crate) struct NetworkSettings {
 
 impl NetworkSettings {
     #[allow(deprecated)]
-    pub(crate) fn resolve(
+    fn resolve(
         args: &GlobalArgs,
         workspace: Option<&FilesystemOptions>,
         environment: &EnvironmentOptions,
@@ -4054,7 +4054,7 @@ pub(crate) struct ResolverSettings {
 
 impl ResolverSettings {
     /// Resolve the [`ResolverSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn combine(
+    fn combine(
         mut args: ResolverOptions,
         filesystem: Option<FilesystemOptions>,
         environment: &EnvironmentOptions,
@@ -4145,7 +4145,7 @@ pub(crate) struct ResolverInstallerSettings {
 
 impl ResolverInstallerSettings {
     /// Reconcile the [`ResolverInstallerSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn combine(
+    fn combine(
         args: ResolverInstallerOptions,
         filesystem: Option<FilesystemOptions>,
         environment: &EnvironmentOptions,
@@ -4302,7 +4302,7 @@ pub(crate) struct PipSettings {
 
 impl PipSettings {
     /// Resolve the [`PipSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn combine(
+    fn combine(
         args: PipOptions,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,

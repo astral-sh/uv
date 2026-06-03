@@ -23,7 +23,7 @@ use uv_pypi_types::{
 };
 
 #[derive(Debug, Error)]
-pub(crate) enum RequirementError {
+enum RequirementError {
     #[error(transparent)]
     VerbatimUrlError(#[from] uv_pep508::VerbatimUrlError),
     #[error(transparent)]
@@ -73,11 +73,6 @@ impl Requirement {
         self.marker.evaluate_optional_environment(env, extras)
     }
 
-    /// Returns `true` if the requirement is editable.
-    pub fn is_editable(&self) -> bool {
-        self.source.is_editable()
-    }
-
     /// Convert to a [`Requirement`] with a relative path based on the given root.
     pub fn relative_to(self, path: &Path) -> Result<Self, io::Error> {
         Ok(Self {
@@ -90,7 +85,7 @@ impl Requirement {
     #[must_use]
     pub fn to_absolute(self, path: &Path) -> Self {
         Self {
-            source: self.source.to_absolute(path),
+            source: self.source.into_absolute(path),
             ..self
         }
     }
@@ -609,7 +604,7 @@ pub enum RequirementSource {
 impl RequirementSource {
     /// Construct a [`RequirementSource`] for a URL source, given a URL parsed into components and
     /// the PEP 508 string (after the `@`) as [`VerbatimUrl`].
-    pub fn from_parsed_url(parsed_url: ParsedUrl, url: VerbatimUrl) -> Self {
+    pub(crate) fn from_parsed_url(parsed_url: ParsedUrl, url: VerbatimUrl) -> Self {
         match parsed_url {
             ParsedUrl::Path(local_file) => Self::Path {
                 install_path: local_file.install_path.clone(),
@@ -712,37 +707,6 @@ impl RequirementSource {
         }
     }
 
-    /// Convert the source to a version specifier or URL.
-    ///
-    /// If the source is a registry and the specifier is empty, it returns `None`.
-    pub fn version_or_url(&self) -> Option<VersionOrUrl<VerbatimParsedUrl>> {
-        match self {
-            Self::Registry { specifier, .. } => {
-                if specifier.is_empty() {
-                    None
-                } else {
-                    Some(VersionOrUrl::VersionSpecifier(specifier.clone()))
-                }
-            }
-            Self::Url { .. }
-            | Self::GitPath { .. }
-            | Self::GitDirectory { .. }
-            | Self::Path { .. }
-            | Self::Directory { .. } => Some(VersionOrUrl::Url(self.to_verbatim_parsed_url()?)),
-        }
-    }
-
-    /// Returns `true` if the source is editable.
-    pub fn is_editable(&self) -> bool {
-        matches!(
-            self,
-            Self::Directory {
-                editable: Some(true),
-                ..
-            }
-        )
-    }
-
     /// Returns `true` if the source is empty.
     pub fn is_empty(&self) -> bool {
         match self {
@@ -768,7 +732,7 @@ impl RequirementSource {
     }
 
     /// Convert the source to a [`RequirementSource`] relative to the given path.
-    pub fn relative_to(self, path: &Path) -> Result<Self, io::Error> {
+    fn relative_to(self, path: &Path) -> Result<Self, io::Error> {
         match self {
             Self::Registry { .. }
             | Self::Url { .. }
@@ -802,7 +766,7 @@ impl RequirementSource {
 
     /// Convert the source to a [`RequirementSource`] with an absolute path based on the given root.
     #[must_use]
-    pub fn to_absolute(self, root: &Path) -> Self {
+    fn into_absolute(self, root: &Path) -> Self {
         match self {
             Self::Registry { .. }
             | Self::Url { .. }

@@ -24,7 +24,7 @@ pub struct BuildRequires {
 impl BuildRequires {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
-    pub fn from_metadata23(metadata: uv_pypi_types::BuildRequires) -> Self {
+    fn from_metadata23(metadata: uv_pypi_types::BuildRequires) -> Self {
         Self {
             name: metadata.name,
             requires_dist: metadata

@@ -368,17 +368,6 @@ impl InstalledDist {
         }
     }
 
-    /// Return the [`CacheInfo`] of the distribution, if any.
-    pub fn cache_info(&self) -> Option<&CacheInfo> {
-        match &self.kind {
-            InstalledDistKind::Registry(dist) => dist.cache_info.as_ref(),
-            InstalledDistKind::Url(dist) => dist.cache_info.as_ref(),
-            InstalledDistKind::EggInfoDirectory(..) => None,
-            InstalledDistKind::EggInfoFile(..) => None,
-            InstalledDistKind::LegacyEditable(..) => None,
-        }
-    }
-
     /// Return the [`BuildInfo`] of the distribution, if any.
     pub fn build_info(&self) -> Option<&BuildInfo> {
         match &self.kind {
@@ -474,16 +463,6 @@ impl InstalledDist {
         Ok(self.metadata_cache.get().expect("metadata should be set"))
     }
 
-    /// Return the `INSTALLER` of the distribution.
-    pub fn read_installer(&self) -> Result<Option<String>, InstalledDistError> {
-        let path = self.install_path().join("INSTALLER");
-        match fs::read_to_string(path) {
-            Ok(installer) => Ok(Some(installer.trim().to_owned())),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(err) => Err(err.into()),
-        }
-    }
-
     /// Return the supported wheel tags for the distribution from the `WHEEL` file, if available.
     pub fn read_tags(&self) -> Result<Option<&ExpandedTags>, InstalledDistError> {
         if let Some(tags) = self.tags_cache.get() {
@@ -534,7 +513,7 @@ impl InstalledDist {
     }
 
     /// Return true if the distribution refers to a local file or directory.
-    pub fn is_local(&self) -> bool {
+    pub(crate) fn is_local(&self) -> bool {
         match &self.kind {
             InstalledDistKind::Registry(_) => false,
             InstalledDistKind::Url(dist) => {

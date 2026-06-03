@@ -47,7 +47,7 @@ pub struct FlatIndexEntry {
 
 impl FlatIndexEntry {
     /// Return the distribution filename.
-    pub fn filename(&self) -> &DistFilename {
+    pub(crate) fn filename(&self) -> &DistFilename {
         &self.filename
     }
 

@@ -214,9 +214,9 @@ type FindPythonResult = Result<PythonInstallation, PythonNotFound>;
 /// See [`FindPythonResult`].
 #[derive(Clone, Debug, Error)]
 pub struct PythonNotFound {
-    pub request: PythonRequest,
-    pub python_preference: PythonPreference,
-    pub environment_preference: EnvironmentPreference,
+    pub(crate) request: PythonRequest,
+    pub(crate) python_preference: PythonPreference,
+    pub(crate) environment_preference: EnvironmentPreference,
 }
 
 /// A location for discovery of a Python installation or interpreter.
@@ -1755,7 +1755,7 @@ impl PythonVariant {
         }
     }
 
-    pub fn is_freethreaded(self) -> bool {
+    fn is_freethreaded(self) -> bool {
         match self {
             Self::Default | Self::Debug | Self::Gil | Self::GilDebug => false,
             Self::Freethreaded | Self::FreethreadedDebug => true,
@@ -2129,7 +2129,7 @@ impl PythonRequest {
     }
 
     /// Whether this request opts-in to a debug Python version.
-    pub(crate) fn allows_debug(&self) -> bool {
+    fn allows_debug(&self) -> bool {
         match self {
             Self::Default => false,
             Self::Any => true,
@@ -2142,7 +2142,7 @@ impl PythonRequest {
     }
 
     /// Whether this request opts-in to an alternative Python implementation, e.g., PyPy.
-    pub(crate) fn allows_alternative_implementations(&self) -> bool {
+    fn allows_alternative_implementations(&self) -> bool {
         match self {
             Self::Default => false,
             Self::Any => true,
@@ -2244,7 +2244,7 @@ impl PythonSource {
     }
 
     /// Whether a pre-release Python installation from this source can be used without opt-in.
-    pub(crate) fn allows_prereleases(self) -> bool {
+    fn allows_prereleases(self) -> bool {
         match self {
             Self::Managed | Self::Registry | Self::MicrosoftStore => false,
             Self::SearchPath
@@ -2259,7 +2259,7 @@ impl PythonSource {
     }
 
     /// Whether a debug Python installation from this source can be used without opt-in.
-    pub(crate) fn allows_debug(self) -> bool {
+    fn allows_debug(self) -> bool {
         match self {
             Self::Managed | Self::Registry | Self::MicrosoftStore => false,
             Self::SearchPath
@@ -2274,7 +2274,7 @@ impl PythonSource {
     }
 
     /// Whether an alternative Python implementation from this source can be used without opt-in.
-    pub(crate) fn allows_alternative_implementations(self) -> bool {
+    fn allows_alternative_implementations(self) -> bool {
         match self {
             Self::Managed
             | Self::Registry
@@ -2785,7 +2785,7 @@ impl VersionRequest {
     }
 
     /// Return the major version segment of the request, if any.
-    pub(crate) fn major(&self) -> Option<u8> {
+    fn major(&self) -> Option<u8> {
         match self {
             Self::Any | Self::Default | Self::Range(_, _) => None,
             Self::Major(major, _) => Some(*major),
@@ -2797,7 +2797,7 @@ impl VersionRequest {
     }
 
     /// Return the minor version segment of the request, if any.
-    pub(crate) fn minor(&self) -> Option<u8> {
+    fn minor(&self) -> Option<u8> {
         match self {
             Self::Any | Self::Default | Self::Range(_, _) => None,
             Self::Major(_, _) => None,
@@ -2809,7 +2809,7 @@ impl VersionRequest {
     }
 
     /// Return the patch version segment of the request, if any.
-    pub(crate) fn patch(&self) -> Option<u8> {
+    fn patch(&self) -> Option<u8> {
         match self {
             Self::Any | Self::Default | Self::Range(_, _) => None,
             Self::Major(_, _) => None,
@@ -2821,7 +2821,7 @@ impl VersionRequest {
     }
 
     /// Return the pre-release segment of the request, if any.
-    pub(crate) fn prerelease(&self) -> Option<&Prerelease> {
+    fn prerelease(&self) -> Option<&Prerelease> {
         match self {
             Self::Any | Self::Default | Self::Range(_, _) => None,
             Self::Major(_, _) => None,
@@ -2984,7 +2984,7 @@ impl VersionRequest {
     ///
     /// WARNING: Use [`VersionRequest::matches_interpreter`] too. This method is only suitable to
     /// avoid querying interpreters if it's clear it cannot fulfill the request.
-    pub(crate) fn matches_version(&self, version: &PythonVersion) -> bool {
+    fn matches_version(&self, version: &PythonVersion) -> bool {
         match self {
             Self::Any | Self::Default => true,
             Self::Major(major, _) => version.major() == *major,
@@ -3187,7 +3187,7 @@ impl VersionRequest {
     }
 
     /// Whether this request is for a free-threaded Python variant.
-    pub(crate) fn is_freethreaded(&self) -> bool {
+    fn is_freethreaded(&self) -> bool {
         match self {
             Self::Any | Self::Default => false,
             Self::Major(_, variant)
@@ -3216,7 +3216,7 @@ impl VersionRequest {
     /// Convert this request into a concrete PEP 440 `Version` when possible.
     ///
     /// Returns `None` for non-concrete requests
-    pub fn as_pep440_version(&self) -> Option<Version> {
+    fn as_pep440_version(&self) -> Option<Version> {
         match self {
             Self::Default | Self::Any | Self::Range(_, _) => None,
             Self::Major(major, _) => Some(Version::new([u64::from(*major)])),

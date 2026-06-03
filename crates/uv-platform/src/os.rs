@@ -24,7 +24,7 @@ impl Os {
         matches!(self.0, target_lexicon::OperatingSystem::Emscripten)
     }
 
-    pub fn is_macos(&self) -> bool {
+    pub(crate) fn is_macos(self) -> bool {
         matches!(self.0, target_lexicon::OperatingSystem::Darwin(_))
     }
 

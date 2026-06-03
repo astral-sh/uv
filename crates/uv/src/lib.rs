@@ -62,7 +62,7 @@ pub(crate) mod child;
 pub(crate) mod commands;
 #[cfg(not(feature = "self-update"))]
 mod install_source;
-pub(crate) mod logging;
+mod logging;
 pub(crate) mod printer;
 pub(crate) mod settings;
 

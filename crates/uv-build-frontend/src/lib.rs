@@ -723,7 +723,7 @@ impl SourceBuild {
 
     /// Try calling `prepare_metadata_for_build_wheel` to get the metadata without executing the
     /// actual build.
-    pub async fn get_metadata_without_build(&mut self) -> Result<Option<PathBuf>, Error> {
+    async fn get_metadata_without_build(&mut self) -> Result<Option<PathBuf>, Error> {
         // We've already called this method; return the existing result.
         if let Some(metadata_dir) = &self.metadata_directory {
             return Ok(Some(metadata_dir.clone()));

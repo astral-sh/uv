@@ -469,10 +469,10 @@ impl RemoveTarget {
 #[derive(Debug, thiserror::Error)]
 #[error("The dependency `{package}` could not be found in {}", dependency_type.toml_table_name())]
 pub(crate) struct DependencyNotFoundError {
-    pub(crate) package: PackageName,
-    pub(crate) dependency_type: DependencyType,
+    package: PackageName,
+    dependency_type: DependencyType,
     /// Other dependency types where this package was found.
-    pub(crate) found_in: Vec<DependencyType>,
+    found_in: Vec<DependencyType>,
 }
 
 impl uv_errors::Hint for DependencyNotFoundError {

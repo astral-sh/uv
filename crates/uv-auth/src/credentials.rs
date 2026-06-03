@@ -91,7 +91,7 @@ impl Password {
     }
 
     /// Return the [`Password`] as a string slice.
-    pub(crate) fn as_str(&self) -> &str {
+    fn as_str(&self) -> &str {
         self.0.as_str()
     }
 }
@@ -112,7 +112,7 @@ impl Token {
     }
 
     /// Return the [`Token`] as a byte slice.
-    pub(crate) fn as_slice(&self) -> &[u8] {
+    fn as_slice(&self) -> &[u8] {
         self.0.as_slice()
     }
 
@@ -122,7 +122,7 @@ impl Token {
     }
 
     /// Return whether the [`Token`] is empty.
-    pub(crate) fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 }
@@ -157,14 +157,14 @@ impl Credentials {
         }
     }
 
-    pub(crate) fn to_username(&self) -> Username {
+    fn to_username(&self) -> Username {
         match self {
             Self::Basic { username, .. } => username.clone(),
             Self::Bearer { .. } => Username::none(),
         }
     }
 
-    pub(crate) fn as_username(&self) -> Cow<'_, Username> {
+    fn as_username(&self) -> Cow<'_, Username> {
         match self {
             Self::Basic { username, .. } => Cow::Borrowed(username),
             Self::Bearer { .. } => Cow::Owned(Username::none()),
@@ -178,7 +178,7 @@ impl Credentials {
         }
     }
 
-    pub(crate) fn is_authenticated(&self) -> bool {
+    fn is_authenticated(&self) -> bool {
         match self {
             Self::Basic {
                 username: _,
@@ -188,7 +188,7 @@ impl Credentials {
         }
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         match self {
             Self::Basic { username, password } => username.is_none() && password.is_none(),
             Self::Bearer { token } => token.is_empty(),

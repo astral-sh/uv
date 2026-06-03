@@ -33,9 +33,7 @@ use crate::implementation::{
 use crate::installation::{self, PythonInstallationKey};
 use crate::interpreter::Interpreter;
 use crate::python_version::PythonVersion;
-use crate::{
-    PythonInstallationMinorVersionKey, PythonRequest, PythonVariant, macos_dylib, sysconfig,
-};
+use crate::{PythonInstallationMinorVersionKey, PythonVariant, macos_dylib, sysconfig};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -327,7 +325,7 @@ impl ManagedPythonInstallation {
         }
     }
 
-    pub(crate) fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
+    fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
         let path = path.as_ref();
 
         let key = PythonInstallationKey::from_str(
@@ -464,7 +462,7 @@ impl ManagedPythonInstallation {
     }
 
     /// The [`PythonVersion`] of the toolchain.
-    pub fn version(&self) -> PythonVersion {
+    pub(crate) fn version(&self) -> PythonVersion {
         self.key.version()
     }
 
@@ -485,7 +483,7 @@ impl ManagedPythonInstallation {
         &self.key
     }
 
-    pub fn platform(&self) -> &Platform {
+    pub(crate) fn platform(&self) -> &Platform {
         self.key.platform()
     }
 
@@ -496,26 +494,6 @@ impl ManagedPythonInstallation {
 
     pub fn minor_version_key(&self) -> &PythonInstallationMinorVersionKey {
         PythonInstallationMinorVersionKey::ref_cast(&self.key)
-    }
-
-    pub fn satisfies(&self, request: &PythonRequest) -> bool {
-        match request {
-            PythonRequest::File(path) => self.executable(false) == *path,
-            PythonRequest::Default | PythonRequest::Any => true,
-            PythonRequest::Directory(path) => self.path() == *path,
-            PythonRequest::ExecutableName(name) => self
-                .executable(false)
-                .file_name()
-                .is_some_and(|filename| filename.to_string_lossy() == *name),
-            PythonRequest::Implementation(implementation) => {
-                *implementation == self.implementation()
-            }
-            PythonRequest::ImplementationVersion(implementation, version) => {
-                *implementation == self.implementation() && version.matches_version(&self.version())
-            }
-            PythonRequest::Version(version) => version.matches_version(&self.version()),
-            PythonRequest::Key(request) => request.satisfied_by_key(self.key()),
-        }
     }
 
     /// Ensure the environment contains the canonical Python executable names.
@@ -713,11 +691,13 @@ impl ManagedPythonInstallation {
         true
     }
 
-    pub fn url(&self) -> Option<&str> {
+    #[cfg(windows)]
+    pub(crate) fn url(&self) -> Option<&str> {
         self.url.as_deref()
     }
 
-    pub fn sha256(&self) -> Option<&str> {
+    #[cfg(windows)]
+    pub(crate) fn sha256(&self) -> Option<&str> {
         self.sha256.as_deref()
     }
 }

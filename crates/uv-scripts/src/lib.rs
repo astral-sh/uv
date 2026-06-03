@@ -42,15 +42,6 @@ impl Pep723Item {
         }
     }
 
-    /// Return the path of the PEP 723 item, if any.
-    pub fn path(&self) -> Option<&Path> {
-        match self {
-            Self::Script(script) => Some(&script.path),
-            Self::Stdin(..) => None,
-            Self::Remote(..) => None,
-        }
-    }
-
     /// Return the PEP 723 script, if any.
     pub fn as_script(&self) -> Option<&Pep723Script> {
         match self {

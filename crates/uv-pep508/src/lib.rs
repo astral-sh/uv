@@ -403,13 +403,6 @@ impl<T: Pep508Url> Requirement<T> {
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct Extras(Vec<ExtraName>);
 
-impl Extras {
-    /// Parse a list of extras.
-    pub fn parse<T: Pep508Url>(input: &str) -> Result<Self, Pep508Error<T>> {
-        Ok(Self(parse_extras_cursor(&mut Cursor::new(input))?))
-    }
-}
-
 /// The actual version specifier or URL to install.
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum VersionOrUrl<T: Pep508Url = VerbatimUrl> {

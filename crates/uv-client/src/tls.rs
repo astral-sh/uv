@@ -16,7 +16,7 @@ use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
 #[derive(Debug, Clone)]
-pub(crate) enum CertificateSource {
+enum CertificateSource {
     SslCertFile(PathBuf),
     SslCertDir(PathBuf),
 }
@@ -37,7 +37,7 @@ impl CertificateSource {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct DiagnosticCertificate(CertificateDer<'static>);
+struct DiagnosticCertificate(CertificateDer<'static>);
 
 impl DiagnosticCertificate {
     fn parse(&self) -> Option<X509Certificate<'_>> {
@@ -52,14 +52,14 @@ impl DiagnosticCertificate {
 }
 
 #[derive(Debug)]
-pub(crate) struct InvalidCertificateWarning {
+struct InvalidCertificateWarning {
     source: CertificateSource,
     certificate: DiagnosticCertificate,
     reason: InvalidCertificateReason,
 }
 
 #[derive(Debug)]
-pub(crate) enum InvalidCertificateReason {
+enum InvalidCertificateReason {
     UnsupportedCriticalExtension,
     BadDer,
     BadDerTime,

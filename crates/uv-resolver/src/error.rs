@@ -417,7 +417,7 @@ impl NoSolutionError {
     }
 
     /// Return the computed PubGrub hints.
-    pub fn pubgrub_hints(&self) -> &IndexSet<PubGrubHint> {
+    fn pubgrub_hints(&self) -> &IndexSet<PubGrubHint> {
         &self.cached().1
     }
 
@@ -1153,7 +1153,7 @@ impl SentinelRange<'_> {
 
     /// Returns `true` if the range appears to be, e.g., `>1.0.0, <1.0.0+[max]` (i.e., a sentinel
     /// range with the non-local version removed).
-    pub fn is_complement(&self) -> bool {
+    fn is_complement(&self) -> bool {
         self.0.iter().all(|(lower, upper)| {
             let (Bound::Excluded(lower), Bound::Excluded(upper)) = (lower, upper) else {
                 return false;
@@ -1325,7 +1325,7 @@ pub struct NoSolutionHeader {
 
 impl NoSolutionHeader {
     /// Create a new [`NoSolutionHeader`] with the given [`ResolverEnvironment`].
-    pub fn new(env: ResolverEnvironment) -> Self {
+    fn new(env: ResolverEnvironment) -> Self {
         Self { env, context: None }
     }
 

@@ -7,11 +7,6 @@ use uv_normalize::PackageName;
 pub struct Excludes(FxHashSet<PackageName>);
 
 impl Excludes {
-    /// Return an iterator over all package names in the exclusion set.
-    pub fn iter(&self) -> impl Iterator<Item = &PackageName> {
-        self.0.iter()
-    }
-
     /// Check if a package is excluded.
     pub fn contains(&self, name: &PackageName) -> bool {
         self.0.contains(name)

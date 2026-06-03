@@ -26,23 +26,9 @@ pub struct RequiresDist {
 }
 
 impl RequiresDist {
-    /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
-    /// dependencies.
-    pub fn from_metadata23(metadata: uv_pypi_types::RequiresDist) -> Self {
-        Self {
-            name: metadata.name,
-            requires_dist: Box::into_iter(metadata.requires_dist)
-                .map(Requirement::from)
-                .collect(),
-            provides_extra: metadata.provides_extra,
-            dependency_groups: BTreeMap::default(),
-            dynamic: metadata.dynamic,
-        }
-    }
-
     /// Lower by considering `tool.uv` in `pyproject.toml` if present, used for Git and directory
     /// dependencies.
-    pub async fn from_project_maybe_workspace(
+    pub(crate) async fn from_project_maybe_workspace(
         metadata: uv_pypi_types::RequiresDist,
         install_path: &Path,
         git_member: Option<&GitWorkspaceMember<'_>>,
@@ -445,11 +431,6 @@ impl FlatRequiresDist {
         }
 
         Self(flattened.into_boxed_slice())
-    }
-
-    /// Consume the [`FlatRequiresDist`] and return the inner requirements.
-    pub fn into_inner(self) -> Box<[Requirement]> {
-        self.0
     }
 }
 
