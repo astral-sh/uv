@@ -565,10 +565,14 @@ impl Lock {
             }
         }
 
-        // Build up a map from ID to extras.
+        // Build up a map from ID to declared extras.
         let mut extras_by_id = FxHashMap::default();
         for dist in &packages {
-            for extra in dist.optional_dependencies.keys() {
+            for extra in dist
+                .optional_dependencies
+                .keys()
+                .chain(dist.provides_extras())
+            {
                 extras_by_id
                     .entry(dist.id.clone())
                     .or_insert_with(FxHashSet::default)

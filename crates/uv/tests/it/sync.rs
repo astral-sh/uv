@@ -10633,6 +10633,99 @@ fn sync_multiple_sources_index_extra_with_extra_marker() -> Result<()> {
     Ok(())
 }
 
+/// Requested extras used only by a source-selection marker must remain on the
+/// parent dependency edge.
+#[test]
+fn sync_multiple_sources_index_metadata_only_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let default_index = context.temp_dir.child("default");
+    let explicit_index = context.temp_dir.child("explicit");
+    fs_err::create_dir_all(&default_index)?;
+    fs_err::create_dir_all(&explicit_index)?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        default_index.join("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        explicit_index.join("ok-2.0.0-py3-none-any.whl"),
+    )?;
+
+    let pkg_a = context.temp_dir.child("pkg_a");
+    fs_err::create_dir_all(&pkg_a)?;
+    pkg_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [project.optional-dependencies]
+        alt = ["ok"]
+        foo = []
+
+        [tool.uv.sources]
+        ok = [
+            { index = "explicit", extra = "alt", marker = "extra == 'foo'" },
+        ]
+
+        [[tool.uv.index]]
+        name = "explicit"
+        url = "../explicit"
+        format = "flat"
+        explicit = true
+        "#,
+    )?;
+
+    let pkg_b = context.temp_dir.child("pkg_b");
+    fs_err::create_dir_all(&pkg_b)?;
+    pkg_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a[alt,foo]"]
+
+        [tool.uv.sources]
+        pkg-a = { path = "../pkg_a", editable = true }
+
+        [[tool.uv.index]]
+        name = "default"
+        url = "../default"
+        format = "flat"
+        default = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .current_dir(&pkg_b)
+        .arg("--no-install-project")
+        .arg("--no-install-package")
+        .arg("pkg-a"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==2.0.0
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn sync_multiple_sources_url_marker_only_negative_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
