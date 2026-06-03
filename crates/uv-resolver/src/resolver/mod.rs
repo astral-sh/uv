@@ -139,6 +139,13 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     reporter: Option<Arc<dyn Reporter>>,
 }
 
+/// A requirement after recursive extras have been expanded.
+struct FlattenedRequirement<'a> {
+    requirement: Cow<'a, Requirement>,
+    /// The extra that introduced this requirement, used to match conditional source variants.
+    source_extra: Option<ExtraName>,
+}
+
 impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
     Resolver<DefaultResolverProvider<'a, Context>, InstalledPackages>
 {
@@ -1795,7 +1802,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .flat_map(move |requirement| {
                         PubGrubDependency::from_requirement(
                             &self.conflicts,
-                            requirement,
+                            requirement.requirement,
                             None,
                             Some(package),
                         )
@@ -1920,7 +1927,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
 
                 let requirements = requirements
-                    .filter(|requirement| !self.excludes.contains(&requirement.name))
+                    .filter(|requirement| !self.excludes.contains(&requirement.requirement.name))
                     .collect::<Vec<_>>();
 
                 let dependencies = if extra.is_none()
@@ -1928,9 +1935,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     && env.marker_environment().is_none()
                     && !metadata.source_variants.is_empty()
                 {
-                    self.dependencies_with_source_variants(
-                        requirements,
+                    let source_variants = self.source_variants_with_recursive_extras(
+                        &metadata.requires_dist,
+                        &metadata.dependency_groups,
+                        &metadata.provides_extra,
                         &metadata.source_variants,
+                        name,
+                        env,
+                        python_requirement,
+                    );
+                    self.dependencies_with_source_variants(
+                        requirements
+                            .into_iter()
+                            .map(|requirement| requirement.requirement)
+                            .collect(),
+                        &source_variants,
                         name,
                         package,
                         env,
@@ -1953,7 +1972,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .flat_map(|requirement| {
                             PubGrubDependency::from_requirement(
                                 &self.conflicts,
-                                requirement,
+                                requirement.requirement,
                                 group.as_ref(),
                                 Some(package),
                             )
@@ -2049,6 +2068,63 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         };
         Ok(Dependencies::Available(dependencies))
+    }
+
+    /// Extend conditional source variants to extras that recursively activate them.
+    fn source_variants_with_recursive_extras(
+        &self,
+        dependencies: &[Requirement],
+        dev_dependencies: &BTreeMap<GroupName, Box<[Requirement]>>,
+        extras: &[ExtraName],
+        source_variants: &[SourceVariant],
+        project_name: &PackageName,
+        env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+    ) -> Vec<SourceVariant> {
+        let mut variants = source_variants.to_vec();
+        for extra in extras {
+            for requirement in self.flatten_requirements(
+                dependencies,
+                dev_dependencies,
+                Some(extra),
+                None,
+                Some(project_name),
+                env,
+                python_requirement,
+            ) {
+                let Some(source_extra) = requirement.source_extra.as_ref() else {
+                    continue;
+                };
+                if source_extra == extra {
+                    continue;
+                }
+
+                let requirement = requirement.requirement;
+                let source = DependencySource::from_source(&requirement.source);
+                if !source_variants.iter().any(|variant| {
+                    variant.extra.as_ref() == Some(source_extra)
+                        && variant.group.is_none()
+                        && variant.requirement.name == requirement.name
+                        && DependencySource::from_source(&variant.requirement.source) == source
+                }) {
+                    continue;
+                }
+
+                let variant = SourceVariant {
+                    requirement: requirement.into_owned(),
+                    extra: Some(extra.clone()),
+                    group: None,
+                };
+                if !variants.iter().any(|existing| {
+                    existing.extra == variant.extra
+                        && existing.group == variant.group
+                        && existing.requirement == variant.requirement
+                }) {
+                    variants.push(variant);
+                }
+            }
+        }
+        variants
     }
 
     /// Annotate production dependencies with their conditional source variants.
@@ -2298,7 +2374,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     /// active.
     fn dependencies_with_scoped_sources(
         &self,
-        requirements: Vec<Cow<'_, Requirement>>,
+        requirements: Vec<FlattenedRequirement<'_>>,
         source_variants: &[SourceVariant],
         project_name: &PackageName,
         extra: Option<&ExtraName>,
@@ -2308,12 +2384,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ) -> Vec<PubGrubDependency> {
         let mut dependencies = Vec::new();
         for requirement in requirements {
+            let source_extra = requirement.source_extra.as_ref();
+            let requirement = requirement.requirement;
             let source = DependencySource::from_source(&requirement.source);
             let source_variant = source_variants.iter().any(|variant| {
                 variant.requirement.name == requirement.name
                     && DependencySource::from_source(&variant.requirement.source) == source
                     && if variant.extra.is_some() || variant.group.is_some() {
-                        variant.extra.as_ref() == extra && variant.group.as_ref() == group
+                        variant.extra.as_ref() == source_extra && variant.group.as_ref() == group
                     } else {
                         variant.requirement.marker == requirement.marker
                     }
@@ -2399,31 +2477,43 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         name: Option<&PackageName>,
         env: &'a ResolverEnvironment,
         python_requirement: &'a PythonRequirement,
-    ) -> impl Iterator<Item = Cow<'a, Requirement>> {
+    ) -> impl Iterator<Item = FlattenedRequirement<'a>> {
         let python_marker = python_requirement.to_marker_tree();
 
         if let Some(dev) = dev {
             // Dependency groups can include the project itself, so no need to flatten recursive
             // dependencies.
-            Either::Left(Either::Left(self.requirements_for_extra(
-                dev_dependencies.get(dev).into_iter().flatten(),
-                extra,
-                env,
-                python_marker,
-                python_requirement,
-            )))
+            Either::Left(Either::Left(
+                self.requirements_for_extra(
+                    dev_dependencies.get(dev).into_iter().flatten(),
+                    extra,
+                    env,
+                    python_marker,
+                    python_requirement,
+                )
+                .map(move |requirement| FlattenedRequirement {
+                    requirement,
+                    source_extra: extra.cloned(),
+                }),
+            ))
         } else if !dependencies
             .iter()
             .any(|req| name == Some(&req.name) && !req.extras.is_empty())
         {
             // If the project doesn't define any recursive dependencies, take the fast path.
-            Either::Left(Either::Right(self.requirements_for_extra(
-                dependencies.iter(),
-                extra,
-                env,
-                python_marker,
-                python_requirement,
-            )))
+            Either::Left(Either::Right(
+                self.requirements_for_extra(
+                    dependencies.iter(),
+                    extra,
+                    env,
+                    python_marker,
+                    python_requirement,
+                )
+                .map(move |requirement| FlattenedRequirement {
+                    requirement,
+                    source_extra: extra.cloned(),
+                }),
+            ))
         } else {
             let mut requirements = self
                 .requirements_for_extra(
@@ -2433,6 +2523,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     python_marker,
                     python_requirement,
                 )
+                .map(|requirement| FlattenedRequirement {
+                    requirement,
+                    source_extra: extra.cloned(),
+                })
                 .collect::<Vec<_>>();
 
             // Transitively process all extras that are recursively included, starting with the current
@@ -2440,8 +2534,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let mut seen = FxHashSet::<(ExtraName, MarkerTree)>::default();
             let mut queue: VecDeque<_> = requirements
                 .iter()
-                .filter(|req| name == Some(&req.name))
-                .flat_map(|req| req.extras.iter().cloned().map(|extra| (extra, req.marker)))
+                .filter(|req| name == Some(&req.requirement.name))
+                .flat_map(|req| {
+                    req.requirement
+                        .extras
+                        .iter()
+                        .cloned()
+                        .map(|extra| (extra, req.requirement.marker))
+                })
                 .collect();
             while let Some((extra, marker)) = queue.pop_front() {
                 if !seen.insert((extra.clone(), marker)) {
@@ -2483,7 +2583,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         );
                     } else {
                         // Add the requirements for that extra.
-                        requirements.push(Cow::Owned(requirement));
+                        requirements.push(FlattenedRequirement {
+                            requirement: Cow::Owned(requirement),
+                            source_extra: Some(extra.clone()),
+                        });
                     }
                 }
             }
@@ -2493,21 +2596,26 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // transitively expanding `project[bar]`.
             let mut self_constraints = vec![];
             for req in &requirements {
-                if name == Some(&req.name) && !req.source.is_empty() {
-                    self_constraints.push(Requirement {
-                        name: req.name.clone(),
-                        extras: Box::new([]),
-                        groups: req.groups.clone(),
-                        source: req.source.clone(),
-                        origin: req.origin.clone(),
-                        marker: req.marker,
+                if name == Some(&req.requirement.name) && !req.requirement.source.is_empty() {
+                    self_constraints.push(FlattenedRequirement {
+                        requirement: Cow::Owned(Requirement {
+                            name: req.requirement.name.clone(),
+                            extras: Box::new([]),
+                            groups: req.requirement.groups.clone(),
+                            source: req.requirement.source.clone(),
+                            origin: req.requirement.origin.clone(),
+                            marker: req.requirement.marker,
+                        }),
+                        source_extra: req.source_extra.clone(),
                     });
                 }
             }
 
             // Drop all the self-requirements now that we flattened them out.
-            requirements.retain(|req| name != Some(&req.name) || req.extras.is_empty());
-            requirements.extend(self_constraints.into_iter().map(Cow::Owned));
+            requirements.retain(|req| {
+                name != Some(&req.requirement.name) || req.requirement.extras.is_empty()
+            });
+            requirements.extend(self_constraints);
 
             Either::Right(requirements.into_iter())
         }
