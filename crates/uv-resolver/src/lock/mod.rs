@@ -1000,6 +1000,11 @@ impl Lock {
         })
     }
 
+    /// Returns `true` if the package is a workspace project.
+    pub(crate) fn is_workspace_package(&self, id: &PackageId) -> bool {
+        self.members().contains(&id.name) || self.root().is_some_and(|root| root.id == *id)
+    }
+
     /// Returns the supported environments that were used to generate this
     /// lock.
     ///

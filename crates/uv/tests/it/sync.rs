@@ -12268,6 +12268,84 @@ fn sync_multiple_sources_root_group_activates_dependency_extra() -> Result<()> {
     Ok(())
 }
 
+/// A dependency group on a non-project workspace root must activate a selected
+/// workspace project's production dependencies.
+#[test]
+fn sync_multiple_sources_root_group_activates_dependency_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [dependency-groups]
+        install = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["iniconfig"]
+
+        [tool.uv]
+        conflicts = [[
+            { package = "child" },
+            { group = "use" },
+        ]]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--only-group")
+        .arg("install"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn sync_derivation_chain() -> Result<()> {
     let context = uv_test::test_context!("3.12");

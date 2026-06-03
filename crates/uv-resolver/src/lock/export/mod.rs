@@ -240,6 +240,11 @@ impl<'lock> ExportableRequirements<'lock> {
                         continue;
                     }
 
+                    if target.lock().is_workspace_package(&dist.id) {
+                        activated_items
+                            .insert(ConflictItem::from(dist.id.name.clone()), MarkerTree::TRUE);
+                    }
+
                     // Simplify the marker.
                     let marker = target.lock().simplify_environment(marker);
 
@@ -381,7 +386,7 @@ fn activate_dependency_group_items(
     loop {
         let mut changed = false;
         for (parent, dependency) in dependencies {
-            let activates_project = dependency.package_id.name == **parent;
+            let activates_project = lock.is_workspace_package(&dependency.package_id);
             if dependency.extra.is_empty() && !activates_project {
                 continue;
             }

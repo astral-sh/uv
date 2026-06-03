@@ -354,6 +354,79 @@ fn source_selection_only_group_self_activates_production_dependencies() -> Resul
     Ok(())
 }
 
+/// A dependency group on a non-project workspace root must activate a selected
+/// workspace project's production dependencies.
+#[test]
+fn source_selection_root_group_activates_dependency_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [dependency-groups]
+        install = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["iniconfig"]
+
+        [tool.uv]
+        conflicts = [[
+            { package = "child" },
+            { group = "use" },
+        ]]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+        "#,
+        )?;
+
+    uv_snapshot!(context.filters(), context
+        .tree()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--universal")
+        .arg("--only-group")
+        .arg("install"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    child v0.1.0 (group: install)
+    └── iniconfig v2.0.0
+    child v0.1.0 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn nested_platform_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");

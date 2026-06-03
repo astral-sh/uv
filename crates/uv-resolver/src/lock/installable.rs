@@ -33,7 +33,8 @@ fn newly_activated_extras<'lock>(
 }
 
 fn activate_dependency_group_items<'lock>(
-    dependencies: &[(&'lock PackageName, &'lock Dependency)],
+    lock: &'lock Lock,
+    dependencies: &[&'lock Dependency],
     marker_env: &ResolverMarkerEnvironment,
     activated_projects: &mut Vec<&'lock PackageName>,
     activated_extras: &mut Vec<(&'lock PackageName, &'lock ExtraName)>,
@@ -42,8 +43,8 @@ fn activate_dependency_group_items<'lock>(
     loop {
         let mut newly_activated_projects = Vec::new();
         let mut newly_activated_extra_items = Vec::new();
-        for (parent, dependency) in dependencies {
-            let additional_activated_project = (dependency.package_id.name == **parent
+        for dependency in dependencies {
+            let additional_activated_project = (lock.is_workspace_package(&dependency.package_id)
                 && !activated_projects.contains(&&dependency.package_id.name))
             .then_some(&dependency.package_id.name);
             let additional_activated_extras = newly_activated_extras(dependency, activated_extras);
@@ -175,17 +176,14 @@ pub trait Installable<'lock> {
                     dist.dependency_groups
                         .iter()
                         .filter(|(group, _)| groups.contains(group))
-                        .flat_map(|(_, dependencies)| {
-                            dependencies
-                                .iter()
-                                .map(|dependency| (&dist.id.name, dependency))
-                        }),
+                        .flat_map(|(_, dependencies)| dependencies),
                 );
             }
 
             // Make direct dependency-group activation order-independent before evaluating the
             // selected group edges.
             activate_dependency_group_items(
+                self.lock(),
                 &selected_group_dependencies,
                 marker_env,
                 &mut activated_projects,
@@ -349,6 +347,12 @@ pub trait Installable<'lock> {
                     name: root_name.clone(),
                 })?;
 
+            if self.lock().is_workspace_package(&dist.id)
+                && !activated_projects.contains(&&dist.id.name)
+            {
+                activated_projects.push(&dist.id.name);
+            }
+
             // Add the package to the graph.
             let index = petgraph.add_node(if groups.prod() {
                 self.package_to_node(dist, tags, build_options, install_options, marker_env)?
@@ -413,6 +417,12 @@ pub trait Installable<'lock> {
                 .ok_or_else(|| LockErrorKind::MissingRootPackage {
                     name: root_name.clone(),
                 })?;
+
+            if self.lock().is_workspace_package(&dist.id)
+                && !activated_projects.contains(&&dist.id.name)
+            {
+                activated_projects.push(&dist.id.name);
+            }
 
             // Add the package to the graph.
             let index = match inverse.entry(&dist.id) {
