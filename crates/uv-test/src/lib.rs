@@ -1989,22 +1989,16 @@ pub fn diff_snapshot(old: &str, new: &str, context_radius: usize) -> String {
 #[macro_export]
 macro_rules! diff_uv_snapshot {
     ($filters:expr, $old:expr, $spawnable:expr, @$snapshot:literal) => {{
-        let (new, _) = $crate::run_and_format(
-            $spawnable,
-            &$filters,
-            $crate::function_name!(),
-            Some($crate::WindowsFilters::Platform),
-            None,
-        );
+        let new = $crate::capture_uv_snapshot!($filters, $spawnable);
         ::insta::assert_snapshot!($crate::diff_snapshot($old, &new, 3), @$snapshot);
         new
     }};
 }
 
-/// Assert and capture a snapshot of a command's output.
+/// Capture a command's output, optionally asserting it against a snapshot.
 #[macro_export]
 macro_rules! capture_uv_snapshot {
-    ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
+    ($filters:expr, $spawnable:expr) => {{
         let (snapshot, _) = $crate::run_and_format(
             $spawnable,
             &$filters,
@@ -2012,6 +2006,10 @@ macro_rules! capture_uv_snapshot {
             Some($crate::WindowsFilters::Platform),
             None,
         );
+        snapshot
+    }};
+    ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
+        let snapshot = $crate::capture_uv_snapshot!($filters, $spawnable);
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         snapshot
     }};
