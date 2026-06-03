@@ -583,7 +583,7 @@ impl TokenStoreError {
 #[derive(Debug, serde::Deserialize)]
 pub struct PyxJwt {
     /// The expiration time of the JWT, as a Unix timestamp.
-    exp: Option<i64>,
+    pub exp: Option<i64>,
     /// The issuer of the JWT.
     pub iss: Option<String>,
     /// The name of the organization, if any.

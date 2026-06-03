@@ -1,5 +1,7 @@
 # Keep intentional uniform field visibility audited instead of excluding whole files.
 
+preserve-uniform-field-visibility = true
+
 [[production]]
 package = "uv"
 bin = "uv"
@@ -9,14 +11,6 @@ reason = "shipped package manager binary"
 package = "uv-dev"
 bin = "uv-dev"
 reason = "developer binary shipped from this workspace"
-
-[[override]]
-lint = "hawk::unnecessary_public"
-crate = "uv_configuration"
-item = "concurrency::Concurrency::builds"
-kind = "field"
-level = "expect"
-reason = "kept public alongside the other Concurrency fields"
 
 [[override]]
 lint = "hawk::unnecessary_restricted_visibility"
@@ -153,14 +147,6 @@ item = "manifest::Manifest::lookaheads"
 kind = "field"
 level = "expect"
 reason = "kept crate-visible alongside the other Manifest fields"
-
-[[override]]
-lint = "hawk::unnecessary_restricted_visibility"
-crate = "uv_resolver"
-item = "resolution::output::ResolverOutput::diagnostics"
-kind = "field"
-level = "expect"
-reason = "kept crate-visible alongside the other ResolverOutput fields"
 
 [[override]]
 lint = "hawk::unnecessary_restricted_visibility"

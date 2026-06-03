@@ -146,9 +146,9 @@ pub struct Pep723Script {
     /// The parsed [`Pep723Metadata`] table from the script.
     pub metadata: Pep723Metadata,
     /// The content of the script before the metadata table.
-    prelude: String,
+    pub prelude: String,
     /// The content of the script after the metadata table.
-    postlude: String,
+    pub postlude: String,
 }
 
 impl Pep723Script {

@@ -20,7 +20,7 @@ pub struct FlatDependencyGroups(BTreeMap<GroupName, FlatDependencyGroup>);
 #[derive(Debug, Default, Clone)]
 pub struct FlatDependencyGroup {
     pub requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
-    pub(crate) requires_python: Option<VersionSpecifiers>,
+    pub requires_python: Option<VersionSpecifiers>,
 }
 
 impl FlatDependencyGroups {

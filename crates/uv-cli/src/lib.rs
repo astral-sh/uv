@@ -211,7 +211,7 @@ pub struct GlobalArgs {
 
     /// Deprecated version of [`Self::python_downloads`].
     #[arg(global = true, long, hide = true)]
-    python_fetch: Option<PythonDownloads>,
+    pub python_fetch: Option<PythonDownloads>,
 
     /// Use quiet output.
     ///
@@ -5824,7 +5824,7 @@ pub struct UvxArgs {
 
     /// Display the uvx version.
     #[arg(short = 'V', long, action = clap::ArgAction::Version)]
-    version: Option<bool>,
+    pub version: Option<bool>,
 }
 
 #[derive(Args)]
@@ -6961,7 +6961,7 @@ pub struct AuthLogoutArgs {
         value_enum,
         env = EnvVars::UV_KEYRING_PROVIDER,
     )]
-    keyring_provider: Option<KeyringProviderType>,
+    pub keyring_provider: Option<KeyringProviderType>,
 }
 
 #[derive(Args)]
@@ -6997,7 +6997,7 @@ pub struct AuthLoginArgs {
         value_enum,
         env = EnvVars::UV_KEYRING_PROVIDER,
     )]
-    keyring_provider: Option<KeyringProviderType>,
+    pub keyring_provider: Option<KeyringProviderType>,
 }
 
 #[derive(Args)]
@@ -7016,7 +7016,7 @@ pub struct AuthTokenArgs {
         value_enum,
         env = EnvVars::UV_KEYRING_PROVIDER,
     )]
-    keyring_provider: Option<KeyringProviderType>,
+    pub keyring_provider: Option<KeyringProviderType>,
 }
 
 #[derive(Args)]
@@ -7057,35 +7057,35 @@ pub struct GenerateShellCompletionArgs {
 
     // Hide unused global options.
     #[arg(long, short, hide = true)]
-    no_cache: bool,
+    pub no_cache: bool,
     #[arg(long, hide = true)]
-    cache_dir: Option<PathBuf>,
+    pub cache_dir: Option<PathBuf>,
 
     #[arg(long, hide = true)]
-    python_preference: Option<PythonPreference>,
+    pub python_preference: Option<PythonPreference>,
     #[arg(long, hide = true)]
-    no_python_downloads: bool,
+    pub no_python_downloads: bool,
 
     #[arg(long, short, action = clap::ArgAction::Count, conflicts_with = "verbose", hide = true)]
-    quiet: u8,
+    pub quiet: u8,
     #[arg(long, short, action = clap::ArgAction::Count, conflicts_with = "quiet", hide = true)]
-    verbose: u8,
+    pub verbose: u8,
     #[arg(long, conflicts_with = "no_color", hide = true)]
-    color: Option<ColorChoice>,
+    pub color: Option<ColorChoice>,
     #[arg(long, hide = true)]
-    native_tls: bool,
+    pub native_tls: bool,
     #[arg(long, hide = true)]
-    offline: bool,
+    pub offline: bool,
     #[arg(long, hide = true)]
-    no_progress: bool,
+    pub no_progress: bool,
     #[arg(long, hide = true)]
-    config_file: Option<PathBuf>,
+    pub config_file: Option<PathBuf>,
     #[arg(long, hide = true)]
-    no_config: bool,
+    pub no_config: bool,
     #[arg(long, short, action = clap::ArgAction::HelpShort, hide = true)]
-    help: Option<bool>,
+    pub help: Option<bool>,
     #[arg(short = 'V', long, hide = true)]
-    version: bool,
+    pub version: bool,
 }
 
 #[derive(Args)]
@@ -7184,12 +7184,12 @@ pub struct IndexArgs {
         value_parser = parse_find_links,
         help_heading = "Index options"
     )]
-    find_links: Option<Vec<Maybe<PipFindLinks>>>,
+    pub find_links: Option<Vec<Maybe<PipFindLinks>>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// provided via `--find-links`.
     #[arg(long, help_heading = "Index options")]
-    no_index: bool,
+    pub no_index: bool,
 }
 
 #[derive(Args)]

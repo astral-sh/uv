@@ -47,7 +47,7 @@ const RESOURCE_SCRIPT_DATA: windows::core::PCWSTR = windows::core::w!("UV_SCRIPT
 pub struct Launcher {
     pub kind: LauncherKind,
     pub python_path: PathBuf,
-    script_data: Option<Vec<u8>>,
+    pub script_data: Option<Vec<u8>>,
 }
 
 impl Launcher {

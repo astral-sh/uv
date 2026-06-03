@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize, Serialize, PartialOrd, PartialEq, Ord, Eq)]
 pub struct RecordEntry {
     pub path: String,
-    pub(crate) hash: Option<String>,
+    pub hash: Option<String>,
     #[allow(dead_code)]
-    pub(crate) size: Option<u64>,
+    pub size: Option<u64>,
 }

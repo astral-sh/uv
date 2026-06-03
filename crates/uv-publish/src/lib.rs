@@ -280,7 +280,7 @@ pub struct UploadDistribution {
     /// The parsed filename of the main distribution file.
     pub filename: DistFilename,
     /// Zero or more paths to PEP 740 attestations for the distribution.
-    attestations: Vec<PathBuf>,
+    pub attestations: Vec<PathBuf>,
 }
 
 /// Given a list of paths (which may contain globs), unroll them into

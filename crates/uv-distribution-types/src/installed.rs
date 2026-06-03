@@ -121,45 +121,45 @@ pub enum InstalledDistKind {
 pub struct InstalledRegistryDist {
     pub name: PackageName,
     pub version: Version,
-    path: Box<Path>,
-    cache_info: Option<CacheInfo>,
-    build_info: Option<BuildInfo>,
+    pub path: Box<Path>,
+    pub cache_info: Option<CacheInfo>,
+    pub build_info: Option<BuildInfo>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledDirectUrlDist {
-    name: PackageName,
-    version: Version,
+    pub name: PackageName,
+    pub version: Version,
     pub direct_url: Box<DirectUrl>,
     pub url: DisplaySafeUrl,
     pub editable: bool,
-    path: Box<Path>,
+    pub path: Box<Path>,
     pub cache_info: Option<CacheInfo>,
-    build_info: Option<BuildInfo>,
+    pub build_info: Option<BuildInfo>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledEggInfoFile {
-    name: PackageName,
+    pub name: PackageName,
     pub version: Version,
-    path: Box<Path>,
+    pub path: Box<Path>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledEggInfoDirectory {
-    name: PackageName,
+    pub name: PackageName,
     pub version: Version,
-    path: Box<Path>,
+    pub path: Box<Path>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledLegacyEditable {
-    name: PackageName,
-    version: Version,
+    pub name: PackageName,
+    pub version: Version,
     pub egg_link: Box<Path>,
     pub target: Box<Path>,
-    target_url: DisplaySafeUrl,
-    egg_info: Box<Path>,
+    pub target_url: DisplaySafeUrl,
+    pub egg_info: Box<Path>,
 }
 
 impl InstalledDist {

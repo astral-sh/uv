@@ -713,8 +713,8 @@ impl EnvFlag {
 /// the CLI level, however there are limited semantics in that context.
 #[derive(Debug, Clone)]
 pub struct EnvironmentOptions {
-    skip_wheel_filename_check: Option<bool>,
-    hide_build_output: Option<bool>,
+    pub skip_wheel_filename_check: Option<bool>,
+    pub hide_build_output: Option<bool>,
     pub python_install_bin: Option<bool>,
     pub python_install_registry: Option<bool>,
     pub python_no_registry: EnvFlag,
@@ -755,8 +755,8 @@ pub struct EnvironmentOptions {
     pub venv_clear: EnvFlag,
     pub venv_relocatable: EnvFlag,
     pub init_bare: EnvFlag,
-    malware_check: EnvFlag,
-    malware_check_url: Option<DisplaySafeUrl>,
+    pub malware_check: EnvFlag,
+    pub malware_check_url: Option<DisplaySafeUrl>,
 }
 
 impl EnvironmentOptions {

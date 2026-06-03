@@ -737,9 +737,9 @@ impl ExternallyManaged {
 #[derive(Debug, Error)]
 pub struct UnexpectedResponseError {
     #[source]
-    err: serde_json::Error,
-    stdout: String,
-    stderr: String,
+    pub(super) err: serde_json::Error,
+    pub(super) stdout: String,
+    pub(super) stderr: String,
     pub(super) path: PathBuf,
 }
 
@@ -774,9 +774,9 @@ impl Display for UnexpectedResponseError {
 
 #[derive(Debug, Error)]
 pub struct StatusCodeError {
-    code: ExitStatus,
-    stdout: String,
-    stderr: String,
+    pub(super) code: ExitStatus,
+    pub(super) stdout: String,
+    pub(super) stderr: String,
     pub(super) path: PathBuf,
 }
 
