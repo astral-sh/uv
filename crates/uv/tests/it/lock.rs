@@ -36530,6 +36530,80 @@ async fn lock_path_dependency_explicit_index_unrequested_group() -> Result<()> {
     Ok(())
 }
 
+/// Test that source-agnostic fallbacks are not synthesized for unrequested
+/// dependency groups from ordinary path dependencies.
+#[test]
+fn lock_path_dependency_unrequested_group_source_fallback() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pkg_a = context.temp_dir.child("pkg_a");
+    fs_err::create_dir_all(&pkg_a)?;
+    pkg_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        alt = [
+            "iniconfig",
+            "iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl ; extra == 'foo'",
+        ]
+        "#,
+    )?;
+
+    let pkg_b = context.temp_dir.child("pkg_b");
+    fs_err::create_dir_all(&pkg_b)?;
+    pkg_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = { path = "../pkg_a/", editable = true }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_b), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("pkg_b/uv.lock");
+    let Some(version) = lock.lines().next() else {
+        bail!("lockfile is empty");
+    };
+    assert_snapshot!(version, @"version = 1");
+
+    let lock = lock.parse::<toml_edit::DocumentMut>()?;
+    let Some(pkg_a) = lock["package"].as_array_of_tables().and_then(|packages| {
+        packages.iter().find(|package| {
+            package
+                .get("name")
+                .and_then(toml_edit::Item::as_str)
+                .is_some_and(|name| name == "pkg-a")
+        })
+    }) else {
+        bail!("lockfile is missing pkg-a");
+    };
+    assert!(pkg_a.get("dev-dependencies").is_none());
+
+    Ok(())
+}
+
 /// Test that complementary dependencies synthesized from a path dependency's
 /// optional extras preserve explicit indexes.
 #[test]

@@ -481,6 +481,7 @@ impl Lock {
 
         let group_source_fallbacks = packages
             .values_mut()
+            .filter(|package| resolution.projects.contains(&package.id.name))
             .flat_map(|package| package.add_group_source_fallbacks(&requires_python))
             .collect();
         add_group_source_fallback_dependencies(
@@ -697,6 +698,7 @@ impl Lock {
     #[must_use]
     pub fn with_manifest(mut self, manifest: ResolverManifest) -> Self {
         self.manifest = manifest;
+        self.update_version_for_activation_markers();
         self
     }
 
@@ -823,11 +825,14 @@ impl Lock {
     /// Returns `true` if dependency selection requires synthesized production fallbacks for
     /// dependency groups.
     fn requires_group_source_fallback_semantics(&self) -> bool {
-        self.packages.iter().any(|package| {
-            !package
-                .add_group_source_fallbacks(&self.requires_python)
-                .is_empty()
-        })
+        self.packages
+            .iter()
+            .filter(|package| self.is_workspace_package(&package.id))
+            .any(|package| {
+                !package
+                    .add_group_source_fallbacks(&self.requires_python)
+                    .is_empty()
+            })
     }
 
     /// Returns the required and actual lockfile versions if the lockfile cannot represent its

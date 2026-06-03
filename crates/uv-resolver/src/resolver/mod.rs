@@ -742,6 +742,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.git,
             &self.python_requirement,
             &self.conflicts,
+            self.project.as_ref(),
+            &self.workspace_members,
             self.selector.resolution_strategy(),
             self.options.clone(),
         )

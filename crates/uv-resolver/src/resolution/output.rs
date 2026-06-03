@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
@@ -56,6 +56,8 @@ pub struct ResolverOutput {
     pub(crate) overrides: Overrides,
     /// The options that were used to build the graph.
     pub(crate) options: Options,
+    /// The projects whose dependency groups participate in the resolution.
+    pub(crate) projects: BTreeSet<PackageName>,
 }
 
 #[derive(Debug, Clone)]
@@ -132,6 +134,8 @@ impl ResolverOutput {
         git: &GitResolver,
         python: &PythonRequirement,
         conflicts: &Conflicts,
+        project: Option<&PackageName>,
+        workspace_members: &BTreeSet<PackageName>,
         resolution_strategy: &ResolutionStrategy,
         options: Options,
     ) -> Result<Self, ResolveError> {
@@ -237,6 +241,11 @@ impl ResolverOutput {
             overrides: overrides.clone(),
             options,
             fork_markers,
+            projects: project
+                .into_iter()
+                .chain(workspace_members)
+                .cloned()
+                .collect(),
         };
 
         // We only do conflicting distribution detection when no
