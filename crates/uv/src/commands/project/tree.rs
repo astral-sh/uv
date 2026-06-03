@@ -296,7 +296,7 @@ pub(crate) async fn tree(
         no_dedupe,
         invert,
         show_sizes,
-    );
+    )?;
 
     print!("{tree}");
 

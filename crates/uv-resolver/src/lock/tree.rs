@@ -17,7 +17,7 @@ use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ResolverMarkerEnvironment;
 
-use crate::lock::{Dependency, Package, PackageId};
+use crate::lock::{Dependency, LockErrorKind, Package, PackageId};
 use crate::{Lock, PackageMap};
 
 fn activate_dependency<'lock>(
@@ -91,9 +91,9 @@ fn activated_extras<'lock>(
     members: &BTreeSet<&'lock PackageId>,
     groups: &DependencyGroupsWithDefaults,
     activated_groups: &[(&'lock PackageName, &'lock GroupName)],
-) -> BTreeSet<(&'lock PackageName, &'lock ExtraName)> {
+) -> Result<BTreeSet<(&'lock PackageName, &'lock ExtraName)>, crate::LockError> {
     let Some(markers) = markers else {
-        return BTreeSet::default();
+        return Ok(BTreeSet::default());
     };
 
     let mut root_queue = VecDeque::new();
@@ -209,7 +209,7 @@ fn activated_extras<'lock>(
     let mut seen_activation_contexts = FxHashSet::default();
     loop {
         if !seen_activation_contexts.insert(activated_extras.clone()) {
-            break;
+            return Err(LockErrorKind::UnstableActivationContext.into());
         }
 
         let mut next_activated_extras = root_activated_extras.clone();
@@ -263,11 +263,10 @@ fn activated_extras<'lock>(
         }
 
         if next_activated_extras == activated_extras {
-            return next_activated_extras;
+            return Ok(next_activated_extras);
         }
         activated_extras = next_activated_extras;
     }
-    activated_extras
 }
 
 #[derive(Debug)]
@@ -303,7 +302,7 @@ impl<'env> TreeDisplay<'env> {
         no_dedupe: bool,
         invert: bool,
         show_sizes: bool,
-    ) -> Self {
+    ) -> Result<Self, crate::LockError> {
         // Identify any workspace members.
         //
         // These include:
@@ -336,7 +335,8 @@ impl<'env> TreeDisplay<'env> {
                     .map(|group| (&id.name, group))
             })
             .collect::<Vec<_>>();
-        let activated_extras = activated_extras(lock, markers, &members, groups, &activated_groups);
+        let activated_extras =
+            activated_extras(lock, markers, &members, groups, &activated_groups)?;
         let evaluate_dependency = |id: &PackageId, extra: Option<&ExtraName>, dep: &Dependency| {
             markers.is_none_or(|markers| {
                 dep.complexified_marker.evaluate(
@@ -688,7 +688,7 @@ impl<'env> TreeDisplay<'env> {
             }
         };
 
-        Self {
+        Ok(Self {
             graph,
             roots,
             latest,
@@ -697,7 +697,7 @@ impl<'env> TreeDisplay<'env> {
             invert,
             lock,
             show_sizes,
-        }
+        })
     }
 
     /// Perform a depth-first traversal of the given package and its dependencies.
