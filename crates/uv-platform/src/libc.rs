@@ -62,7 +62,7 @@ pub enum Libc {
 }
 
 impl Libc {
-    pub fn from_env() -> Result<Self, crate::Error> {
+    pub(crate) fn from_env() -> Result<Self, crate::Error> {
         match env::consts::OS {
             "linux" => {
                 if let Ok(libc) = env::var(EnvVars::UV_LIBC) {

@@ -94,7 +94,7 @@ pub fn finalize() -> Result<(), PreviewError> {
 ///
 /// When called before [`init`] or (with the `testing` feature) when the
 /// current thread does not hold a [`test::with_features`] guard.
-pub fn get() -> Preview {
+fn get() -> Preview {
     match PREVIEW.get() {
         Some(PreviewMode::Normal(mutex)) => match *mutex.lock().unwrap() {
             PreviewState::Provisional(preview) => preview,

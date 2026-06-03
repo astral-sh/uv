@@ -24,12 +24,12 @@ pub enum PackageId {
 
 impl PackageId {
     /// Create a new [`PackageId`] from a package name and version.
-    pub fn from_registry(name: PackageName) -> Self {
+    pub(crate) fn from_registry(name: PackageName) -> Self {
         Self::Name(name)
     }
 
     /// Create a new [`PackageId`] from a URL.
-    pub fn from_url(url: &DisplaySafeUrl) -> Self {
+    pub(crate) fn from_url(url: &DisplaySafeUrl) -> Self {
         Self::Url(CanonicalUrl::new(url))
     }
 }

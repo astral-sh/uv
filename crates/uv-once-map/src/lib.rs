@@ -63,7 +63,7 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     ///
     ///  # Example
     ///
-    /// ```rust,no-build
+    /// ```rust,ignore
     /// if let Some(response) = cache.register_or_wait(&id).await {
     ///     response
     /// } else {

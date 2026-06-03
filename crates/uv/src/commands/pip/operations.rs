@@ -1141,7 +1141,7 @@ impl uv_errors::Hint for Error {
     "Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file"
 )]
 pub(crate) struct ExtrasWithoutSourceError {
-    pub(crate) has_editable: bool,
+    has_editable: bool,
 }
 
 impl uv_errors::Hint for ExtrasWithoutSourceError {

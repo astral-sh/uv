@@ -640,7 +640,7 @@ impl std::fmt::Display for ExecutableProviderHints<'_> {
 // [`ToolRequirement::Package`] is the more common case and it seems annoying to box it.
 #[derive(Debug)]
 #[expect(clippy::large_enum_variant)]
-pub(crate) enum ToolRequirement {
+enum ToolRequirement {
     Python {
         executable: String,
     },

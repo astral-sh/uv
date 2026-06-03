@@ -16,21 +16,21 @@ pub struct InstallTarget<'a> {
 #[derive(Debug, Clone, Default)]
 pub struct InstallOptions {
     /// Omit the project itself from the resolution.
-    pub no_install_project: bool,
+    no_install_project: bool,
     /// Include only the project itself in the resolution.
-    pub only_install_project: bool,
+    only_install_project: bool,
     /// Omit all workspace members (including the project itself) from the resolution.
-    pub no_install_workspace: bool,
+    no_install_workspace: bool,
     /// Include only workspace members (including the project itself) in the resolution.
-    pub only_install_workspace: bool,
+    only_install_workspace: bool,
     /// Omit all local packages from the resolution.
-    pub no_install_local: bool,
+    no_install_local: bool,
     /// Include only local packages in the resolution.
-    pub only_install_local: bool,
+    only_install_local: bool,
     /// Omit the specified packages from the resolution.
-    pub no_install_package: Vec<PackageName>,
+    no_install_package: Vec<PackageName>,
     /// Include only the specified packages in the resolution.
-    pub only_install_package: Vec<PackageName>,
+    only_install_package: Vec<PackageName>,
 }
 
 impl InstallOptions {

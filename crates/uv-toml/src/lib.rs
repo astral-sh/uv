@@ -61,7 +61,7 @@ impl<'s> DetectToml11<'s> {
         }
     }
 
-    pub fn is_11(&self) -> bool {
+    fn is_11(&self) -> bool {
         self.toml11
     }
 }

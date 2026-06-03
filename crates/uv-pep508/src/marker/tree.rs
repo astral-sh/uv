@@ -20,8 +20,8 @@ use crate::marker::lowering::{
 };
 use crate::marker::parse;
 use crate::{
-    CanonicalMarkerValueExtra, MarkerEnvironment, Pep508Error, Pep508ErrorSource, Pep508Url,
-    Reporter, TracingReporter,
+    CanonicalMarkerValueExtra, MarkerEnvironment, Pep508Error, Pep508ErrorSource, Reporter,
+    TracingReporter,
 };
 
 /// Ways in which marker evaluation can fail
@@ -629,10 +629,7 @@ impl Display for ContainerOperator {
 
 impl MarkerExpression {
     /// Parse a [`MarkerExpression`] from a string with the given reporter.
-    pub(crate) fn parse_reporter(
-        s: &str,
-        reporter: &mut impl Reporter,
-    ) -> Result<Option<Self>, Pep508Error> {
+    fn parse_reporter(s: &str, reporter: &mut impl Reporter) -> Result<Option<Self>, Pep508Error> {
         let mut chars = Cursor::new(s);
         let expression = parse::parse_marker_key_op_value(&mut chars, reporter)?;
         chars.eat_whitespace();
@@ -805,11 +802,6 @@ impl FromStr for MarkerTree {
 }
 
 impl MarkerTree {
-    /// Like [`FromStr::from_str`], but the caller chooses the return type generic.
-    pub fn parse_str<T: Pep508Url>(markers: &str) -> Result<Self, Pep508Error<T>> {
-        parse::parse_markers(markers, &mut TracingReporter)
-    }
-
     /// An empty marker that always evaluates to `true`.
     pub const TRUE: Self = Self(NodeId::TRUE);
 
@@ -1556,7 +1548,7 @@ impl InMarkerTree<'_> {
     }
 
     /// The value (RHS) for this expression.
-    pub fn value(&self) -> &ArcStr {
+    pub(crate) fn value(&self) -> &ArcStr {
         self.value
     }
 
@@ -1566,7 +1558,7 @@ impl InMarkerTree<'_> {
     }
 
     /// Returns the subtree associated with the given edge value.
-    pub fn edge(&self, value: bool) -> MarkerTree {
+    fn edge(&self, value: bool) -> MarkerTree {
         if value {
             MarkerTree(self.high)
         } else {
@@ -1606,7 +1598,7 @@ impl ContainsMarkerTree<'_> {
     }
 
     /// The value (RHS) for this expression.
-    pub fn value(&self) -> &str {
+    pub(crate) fn value(&self) -> &str {
         self.value
     }
 
@@ -1616,7 +1608,7 @@ impl ContainsMarkerTree<'_> {
     }
 
     /// Returns the subtree associated with the given edge value.
-    pub fn edge(&self, value: bool) -> MarkerTree {
+    fn edge(&self, value: bool) -> MarkerTree {
         if value {
             MarkerTree(self.high)
         } else {
@@ -1703,7 +1695,7 @@ pub struct ExtraMarkerTree<'a> {
 
 impl ExtraMarkerTree<'_> {
     /// Returns the name of the extra in this expression.
-    pub fn name(&self) -> &CanonicalMarkerValueExtra {
+    pub(crate) fn name(&self) -> &CanonicalMarkerValueExtra {
         self.name
     }
 
@@ -1713,7 +1705,7 @@ impl ExtraMarkerTree<'_> {
     }
 
     /// Returns the subtree associated with the given edge value.
-    pub fn edge(&self, value: bool) -> MarkerTree {
+    fn edge(&self, value: bool) -> MarkerTree {
         if value {
             MarkerTree(self.high)
         } else {

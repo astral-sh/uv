@@ -668,7 +668,7 @@ impl<'a> CompatibleDist<'a> {
 
 impl WheelCompatibility {
     /// Return `true` if the distribution is compatible.
-    pub fn is_compatible(&self) -> bool {
+    fn is_compatible(&self) -> bool {
         matches!(self, Self::Compatible(_, _, _))
     }
 
@@ -700,7 +700,7 @@ impl WheelCompatibility {
 
 impl SourceDistCompatibility {
     /// Return `true` if the distribution is compatible.
-    pub fn is_compatible(&self) -> bool {
+    fn is_compatible(&self) -> bool {
         matches!(self, Self::Compatible(_))
     }
 

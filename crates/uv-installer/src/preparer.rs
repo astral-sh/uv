@@ -108,7 +108,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
     }
     /// Download, build, and unzip a single wheel.
     #[instrument(skip_all, fields(name = % dist, size = ? dist.size(), url = dist.file().map(| file | file.url.to_string()).unwrap_or_default()))]
-    pub async fn get_wheel(
+    async fn get_wheel(
         &self,
         dist: Dist,
         in_flight: &InFlight,
@@ -270,9 +270,7 @@ pub trait Reporter: Send + Sync {
 
 impl dyn Reporter {
     /// Converts this reporter to a [`uv_distribution::Reporter`].
-    pub(crate) fn into_distribution_reporter(
-        self: Arc<dyn Reporter>,
-    ) -> Arc<dyn uv_distribution::Reporter> {
+    fn into_distribution_reporter(self: Arc<dyn Reporter>) -> Arc<dyn uv_distribution::Reporter> {
         Arc::new(Facade {
             reporter: self.clone(),
         })

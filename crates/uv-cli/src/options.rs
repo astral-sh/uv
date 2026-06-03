@@ -107,14 +107,6 @@ impl Flag {
             Self::Enabled { source, .. } => Some(source),
         }
     }
-
-    /// Returns the CLI flag name, if the flag is enabled.
-    pub fn name(self) -> Option<&'static str> {
-        match self {
-            Self::Disabled => None,
-            Self::Enabled { name, .. } => Some(name),
-        }
-    }
 }
 
 impl From<Flag> for bool {

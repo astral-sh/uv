@@ -206,7 +206,7 @@ pub struct UrlString(SmallString);
 
 impl UrlString {
     /// Create a new [`UrlString`] from a [`String`].
-    pub fn new(url: SmallString) -> Self {
+    fn new(url: SmallString) -> Self {
         Self(url)
     }
 

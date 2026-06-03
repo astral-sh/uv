@@ -530,7 +530,7 @@ pub struct RequiresPythonRange(LowerBound, UpperBound);
 
 impl RequiresPythonRange {
     /// Initialize a [`RequiresPythonRange`] from a [`Range`].
-    pub fn from_range(range: &Ranges<Version>) -> Self {
+    fn from_range(range: &Ranges<Version>) -> Self {
         let (lower, upper) = range
             .bounding_range()
             .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
@@ -554,7 +554,7 @@ impl RequiresPythonRange {
     }
 
     /// Returns the [`VersionSpecifiers`] for the range.
-    pub fn specifiers(&self) -> VersionSpecifiers {
+    fn specifiers(&self) -> VersionSpecifiers {
         [self.0.specifier(), self.1.specifier()]
             .into_iter()
             .flatten()

@@ -272,11 +272,6 @@ impl Cache {
         &self.root
     }
 
-    /// Return the [`Refresh`] policy for the cache.
-    pub fn refresh(&self) -> &Refresh {
-        &self.refresh
-    }
-
     /// The folder for a specific cache bucket
     pub fn bucket(&self, cache_bucket: CacheBucket) -> PathBuf {
         self.root.join(cache_bucket.to_str())
@@ -1322,7 +1317,7 @@ impl CacheBucket {
     }
 
     /// Return an iterator over all cache buckets.
-    pub fn iter() -> impl Iterator<Item = Self> {
+    fn iter() -> impl Iterator<Item = Self> {
         [
             Self::Wheels,
             Self::SourceDistributions,
@@ -1389,20 +1384,6 @@ impl Refresh {
                 }
             }
         }
-    }
-
-    /// Return the [`Timestamp`] associated with the refresh policy.
-    pub fn timestamp(&self) -> Timestamp {
-        match self {
-            Self::None(timestamp) => *timestamp,
-            Self::Packages(.., timestamp) => *timestamp,
-            Self::All(timestamp) => *timestamp,
-        }
-    }
-
-    /// Returns `true` if no packages should be reinstalled.
-    pub fn is_none(&self) -> bool {
-        matches!(self, Self::None(_))
     }
 
     /// Combine two [`Refresh`] policies, taking the "max" of the two policies.

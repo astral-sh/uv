@@ -46,8 +46,8 @@ fn read_pyx_auth_token() -> Option<AccessToken> {
 /// and a new refresh token.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct PyxOAuthTokens {
-    pub access_token: AccessToken,
-    pub refresh_token: String,
+    access_token: AccessToken,
+    refresh_token: String,
 }
 
 /// An access token with an accompanying API key.

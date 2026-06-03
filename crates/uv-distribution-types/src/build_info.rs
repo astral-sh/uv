@@ -38,7 +38,7 @@ impl BuildInfo {
     }
 
     /// Returns `true` if the [`BuildInfo`] is empty, meaning it has no configuration settings,
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.config_settings.is_empty()
             && self.extra_build_requires.is_empty()
             && self.extra_build_variables.is_empty()

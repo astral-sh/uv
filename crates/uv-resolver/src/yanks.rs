@@ -52,7 +52,7 @@ impl AllowedYanks {
     }
 
     /// Returns `true` if the package-version is allowed, even if it's marked as yanked.
-    pub fn contains(&self, package_name: &PackageName, version: &Version) -> bool {
+    pub(crate) fn contains(&self, package_name: &PackageName, version: &Version) -> bool {
         self.0
             .get(package_name)
             .is_some_and(|versions| versions.contains(version))

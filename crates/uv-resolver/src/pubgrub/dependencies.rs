@@ -36,7 +36,7 @@ impl DependencySource {
     ///
     /// Registry requirements only carry a source here when they are tied to a group-scoped
     /// explicit index. Direct URL-like requirements always preserve their verbatim URL.
-    pub(crate) fn from_requirement(requirement: &Requirement) -> Self {
+    fn from_requirement(requirement: &Requirement) -> Self {
         match &requirement.source {
             RequirementSource::Registry { index, .. }
                 if matches!(
@@ -243,10 +243,10 @@ impl PubGrubDependency {
 
 /// A PubGrub-compatible package and version range.
 #[derive(Debug, Clone)]
-pub(crate) struct PubGrubRequirement {
-    pub(crate) package: PubGrubPackage,
-    pub(crate) version: Ranges<Version>,
-    pub(crate) source: DependencySource,
+struct PubGrubRequirement {
+    package: PubGrubPackage,
+    version: Ranges<Version>,
+    source: DependencySource,
 }
 
 impl PubGrubRequirement {
@@ -260,7 +260,7 @@ impl PubGrubRequirement {
 
     /// Convert a [`Requirement`] to a PubGrub-compatible package and range, while returning the URL
     /// on the [`Requirement`], if any.
-    pub(crate) fn from_requirement(
+    fn from_requirement(
         requirement: &Requirement,
         extra: Option<ExtraName>,
         group: Option<GroupName>,
