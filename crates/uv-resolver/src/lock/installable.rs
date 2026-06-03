@@ -117,7 +117,7 @@ pub trait Installable<'lock> {
                 // Track the activated extras.
                 if groups.prod() {
                     activated_projects.push(&dist.id.name);
-                    for extra in extras.extra_names(dist.optional_dependencies.keys()) {
+                    for extra in extras.extra_names(dist.provides_extras().iter()) {
                         activated_extras.push((&dist.id.name, extra));
                     }
                 }
