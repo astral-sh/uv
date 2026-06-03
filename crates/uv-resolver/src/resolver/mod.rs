@@ -2216,6 +2216,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 for constraint in self.constraints_for_requirement(
                     Cow::Borrowed(requirement),
                     variant.extra.as_ref(),
+                    true,
                     env,
                     python_marker,
                     python_requirement,
@@ -2649,6 +2650,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 iter::once(requirement.clone()).chain(self.constraints_for_requirement(
                     requirement,
                     extra,
+                    false,
                     env,
                     python_marker,
                     python_requirement,
@@ -2715,6 +2717,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &'data self,
         requirement: Cow<'data, Requirement>,
         extra: Option<&'parameters ExtraName>,
+        preserve_extra_markers: bool,
         env: &'parameters ResolverEnvironment,
         python_marker: MarkerTree,
         python_requirement: &'parameters PythonRequirement,
@@ -2803,23 +2806,32 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return None;
                 }
 
-                // If the constraint isn't relevant for the current platform, skip it.
-                match extra {
-                    Some(source_extra) => {
-                        if !constraint
-                            .evaluate_markers(env.marker_environment(), slice::from_ref(source_extra))
-                        {
-                            return None;
-                        }
-                        if !env.included_by_group(ConflictItemRef::from((&requirement.name, source_extra)))
-                        {
-                            return None;
-                        }
+                // Source-variant constraints preserve extra expressions so they can be scoped to
+                // the package that declared the source. Continue to evaluate concrete platform
+                // markers, but leave the extras symbolic for universal resolution.
+                if preserve_extra_markers {
+                    if !constraint
+                        .marker
+                        .without_extras()
+                        .evaluate_optional_environment(env.marker_environment(), &[])
+                    {
+                        return None;
                     }
-                    None => {
-                        if !constraint.evaluate_markers(env.marker_environment(), &[]) {
-                            return None;
-                        }
+                } else if let Some(source_extra) = extra {
+                    if !constraint
+                        .evaluate_markers(env.marker_environment(), slice::from_ref(source_extra))
+                    {
+                        return None;
+                    }
+                    if !env.included_by_group(ConflictItemRef::from((
+                        &requirement.name,
+                        source_extra,
+                    ))) {
+                        return None;
+                    }
+                } else {
+                    if !constraint.evaluate_markers(env.marker_environment(), &[]) {
+                        return None;
                     }
                 }
 

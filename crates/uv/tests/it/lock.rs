@@ -26139,6 +26139,83 @@ fn lock_multiple_sources_extra_constraint() -> Result<()> {
     Ok(())
 }
 
+/// An extra-marked constraint must apply to a source selected by an extra
+/// marker, even when the source has no explicit extra selector.
+#[tokio::test]
+async fn lock_multiple_sources_marker_extra_constraint() -> Result<()> {
+    use serde_json::json;
+    use wiremock::{
+        Mock, MockServer, ResponseTemplate,
+        matchers::{method, path},
+    };
+
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+
+    let simple_index = json!({
+        "meta": {
+            "api-version": "1.1"
+        },
+        "name": "iniconfig",
+        "files": [{
+            "filename": "iniconfig-1.1.1-py2.py3-none-any.whl",
+            "url": "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl",
+            "hashes": {}
+        }]
+    });
+
+    Mock::given(method("GET"))
+        .and(path("/simple/iniconfig/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string().into_bytes(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [tool.uv]
+        constraint-dependencies = ["iniconfig>1.1.1 ; extra == 'foo'"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            {{ index = "local", marker = "extra == 'foo'" }},
+        ]
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "{}/simple"
+        explicit = true
+        "#,
+        server.uri()
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (markers: extra == 'extra-7-project-foo'):
+      ╰─▶ Because only iniconfig{extra == 'extra-7-project-foo'}==1.1.1 is available and your project depends on iniconfig{extra == 'extra-7-project-foo'}>1.1.1, we can conclude that your project's requirements are unsatisfiable.
+          And because your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    ");
+
+    Ok(())
+}
+
 /// Like `lock_multiple_sources_extra_base_and_optional`, but with an explicit
 /// index instead of a URL. The index must remain scoped to the extra.
 ///
