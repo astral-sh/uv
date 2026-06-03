@@ -24949,9 +24949,10 @@ fn lock_multiple_sources_extra() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
-        source-activation-contexts = [
+        conflicts = [[
             { package = "project", extra = "cpu" },
-        ]
+            { package = "project", extra = "cpu" },
+        ]]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -25049,8 +25050,8 @@ fn lock_multiple_sources_extra_base_and_optional() -> Result<()> {
 
     let lock = context.read("uv.lock");
 
-    // Keep source activation contexts out of `conflicts`: older readers compare that field to
-    // `[tool.uv].conflicts` when validating `--locked`.
+    // Encode source activation contexts as synthetic conflicts so older readers reject the lock
+    // under `--locked` instead of silently selecting the wrong source.
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -25059,9 +25060,10 @@ fn lock_multiple_sources_extra_base_and_optional() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
-        source-activation-contexts = [
+        conflicts = [[
             { package = "project", extra = "alt" },
-        ]
+            { package = "project", extra = "alt" },
+        ]]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -25272,9 +25274,10 @@ fn lock_multiple_sources_index_extra_base_and_optional() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
-        source-activation-contexts = [
+        conflicts = [[
             { package = "project", extra = "cu118" },
-        ]
+            { package = "project", extra = "cu118" },
+        ]]
 
         [options]
         exclude-newer = "2025-01-30T00:00:00Z"
@@ -25477,9 +25480,10 @@ fn lock_multiple_sources_group_base_and_group() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
-        source-activation-contexts = [
+        conflicts = [[
             { package = "project", group = "alt" },
-        ]
+            { package = "project", group = "alt" },
+        ]]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -25589,9 +25593,10 @@ fn lock_multiple_sources_index_group_base_and_group() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
-        source-activation-contexts = [
+        conflicts = [[
             { package = "project", group = "cu118" },
-        ]
+            { package = "project", group = "cu118" },
+        ]]
 
         [options]
         exclude-newer = "2025-01-30T00:00:00Z"
@@ -25747,10 +25752,13 @@ fn lock_multiple_sources_index_group_repeated_root_groups() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
-        source-activation-contexts = [
+        conflicts = [[
             { package = "project", group = "cu118a" },
+            { package = "project", group = "cu118a" },
+        ], [
             { package = "project", group = "cu118b" },
-        ]
+            { package = "project", group = "cu118b" },
+        ]]
 
         [options]
         exclude-newer = "2025-01-30T00:00:00Z"
@@ -26007,9 +26015,10 @@ fn lock_multiple_sources_extra_and_platform_marker() -> Result<()> {
             "sys_platform != 'linux'",
             "sys_platform == 'linux'",
         ]
-        source-activation-contexts = [
+        conflicts = [[
             { package = "project", extra = "alt" },
-        ]
+            { package = "project", extra = "alt" },
+        ]]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -26121,10 +26130,13 @@ fn lock_multiple_sources_extra_url_negative_extra_marker() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
-        source-activation-contexts = [
+        conflicts = [[
             { package = "project", extra = "alt" },
+            { package = "project", extra = "alt" },
+        ], [
             { package = "project", extra = "other" },
-        ]
+            { package = "project", extra = "other" },
+        ]]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -26233,10 +26245,13 @@ fn lock_multiple_sources_extra_multiple_urls() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
-        source-activation-contexts = [
+        conflicts = [[
             { package = "project", extra = "alt" },
+            { package = "project", extra = "alt" },
+        ], [
             { package = "project", extra = "dev" },
-        ]
+            { package = "project", extra = "dev" },
+        ]]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -36373,10 +36388,13 @@ fn lock_path_dependency_explicit_index_optional_extra_source_multiple_extras() -
         version = 1
         revision = 3
         requires-python = ">=3.12"
-        source-activation-contexts = [
+        conflicts = [[
             { package = "pkg-a", extra = "cu118" },
+            { package = "pkg-a", extra = "cu118" },
+        ], [
             { package = "pkg-a", extra = "cu124" },
-        ]
+            { package = "pkg-a", extra = "cu124" },
+        ]]
 
         [options]
         exclude-newer = "2025-01-30T00:00:00Z"

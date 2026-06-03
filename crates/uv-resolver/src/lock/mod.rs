@@ -277,7 +277,7 @@ pub struct Lock {
     fork_markers: Vec<UniversalMarker>,
     /// The conflicting groups/extras specified by the user.
     conflicts: Conflicts,
-    /// Source-selection contexts persisted separately from user-declared conflicts.
+    /// Source-selection contexts encoded as degenerate conflict sets for older lockfile readers.
     source_activation_contexts: BTreeSet<ConflictItem>,
     /// The list of supported environments specified by the user.
     supported_environments: Vec<MarkerTree>,
@@ -676,7 +676,7 @@ impl Lock {
         self
     }
 
-    /// Return source-selection contexts that must be persisted in the lockfile.
+    /// Return source-selection contexts that older lockfile readers must activate.
     fn expected_source_activation_contexts(&self, conflicts: &Conflicts) -> BTreeSet<ConflictItem> {
         if !conflicts.is_empty() {
             return BTreeSet::new();
@@ -1220,22 +1220,19 @@ impl Lock {
                 }
                 table
             };
-            if !self.conflicts.is_empty() {
-                let mut list = Array::new();
-                for set in self.conflicts.iter() {
-                    list.push(each_element_on_its_line_array(
-                        set.iter().map(&conflict_item),
-                    ));
-                }
-                doc.insert("conflicts", value(list));
+            let mut list = Array::new();
+            for set in self.conflicts.iter() {
+                list.push(each_element_on_its_line_array(
+                    set.iter().map(&conflict_item),
+                ));
             }
-
-            if !self.source_activation_contexts.is_empty() {
-                let contexts = each_element_on_its_line_array(
-                    self.source_activation_contexts.iter().map(&conflict_item),
-                );
-                doc.insert("source-activation-contexts", value(contexts));
+            for context in &self.source_activation_contexts {
+                let item = conflict_item(context);
+                list.push(each_element_on_its_line_array(
+                    [item.clone(), item].into_iter(),
+                ));
             }
+            doc.insert("conflicts", value(list));
         }
 
         // Write the settings that were used to generate the resolution.
@@ -2756,8 +2753,6 @@ struct LockWire {
     required_environments: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "conflicts", default)]
     conflicts: Option<Conflicts>,
-    #[serde(default)]
-    source_activation_contexts: BTreeSet<ConflictItem>,
     /// We discard the lockfile if these options match.
     #[serde(default)]
     options: ResolverOptions,
@@ -2765,6 +2760,24 @@ struct LockWire {
     manifest: ResolverManifest,
     #[serde(rename = "package", alias = "distribution", default)]
     packages: Vec<PackageWire>,
+}
+
+/// Split source activation contexts from user-declared conflicts.
+fn split_source_activation_contexts(conflicts: &Conflicts) -> (Conflicts, BTreeSet<ConflictItem>) {
+    let mut user_conflicts = Conflicts::empty();
+    let mut source_activation_contexts = BTreeSet::new();
+    for set in conflicts.iter() {
+        let mut items = set.iter();
+        let Some(item) = items.next() else {
+            continue;
+        };
+        if items.next().is_none() {
+            source_activation_contexts.insert(item.clone());
+        } else {
+            user_conflicts.push(set.clone());
+        }
+    }
+    (user_conflicts, source_activation_contexts)
 }
 
 impl TryFrom<LockWire> for Lock {
@@ -2813,6 +2826,8 @@ impl TryFrom<LockWire> for Lock {
         if options.exclude_newer.exclude_newer_span.is_some() {
             options.exclude_newer.exclude_newer = None;
         }
+        let (conflicts, source_activation_contexts) =
+            split_source_activation_contexts(&wire.conflicts.unwrap_or_else(Conflicts::empty));
         let lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
@@ -2820,8 +2835,8 @@ impl TryFrom<LockWire> for Lock {
             wire.requires_python,
             options,
             wire.manifest,
-            wire.conflicts.unwrap_or_else(Conflicts::empty),
-            wire.source_activation_contexts,
+            conflicts,
+            source_activation_contexts,
             supported_environments,
             required_environments,
             fork_markers,
