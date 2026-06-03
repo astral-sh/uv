@@ -447,6 +447,9 @@ from zipfile import ZipFile
 def get_requires_for_build_editable(config_settings=None):
     return []
 
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
 def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
     filename = "b-0.1.0-py3-none-any.whl"
     with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
@@ -461,6 +464,8 @@ def build_editable(wheel_directory, config_settings=None, metadata_directory=Non
         )
         wheel.writestr("b-0.1.0.dist-info/RECORD", "")
     return filename
+
+build_wheel = build_editable
 "#,
     )?;
 
@@ -480,7 +485,7 @@ def build_editable(wheel_directory, config_settings=None, metadata_directory=Non
         .split("[[resolution]]")
         .filter(|resolution| resolution.contains("\nname = \"b\"\n"))
         .collect::<Vec<_>>();
-    assert_eq!(member_b_resolutions.len(), 2, "{resolutions}");
+    assert_eq!(member_b_resolutions.len(), 4, "{resolutions}");
     assert!(
         member_b_resolutions
             .iter()
@@ -708,6 +713,119 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         .sync()
         .arg("--python-platform")
         .arg(target_platform)
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Verify that editable workspace packages capture separate build requirements
+/// for editable and regular wheel builds.
+#[test]
+fn lock_build_dependencies_distinguish_editable_and_wheel_builds() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("editable_helper-1.0.0-py3-none-any.whl"),
+        "editable-helper",
+        "1.0.0",
+    )?;
+    write_wheel(
+        &links_dir.child("wheel_helper-1.0.0-py3-none-any.whl"),
+        "wheel-helper",
+        "1.0.0",
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    context.temp_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_editable(config_settings=None):
+    return ["editable-helper==1.0.0"]
+
+def get_requires_for_build_wheel(config_settings=None):
+    return ["wheel-helper==1.0.0"]
+
+def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
+    import editable_helper
+    return _build(wheel_directory)
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    import wheel_helper
+    return _build(wheel_directory)
+
+def _build(wheel_directory):
+    filename = "project-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("project/__init__.py", "")
+        wheel.writestr(
+            "project-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: project\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "project-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("project-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let resolutions = resolution_sections(&lock);
+    let project_resolutions = resolutions
+        .split("[[resolution]]")
+        .filter(|resolution| resolution.contains("\nname = \"project\"\n"))
+        .collect::<Vec<_>>();
+    assert!(
+        project_resolutions.iter().any(|resolution| {
+            resolution.contains("operation = \"editable\"")
+                && resolution.contains(r#"{ name = "editable-helper""#)
+        }),
+        "{resolutions}"
+    );
+    assert!(
+        project_resolutions.iter().any(|resolution| {
+            resolution.contains("operation = \"wheel\"")
+                && resolution.contains(r#"{ name = "wheel-helper""#)
+        }),
+        "{resolutions}"
+    );
+
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    context
+        .sync()
+        .arg("--no-editable")
         .arg("--no-index")
         .arg("--frozen")
         .arg("--preview-features")

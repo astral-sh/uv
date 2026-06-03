@@ -355,6 +355,7 @@ impl<'a> BuildDispatch<'a> {
     /// Record both active PEP 517 stage contexts for a source package.
     pub fn set_build_resolution_stage_contexts(
         &self,
+        package: BuildPackageKey,
         bootstrap: BuildResolutionGraphKey,
         build: BuildResolutionGraphKey,
     ) {
@@ -362,7 +363,7 @@ impl<'a> BuildDispatch<'a> {
             .build_resolution_contexts
             .lock()
             .expect("build resolution context lock poisoned");
-        let package_contexts = contexts.entry(bootstrap.package.clone()).or_default();
+        let package_contexts = contexts.entry(package).or_default();
         package_contexts.insert(BuildResolutionStage::Bootstrap, bootstrap);
         package_contexts.insert(BuildResolutionStage::Build, build);
     }

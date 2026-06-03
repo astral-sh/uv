@@ -252,6 +252,34 @@ impl BuildResolutionStage {
     }
 }
 
+/// The build operation captured by a build resolution graph.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum BuildResolutionOperation {
+    /// A PEP 517 wheel build.
+    Wheel,
+    /// A PEP 660 editable wheel build.
+    Editable,
+}
+
+impl BuildResolutionOperation {
+    /// Return the operation for a source distribution.
+    pub fn from_source_dist(source_dist: &SourceDist) -> Self {
+        if source_dist.is_editable() {
+            Self::Editable
+        } else {
+            Self::Wheel
+        }
+    }
+
+    /// Return the serialized operation name.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Wheel => "wheel",
+            Self::Editable => "editable",
+        }
+    }
+}
+
 /// A captured build resolution graph key.
 ///
 /// A source package can have multiple independently resolved build graphs when
@@ -263,6 +291,8 @@ impl BuildResolutionStage {
 pub struct BuildResolutionGraphKey {
     /// The source package being built.
     pub package: BuildPackageKey,
+    /// The operation used to build the source package.
+    pub operation: BuildResolutionOperation,
     /// The captured resolution context identity, when known.
     pub context: Option<String>,
     /// The requirement-discovery stage captured by the graph.
@@ -276,6 +306,7 @@ impl BuildResolutionGraphKey {
     pub fn package(package: BuildPackageKey) -> Self {
         Self {
             package,
+            operation: BuildResolutionOperation::Wheel,
             context: None,
             stage: None,
             target_marker: None,
@@ -286,6 +317,7 @@ impl BuildResolutionGraphKey {
     pub fn context(package: BuildPackageKey, context: String) -> Self {
         Self {
             package,
+            operation: BuildResolutionOperation::Wheel,
             context: Some(context),
             stage: Some(BuildResolutionStage::Build),
             target_marker: None,
@@ -299,8 +331,27 @@ impl BuildResolutionGraphKey {
         stage: BuildResolutionStage,
         target_marker: Option<MarkerTree>,
     ) -> Self {
+        Self::context_with_marker_and_operation(
+            package,
+            BuildResolutionOperation::Wheel,
+            context,
+            stage,
+            target_marker,
+        )
+    }
+
+    /// Create an operation- and context-qualified build resolution graph key with target
+    /// reachability.
+    pub fn context_with_marker_and_operation(
+        package: BuildPackageKey,
+        operation: BuildResolutionOperation,
+        context: String,
+        stage: BuildResolutionStage,
+        target_marker: Option<MarkerTree>,
+    ) -> Self {
         Self {
             package,
+            operation,
             context: Some(context),
             stage: Some(stage),
             target_marker,

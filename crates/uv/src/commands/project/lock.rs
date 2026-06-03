@@ -44,8 +44,8 @@ use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{
     BuildContext, BuildIsolation, BuildPackageKey, BuildPreferences, BuildResolutionGraphKey,
-    BuildResolutionStage, BuildStack, EmptyInstalledPackages, HashStrategy,
-    SourceTreeEditablePolicy,
+    BuildResolutionOperation, BuildResolutionStage, BuildStack, EmptyInstalledPackages,
+    HashStrategy, SourceTreeEditablePolicy,
 };
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{
@@ -1250,27 +1250,71 @@ async fn resolve_all_possible_builds(
 ) -> anyhow::Result<()> {
     struct BuildResolutionRequest {
         key: BuildPackageKey,
+        dispatch_key: BuildPackageKey,
+        source_dist: SourceDist,
+        operation: BuildResolutionOperation,
+        solve_marker: Option<MarkerTree>,
+        context_marker: Option<MarkerTree>,
+    }
+
+    fn build_resolution_requests(
+        key: BuildPackageKey,
         source_dist: SourceDist,
         solve_marker: Option<MarkerTree>,
         context_marker: Option<MarkerTree>,
+    ) -> Vec<BuildResolutionRequest> {
+        let mut requests = Vec::with_capacity(if source_dist.is_editable() { 2 } else { 1 });
+        if source_dist.is_editable() {
+            requests.push(BuildResolutionRequest {
+                dispatch_key: key.clone(),
+                key: key.clone(),
+                source_dist: source_dist.clone(),
+                operation: BuildResolutionOperation::Editable,
+                solve_marker,
+                context_marker,
+            });
+
+            let SourceDist::Directory(mut wheel_source_dist) = source_dist else {
+                return requests;
+            };
+            wheel_source_dist.editable = Some(false);
+            let source_dist = SourceDist::Directory(wheel_source_dist);
+            requests.push(BuildResolutionRequest {
+                dispatch_key: BuildPackageKey::from_source_dist(
+                    key.name.clone(),
+                    key.version.clone(),
+                    Some(&source_dist),
+                ),
+                key,
+                source_dist,
+                operation: BuildResolutionOperation::Wheel,
+                solve_marker,
+                context_marker,
+            });
+        } else {
+            requests.push(BuildResolutionRequest {
+                dispatch_key: key.clone(),
+                key,
+                source_dist,
+                operation: BuildResolutionOperation::Wheel,
+                solve_marker,
+                context_marker,
+            });
+        }
+        requests
     }
 
     let mut queue: VecDeque<BuildResolutionRequest> = lock
         .source_distributions_for_build(workspace_root)?
         .into_iter()
         .filter(|(key, _)| !build_options.no_build_package(&key.name))
-        .map(|(key, source_dist)| {
+        .flat_map(|(key, source_dist)| {
             let marker = build_markers
                 .get(&key)
                 .copied()
                 .map(UniversalMarker::combined)
                 .map(source_python_marker);
-            BuildResolutionRequest {
-                key,
-                source_dist,
-                solve_marker: marker,
-                context_marker: None,
-            }
+            build_resolution_requests(key, source_dist, marker, None)
         })
         .collect();
 
@@ -1278,7 +1322,9 @@ async fn resolve_all_possible_builds(
 
     while let Some(BuildResolutionRequest {
         key,
+        dispatch_key,
         source_dist,
+        operation,
         solve_marker,
         context_marker,
     }) = queue.pop_front()
@@ -1298,6 +1344,7 @@ async fn resolve_all_possible_builds(
         let bootstrap_context = if build_markers.contains_key(&key) {
             lock.build_resolution_context_id_for(
                 &key,
+                operation,
                 BuildResolutionStage::Bootstrap,
                 build_markers,
                 executor_markers,
@@ -1307,6 +1354,7 @@ async fn resolve_all_possible_builds(
         } else {
             lock.build_resolution_context_id_for_marker(
                 &key,
+                operation,
                 BuildResolutionStage::Bootstrap,
                 target_marker,
                 executor_markers,
@@ -1317,6 +1365,7 @@ async fn resolve_all_possible_builds(
         let build_context = if build_markers.contains_key(&key) {
             lock.build_resolution_context_id_for(
                 &key,
+                operation,
                 BuildResolutionStage::Build,
                 build_markers,
                 executor_markers,
@@ -1326,6 +1375,7 @@ async fn resolve_all_possible_builds(
         } else {
             lock.build_resolution_context_id_for_marker(
                 &key,
+                operation,
                 BuildResolutionStage::Build,
                 target_marker,
                 executor_markers,
@@ -1333,19 +1383,22 @@ async fn resolve_all_possible_builds(
                 workspace_root,
             )?
         };
-        let bootstrap_graph_key = BuildResolutionGraphKey::context_with_marker(
+        let bootstrap_graph_key = BuildResolutionGraphKey::context_with_marker_and_operation(
             key.clone(),
+            operation,
             bootstrap_context,
             BuildResolutionStage::Bootstrap,
             target_marker,
         );
-        let build_graph_key = BuildResolutionGraphKey::context_with_marker(
+        let build_graph_key = BuildResolutionGraphKey::context_with_marker_and_operation(
             key.clone(),
+            operation,
             build_context,
             BuildResolutionStage::Build,
             target_marker,
         );
         build_dispatch.set_build_resolution_stage_contexts(
+            dispatch_key.clone(),
             bootstrap_graph_key.clone(),
             build_graph_key.clone(),
         );
@@ -1418,7 +1471,7 @@ async fn resolve_all_possible_builds(
                 if !requirements.is_empty() {
                     let build_stack = BuildStack::default();
                     let _ = build_dispatch
-                        .resolve(&requirements, Some(&key), &build_stack, None)
+                        .resolve(&requirements, Some(&dispatch_key), &build_stack, None)
                         .await?;
                     graph = build_resolutions
                         .get(&build_graph_key)
@@ -1437,7 +1490,7 @@ async fn resolve_all_possible_builds(
                 requirements.extend(extra_build_dependencies.into_iter().map(Requirement::from));
                 let build_stack = BuildStack::default();
                 let _ = build_dispatch
-                    .resolve(&requirements, Some(&key), &build_stack, None)
+                    .resolve(&requirements, Some(&dispatch_key), &build_stack, None)
                     .await?;
                 graph = build_resolutions
                     .get(&build_graph_key)
@@ -1467,12 +1520,12 @@ async fn resolve_all_possible_builds(
                     package.dist.version().cloned(),
                     Some(&source_dist),
                 );
-                queue.push_back(BuildResolutionRequest {
-                    key: dep_key,
+                queue.extend(build_resolution_requests(
+                    dep_key,
                     source_dist,
-                    solve_marker: resolve_backend_hook_requirements.then_some(package.marker),
-                    context_marker: nested_context_marker,
-                });
+                    resolve_backend_hook_requirements.then_some(package.marker),
+                    nested_context_marker,
+                ));
             }
         }
     }

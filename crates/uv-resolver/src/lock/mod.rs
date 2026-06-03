@@ -58,8 +58,8 @@ use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 use uv_types::{
     BuildContext, BuildPackageKey, BuildPackageSource, BuildResolutionGraphKey,
-    BuildResolutionGraphMap, BuildResolutionStage, HashStrategy, LockedBuildDependency,
-    LockedBuildResolution,
+    BuildResolutionGraphMap, BuildResolutionOperation, BuildResolutionStage, HashStrategy,
+    LockedBuildDependency, LockedBuildResolution,
 };
 use uv_workspace::{Editability, WorkspaceMember};
 
@@ -309,14 +309,58 @@ fn build_key_for_package(package: &Package, root: &Path) -> BuildPackageKey {
     }
 }
 
+fn build_package_sources_match(
+    left: Option<&BuildPackageSource>,
+    right: Option<&BuildPackageSource>,
+) -> bool {
+    match (left, right) {
+        (left, right) if left == right => true,
+        (Some(BuildPackageSource::Directory(left)), Some(BuildPackageSource::Editable(right)))
+        | (Some(BuildPackageSource::Editable(left)), Some(BuildPackageSource::Directory(right))) => {
+            left == right
+        }
+        _ => false,
+    }
+}
+
+fn build_keys_match(left: &BuildPackageKey, right: &BuildPackageKey) -> bool {
+    left.name == right.name
+        && (left.version == right.version || left.version.is_none() || right.version.is_none())
+        && build_package_sources_match(left.source.as_ref(), right.source.as_ref())
+}
+
+fn build_operation_for_key(key: &BuildPackageKey) -> BuildResolutionOperation {
+    if matches!(key.source, Some(BuildPackageSource::Editable(_))) {
+        BuildResolutionOperation::Editable
+    } else {
+        BuildResolutionOperation::Wheel
+    }
+}
+
+fn build_key_from_resolved_source_dist(resolved_dist: &ResolvedDist) -> Option<BuildPackageKey> {
+    let ResolvedDist::Installable { dist, version } = resolved_dist else {
+        return None;
+    };
+    let Dist::Source(source_dist) = dist.as_ref() else {
+        return None;
+    };
+    Some(BuildPackageKey::from_source_dist(
+        resolved_dist.name().clone(),
+        version.clone(),
+        Some(source_dist),
+    ))
+}
+
 fn build_resolution_context_id_for_package(
     package: &Package,
+    operation: BuildResolutionOperation,
     stage: BuildResolutionStage,
     target: Option<&TargetSelector>,
     executor: Option<&ExecutorSelector>,
 ) -> String {
     build_resolution_context_id_with_context(
         &build_key_from_package_id(&package.id),
+        operation,
         stage,
         target,
         executor,
@@ -324,28 +368,41 @@ fn build_resolution_context_id_for_package(
 }
 
 fn build_resolution_context_id(package: &BuildPackageKey) -> String {
-    build_resolution_context_id_with_context(package, BuildResolutionStage::Build, None, None)
+    build_resolution_context_id_with_context(
+        package,
+        BuildResolutionOperation::Wheel,
+        BuildResolutionStage::Build,
+        None,
+        None,
+    )
 }
 
 fn build_resolution_context_id_with_context(
     package: &BuildPackageKey,
+    operation: BuildResolutionOperation,
     stage: BuildResolutionStage,
     target: Option<&TargetSelector>,
     executor: Option<&ExecutorSelector>,
 ) -> String {
     let digest = hash_digest(&build_resolution_context_identity(
-        package, stage, target, executor,
+        package, operation, stage, target, executor,
     ));
-    format!("build:{}:wheel:{}:{digest}", package.name, stage.as_str())
+    format!(
+        "build:{}:{}:{}:{digest}",
+        package.name,
+        operation.as_str(),
+        stage.as_str()
+    )
 }
 
 fn build_resolution_context_identity(
     package: &BuildPackageKey,
+    operation: BuildResolutionOperation,
     stage: BuildResolutionStage,
     target: Option<&TargetSelector>,
     executor: Option<&ExecutorSelector>,
 ) -> String {
-    let mut identity = format!("operation=wheel;name={}", package.name);
+    let mut identity = format!("operation={};name={}", operation.as_str(), package.name);
     identity.push_str(";stage=");
     identity.push_str(stage.as_str());
     if let Some(version) = package.version.as_ref() {
@@ -1025,6 +1082,7 @@ impl Lock {
     pub fn build_resolution_context_id_for(
         &self,
         key: &BuildPackageKey,
+        operation: BuildResolutionOperation,
         stage: BuildResolutionStage,
         build_markers: &BTreeMap<BuildPackageKey, UniversalMarker>,
         executor_markers: &MarkerEnvironment,
@@ -1047,6 +1105,7 @@ impl Lock {
             || {
                 build_resolution_context_id_with_context(
                     key,
+                    operation,
                     stage,
                     target.as_ref(),
                     Some(&executor),
@@ -1055,6 +1114,7 @@ impl Lock {
             |package| {
                 build_resolution_context_id_for_package(
                     package,
+                    operation,
                     stage,
                     target.as_ref(),
                     Some(&executor),
@@ -1067,6 +1127,7 @@ impl Lock {
     pub fn build_resolution_context_id_for_marker(
         &self,
         key: &BuildPackageKey,
+        operation: BuildResolutionOperation,
         stage: BuildResolutionStage,
         target_marker: Option<MarkerTree>,
         executor_markers: &MarkerEnvironment,
@@ -1092,6 +1153,7 @@ impl Lock {
             || {
                 build_resolution_context_id_with_context(
                     key,
+                    operation,
                     stage,
                     target.as_ref(),
                     Some(&executor),
@@ -1100,6 +1162,7 @@ impl Lock {
             |package| {
                 build_resolution_context_id_for_package(
                     package,
+                    operation,
                     stage,
                     target.as_ref(),
                     Some(&executor),
@@ -1180,6 +1243,7 @@ impl Lock {
                 .packages
                 .iter()
                 .find(|package| build_key_for_package(package, root) == *parent_key);
+            let operation = graph_key.operation;
             let target = graph_key
                 .target_marker
                 .map(|marker| {
@@ -1201,6 +1265,7 @@ impl Lock {
                     || {
                         build_resolution_context_id_with_context(
                             parent_key,
+                            operation,
                             stage,
                             target.as_ref(),
                             Some(&executor),
@@ -1209,6 +1274,7 @@ impl Lock {
                     |package| {
                         build_resolution_context_id_for_package(
                             package,
+                            operation,
                             stage,
                             target.as_ref(),
                             Some(&executor),
@@ -1423,6 +1489,7 @@ impl Lock {
                 .packages
                 .iter()
                 .find(|package| build_key_for_package(package, root) == *parent_key);
+            let operation = graph_key.operation;
             let target = graph_key
                 .target_marker
                 .map(|marker| {
@@ -1444,6 +1511,7 @@ impl Lock {
                     || {
                         build_resolution_context_id_with_context(
                             parent_key,
+                            operation,
                             stage,
                             target.as_ref(),
                             Some(&executor),
@@ -1452,6 +1520,7 @@ impl Lock {
                     |package| {
                         build_resolution_context_id_for_package(
                             package,
+                            operation,
                             stage,
                             target.as_ref(),
                             Some(&executor),
@@ -1791,7 +1860,7 @@ impl Lock {
                 Some(ResolutionRecord {
                     id: context.clone(),
                     kind: ResolutionKind::Build,
-                    operation: Some(ResolutionOperation::Wheel),
+                    operation: Some(graph_key.operation.into()),
                     mode: Some(ResolutionModeRecord::Isolated),
                     stage: graph_key.stage.or(Some(BuildResolutionStage::Build)),
                     package_id: Some(package_id),
@@ -1930,6 +1999,7 @@ impl Lock {
     fn build_resolution_record_for_package_in_markers(
         &self,
         package: &Package,
+        operation: BuildResolutionOperation,
         target_markers: &MarkerEnvironment,
         executor_markers: &MarkerEnvironment,
         executor_python: &Version,
@@ -1947,6 +2017,9 @@ impl Lock {
                 && resolution.stage.unwrap_or(BuildResolutionStage::Build) == stage
         }) {
             has_records = true;
+            if resolution.operation.unwrap_or(ResolutionOperation::Wheel) != operation.into() {
+                continue;
+            }
             let has_executor = resolution.executor.is_some();
             if !resolution.executor.as_ref().is_none_or(|executor| {
                 executor.matches(executor_markers, executor_python, &self.requires_python)
@@ -2183,41 +2256,45 @@ impl Lock {
         executor_python: &Version,
     ) -> Result<BTreeMap<BuildPackageKey, LockedBuildResolution>, LockError> {
         let package_by_id = self.package_by_id();
+        let package_for_resolved_dist = |resolved_dist: &ResolvedDist| {
+            let package_id = package_id_from_resolved_dist(resolved_dist, workspace_root).ok()?;
+            package_by_id.get(&package_id).copied().or_else(|| {
+                let key = build_key_from_resolved_source_dist(resolved_dist)?;
+                self.packages.iter().find(|package| {
+                    package.id.resolution_id.is_none()
+                        && build_keys_match(&key, &build_key_for_package(package, workspace_root))
+                })
+            })
+        };
         let runtime_package_ids: FxHashSet<PackageId> = resolution
             .distributions()
-            .filter_map(|resolved_dist| {
-                package_id_from_resolved_dist(resolved_dist, workspace_root).ok()
-            })
+            .filter_map(|resolved_dist| package_for_resolved_dist(resolved_dist))
+            .map(|package| package.id.clone())
             .collect();
-        let selected_package_ids: FxHashSet<PackageId> = resolution
+        let selected_builds: Vec<(PackageId, BuildPackageKey)> = resolution
             .distributions()
             .filter_map(|resolved_dist| {
-                let ResolvedDist::Installable { dist, .. } = resolved_dist else {
-                    return None;
-                };
-                if !matches!(dist.as_ref(), Dist::Source(_)) {
-                    return None;
-                }
-                package_id_from_resolved_dist(resolved_dist, workspace_root).ok()
+                let key = build_key_from_resolved_source_dist(resolved_dist)?;
+                let package = package_for_resolved_dist(resolved_dist)?;
+                Some((package.id.clone(), key))
             })
             .collect();
-        let mut build_resolution_roots: FxHashSet<PackageId> = FxHashSet::default();
-        let mut queue: VecDeque<PackageId> = selected_package_ids.iter().cloned().collect();
+        let mut build_resolution_roots: FxHashSet<(PackageId, BuildPackageKey)> =
+            FxHashSet::default();
+        let mut queue: VecDeque<(PackageId, BuildPackageKey)> = selected_builds.into();
         let tag_policy = TagPolicy::Required(executor_tags);
 
-        while let Some(package_id) = queue.pop_front() {
+        while let Some((package_id, key)) = queue.pop_front() {
             let Some(package) = package_by_id.get(&package_id) else {
                 continue;
             };
-            if package.build_dependencies.is_empty() {
-                continue;
-            }
-            if !build_resolution_roots.insert(package.id.clone()) {
+            if !build_resolution_roots.insert((package.id.clone(), key.clone())) {
                 continue;
             }
 
             let build_resolution_record = self.build_resolution_record_for_package_in_markers(
                 package,
+                build_operation_for_key(&key),
                 target_markers,
                 executor_markers,
                 executor_python,
@@ -2249,23 +2326,30 @@ impl Lock {
                     build_options,
                     executor_markers,
                 )?;
-                if matches!(dist, Dist::Source(_))
-                    && !dependency_package.build_dependencies.is_empty()
-                    && !build_resolution_roots.contains(&dependency_package.id)
-                {
-                    queue.push_back(dependency_package.id.clone());
+                let Dist::Source(source_dist) = dist else {
+                    continue;
+                };
+                let key = BuildPackageKey::from_source_dist(
+                    dependency_package.id.name.clone(),
+                    dependency_package.id.version.clone(),
+                    Some(&source_dist),
+                );
+                if !build_resolution_roots.contains(&(dependency_package.id.clone(), key.clone())) {
+                    queue.push_back((dependency_package.id.clone(), key));
                 }
             }
         }
 
         let mut resolutions = BTreeMap::new();
 
-        for package in &self.packages {
-            if !build_resolution_roots.contains(&package.id) {
+        for (package_id, key) in build_resolution_roots {
+            let Some(package) = package_by_id.get(&package_id) else {
                 continue;
-            }
+            };
+            let operation = build_operation_for_key(&key);
             let build_resolution_record = self.build_resolution_record_for_package_in_markers(
                 package,
+                operation,
                 target_markers,
                 executor_markers,
                 executor_python,
@@ -2395,6 +2479,7 @@ impl Lock {
 
             let bootstrap_resolution_record = self.build_resolution_record_for_package_in_markers(
                 package,
+                operation,
                 target_markers,
                 executor_markers,
                 executor_python,
@@ -2410,7 +2495,6 @@ impl Lock {
                     Vec::new()
                 };
 
-            let key = build_key_for_package(package, workspace_root);
             let mut locked_resolution = LockedBuildResolution::new(
                 uv_distribution_types::Resolution::new(graph),
                 direct_dependencies,
@@ -5208,12 +5292,23 @@ impl ResolutionKind {
 #[serde(rename_all = "kebab-case")]
 enum ResolutionOperation {
     Wheel,
+    Editable,
 }
 
 impl ResolutionOperation {
     fn as_str(self) -> &'static str {
         match self {
             Self::Wheel => "wheel",
+            Self::Editable => "editable",
+        }
+    }
+}
+
+impl From<BuildResolutionOperation> for ResolutionOperation {
+    fn from(operation: BuildResolutionOperation) -> Self {
+        match operation {
+            BuildResolutionOperation::Wheel => Self::Wheel,
+            BuildResolutionOperation::Editable => Self::Editable,
         }
     }
 }
@@ -11468,34 +11563,47 @@ target = { marker = "sys_platform == 'darwin'" }
         let source_only_id = build_resolution_context_id(&package);
         let linux_linux_id = build_resolution_context_id_with_context(
             &package,
+            BuildResolutionOperation::Wheel,
             BuildResolutionStage::Build,
             Some(&linux_target),
             Some(&linux_executor),
         );
         let darwin_linux_id = build_resolution_context_id_with_context(
             &package,
+            BuildResolutionOperation::Wheel,
             BuildResolutionStage::Build,
             Some(&darwin_target),
             Some(&linux_executor),
         );
         let linux_darwin_id = build_resolution_context_id_with_context(
             &package,
+            BuildResolutionOperation::Wheel,
             BuildResolutionStage::Build,
             Some(&linux_target),
             Some(&darwin_executor),
         );
         let linux_python_313_id = build_resolution_context_id_with_context(
             &package,
+            BuildResolutionOperation::Wheel,
             BuildResolutionStage::Build,
             Some(&linux_target),
             Some(&python_313_executor),
         );
+        let editable_linux_id = build_resolution_context_id_with_context(
+            &package,
+            BuildResolutionOperation::Editable,
+            BuildResolutionStage::Build,
+            Some(&linux_target),
+            Some(&linux_executor),
+        );
 
         assert!(linux_linux_id.starts_with("build:dep:wheel:"));
+        assert!(editable_linux_id.starts_with("build:dep:editable:"));
         assert_ne!(source_only_id, linux_linux_id);
         assert_ne!(linux_linux_id, darwin_linux_id);
         assert_ne!(linux_linux_id, linux_darwin_id);
         assert_ne!(linux_linux_id, linux_python_313_id);
+        assert_ne!(linux_linux_id, editable_linux_id);
     }
 
     #[test]
