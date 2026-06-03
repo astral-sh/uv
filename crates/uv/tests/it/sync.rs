@@ -10416,6 +10416,94 @@ fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
 }
 
 #[test]
+fn sync_multiple_sources_index_marker_only_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["jinja2>=3"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
+        [tool.uv.sources]
+        jinja2 = [
+            { index = "torch-cu118", marker = "extra == 'foo'" },
+        ]
+
+        [[tool.uv.index]]
+        name = "torch-cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
+        explicit = true
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("foo"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + jinja2==3.1.4
+     + markupsafe==2.1.5
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_multiple_sources_url_marker_only_negative_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", marker = "extra != 'foo'" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.1.1 (from https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl)
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn sync_multiple_sources_extra_url_without_conflicts() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

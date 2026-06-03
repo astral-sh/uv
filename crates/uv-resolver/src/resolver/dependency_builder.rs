@@ -131,7 +131,14 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
     /// `ResolverState::requirements`, so this pass mutates the already-added dependencies in place
     /// instead of synthesizing new ones from raw metadata.
     pub(super) fn rewrite_root_complementary_sources(&mut self) {
-        if self.state.urls.is_empty() && self.state.indexes.is_empty() {
+        if self.state.urls.is_empty()
+            && self.state.indexes.is_empty()
+            && !self
+                .state
+                .requirements
+                .iter()
+                .any(|requirement| self.is_source_specific_base_requirement(requirement))
+        {
             return;
         }
 
@@ -163,7 +170,13 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         base_requirements: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Box<[Requirement]>>,
     ) {
-        if self.state.urls.is_empty() && self.state.indexes.is_empty() {
+        if self.state.urls.is_empty()
+            && self.state.indexes.is_empty()
+            && !base_requirements
+                .iter()
+                .chain(dependency_groups.values().flatten())
+                .any(|requirement| self.is_source_specific_base_requirement(requirement))
+        {
             return;
         }
 
@@ -175,10 +188,13 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                 continue;
             }
             let scope = self.complementary_source_scope(&raw_requirement);
+            let included_in_fork = raw_requirement
+                .evaluate_markers(self.env.marker_environment(), &[])
+                && (scope.conflict().is_some() || scope.marker() == raw_requirement.marker);
             let complementary_requirements = self.complementary_source_requirements(
                 &raw_requirement,
                 &scope,
-                raw_requirement.evaluate_markers(self.env.marker_environment(), &[]),
+                included_in_fork,
                 python_marker,
             );
 
@@ -258,6 +274,15 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         let Some(base_index) = self.find_unsourced_base_index(&name) else {
             if action == ComplementarySourceAction::RewriteFlattenedDependency {
                 return self.add_root_unsourced_complement(requirement, name, parent);
+            }
+            if let Some(source_index) = self.find_source_index(
+                &name,
+                &requirement.flattened_source,
+                requirement.flattened_marker.simplify_extras_with(|_| true),
+            ) {
+                self.deps[source_index].package =
+                    PubGrubPackage::from_base_preserving_marker(name, requirement.marker);
+                return true;
             }
             return false;
         };
@@ -416,16 +441,21 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         project_name: Option<&PackageName>,
     ) -> ForkScope {
         let scope = ForkScope::from_requirement(requirement);
-        if matches!(requirement.source, RequirementSource::Registry { .. })
-            || scope.conflict().is_some()
-        {
+        if scope.conflict().is_some() {
             return scope;
         }
         let Some(project_name) = project_name else {
             return scope;
         };
+        if matches!(requirement.source, RequirementSource::Registry { .. }) {
+            return if Self::has_extra(requirement.marker) {
+                ForkScope::from_package_marker(requirement.marker, project_name)
+            } else {
+                scope
+            };
+        }
         let Some(extra) = Self::single_positive_extra(requirement.marker) else {
-            return if Self::has_positive_extra(requirement.marker) {
+            return if Self::has_extra(requirement.marker) {
                 ForkScope::from_package_marker(requirement.marker, project_name)
             } else {
                 scope
@@ -529,17 +559,11 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         extra
     }
 
-    /// Returns whether `marker` references at least one positive extra.
-    fn has_positive_extra(marker: MarkerTree) -> bool {
-        let mut has_positive_extra = false;
-
-        marker.visit_extras(|operator, _| {
-            if operator == MarkerOperator::Equal {
-                has_positive_extra = true;
-            }
-        });
-
-        has_positive_extra
+    /// Returns whether `marker` references at least one extra.
+    fn has_extra(marker: MarkerTree) -> bool {
+        let mut has_extra = false;
+        marker.visit_extras(|_, _| has_extra = true);
+        has_extra
     }
 
     /// Returns the marker split for a complementary dependency.
