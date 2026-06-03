@@ -238,6 +238,7 @@ pub(crate) async fn add(
             VirtualProject::discover_with_package(
                 project_dir,
                 &DiscoveryOptions::default(),
+                cache,
                 &WorkspaceCache::default(),
                 package,
             )
@@ -246,6 +247,7 @@ pub(crate) async fn add(
             VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions::default(),
+                cache,
                 &WorkspaceCache::default(),
             )
             .await?
@@ -614,6 +616,7 @@ pub(crate) async fn add(
                 VirtualProject::discover(
                     project.root(),
                     &DiscoveryOptions::default(),
+                    cache,
                     &WorkspaceCache::default(),
                 )
                 .await?,

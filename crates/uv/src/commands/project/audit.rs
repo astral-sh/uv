@@ -84,9 +84,13 @@ pub(crate) async fn audit(
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
     } else {
-        workspace =
-            Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                .await?;
+        workspace = Workspace::discover(
+            project_dir,
+            &DiscoveryOptions::default(),
+            &cache,
+            &workspace_cache,
+        )
+        .await?;
         LockTarget::Workspace(&workspace)
     };
 

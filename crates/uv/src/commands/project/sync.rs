@@ -108,6 +108,7 @@ pub(crate) async fn sync(
                     members: MemberDiscovery::Existing,
                     ..DiscoveryOptions::default()
                 },
+                cache,
                 workspace_cache,
             )
             .await?
@@ -115,6 +116,7 @@ pub(crate) async fn sync(
             VirtualProject::discover_with_package(
                 project_dir,
                 &DiscoveryOptions::default(),
+                cache,
                 workspace_cache,
                 name.clone(),
             )
@@ -123,6 +125,7 @@ pub(crate) async fn sync(
             let project = VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions::default(),
+                cache,
                 workspace_cache,
             )
             .await?;

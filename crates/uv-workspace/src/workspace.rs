@@ -13,6 +13,7 @@ use itertools::Itertools;
 use rustc_hash::{FxHashSet, FxHasher};
 use tracing::{debug, trace, warn};
 
+use uv_cache::Cache;
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_distribution_types::{Index, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified, normalize_path};
@@ -41,8 +42,8 @@ type CachedWorkspaceResult = Result<Arc<Workspace>, WorkspaceError>;
 /// The cache is indexed both by the workspace root and by the path of each workspace member.
 ///
 /// The cache makes assumptions about [`DiscoveryOptions`]:
-/// * For a given discovery path, `stop_discovery_at` either always or never sits between a project
-///   and a workspace root. This means that we don't need to key discovery on `stop_discovery_at`.
+/// * `stop_discovery_at` is only used for isolation workspaces in the cache. We avoid traversing
+///   into the cache if `cache` is accidentally included in the workspace member glob.
 /// * TODO(konsti): Support caching for [`MemberDiscovery`] modes that aren't `All`.
 #[derive(Debug, Default, Clone)]
 pub struct WorkspaceCache {
@@ -247,7 +248,8 @@ impl Workspace {
     pub async fn discover(
         path: &Path,
         options: &DiscoveryOptions,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
     ) -> Result<Arc<Self>, WorkspaceError> {
         let path = std::path::absolute(path)
             .map_err(WorkspaceErrorKind::Normalize)?
@@ -266,7 +268,7 @@ impl Workspace {
         // synchronize them after finding the workspace root and allow only one of them to perform
         // the full discovery.
         if options.members == MemberDiscovery::All
-            && let Some(workspace) = cache.get(&project_path)
+            && let Some(workspace) = workspace_cache.get(&project_path)
         {
             return workspace;
         }
@@ -334,7 +336,7 @@ impl Workspace {
             // package `pyproject.toml` and the workspace root `pyproject.toml` before arriving
             // here. At this point, only one thread can continue and the other waits, then uses the
             // cached workspace.
-            if let Some(workspace) = cache.register_or_wait(&workspace_root).await {
+            if let Some(workspace) = workspace_cache.register_or_wait(&workspace_root).await {
                 return workspace;
             }
         }
@@ -361,10 +363,11 @@ impl Workspace {
             workspace_pyproject_toml,
             current_project,
             options,
+            cache,
         )
         .await;
         if options.members == MemberDiscovery::All {
-            cache.insert(result.clone(), &workspace_root);
+            workspace_cache.insert(result.clone(), &workspace_root);
         }
         result
     }
@@ -951,6 +954,7 @@ impl Workspace {
         workspace_pyproject_toml: PyProjectToml,
         current_project: Option<WorkspaceMember>,
         options: &DiscoveryOptions,
+        cache: &Cache,
     ) -> Result<Arc<Self>, WorkspaceError> {
         trace!(
             "Discovering workspace members for: `{}`",
@@ -961,6 +965,7 @@ impl Workspace {
             &workspace_definition,
             &workspace_pyproject_toml,
             options,
+            cache,
         )
         .await?;
         let mut workspace_members = Arc::new(workspace_members);
@@ -1038,10 +1043,19 @@ impl Workspace {
         workspace_definition: &ToolUvWorkspace,
         workspace_pyproject_toml: &PyProjectToml,
         options: &DiscoveryOptions,
+        cache: &Cache,
     ) -> Result<BTreeMap<PackageName, WorkspaceMember>, WorkspaceError> {
         let mut workspace_members = BTreeMap::new();
         // Avoid reading a `pyproject.toml` more than once.
         let mut seen = FxHashSet::default();
+
+        // We may receive an uninitialized cache with a relative cache root.
+        let cache_root = if cache.root().is_absolute() {
+            cache.root().to_path_buf()
+        } else {
+            CWD.join(cache.root())
+        };
+        let cache_root = normalize_path(&cache_root).into_owned();
 
         // Add the project at the workspace root, if it exists and if it's distinct from the current
         // project. If it is the current project, it is added as such in the next step.
@@ -1077,6 +1091,13 @@ impl Workspace {
             {
                 let member_root = member_root
                     .map_err(|err| WorkspaceErrorKind::GlobWalk(absolute_glob.clone(), err))?;
+                if member_root.starts_with(&cache_root) {
+                    debug!(
+                        "Ignoring cache directory while discovering workspace members: `{}`",
+                        member_root.simplified_display()
+                    );
+                    continue;
+                }
                 if !seen.insert(member_root.clone()) {
                     continue;
                 }
@@ -1414,7 +1435,8 @@ impl ProjectWorkspace {
     pub async fn discover(
         path: &Path,
         options: &DiscoveryOptions,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
     ) -> Result<Self, WorkspaceError> {
         assert!(
             path.is_absolute(),
@@ -1439,16 +1461,17 @@ impl ProjectWorkspace {
             project_root.simplified_display()
         );
 
-        Self::from_project_root(project_root, options, cache).await
+        Self::from_project_root(project_root, options, cache, workspace_cache).await
     }
 
     /// Discover the workspace starting from the directory containing the `pyproject.toml`.
     async fn from_project_root(
         project_root: &Path,
         options: &DiscoveryOptions,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
     ) -> Result<Self, WorkspaceError> {
-        if let Some(project) = Self::from_cache(project_root, options, cache)? {
+        if let Some(project) = Self::from_cache(project_root, options, workspace_cache)? {
             return Ok(project);
         }
 
@@ -1465,7 +1488,15 @@ impl ProjectWorkspace {
             .clone()
             .ok_or_else(|| WorkspaceErrorKind::MissingProject(pyproject_path))?;
 
-        Self::from_project(project_root, &project, &pyproject_toml, options, cache).await
+        Self::from_project(
+            project_root,
+            &project,
+            &pyproject_toml,
+            options,
+            cache,
+            workspace_cache,
+        )
+        .await
     }
 
     /// If the current directory contains a `pyproject.toml` with a `project` table, discover the
@@ -1473,9 +1504,10 @@ impl ProjectWorkspace {
     pub async fn from_maybe_project_root(
         project_root: &Path,
         options: &DiscoveryOptions,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
     ) -> Result<Option<Self>, WorkspaceError> {
-        if let Some(project) = Self::from_cache(project_root, options, cache)? {
+        if let Some(project) = Self::from_cache(project_root, options, workspace_cache)? {
             return Ok(Some(project));
         }
 
@@ -1494,7 +1526,16 @@ impl ProjectWorkspace {
             return Ok(None);
         };
 
-        match Self::from_project(project_root, &project, &pyproject_toml, options, cache).await {
+        match Self::from_project(
+            project_root,
+            &project,
+            &pyproject_toml,
+            options,
+            cache,
+            workspace_cache,
+        )
+        .await
+        {
             Ok(workspace) => Ok(Some(workspace)),
             Err(error) if matches!(error.as_ref(), WorkspaceErrorKind::NonWorkspace(_)) => Ok(None),
             Err(err) => Err(err),
@@ -1540,7 +1581,8 @@ impl ProjectWorkspace {
         project: &Project,
         project_pyproject_toml: &PyProjectToml,
         options: &DiscoveryOptions,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
     ) -> Result<Self, WorkspaceError> {
         let project_path = std::path::absolute(install_path)
             .map_err(WorkspaceErrorKind::Normalize)?
@@ -1561,7 +1603,7 @@ impl ProjectWorkspace {
             )));
         }
 
-        if let Some(project) = Self::from_cache(&project_path, options, cache)? {
+        if let Some(project) = Self::from_cache(&project_path, options, workspace_cache)? {
             return Ok(project);
         }
 
@@ -1620,7 +1662,7 @@ impl ProjectWorkspace {
             };
             let workspace = Arc::new(workspace);
             if options.members == MemberDiscovery::All {
-                cache.insert(Ok(workspace.clone()), &project_path);
+                workspace_cache.insert(Ok(workspace.clone()), &project_path);
             }
             return Ok(Self {
                 project_root: project_path.to_path_buf(),
@@ -1631,7 +1673,7 @@ impl ProjectWorkspace {
 
         if options.members == MemberDiscovery::All {
             // Ensure that workspace discovery runs only once for any given workspace root.
-            if let Some(workspace) = cache.register_or_wait(&workspace_root).await {
+            if let Some(workspace) = workspace_cache.register_or_wait(&workspace_root).await {
                 return workspace.map(|workspace| Self {
                     project_root: project_path.to_path_buf(),
                     project_name: project.name.clone(),
@@ -1651,10 +1693,11 @@ impl ProjectWorkspace {
             workspace_pyproject_toml,
             Some(current_project),
             options,
+            cache,
         )
         .await;
         if options.members == MemberDiscovery::All {
-            cache.insert(result.clone(), &workspace_root);
+            workspace_cache.insert(result.clone(), &workspace_root);
         }
 
         Ok(Self {
@@ -1864,7 +1907,8 @@ impl VirtualProject {
     pub async fn discover(
         path: &Path,
         options: &DiscoveryOptions,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
     ) -> Result<Self, WorkspaceError> {
         assert!(
             path.is_absolute(),
@@ -1891,7 +1935,7 @@ impl VirtualProject {
 
         // Fast path: The workspace is already cached.
         if options.members == MemberDiscovery::All
-            && let Some(workspace) = cache.get(project_root)
+            && let Some(workspace) = workspace_cache.get(project_root)
         {
             let workspace = workspace?;
             let virtual_project = if let Some((project_name, _member)) = workspace
@@ -1924,6 +1968,7 @@ impl VirtualProject {
                 &pyproject_toml,
                 options,
                 cache,
+                workspace_cache,
             )
             .await?;
             Ok(Self::Project(project))
@@ -1945,10 +1990,11 @@ impl VirtualProject {
                 pyproject_toml,
                 None,
                 options,
+                cache,
             )
             .await;
             if options.members == MemberDiscovery::All {
-                cache.insert(result.clone(), &project_path);
+                workspace_cache.insert(result.clone(), &project_path);
             }
             Ok(Self::NonProject(result?))
         } else {
@@ -1964,10 +2010,11 @@ impl VirtualProject {
                 pyproject_toml,
                 None,
                 options,
+                cache,
             )
             .await;
             if options.members == MemberDiscovery::All {
-                cache.insert(result.clone(), &project_path);
+                workspace_cache.insert(result.clone(), &project_path);
             }
             Ok(Self::NonProject(result?))
         }
@@ -1977,10 +2024,11 @@ impl VirtualProject {
     pub async fn discover_with_package(
         path: &Path,
         options: &DiscoveryOptions,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         package: PackageName,
     ) -> Result<Self, WorkspaceError> {
-        let workspace = Workspace::discover(path, options, cache).await?;
+        let workspace = Workspace::discover(path, options, cache, workspace_cache).await?;
         let Some(project_workspace) =
             Workspace::with_current_project(workspace.clone(), package.clone())
         else {
@@ -2100,6 +2148,7 @@ mod tests {
     use assert_fs::prelude::*;
     use insta::{assert_json_snapshot, assert_snapshot};
 
+    use uv_cache::Cache;
     use uv_normalize::{GroupName, PackageName};
     use uv_pypi_types::DependencyGroupSpecifier;
 
@@ -2116,9 +2165,11 @@ mod tests {
             .unwrap()
             .join("test")
             .join("workspaces");
+        let cache = Cache::from_path(root_dir.join(".uv_cache"));
         let project = ProjectWorkspace::discover(
             &root_dir.join(folder),
             &DiscoveryOptions::default(),
+            &cache,
             &WorkspaceCache::default(),
         )
         .await
@@ -2131,9 +2182,11 @@ mod tests {
         folder: &Path,
     ) -> Result<(ProjectWorkspace, String), (WorkspaceError, String)> {
         let root_escaped = regex::escape(folder.to_string_lossy().as_ref());
+        let cache = Cache::from_path(env::temp_dir().join("uv-workspace-cache"));
         let project = ProjectWorkspace::discover(
             folder,
             &DiscoveryOptions::default(),
+            &cache,
             &WorkspaceCache::default(),
         )
         .await
@@ -2507,13 +2560,20 @@ mod tests {
             "#,
             )?;
 
-        let cache = WorkspaceCache::default();
-        let root_workspace =
-            Workspace::discover(root.as_ref(), &DiscoveryOptions::default(), &cache).await?;
+        let cache = Cache::from_path(env::temp_dir().join("uv-workspace-cache"));
+        let workspace_cache = WorkspaceCache::default();
+        let root_workspace = Workspace::discover(
+            root.as_ref(),
+            &DiscoveryOptions::default(),
+            &cache,
+            &workspace_cache,
+        )
+        .await?;
         let member_workspace = Workspace::discover(
             root.child("packages").child("seeds").as_ref(),
             &DiscoveryOptions::default(),
             &cache,
+            &workspace_cache,
         )
         .await?;
 
@@ -2525,6 +2585,7 @@ mod tests {
             root.child("packages").child("seeds").as_ref(),
             &DiscoveryOptions::default(),
             &cache,
+            &workspace_cache,
         )
         .await?
         .expect("cached workspace member ignores invalid change in the meantime");
@@ -2563,13 +2624,15 @@ mod tests {
             "#,
             )?;
 
-        let cache = WorkspaceCache::default();
+        let cache = Cache::from_path(env::temp_dir().join("uv-workspace-cache"));
+        let workspace_cache = WorkspaceCache::default();
         let partial_options = DiscoveryOptions {
             members: MemberDiscovery::None,
             ..DiscoveryOptions::default()
         };
         let partial_project =
-            ProjectWorkspace::discover(root.as_ref(), &partial_options, &cache).await?;
+            ProjectWorkspace::discover(root.as_ref(), &partial_options, &cache, &workspace_cache)
+                .await?;
 
         assert_eq!(partial_project.workspace().packages().len(), 1);
 
@@ -2577,6 +2640,7 @@ mod tests {
             root.child("packages").child("seeds").as_ref(),
             &DiscoveryOptions::default(),
             &cache,
+            &workspace_cache,
         )
         .await?;
         let seeds = PackageName::from_str("seeds")?;

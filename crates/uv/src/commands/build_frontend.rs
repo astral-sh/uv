@@ -268,6 +268,7 @@ async fn build_impl(
     let workspace = Workspace::discover(
         src.directory(),
         &DiscoveryOptions::default(),
+        cache,
         workspace_cache,
     )
     .await;

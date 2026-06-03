@@ -266,6 +266,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     //    If found, this file is combined with the user configuration file.
     // 3. The nearest configuration file (`uv.toml` or `pyproject.toml`) in the directory tree,
     //    starting from the current directory.
+
+    // Pass the (possibly non-existent) cache dir path to the initial workspace discovery.
+    let discovery_cache = Cache::from_settings(
+        cli.top_level.cache_args.no_cache,
+        cli.top_level.cache_args.cache_dir.clone(),
+    )?;
     let workspace_cache = WorkspaceCache::default();
     let filesystem = if let Some(config_file) = cli.top_level.config_file.as_ref() {
         if config_file
@@ -284,8 +290,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         FilesystemOptions::user()
             .map_err(map_settings_error)?
             .combine(FilesystemOptions::system().map_err(map_settings_error)?)
-    } else if let Ok(workspace) =
-        Workspace::discover(&project_dir, &DiscoveryOptions::default(), &workspace_cache).await
+    } else if let Ok(workspace) = Workspace::discover(
+        &project_dir,
+        &DiscoveryOptions::default(),
+        &discovery_cache,
+        &workspace_cache,
+    )
+    .await
     {
         let project =
             FilesystemOptions::find(workspace.install_path()).map_err(map_settings_error)?;
@@ -523,6 +534,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         debug!("Disabling the uv cache due to `--no-cache`");
     }
     let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
+    let workspace_cache = WorkspaceCache::default();
 
     // Configure the global network settings.
     let client_builder = BaseClientBuilder::new(
@@ -1978,10 +1990,17 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .await
             }
             WorkspaceCommand::Dir(args) => {
-                commands::dir(args.package, &project_dir, &workspace_cache, printer).await
+                commands::dir(
+                    args.package,
+                    &project_dir,
+                    &cache,
+                    &workspace_cache,
+                    printer,
+                )
+                .await
             }
             WorkspaceCommand::List(args) => {
-                commands::list(&project_dir, args.paths, &workspace_cache, printer).await
+                commands::list(&project_dir, args.paths, &cache, &workspace_cache, printer).await
             }
         },
         Commands::BuildBackend { command } => spawn_blocking(move || match command {

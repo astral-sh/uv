@@ -28,6 +28,7 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, warn};
 use uv_auth::CredentialsCache;
+use uv_cache::Cache;
 use uv_cache_key::cache_digest;
 use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution::BuildRequires;
@@ -321,6 +322,7 @@ impl SourceBuild {
             fallback_package_name,
             locations,
             &no_sources,
+            build_context.cache(),
             workspace_cache,
             credentials_cache,
         )
@@ -572,6 +574,7 @@ impl SourceBuild {
         package_name: Option<&PackageName>,
         locations: &IndexLocations,
         no_sources: &NoSources,
+        cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
@@ -652,6 +655,7 @@ impl SourceBuild {
                     locations,
                     no_sources,
                     true,
+                    cache,
                     workspace_cache,
                     credentials_cache,
                 )
@@ -1100,6 +1104,7 @@ async fn create_pep517_build_environment(
             build_context
                 .source_tree_editable_policy()
                 .workspace_member_editable(None),
+            build_context.cache(),
             workspace_cache,
             credentials_cache,
         )

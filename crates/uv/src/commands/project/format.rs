@@ -48,8 +48,13 @@ pub(crate) async fn format(
     let target_dir = if no_project {
         project_dir.to_owned()
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-            .await
+        match VirtualProject::discover(
+            project_dir,
+            &DiscoveryOptions::default(),
+            &cache,
+            &workspace_cache,
+        )
+        .await
         {
             // If we found a project, we use the project root
             Ok(proj) => proj.root().to_owned(),

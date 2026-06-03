@@ -219,6 +219,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 None,
                 build_dispatch.locations(),
                 build_dispatch.sources().clone(),
+                build_dispatch.cache(),
                 build_dispatch.workspace_cache(),
                 client.credentials_cache(),
             )

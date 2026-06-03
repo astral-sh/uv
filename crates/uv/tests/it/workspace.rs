@@ -2193,6 +2193,79 @@ fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
     Ok(())
 }
 
+/// Ignore uv's cache directory when expanding member globs for an outer workspace.
+///
+/// If `workspace-member-in-subdir` is treated as a member of the outer workspace, its workspace
+/// source resolves to the outer workspace's `uv-git-workspace-in-root` instead of the Git
+/// checkout's root package.
+///
+/// See: <https://github.com/astral-sh/uv/pull/18311#discussion_r3340828264>
+#[test]
+#[cfg(feature = "test-git")]
+fn transitive_dep_in_git_workspace_with_cache_inside_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "prime-cache"
+        version = "0"
+        requires-python = ">=3.12"
+        dependencies = ["workspace-member-in-subdir"]
+
+        [tool.uv.sources]
+        workspace-member-in-subdir = { git = "https://github.com/astral-sh/workspace-in-root-test", subdirectory = "workspace-member-in-subdir", rev = "d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68" }
+    "#})?;
+    context.lock().assert().success();
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+
+    context.root.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "outer"
+        version = "0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = [
+            "packages/uv-git-workspace-in-root",
+            "**/workspace-member-in-subdir",
+        ]
+    "#})?;
+    context
+        .root
+        .child("packages")
+        .child("uv-git-workspace-in-root")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "uv-git-workspace-in-root"
+        version = "0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "consumer"
+        version = "0"
+        requires-python = ">=3.12"
+        dependencies = ["outer", "workspace-member-in-subdir"]
+
+        [tool.uv.sources]
+        outer = { path = ".." }
+        workspace-member-in-subdir = { git = "https://github.com/astral-sh/workspace-in-root-test", subdirectory = "workspace-member-in-subdir", rev = "d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn workspace_members_with_leading_dot_slash() -> Result<()> {
     let context = uv_test::test_context!("3.12");

@@ -102,6 +102,7 @@ pub(crate) async fn project_version(
         project_dir,
         package.as_ref(),
         explicit_project,
+        cache,
         workspace_cache,
     )
     .await?;
@@ -412,6 +413,7 @@ async fn find_target(
     project_dir: &Path,
     package: Option<&PackageName>,
     explicit_project: bool,
+    cache: &Cache,
     workspace_cache: &WorkspaceCache,
 ) -> Result<VirtualProject> {
     // Find the project in the workspace.
@@ -419,6 +421,7 @@ async fn find_target(
         VirtualProject::discover_with_package(
             project_dir,
             &DiscoveryOptions::default(),
+            cache,
             workspace_cache,
             package.clone(),
         )
@@ -432,6 +435,7 @@ async fn find_target(
             ProjectWorkspace::discover(
                 project_dir,
                 &DiscoveryOptions::default(),
+                cache,
                 &project_workspace_cache,
             )
             .await
