@@ -427,6 +427,7 @@ impl<'a> BaseClientBuilder<'a> {
             read_timeout: self.read_timeout,
             connect_timeout: self.connect_timeout,
             credentials_cache: self.credentials_cache.clone(),
+            suggest_system_certs: !self.system_certs,
         })
     }
 
@@ -456,6 +457,7 @@ impl<'a> BaseClientBuilder<'a> {
             read_timeout: existing.read_timeout,
             connect_timeout: existing.connect_timeout,
             credentials_cache: existing.credentials_cache.clone(),
+            suggest_system_certs: existing.suggest_system_certs,
         }
     }
 
@@ -688,6 +690,8 @@ pub struct BaseClient {
     no_retry_delay: bool,
     /// Global authentication cache for a uv invocation to share credentials across uv clients.
     credentials_cache: Arc<CredentialsCache>,
+    /// Whether TLS failures may be resolved by enabling system certificate roots.
+    suggest_system_certs: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -750,6 +754,10 @@ impl BaseClient {
 
     pub fn credentials_cache(&self) -> &CredentialsCache {
         &self.credentials_cache
+    }
+
+    pub(crate) fn suggest_system_certs(&self) -> bool {
+        self.suggest_system_certs
     }
 
     /// The reqwest client without middleware.

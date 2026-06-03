@@ -34,7 +34,7 @@ use crate::commands::project::{
     ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
     WorkspacePython, default_dependency_groups,
 };
-use crate::commands::{ExitStatus, diagnostics, project};
+use crate::commands::{ExitStatus, UvFailure, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -333,11 +333,7 @@ pub(crate) async fn remove(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(UvFailure::from(err).into());
         }
         Err(err) => return Err(err.into()),
     };
@@ -393,11 +389,7 @@ pub(crate) async fn remove(
     {
         Ok(_) => {}
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(UvFailure::from(err).into());
         }
         Err(err) => return Err(err.into()),
     }

@@ -37,6 +37,34 @@ fn check_project() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "test-pypi")]
+fn check_unsatisfiable_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sortedcontainers==0.0.0"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: No solution found when resolving dependencies
+      Caused by: Because there is no version of sortedcontainers==0.0.0 and your project depends on sortedcontainers==0.0.0, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn check_rejects_tool_arguments() {
     let context = uv_test::test_context_with_versions!(&[]);
 

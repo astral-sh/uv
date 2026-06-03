@@ -50,7 +50,7 @@ use crate::commands::project::{
     ScriptEnvironment, UniversalState, default_dependency_groups, detect_conflicts,
     script_extra_build_requires, script_specification, update_environment,
 };
-use crate::commands::{ExitStatus, diagnostics};
+use crate::commands::{ExitStatus, UvFailure};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings,
@@ -309,18 +309,12 @@ pub(crate) async fn sync(
                         output_format,
                         printer,
                     )?;
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .report(operations::Error::OutdatedEnvironment(changelog))
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return Err(
+                        UvFailure::from(operations::Error::OutdatedEnvironment(changelog)).into(),
+                    );
                 }
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return Err(UvFailure::from(err).into());
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -365,11 +359,7 @@ pub(crate) async fn sync(
     {
         Ok(result) => Outcome::Success(result),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(UvFailure::from(err).into());
         }
         Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
             if dry_run.enabled() {
@@ -453,18 +443,10 @@ pub(crate) async fn sync(
                 output_format,
                 printer,
             )?;
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(operations::Error::OutdatedEnvironment(changelog))
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(UvFailure::from(operations::Error::OutdatedEnvironment(changelog)).into());
         }
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(UvFailure::from(err).into());
         }
         Err(err) => return Err(err.into()),
     };

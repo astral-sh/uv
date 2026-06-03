@@ -2821,7 +2821,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
-        ResolveError::NoSolution(Box::new(NoSolutionError::new(
+        let cause = Box::new(NoSolutionError::new(
             err,
             self.index.clone(),
             included_versions,
@@ -2840,7 +2840,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.tags.clone(),
             self.workspace_members.clone(),
             self.options.clone(),
-        )))
+        ));
+        ResolveError::NoSolution {
+            header: cause.header(),
+            cause,
+        }
     }
 
     fn on_progress(&self, package: &PubGrubPackage, version: &Version) {

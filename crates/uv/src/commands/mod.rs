@@ -114,6 +114,46 @@ pub(crate) enum ExitStatus {
     External(u8),
 }
 
+/// A failure propagated to the command entrypoint for rendering and exit-status selection.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum UvFailure {
+    /// A failure caused by invalid or unsatisfiable user input.
+    #[error(transparent)]
+    User(anyhow::Error),
+
+    /// An unexpected internal or environmental failure.
+    #[error(transparent)]
+    Unexpected(anyhow::Error),
+}
+
+impl UvFailure {
+    pub(crate) fn user(error: impl Into<anyhow::Error>) -> Self {
+        Self::User(error.into())
+    }
+
+    pub(crate) fn unexpected(error: anyhow::Error) -> Self {
+        Self::Unexpected(error)
+    }
+
+    pub(crate) fn into_error_and_status(self) -> (anyhow::Error, ExitStatus) {
+        match self {
+            Self::User(error) => (error, ExitStatus::Failure),
+            Self::Unexpected(error) => (error, ExitStatus::Error),
+        }
+    }
+}
+
+impl From<pip::operations::Error> for UvFailure {
+    /// Classify an operation error at the point where it leaves its command.
+    fn from(error: pip::operations::Error) -> Self {
+        if error.is_user_failure() {
+            Self::user(error)
+        } else {
+            Self::unexpected(error.into())
+        }
+    }
+}
+
 /// Read dotenv files into an overlay for a spawned process.
 ///
 /// These values intentionally do not mutate uv's process environment and cannot mutate
