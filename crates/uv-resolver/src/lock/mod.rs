@@ -760,21 +760,21 @@ impl Lock {
             .chain(package.optional_dependencies.values().flatten())
             .chain(package.dependency_groups.values().flatten())
             .collect::<Vec<_>>();
-        let sources = dependencies.iter().fold(
+        let packages = dependencies.iter().fold(
             FxHashMap::<_, FxHashSet<_>>::default(),
-            |mut sources, dependency| {
-                sources
+            |mut packages, dependency| {
+                packages
                     .entry(&dependency.package_id.name)
                     .or_default()
-                    .insert(&dependency.package_id.source);
-                sources
+                    .insert(&dependency.package_id);
+                packages
             },
         );
 
         for dependency in dependencies {
-            if sources
+            if packages
                 .get(&dependency.package_id.name)
-                .is_none_or(|sources| sources.len() <= 1)
+                .is_none_or(|packages| packages.len() <= 1)
             {
                 continue;
             }
