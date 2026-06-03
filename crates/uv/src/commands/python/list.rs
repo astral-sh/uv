@@ -3,7 +3,6 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 use uv_cli::PythonListFormat;
 use uv_pep440::Version;
-use uv_preview::Preview;
 
 use anyhow::Result;
 use itertools::Either;
@@ -71,7 +70,6 @@ pub(crate) async fn list(
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let request = request.as_deref().map(PythonRequest::parse);
     let base_download_request = if python_preference == PythonPreference::OnlySystem {
@@ -155,7 +153,6 @@ pub(crate) async fn list(
                 EnvironmentPreference::OnlySystem,
                 discovery_preference,
                 cache,
-                preview,
             )
             // Raise discovery errors if critical
             .filter(|result| {

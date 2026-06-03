@@ -138,7 +138,6 @@ pub(crate) async fn check(
             cache,
             DryRun::Disabled,
             printer,
-            preview,
         )
         .await?
         .into_environment()?;

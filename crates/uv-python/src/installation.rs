@@ -13,7 +13,6 @@ use uv_cache::Cache;
 use uv_client::{BaseClient, BaseClientBuilder};
 use uv_pep440::{Prerelease, Version};
 use uv_platform::{Arch, Libc, Os, Platform};
-use uv_preview::Preview;
 
 use crate::discovery::{
     EnvironmentPreference, PythonRequest, find_best_python_installation, find_python_installation,
@@ -64,9 +63,8 @@ impl PythonInstallation {
         preference: PythonPreference,
         download_list: &ManagedPythonDownloadList,
         cache: &Cache,
-        preview: Preview,
     ) -> Result<Self, Error> {
-        let installation = Self::find_existing(request, environments, preference, cache, preview)?;
+        let installation = Self::find_existing(request, environments, preference, cache)?;
         installation.warn_if_outdated_prerelease(request, download_list);
         Ok(installation)
     }
@@ -77,14 +75,12 @@ impl PythonInstallation {
         environments: EnvironmentPreference,
         preference: PythonPreference,
         cache: &Cache,
-        preview: Preview,
     ) -> Result<Self, Error> {
         Ok(find_python_installation(
             request,
             environments,
             preference,
             cache,
-            preview,
         )??)
     }
 
@@ -101,7 +97,6 @@ impl PythonInstallation {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
         python_downloads_json_url: Option<&str>,
-        preview: Preview,
     ) -> Result<Self, Error> {
         let downloads_enabled = preference.allows_managed()
             && python_downloads.is_automatic()
@@ -117,7 +112,6 @@ impl PythonInstallation {
             python_install_mirror,
             pypy_install_mirror,
             python_downloads_json_url,
-            preview,
         )
         .await?;
         installation
@@ -144,11 +138,10 @@ impl PythonInstallation {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
         python_downloads_json_url: Option<&str>,
-        preview: Preview,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or(&PythonRequest::Default);
 
-        let err = match Self::find_existing(request, environments, preference, cache, preview) {
+        let err = match Self::find_existing(request, environments, preference, cache) {
             Ok(installation) => {
                 installation
                     .download_and_warn_if_outdated_prerelease(

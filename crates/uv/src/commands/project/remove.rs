@@ -243,7 +243,6 @@ pub(crate) async fn remove(
                     active,
                     cache,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -265,7 +264,6 @@ pub(crate) async fn remove(
                     cache,
                     DryRun::Disabled,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_environment()?;
@@ -286,7 +284,6 @@ pub(crate) async fn remove(
                 active,
                 cache,
                 printer,
-                preview,
             )
             .await?
             .into_interpreter();

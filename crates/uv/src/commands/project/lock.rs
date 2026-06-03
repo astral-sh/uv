@@ -116,7 +116,6 @@ pub(crate) async fn lock(
                 &client_builder,
                 cache,
                 &reporter,
-                preview,
             )
             .await?;
             Some(Pep723Script::init(&path, requires_python.specifiers()).await?)
@@ -165,7 +164,6 @@ pub(crate) async fn lock(
                     Some(false),
                     cache,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_interpreter()
@@ -182,7 +180,6 @@ pub(crate) async fn lock(
                 Some(false),
                 cache,
                 printer,
-                preview,
             )
             .await?
             .into_interpreter(),

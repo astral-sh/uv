@@ -73,6 +73,8 @@ windows-registry = { workspace = true }
 windows = { workspace = true }
 
 [dev-dependencies]
+uv-preview = { workspace = true, features = ["testing"] }
+
 anyhow = { workspace = true }
 assert_fs = { workspace = true }
 indoc = { workspace = true }

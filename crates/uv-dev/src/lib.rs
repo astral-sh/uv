@@ -70,6 +70,9 @@ enum Cli {
 
 #[instrument] // Anchor span to check for overhead
 pub async fn run() -> Result<()> {
+    uv_preview::set(uv_preview::Preview::default())?;
+    uv_preview::finalize()?;
+
     let cli = Cli::parse();
     let environment = EnvironmentOptions::new()?;
     match cli {
