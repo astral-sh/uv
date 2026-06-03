@@ -972,7 +972,7 @@ wheels = [
 
 [[package]]
 name = "uv"
-version = "0.11.18"
+version = "0.11.19"
 source = { editable = "." }
 
 [package.dev-dependencies]
