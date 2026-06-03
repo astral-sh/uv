@@ -1960,6 +1960,16 @@ impl Lock {
                 &self.source_activation_contexts,
             ));
         }
+        if let Some(package) = self
+            .packages
+            .iter()
+            .find(|package| !package.has_source_variant_group_dependencies(&self.requires_python))
+        {
+            return Ok(SatisfiesResult::MissingSourceVariantGroupDependencies(
+                &package.id.name,
+                package.id.version.as_ref(),
+            ));
+        }
 
         let mut queue: VecDeque<&Package> = VecDeque::new();
         let mut seen = FxHashSet::default();
@@ -2799,6 +2809,8 @@ pub enum SatisfiesResult<'lock> {
     Satisfied,
     /// The lockfile uses different source activation contexts.
     MismatchedSourceActivationContexts(BTreeSet<ConflictItem>, &'lock BTreeSet<ConflictItem>),
+    /// A package in the lockfile is missing derived source-variant dependency group edges.
+    MissingSourceVariantGroupDependencies(&'lock PackageName, Option<&'lock Version>),
     /// The lockfile uses a different set of workspace members.
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
     /// A workspace member switched from virtual to non-virtual or vice versa.
@@ -3338,6 +3350,33 @@ impl Package {
 
     /// Add production source branches that satisfy source-variant group requirements.
     fn add_source_variant_group_dependencies(&mut self, requires_python: &RequiresPython) {
+        for (group, dependency) in self.source_variant_group_dependencies(requires_python) {
+            self.add_locked_group_dependency(group, dependency);
+        }
+    }
+
+    /// Return whether all production source branches required by source-variant groups are present.
+    fn has_source_variant_group_dependencies(&self, requires_python: &RequiresPython) -> bool {
+        self.source_variant_group_dependencies(requires_python)
+            .into_iter()
+            .all(|(group, expected)| {
+                self.dependency_groups
+                    .get(&group)
+                    .is_some_and(|dependencies| {
+                        dependencies.iter().any(|dependency| {
+                            dependency.package_id == expected.package_id
+                                && dependency.simplified_marker == expected.simplified_marker
+                                && dependency.extra.is_superset(&expected.extra)
+                        })
+                    })
+            })
+    }
+
+    /// Return production source branches that satisfy source-variant group requirements.
+    fn source_variant_group_dependencies(
+        &self,
+        requires_python: &RequiresPython,
+    ) -> Vec<(GroupName, Dependency)> {
         let mut dependencies = Vec::new();
         for (group, requirements) in &self.metadata.dependency_groups {
             let source_variant_names = requirements
@@ -3378,10 +3417,7 @@ impl Package {
                 );
             }
         }
-
-        for (group, dependency) in dependencies {
-            self.add_locked_group_dependency(group, dependency);
-        }
+        dependencies
     }
 
     fn add_locked_group_dependency(&mut self, group: GroupName, dep: Dependency) {

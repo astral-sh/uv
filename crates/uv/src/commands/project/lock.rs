@@ -1269,6 +1269,18 @@ impl ValidatedLock {
                 );
                 Ok(Self::Versions(lock))
             }
+            SatisfiesResult::MissingSourceVariantGroupDependencies(name, version) => {
+                if let Some(version) = version {
+                    debug!(
+                        "Resolving despite existing lockfile due to missing source-variant dependency group edges for: `{name}=={version}`"
+                    );
+                } else {
+                    debug!(
+                        "Resolving despite existing lockfile due to missing source-variant dependency group edges for: `{name}`"
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
             SatisfiesResult::MismatchedMembers(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched members:\n  Requested: {:?}\n  Existing: {:?}",

@@ -25646,6 +25646,76 @@ fn lock_multiple_sources_explicit_default_index_needs_no_activation_context() ->
     Ok(())
 }
 
+/// A stale lock must be updated when a group-scoped source requires a
+/// materialized production fallback, even if both branches use the default
+/// index.
+#[test]
+fn lock_multiple_sources_group_explicit_default_index_invalidates_stale_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [{ index = "default", group = "use", marker = "extra == 'foo'" }]
+
+        [[tool.uv.index]]
+        name = "default"
+        url = "https://pypi.org/simple"
+        default = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Locks created before production source fallbacks were materialized omit
+    // the group edge, so `--only-group use` installs nothing.
+    let mut stale_lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    for package in stale_lock["package"]
+        .as_array_of_tables_mut()
+        .expect("lock packages")
+        .iter_mut()
+    {
+        if package["name"].as_str() == Some("project") {
+            package.remove("dev-dependencies");
+        }
+    }
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&stale_lock.to_string())?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// An explicit default-index source still needs an activation context when its
 /// scoped requirement selects a different version.
 #[test]
