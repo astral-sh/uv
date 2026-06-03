@@ -252,10 +252,13 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                 );
 
                 for requirement in complementary_requirements {
-                    let split_requirement =
-                        Self::requirement_with_marker(&raw_requirement, requirement.marker);
-                    let constraints =
-                        self.constraints_for_requirement(&split_requirement, None, python_marker);
+                    let extras = Self::required_extras(raw_requirement.marker);
+                    let constraints = self.constraints_for_complementary_extra_source(
+                        &raw_requirement,
+                        requirement.marker,
+                        &extras,
+                        python_marker,
+                    );
 
                     if self.apply_complementary_source_requirement(
                         &requirement,

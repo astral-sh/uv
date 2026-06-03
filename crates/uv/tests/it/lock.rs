@@ -36501,6 +36501,102 @@ fn lock_path_dependency_explicit_index_multi_extra_source_constraint() -> Result
     Ok(())
 }
 
+/// Test that complementary explicit-index dependencies synthesized from a
+/// workspace member's dependency groups retain extra-gated constraints.
+#[test]
+fn lock_workspace_group_explicit_index_extra_source_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let default_index = context.temp_dir.child("default");
+    fs_err::create_dir_all(&default_index)?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        default_index.join("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    let explicit_index = context.temp_dir.child("explicit");
+    fs_err::create_dir_all(&explicit_index)?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        explicit_index.join("ok-2.0.0-py3-none-any.whl"),
+    )?;
+
+    let pkg_a = context.temp_dir.child("pkg_a");
+    fs_err::create_dir_all(&pkg_a)?;
+
+    let pyproject_toml = pkg_a.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        alt = ["ok"]
+
+        [tool.uv.sources]
+        ok = [
+            { index = "explicit", group = "alt", marker = "extra == 'foo'" },
+        ]
+
+        [[tool.uv.index]]
+        name = "explicit"
+        url = "explicit"
+        format = "flat"
+        explicit = true
+        "#,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [tool.uv]
+        constraint-dependencies = ["ok<2 ; extra == 'foo'"]
+
+        [tool.uv.workspace]
+        members = ["pkg_a"]
+
+        [tool.uv.sources]
+        pkg-a = { workspace = true }
+
+        [[tool.uv.index]]
+        name = "default"
+        url = "default"
+        format = "flat"
+        default = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (markers: extra == 'extra-5-pkg-a-foo' and extra == 'group-5-pkg-a-alt'):
+      ╰─▶ Because only ok{extra == 'extra-5-pkg-a-foo' and extra == 'group-5-pkg-a-alt'}==2.0.0 is available and pkg-a depends on ok{extra == 'extra-5-pkg-a-foo' and extra == 'group-5-pkg-a-alt'}, we can conclude that pkg-a depends on ok==2.0.0.
+          And because pkg-a depends on ok<2 and your workspace requires pkg-a[foo], we can conclude that your workspace's requirements are unsatisfiable.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    ");
+
+    Ok(())
+}
+
 /// Test that complementary source splits for path dependencies are emitted per
 /// extra when the same source applies to multiple sibling extras.
 #[test]
