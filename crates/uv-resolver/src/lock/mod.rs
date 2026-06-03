@@ -2954,24 +2954,21 @@ impl Package {
                     ConflictMarker::group(&self.id.name, group),
                 );
                 for dependency in &self.dependencies {
-                    if dependency.package_id.name != requirement.name
-                        || !matches!(
-                            &requirement.source,
-                            RequirementSource::Registry { specifier, .. }
-                                if dependency
-                                    .package_id
-                                    .version
-                                    .as_ref()
-                                    .is_some_and(|version| specifier.contains(version))
-                        )
-                    {
+                    if dependency.package_id.name != requirement.name {
                         continue;
                     }
 
                     let mut marker = dependency.complexified_marker;
                     marker.assume_conflict_item(&ConflictItem::from(self.id.name.clone()));
                     marker.and(group_marker);
-                    if marker.is_false() {
+                    if marker.is_false()
+                        || !Self::dependency_satisfies_group_requirements(
+                            dependency,
+                            requirements,
+                            marker,
+                            &self.id.name,
+                        )
+                    {
                         continue;
                     }
 
@@ -2995,6 +2992,33 @@ impl Package {
         }
 
         fallbacks
+    }
+
+    /// Returns `true` if a resolved dependency satisfies every overlapping source-agnostic group
+    /// requirement.
+    fn dependency_satisfies_group_requirements(
+        dependency: &Dependency,
+        requirements: &BTreeSet<Requirement>,
+        marker: UniversalMarker,
+        project: &PackageName,
+    ) -> bool {
+        let Some(version) = dependency.package_id.version.as_ref() else {
+            return false;
+        };
+        requirements
+            .iter()
+            .filter(|requirement| {
+                requirement.name == dependency.package_id.name
+                    && Self::is_unsourced_base_requirement(requirement)
+                    && !encode_package_extras(requirement.marker, project)
+                        .is_disjoint(marker.pep508())
+            })
+            .all(|requirement| {
+                matches!(
+                    &requirement.source,
+                    RequirementSource::Registry { specifier, .. } if specifier.contains(version)
+                )
+            })
     }
 
     /// Returns `true` if `requirement` is an unsourced base requirement.

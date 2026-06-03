@@ -11648,6 +11648,61 @@ fn sync_multiple_sources_only_group_conflicting_prod_fallback_preserves_constrai
     Ok(())
 }
 
+/// A source-agnostic group fallback must satisfy every overlapping group
+/// constraint for the package.
+#[test]
+fn sync_multiple_sources_only_group_conflicting_prod_fallback_preserves_overlapping_constraints()
+-> Result<()> {
+    let context = uv_test::test_context!("3.14");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["iniconfig>=1", "iniconfig<2"]
+
+        [tool.uv]
+        conflicts = [[
+            { package = "project" },
+            { group = "use" },
+        ]]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--only-group")
+        .arg("use"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// A source-agnostic group fallback must retain the selected package's
 /// production dependencies when production and the group conflict.
 #[test]
