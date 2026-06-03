@@ -9,15 +9,18 @@ use petgraph::prelude::EdgeRef;
 use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::DependencyGroupsWithDefaults;
+use uv_configuration::{
+    DependencyGroups, DependencyGroupsWithDefaults, ExtrasSpecification, InstallOptions,
+};
 use uv_console::human_readable_bytes;
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ResolverMarkerEnvironment;
 
+use super::export;
 use crate::lock::{Package, PackageId};
-use crate::{Lock, PackageMap};
+use crate::{Installable, Lock, LockError, PackageMap};
 
 #[derive(Debug)]
 pub struct TreeDisplay<'env> {
@@ -42,7 +45,7 @@ pub struct TreeDisplay<'env> {
 impl<'env> TreeDisplay<'env> {
     /// Create a new [`DisplayDependencyGraph`] for the set of installed packages.
     pub fn new(
-        lock: &'env Lock,
+        target: &impl Installable<'env>,
         markers: Option<&'env ResolverMarkerEnvironment>,
         latest: &'env PackageMap<Version>,
         depth: usize,
@@ -52,7 +55,59 @@ impl<'env> TreeDisplay<'env> {
         no_dedupe: bool,
         invert: bool,
         show_sizes: bool,
-    ) -> Self {
+    ) -> Result<Self, LockError> {
+        let lock = target.lock();
+        let extras = ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::All);
+        let group_names = lock
+            .packages
+            .iter()
+            .flat_map(|package| package.dependency_groups.keys())
+            .filter(|group| groups.contains(group))
+            .chain(lock.dependency_groups().keys())
+            .cloned()
+            .unique()
+            .collect();
+        let reachability_groups = if groups.prod() {
+            DependencyGroups::from_args(
+                false,
+                false,
+                false,
+                group_names,
+                Vec::new(),
+                false,
+                Vec::new(),
+                false,
+            )
+        } else {
+            DependencyGroups::from_args(
+                false,
+                false,
+                false,
+                Vec::new(),
+                Vec::new(),
+                false,
+                group_names,
+                false,
+            )
+        }
+        .with_defaults(DefaultGroups::default());
+        let install_options = InstallOptions::default();
+        let export::ExportableRequirements(reachable) = export::ExportableRequirements::from_lock(
+            target,
+            &[],
+            &extras,
+            &reachability_groups,
+            false,
+            &install_options,
+        )?;
+        let reachable = reachable
+            .into_iter()
+            .filter(|requirement| {
+                markers.is_none_or(|markers| requirement.marker.evaluate(markers, &[]))
+            })
+            .map(|requirement| &requirement.package.id)
+            .collect::<FxHashSet<_>>();
+
         // Identify any workspace members.
         //
         // These include:
@@ -134,9 +189,16 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
-                {
+                if !reachable.contains(&dep.package_id) {
+                    continue;
+                }
+
+                if markers.is_some_and(|markers| {
+                    !dep.complexified_marker
+                        .combined()
+                        .without_extras()
+                        .evaluate(markers, &[])
+                }) {
                     continue;
                 }
 
@@ -277,9 +339,16 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
-                {
+                if !reachable.contains(&dep.package_id) {
+                    continue;
+                }
+
+                if markers.is_some_and(|markers| {
+                    !dep.complexified_marker
+                        .combined()
+                        .without_extras()
+                        .evaluate(markers, &[])
+                }) {
                     continue;
                 }
 
@@ -406,7 +475,7 @@ impl<'env> TreeDisplay<'env> {
             }
         };
 
-        Self {
+        Ok(Self {
             graph,
             roots,
             latest,
@@ -415,7 +484,7 @@ impl<'env> TreeDisplay<'env> {
             invert,
             lock,
             show_sizes,
-        }
+        })
     }
 
     /// Perform a depth-first traversal of the given package and its dependencies.
