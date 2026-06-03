@@ -323,7 +323,7 @@ impl Workspace {
                 return Err(WorkspaceError::from(WorkspaceErrorKind::MissingProject(
                     pyproject_path,
                 )));
-            } else if let Some(workspace) = find_workspace(&project_path, options).await? {
+            } else if let Some(workspace) = find_workspace(&project_path, options, cache).await? {
                 // We have found an explicit root above.
                 workspace
             } else {
@@ -1638,7 +1638,7 @@ impl ProjectWorkspace {
         if workspace.is_none() {
             // The project isn't an explicit workspace root, check if we're a regular workspace
             // member by looking for an explicit workspace root above.
-            workspace = find_workspace(&project_path, options).await?;
+            workspace = find_workspace(&project_path, options, cache).await?;
         }
 
         let current_project = WorkspaceMember {
@@ -1726,7 +1726,30 @@ impl ProjectWorkspace {
 async fn find_workspace(
     project_root: &Path,
     options: &DiscoveryOptions,
+    cache: &Cache,
 ) -> Result<Option<(PathBuf, ToolUvWorkspace, PyProjectToml)>, WorkspaceError> {
+    let external_cache_root = if options.stop_discovery_at.is_none() {
+        // We may receive an uninitialized cache with a relative cache root.
+        let cache_root = if cache.root().is_absolute() {
+            cache.root().to_path_buf()
+        } else {
+            CWD.join(cache.root())
+        };
+        Some(normalize_path(&cache_root).into_owned())
+    } else {
+        None
+    };
+    // Avoid panicking in the odd (unsupported) case that uv is running inside the cache dir.
+    if let Some(cache_root) = external_cache_root
+        && project_root.starts_with(cache_root)
+    {
+        debug!(
+            "Project is contained in cache directory: `{}`",
+            project_root.simplified_display()
+        );
+        return Ok(None);
+    }
+
     // Skip 1 to ignore the current project itself.
     for workspace_root in project_root
         .ancestors()
