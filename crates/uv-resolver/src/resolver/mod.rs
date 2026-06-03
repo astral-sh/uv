@@ -2176,7 +2176,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 variant.extra.as_ref(),
                 variant.group.as_ref(),
             );
-            if variant.extra.is_some() || variant.group.is_some() {
+            if variant.extra.is_some() || variant.group.is_some() || !requirement.marker.is_true() {
                 selector_markers
                     .entry(requirement.name.clone())
                     .or_insert(MarkerTree::FALSE)

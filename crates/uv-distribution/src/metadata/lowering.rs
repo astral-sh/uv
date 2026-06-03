@@ -177,6 +177,13 @@ impl LoweredRequirement {
                             }
                         }
 
+                        if extra.is_none()
+                            && group.is_none()
+                            && !source.marker().only_extras().is_true()
+                        {
+                            return false;
+                        }
+
                         true
                     }
                     None => {
