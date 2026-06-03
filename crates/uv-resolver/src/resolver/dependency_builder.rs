@@ -292,7 +292,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             if let Some(source_index) = self.find_source_index(
                 &name,
                 &requirement.flattened_source,
-                requirement.flattened_marker.simplify_extras_with(|_| true),
+                requirement.flattened_marker,
             ) {
                 self.deps[source_index].package =
                     PubGrubPackage::from_base_preserving_marker(name, requirement.marker);
@@ -301,17 +301,16 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             return false;
         };
 
-        if action == ComplementarySourceAction::RewriteFlattenedDependency {
-            let Some(flattened_index) = self.find_source_index(
-                &name,
-                &requirement.flattened_source,
-                requirement.flattened_marker,
-            ) else {
-                return false;
-            };
-
+        let flattened_index = self.find_source_index(
+            &name,
+            &requirement.flattened_source,
+            requirement.flattened_marker,
+        );
+        if let Some(flattened_index) = flattened_index {
             self.deps[flattened_index].package =
                 PubGrubPackage::from_base_preserving_marker(name.clone(), requirement.marker);
+        } else if action == ComplementarySourceAction::RewriteFlattenedDependency {
+            return false;
         }
 
         self.preserve_base_constraint_on_source(base_index, &name, requirement.marker);
@@ -325,7 +324,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             Self::exclude_marker_from_base(&mut self.deps[base_index], &name, requirement.marker);
         }
 
-        if action == ComplementarySourceAction::AddDependency {
+        if action == ComplementarySourceAction::AddDependency && flattened_index.is_none() {
             self.deps.push(PubGrubDependency {
                 package: PubGrubPackage::from_base_preserving_marker(name, requirement.marker),
                 version: requirement.version.clone(),
@@ -423,7 +422,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         }
         let marker = scope.marker();
         // This path is specifically for extra/group-gated source splits.
-        if marker.only_extras().is_true() {
+        if !Self::has_extra(marker) {
             return Vec::new();
         }
         Self::split_complementary_markers(marker)
@@ -435,7 +434,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                 marker,
                 version: Self::version_for_requirement(requirement),
                 attached_source: DependencySource::from_source(&requirement.source),
-                flattened_marker: requirement.marker,
+                flattened_marker: requirement.marker.simplify_extras_with(|_| true),
                 flattened_source: DependencySource::from_requirement(requirement),
             })
             .collect()
