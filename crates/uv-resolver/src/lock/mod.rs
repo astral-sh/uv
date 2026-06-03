@@ -1155,7 +1155,7 @@ impl Lock {
                 }
             }
             for group in package
-                .dependency_groups
+                .dependency_groups()
                 .keys()
                 .filter(|group| groups.contains(group))
             {

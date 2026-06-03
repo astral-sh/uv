@@ -248,7 +248,7 @@ impl<'env> TreeDisplay<'env> {
             .iter()
             .flat_map(|id| {
                 lock.find_by_id(id)
-                    .dependency_groups
+                    .dependency_groups()
                     .keys()
                     .filter(|group| groups.contains(group))
                     .map(|group| (&id.name, group))

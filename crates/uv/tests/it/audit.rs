@@ -868,6 +868,71 @@ async fn audit_empty_extra_excludes_source_variant_edges() {
     ");
 }
 
+/// Groups represented only in package metadata must still activate source
+/// selection markers during audit traversal.
+#[tokio::test]
+async fn audit_metadata_only_group_source_variant_edges() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({
+            "queries": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
+                "version": "1.1.1"
+            }]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
 /// Recursive extras that select a source must be excluded from audit traversal.
 #[tokio::test]
 async fn audit_excludes_recursive_source_variant_edges() {
