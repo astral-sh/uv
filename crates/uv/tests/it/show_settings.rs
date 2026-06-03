@@ -353,6 +353,73 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     let uv_toml = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
+    --- old
+    +++ new
+    @@ -67,7 +67,45 @@
+         ),
+         settings: PipSettings {
+             index_locations: IndexLocations {
+    -            indexes: [],
+    +            indexes: [
+    +                Index {
+    +                    name: None,
+    +                    url: Pypi(
+    +                        VerbatimUrl {
+    +                            url: DisplaySafeUrl {
+    +                                scheme: "https",
+    +                                cannot_be_a_base: false,
+    +                                username: "",
+    +                                password: None,
+    +                                host: Some(
+    +                                    Domain(
+    +                                        "pypi.org",
+    +                                    ),
+    +                                ),
+    +                                port: None,
+    +                                path: "/simple",
+    +                                query: None,
+    +                                fragment: None,
+    +                            },
+    +                            given: Some(
+    +                                "https://pypi.org/simple",
+    +                            ),
+    +                            expanded: false,
+    +                        },
+    +                    ),
+    +                    explicit: false,
+    +                    default: true,
+    +                    origin: Some(
+    +                        Project,
+    +                    ),
+    +                    format: Simple,
+    +                    publish_url: None,
+    +                    authenticate: Auto,
+    +                    ignore_error_codes: None,
+    +                    cache_control: None,
+    +                    exclude_newer: None,
+    +                },
+    +            ],
+                 flat_index: [],
+                 no_index: false,
+             },
+    @@ -118,7 +156,7 @@
+             allow_empty_requirements: false,
+             strict: false,
+             dependency_mode: Transitive,
+    -        resolution: Highest,
+    +        resolution: LowestDirect,
+             prerelease: IfNecessaryOrExplicit,
+             fork_strategy: RequiresPython,
+             dependency_metadata: DependencyMetadata(
+    @@ -130,7 +168,7 @@
+             no_annotate: false,
+             no_header: false,
+             custom_compile_command: None,
+    -        generate_hashes: false,
+    +        generate_hashes: true,
+             config_setting: ConfigSettings(
+                 {},
+             ),
     "#
     );
 
@@ -382,6 +449,30 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     diff_uv_snapshot!(context.filters(), &uv_toml, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @"
+    --- old
+    +++ new
+    @@ -95,9 +95,7 @@
+                         ),
+                         explicit: false,
+                         default: true,
+    -                    origin: Some(
+    -                        Project,
+    -                    ),
+    +                    origin: None,
+                         format: Simple,
+                         publish_url: None,
+                         authenticate: Auto,
+    @@ -176,7 +174,9 @@
+                 {},
+             ),
+             python_version: None,
+    -        python_platform: None,
+    +        python_platform: Some(
+    +            X8664UnknownLinuxGnu,
+    +        ),
+             universal: false,
+             exclude_newer: ExcludeNewer {
+                 global: None,
     "
     );
 
@@ -422,6 +513,88 @@ fn resolve_index_url() -> anyhow::Result<()> {
     let configured = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
+    --- old
+    +++ new
+    @@ -67,7 +67,78 @@
+         ),
+         settings: PipSettings {
+             index_locations: IndexLocations {
+    -            indexes: [],
+    +            indexes: [
+    +                Index {
+    +                    name: None,
+    +                    url: Pypi(
+    +                        VerbatimUrl {
+    +                            url: DisplaySafeUrl {
+    +                                scheme: "https",
+    +                                cannot_be_a_base: false,
+    +                                username: "",
+    +                                password: None,
+    +                                host: Some(
+    +                                    Domain(
+    +                                        "pypi.org",
+    +                                    ),
+    +                                ),
+    +                                port: None,
+    +                                path: "/simple",
+    +                                query: None,
+    +                                fragment: None,
+    +                            },
+    +                            given: Some(
+    +                                "https://pypi.org/simple",
+    +                            ),
+    +                            expanded: false,
+    +                        },
+    +                    ),
+    +                    explicit: false,
+    +                    default: false,
+    +                    origin: None,
+    +                    format: Simple,
+    +                    publish_url: None,
+    +                    authenticate: Auto,
+    +                    ignore_error_codes: None,
+    +                    cache_control: None,
+    +                    exclude_newer: None,
+    +                },
+    +                Index {
+    +                    name: None,
+    +                    url: Url(
+    +                        VerbatimUrl {
+    +                            url: DisplaySafeUrl {
+    +                                scheme: "https",
+    +                                cannot_be_a_base: false,
+    +                                username: "",
+    +                                password: None,
+    +                                host: Some(
+    +                                    Domain(
+    +                                        "test.pypi.org",
+    +                                    ),
+    +                                ),
+    +                                port: None,
+    +                                path: "/simple",
+    +                                query: None,
+    +                                fragment: None,
+    +                            },
+    +                            given: Some(
+    +                                "https://test.pypi.org/simple",
+    +                            ),
+    +                            expanded: false,
+    +                        },
+    +                    ),
+    +                    explicit: false,
+    +                    default: true,
+    +                    origin: None,
+    +                    format: Simple,
+    +                    publish_url: None,
+    +                    authenticate: Auto,
+    +                    ignore_error_codes: None,
+    +                    cache_control: None,
+    +                    exclude_newer: None,
+    +                },
+    +            ],
+                 flat_index: [],
+                 no_index: false,
+             },
     "#
     );
 
@@ -433,6 +606,52 @@ fn resolve_index_url() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--extra-index-url")
         .arg("https://test.pypi.org/simple"), @r#"
+    --- old
+    +++ new
+    @@ -70,6 +70,43 @@
+                 indexes: [
+                     Index {
+                         name: None,
+    +                    url: Url(
+    +                        VerbatimUrl {
+    +                            url: DisplaySafeUrl {
+    +                                scheme: "https",
+    +                                cannot_be_a_base: false,
+    +                                username: "",
+    +                                password: None,
+    +                                host: Some(
+    +                                    Domain(
+    +                                        "test.pypi.org",
+    +                                    ),
+    +                                ),
+    +                                port: None,
+    +                                path: "/simple",
+    +                                query: None,
+    +                                fragment: None,
+    +                            },
+    +                            given: Some(
+    +                                "https://test.pypi.org/simple",
+    +                            ),
+    +                            expanded: false,
+    +                        },
+    +                    ),
+    +                    explicit: false,
+    +                    default: false,
+    +                    origin: Some(
+    +                        Cli,
+    +                    ),
+    +                    format: Simple,
+    +                    publish_url: None,
+    +                    authenticate: Auto,
+    +                    ignore_error_codes: None,
+    +                    cache_control: None,
+    +                    exclude_newer: None,
+    +                },
+    +                Index {
+    +                    name: None,
+                         url: Pypi(
+                             VerbatimUrl {
+                                 url: DisplaySafeUrl {
     "#
     );
 
@@ -473,6 +692,55 @@ fn resolve_find_links() -> anyhow::Result<()> {
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
+    --- old
+    +++ new
+    @@ -68,8 +68,44 @@
+         settings: PipSettings {
+             index_locations: IndexLocations {
+                 indexes: [],
+    -            flat_index: [],
+    -            no_index: false,
+    +            flat_index: [
+    +                Index {
+    +                    name: None,
+    +                    url: Url(
+    +                        VerbatimUrl {
+    +                            url: DisplaySafeUrl {
+    +                                scheme: "https",
+    +                                cannot_be_a_base: false,
+    +                                username: "",
+    +                                password: None,
+    +                                host: Some(
+    +                                    Domain(
+    +                                        "download.pytorch.org",
+    +                                    ),
+    +                                ),
+    +                                port: None,
+    +                                path: "/whl/torch_stable.html",
+    +                                query: None,
+    +                                fragment: None,
+    +                            },
+    +                            given: Some(
+    +                                "https://download.pytorch.org/whl/torch_stable.html",
+    +                            ),
+    +                            expanded: false,
+    +                        },
+    +                    ),
+    +                    explicit: false,
+    +                    default: false,
+    +                    origin: None,
+    +                    format: Flat,
+    +                    publish_url: None,
+    +                    authenticate: Auto,
+    +                    ignore_error_codes: None,
+    +                    cache_control: None,
+    +                    exclude_newer: None,
+    +                },
+    +            ],
+    +            no_index: true,
+             },
+             python: None,
+             install_mirrors: PythonInstallMirrors {
     "#
     );
 
@@ -512,6 +780,17 @@ fn resolve_top_level() -> anyhow::Result<()> {
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @"
+    --- old
+    +++ new
+    @@ -118,7 +118,7 @@
+             allow_empty_requirements: false,
+             strict: false,
+             dependency_mode: Transitive,
+    -        resolution: Highest,
+    +        resolution: LowestDirect,
+             prerelease: IfNecessaryOrExplicit,
+             fork_strategy: RequiresPython,
+             dependency_metadata: DependencyMetadata(
     "
     );
 
@@ -537,6 +816,88 @@ fn resolve_top_level() -> anyhow::Result<()> {
     let combined = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
+    --- old
+    +++ new
+    @@ -67,7 +67,78 @@
+         ),
+         settings: PipSettings {
+             index_locations: IndexLocations {
+    -            indexes: [],
+    +            indexes: [
+    +                Index {
+    +                    name: None,
+    +                    url: Url(
+    +                        VerbatimUrl {
+    +                            url: DisplaySafeUrl {
+    +                                scheme: "https",
+    +                                cannot_be_a_base: false,
+    +                                username: "",
+    +                                password: None,
+    +                                host: Some(
+    +                                    Domain(
+    +                                        "download.pytorch.org",
+    +                                    ),
+    +                                ),
+    +                                port: None,
+    +                                path: "/whl",
+    +                                query: None,
+    +                                fragment: None,
+    +                            },
+    +                            given: Some(
+    +                                "https://download.pytorch.org/whl",
+    +                            ),
+    +                            expanded: false,
+    +                        },
+    +                    ),
+    +                    explicit: false,
+    +                    default: false,
+    +                    origin: None,
+    +                    format: Simple,
+    +                    publish_url: None,
+    +                    authenticate: Auto,
+    +                    ignore_error_codes: None,
+    +                    cache_control: None,
+    +                    exclude_newer: None,
+    +                },
+    +                Index {
+    +                    name: None,
+    +                    url: Url(
+    +                        VerbatimUrl {
+    +                            url: DisplaySafeUrl {
+    +                                scheme: "https",
+    +                                cannot_be_a_base: false,
+    +                                username: "",
+    +                                password: None,
+    +                                host: Some(
+    +                                    Domain(
+    +                                        "test.pypi.org",
+    +                                    ),
+    +                                ),
+    +                                port: None,
+    +                                path: "/simple",
+    +                                query: None,
+    +                                fragment: None,
+    +                            },
+    +                            given: Some(
+    +                                "https://test.pypi.org/simple",
+    +                            ),
+    +                            expanded: false,
+    +                        },
+    +                    ),
+    +                    explicit: false,
+    +                    default: false,
+    +                    origin: None,
+    +                    format: Simple,
+    +                    publish_url: None,
+    +                    authenticate: Auto,
+    +                    ignore_error_codes: None,
+    +                    cache_control: None,
+    +                    exclude_newer: None,
+    +                },
+    +            ],
+                 flat_index: [],
+                 no_index: false,
+             },
     "#
     );
 
@@ -546,6 +907,17 @@ fn resolve_top_level() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--resolution=lowest-direct"), @"
+    --- old
+    +++ new
+    @@ -189,7 +189,7 @@
+             allow_empty_requirements: false,
+             strict: false,
+             dependency_mode: Transitive,
+    -        resolution: Highest,
+    +        resolution: LowestDirect,
+             prerelease: IfNecessaryOrExplicit,
+             fork_strategy: RequiresPython,
+             dependency_metadata: DependencyMetadata(
     "
     );
 
@@ -585,6 +957,17 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
+    --- old
+    +++ new
+    @@ -118,7 +118,7 @@
+             allow_empty_requirements: false,
+             strict: false,
+             dependency_mode: Transitive,
+    -        resolution: Highest,
+    +        resolution: LowestDirect,
+             prerelease: IfNecessaryOrExplicit,
+             fork_strategy: RequiresPython,
+             dependency_metadata: DependencyMetadata(
     "
     );
 
@@ -601,6 +984,17 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
+    --- old
+    +++ new
+    @@ -130,7 +130,7 @@
+             no_annotate: false,
+             no_header: false,
+             custom_compile_command: None,
+    -        generate_hashes: false,
+    +        generate_hashes: true,
+             config_setting: ConfigSettings(
+                 {},
+             ),
     "
     );
 
@@ -671,6 +1065,17 @@ fn resolve_system_configuration_can_be_disabled() -> anyhow::Result<()> {
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_DIRS, xdg.path())
         .env_remove(EnvVars::UV_NO_SYSTEM_CONFIG), @"
+    --- old
+    +++ new
+    @@ -118,7 +118,7 @@
+             allow_empty_requirements: false,
+             strict: false,
+             dependency_mode: Transitive,
+    -        resolution: Highest,
+    +        resolution: LowestDirect,
+             prerelease: IfNecessaryOrExplicit,
+             fork_strategy: RequiresPython,
+             dependency_metadata: DependencyMetadata(
     ");
 
     diff_uv_snapshot!(
@@ -725,6 +1130,28 @@ fn resolve_tool() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
+    --- old
+    +++ new
+    @@ -68,7 +68,9 @@
+             find_links: None,
+             index_strategy: None,
+             keyring_provider: None,
+    -        resolution: None,
+    +        resolution: Some(
+    +            LowestDirect,
+    +        ),
+             prerelease: None,
+             fork_strategy: None,
+             dependency_metadata: None,
+    @@ -131,7 +133,7 @@
+                     {},
+                 ),
+                 prerelease: IfNecessaryOrExplicit,
+    -            resolution: Highest,
+    +            resolution: LowestDirect,
+                 sources: None,
+                 torch_backend: None,
+                 upgrade: Upgrade {
     "
     );
 
@@ -774,6 +1201,17 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @"
+    --- old
+    +++ new
+    @@ -118,7 +118,7 @@
+             allow_empty_requirements: false,
+             strict: false,
+             dependency_mode: Transitive,
+    -        resolution: Highest,
+    +        resolution: LowestDirect,
+             prerelease: IfNecessaryOrExplicit,
+             fork_strategy: RequiresPython,
+             dependency_metadata: DependencyMetadata(
     "
     );
 
@@ -830,6 +1268,81 @@ fn resolve_both() -> anyhow::Result<()> {
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
+    --- old
+    +++ new
+    @@ -67,7 +67,45 @@
+         ),
+         settings: PipSettings {
+             index_locations: IndexLocations {
+    -            indexes: [],
+    +            indexes: [
+    +                Index {
+    +                    name: None,
+    +                    url: Pypi(
+    +                        VerbatimUrl {
+    +                            url: DisplaySafeUrl {
+    +                                scheme: "https",
+    +                                cannot_be_a_base: false,
+    +                                username: "",
+    +                                password: None,
+    +                                host: Some(
+    +                                    Domain(
+    +                                        "pypi.org",
+    +                                    ),
+    +                                ),
+    +                                port: None,
+    +                                path: "/simple",
+    +                                query: None,
+    +                                fragment: None,
+    +                            },
+    +                            given: Some(
+    +                                "https://pypi.org/simple",
+    +                            ),
+    +                            expanded: false,
+    +                        },
+    +                    ),
+    +                    explicit: false,
+    +                    default: true,
+    +                    origin: Some(
+    +                        Project,
+    +                    ),
+    +                    format: Simple,
+    +                    publish_url: None,
+    +                    authenticate: Auto,
+    +                    ignore_error_codes: None,
+    +                    cache_control: None,
+    +                    exclude_newer: None,
+    +                },
+    +            ],
+                 flat_index: [],
+                 no_index: false,
+             },
+    @@ -118,7 +156,7 @@
+             allow_empty_requirements: false,
+             strict: false,
+             dependency_mode: Transitive,
+    -        resolution: Highest,
+    +        resolution: LowestDirect,
+             prerelease: IfNecessaryOrExplicit,
+             fork_strategy: RequiresPython,
+             dependency_metadata: DependencyMetadata(
+    @@ -130,7 +168,7 @@
+             no_annotate: false,
+             no_header: false,
+             custom_compile_command: None,
+    -        generate_hashes: false,
+    +        generate_hashes: true,
+             config_setting: ConfigSettings(
+                 {},
+             ),
+    @@ -168,3 +206,7 @@
+     }
+
+     ----- stderr -----
+    +warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
+    +warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The following fields from `[tool.uv]` will be ignored in favor of the `uv.toml` file:
+    +- offline
+    +- pip
     "#
     );
 
@@ -887,6 +1400,78 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
+    --- old
+    +++ new
+    @@ -67,7 +67,45 @@
+         ),
+         settings: PipSettings {
+             index_locations: IndexLocations {
+    -            indexes: [],
+    +            indexes: [
+    +                Index {
+    +                    name: None,
+    +                    url: Pypi(
+    +                        VerbatimUrl {
+    +                            url: DisplaySafeUrl {
+    +                                scheme: "https",
+    +                                cannot_be_a_base: false,
+    +                                username: "",
+    +                                password: None,
+    +                                host: Some(
+    +                                    Domain(
+    +                                        "pypi.org",
+    +                                    ),
+    +                                ),
+    +                                port: None,
+    +                                path: "/simple",
+    +                                query: None,
+    +                                fragment: None,
+    +                            },
+    +                            given: Some(
+    +                                "https://pypi.org/simple",
+    +                            ),
+    +                            expanded: false,
+    +                        },
+    +                    ),
+    +                    explicit: false,
+    +                    default: true,
+    +                    origin: Some(
+    +                        Project,
+    +                    ),
+    +                    format: Simple,
+    +                    publish_url: None,
+    +                    authenticate: Auto,
+    +                    ignore_error_codes: None,
+    +                    cache_control: None,
+    +                    exclude_newer: None,
+    +                },
+    +            ],
+                 flat_index: [],
+                 no_index: false,
+             },
+    @@ -118,7 +156,7 @@
+             allow_empty_requirements: false,
+             strict: false,
+             dependency_mode: Transitive,
+    -        resolution: Highest,
+    +        resolution: LowestDirect,
+             prerelease: IfNecessaryOrExplicit,
+             fork_strategy: RequiresPython,
+             dependency_metadata: DependencyMetadata(
+    @@ -130,7 +168,7 @@
+             no_annotate: false,
+             no_header: false,
+             custom_compile_command: None,
+    -        generate_hashes: false,
+    +        generate_hashes: true,
+             config_setting: ConfigSettings(
+                 {},
+             ),
+    @@ -168,3 +206,4 @@
+     }
+
+     ----- stderr -----
+    +warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     "#
     );
 
@@ -1030,6 +1615,71 @@ fn resolve_config_file() -> anyhow::Result<()> {
         .arg("--config-file")
         .arg(config.path())
         .arg("requirements.in"), @r#"
+    --- old
+    +++ new
+    @@ -67,7 +67,43 @@
+         ),
+         settings: PipSettings {
+             index_locations: IndexLocations {
+    -            indexes: [],
+    +            indexes: [
+    +                Index {
+    +                    name: None,
+    +                    url: Pypi(
+    +                        VerbatimUrl {
+    +                            url: DisplaySafeUrl {
+    +                                scheme: "https",
+    +                                cannot_be_a_base: false,
+    +                                username: "",
+    +                                password: None,
+    +                                host: Some(
+    +                                    Domain(
+    +                                        "pypi.org",
+    +                                    ),
+    +                                ),
+    +                                port: None,
+    +                                path: "/simple",
+    +                                query: None,
+    +                                fragment: None,
+    +                            },
+    +                            given: Some(
+    +                                "https://pypi.org/simple",
+    +                            ),
+    +                            expanded: false,
+    +                        },
+    +                    ),
+    +                    explicit: false,
+    +                    default: true,
+    +                    origin: None,
+    +                    format: Simple,
+    +                    publish_url: None,
+    +                    authenticate: Auto,
+    +                    ignore_error_codes: None,
+    +                    cache_control: None,
+    +                    exclude_newer: None,
+    +                },
+    +            ],
+                 flat_index: [],
+                 no_index: false,
+             },
+    @@ -118,7 +154,7 @@
+             allow_empty_requirements: false,
+             strict: false,
+             dependency_mode: Transitive,
+    -        resolution: Highest,
+    +        resolution: LowestDirect,
+             prerelease: IfNecessaryOrExplicit,
+             fork_strategy: RequiresPython,
+             dependency_metadata: DependencyMetadata(
+    @@ -130,7 +166,7 @@
+             no_annotate: false,
+             no_header: false,
+             custom_compile_command: None,
+    -        generate_hashes: false,
+    +        generate_hashes: true,
+             config_setting: ConfigSettings(
+                 {},
+             ),
     "#
     );
 
@@ -1146,6 +1796,17 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("requirements.in")
         .current_dir(&child), @"
+    --- old
+    +++ new
+    @@ -118,7 +118,7 @@
+             allow_empty_requirements: false,
+             strict: false,
+             dependency_mode: Transitive,
+    -        resolution: Highest,
+    +        resolution: LowestDirect,
+             prerelease: IfNecessaryOrExplicit,
+             fork_strategy: RequiresPython,
+             dependency_metadata: DependencyMetadata(
     "
     );
 
@@ -1195,6 +1856,28 @@ fn allow_insecure_host() -> anyhow::Result<()> {
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
+    --- old
+    +++ new
+    @@ -13,7 +13,18 @@
+             http_proxy: None,
+             https_proxy: None,
+             no_proxy: None,
+    -        allow_insecure_host: [],
+    +        allow_insecure_host: [
+    +            Host {
+    +                scheme: None,
+    +                host: "google.com",
+    +                port: None,
+    +            },
+    +            Host {
+    +                scheme: None,
+    +                host: "example.com",
+    +                port: None,
+    +            },
+    +        ],
+             read_timeout: [TIME],
+             connect_timeout: [TIME],
+             retries: 3,
     "#
     );
 
@@ -1231,6 +1914,92 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("--index-url")
         .arg("https://cli.pypi.org/simple"), @r#"
+    --- old
+    +++ new
+    @@ -67,7 +67,82 @@
+         ),
+         settings: PipSettings {
+             index_locations: IndexLocations {
+    -            indexes: [],
+    +            indexes: [
+    +                Index {
+    +                    name: None,
+    +                    url: Url(
+    +                        VerbatimUrl {
+    +                            url: DisplaySafeUrl {
+    +                                scheme: "https",
+    +                                cannot_be_a_base: false,
+    +                                username: "",
+    +                                password: None,
+    +                                host: Some(
+    +                                    Domain(
+    +                                        "cli.pypi.org",
+    +                                    ),
+    +                                ),
+    +                                port: None,
+    +                                path: "/simple",
+    +                                query: None,
+    +                                fragment: None,
+    +                            },
+    +                            given: Some(
+    +                                "https://cli.pypi.org/simple",
+    +                            ),
+    +                            expanded: false,
+    +                        },
+    +                    ),
+    +                    explicit: false,
+    +                    default: true,
+    +                    origin: Some(
+    +                        Cli,
+    +                    ),
+    +                    format: Simple,
+    +                    publish_url: None,
+    +                    authenticate: Auto,
+    +                    ignore_error_codes: None,
+    +                    cache_control: None,
+    +                    exclude_newer: None,
+    +                },
+    +                Index {
+    +                    name: None,
+    +                    url: Url(
+    +                        VerbatimUrl {
+    +                            url: DisplaySafeUrl {
+    +                                scheme: "https",
+    +                                cannot_be_a_base: false,
+    +                                username: "",
+    +                                password: None,
+    +                                host: Some(
+    +                                    Domain(
+    +                                        "file.pypi.org",
+    +                                    ),
+    +                                ),
+    +                                port: None,
+    +                                path: "/simple",
+    +                                query: None,
+    +                                fragment: None,
+    +                            },
+    +                            given: Some(
+    +                                "https://file.pypi.org/simple",
+    +                            ),
+    +                            expanded: false,
+    +                        },
+    +                    ),
+    +                    explicit: false,
+    +                    default: false,
+    +                    origin: Some(
+    +                        Project,
+    +                    ),
+    +                    format: Simple,
+    +                    publish_url: None,
+    +                    authenticate: Auto,
+    +                    ignore_error_codes: None,
+    +                    cache_control: None,
+    +                    exclude_newer: None,
+    +                },
+    +            ],
+                 flat_index: [],
+                 no_index: false,
+             },
     "#
     );
 
@@ -1254,6 +2023,17 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("--default-index")
         .arg("https://cli.pypi.org/simple"), @"
+    --- old
+    +++ new
+    @@ -131,7 +131,7 @@
+                             },
+                         ),
+                         explicit: false,
+    -                    default: false,
+    +                    default: true,
+                         origin: Some(
+                             Project,
+                         ),
     "
     );
 
@@ -1264,6 +2044,17 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("--index")
         .arg("https://cli.pypi.org/simple"), @"
+    --- old
+    +++ new
+    @@ -94,7 +94,7 @@
+                             },
+                         ),
+                         explicit: false,
+    -                    default: true,
+    +                    default: false,
+                         origin: Some(
+                             Cli,
+                         ),
     "
     );
 
@@ -1290,6 +2081,17 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("--extra-index-url")
         .arg("https://cli.pypi.org/simple"), @"
+    --- old
+    +++ new
+    @@ -94,7 +94,7 @@
+                             },
+                         ),
+                         explicit: false,
+    -                    default: true,
+    +                    default: false,
+                         origin: Some(
+                             Cli,
+                         ),
     "
     );
 
@@ -1611,6 +2413,52 @@ fn preview_features() {
     );
 
     let preview = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview"), @"
+    --- old
+    +++ new
+    @@ -25,7 +25,42 @@
+         },
+         show_settings: true,
+         preview: Preview {
+    -        flags: [],
+    +        flags: [
+    +            PythonInstallDefault,
+    +            PythonUpgrade,
+    +            JsonOutput,
+    +            Pylock,
+    +            AddBounds,
+    +            PackageConflicts,
+    +            ExtraBuildDependencies,
+    +            DetectModuleConflicts,
+    +            Format,
+    +            NativeAuth,
+    +            S3Endpoint,
+    +            CacheSize,
+    +            InitProjectFlag,
+    +            WorkspaceMetadata,
+    +            WorkspaceDir,
+    +            WorkspaceList,
+    +            SbomExport,
+    +            AuthHelper,
+    +            DirectPublish,
+    +            TargetWorkspaceDiscovery,
+    +            MetadataJson,
+    +            GcsEndpoint,
+    +            AdjustUlimit,
+    +            SpecialCondaEnvNames,
+    +            RelocatableEnvsDefault,
+    +            PublishRequireNormalized,
+    +            Audit,
+    +            ProjectDirectoryMustExist,
+    +            IndexExcludeNewer,
+    +            AzureEndpoint,
+    +            TomlBackwardsCompatibility,
+    +            MalwareCheck,
+    +            VenvSafeClear,
+    +            Check,
+    +        ],
+         },
+         python_preference: Managed,
+         python_downloads: Automatic,
     "
     );
 
@@ -1626,6 +2474,20 @@ fn preview_features() {
     );
 
     let preview_features = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview-features").arg("python-install-default,python-upgrade"), @"
+    --- old
+    +++ new
+    @@ -25,7 +25,10 @@
+         },
+         show_settings: true,
+         preview: Preview {
+    -        flags: [],
+    +        flags: [
+    +            PythonInstallDefault,
+    +            PythonUpgrade,
+    +        ],
+         },
+         python_preference: Managed,
+         python_downloads: Automatic,
     "
     );
 
@@ -1660,6 +2522,13 @@ fn system_certs_cli_aliases_override_env() {
         .arg("--show-settings")
         .arg("--no-native-tls")
         .env(EnvVars::UV_SYSTEM_CERTS, "1"), @"
+    --- old
+    +++ new
+    @@ -119,3 +119,4 @@
+     }
+
+     ----- stderr -----
+    +warning: The `--no-native-tls` flag is deprecated and will be removed in a future release. Use `--no-system-certs` instead.
     "
     );
 
@@ -1667,6 +2536,13 @@ fn system_certs_cli_aliases_override_env() {
         .arg("--show-settings")
         .arg("--no-system-certs")
         .env(EnvVars::UV_NATIVE_TLS, "1"), @"
+    --- old
+    +++ new
+    @@ -119,3 +119,4 @@
+     }
+
+     ----- stderr -----
+    +warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
     "
     );
 }
@@ -1689,6 +2565,17 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
 
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version())
         .arg("--show-settings"), @"
+    --- old
+    +++ new
+    @@ -9,7 +9,7 @@
+         network_settings: NetworkSettings {
+             connectivity: Online,
+             offline: Disabled,
+    -        system_certs: false,
+    +        system_certs: true,
+             http_proxy: None,
+             https_proxy: None,
+             no_proxy: None,
     "
     );
 
@@ -1699,6 +2586,13 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
 
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version())
         .arg("--show-settings"), @"
+    --- old
+    +++ new
+    @@ -119,3 +119,4 @@
+     }
+
+     ----- stderr -----
+    +warning: The `native-tls` setting is deprecated and will be removed in a future release. Use `system-certs` instead.
     "
     );
 
