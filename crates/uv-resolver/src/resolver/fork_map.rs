@@ -76,10 +76,15 @@ impl ForkScope {
     }
 
     fn from_conflict(marker: MarkerTree, conflict: ConflictItem) -> Self {
-        let marker = Self::marker_with_conflict(marker, &conflict);
+        let fork_marker = Self::marker_with_conflict(marker, &conflict);
+        let marker = UniversalMarker::new(
+            encode_package_extras(marker, conflict.package()),
+            ConflictMarker::from_conflict_item(&conflict),
+        )
+        .combined();
         Self {
             marker,
-            fork_marker: marker,
+            fork_marker,
             conflict: Some(conflict),
         }
     }
