@@ -36626,7 +36626,8 @@ fn lock_path_dependency_explicit_index_multi_extra_source_constraint() -> Result
 }
 
 /// Test that complementary explicit-index dependencies synthesized from a
-/// workspace member's dependency groups retain extra-gated constraints.
+/// workspace member's dependency groups retain extra-gated constraints when
+/// matching an already-flattened source edge.
 #[test]
 fn lock_workspace_group_explicit_index_extra_source_constraint() -> Result<()> {
     let context = uv_test::test_context!("3.12");

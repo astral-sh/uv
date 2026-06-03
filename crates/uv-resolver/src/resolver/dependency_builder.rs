@@ -148,9 +148,13 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             let requirement: &Requirement = requirement.as_ref();
             let scope = self.complementary_source_scope(requirement);
 
-            for requirement in
-                self.complementary_source_requirements(requirement, &scope, false, python_marker)
-            {
+            for requirement in self.complementary_source_requirements(
+                requirement,
+                &scope,
+                false,
+                false,
+                python_marker,
+            ) {
                 self.apply_complementary_source_requirement(
                     &requirement,
                     ComplementarySourceAction::RewriteFlattenedDependency,
@@ -195,6 +199,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                 &raw_requirement,
                 &scope,
                 included_in_fork,
+                false,
                 python_marker,
             );
 
@@ -248,6 +253,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                     &raw_requirement,
                     &scope,
                     false,
+                    true,
                     python_marker,
                 );
 
@@ -405,6 +411,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         requirement: &Requirement,
         scope: &ForkScope,
         included_in_fork: bool,
+        preserve_raw_flattened_marker: bool,
         python_marker: MarkerTree,
     ) -> Vec<ComplementarySourceRequirement> {
         // Already included via `flatten_requirements`.
@@ -434,7 +441,11 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                 marker,
                 version: Self::version_for_requirement(requirement),
                 attached_source: DependencySource::from_source(&requirement.source),
-                flattened_marker: requirement.marker.simplify_extras_with(|_| true),
+                flattened_marker: if preserve_raw_flattened_marker {
+                    requirement.marker
+                } else {
+                    requirement.marker.simplify_extras_with(|_| true)
+                },
                 flattened_source: DependencySource::from_requirement(requirement),
             })
             .collect()
