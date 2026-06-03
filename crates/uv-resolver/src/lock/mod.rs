@@ -680,25 +680,27 @@ impl Lock {
     fn expected_source_activation_contexts(&self) -> BTreeSet<ConflictItem> {
         let mut contexts = BTreeSet::new();
         for package in &self.packages {
-            let production_sources = package
+            let production_requirements = package
                 .metadata
                 .requires_dist
                 .iter()
-                .filter(|requirement| requirement.marker.evaluate_only_extras(&[]))
+                .filter(|requirement| requirement.evaluate_markers(None, &[]))
                 .fold(
                     FxHashMap::<_, Vec<_>>::default(),
-                    |mut sources, requirement| {
-                        sources
+                    |mut requirements, requirement| {
+                        requirements
                             .entry(&requirement.name)
                             .or_default()
-                            .push(&requirement.source);
-                        sources
+                            .push(requirement);
+                        requirements
                     },
                 );
             for requirement in &package.metadata.requires_dist {
-                if production_sources
+                if production_requirements
                     .get(&requirement.name)
-                    .is_some_and(|sources| Self::changes_production_source(requirement, sources))
+                    .is_some_and(|requirements| {
+                        Self::changes_production_source(requirement, requirements)
+                    })
                 {
                     Self::extend_source_activation_contexts(
                         &package.id.name,
@@ -709,17 +711,15 @@ impl Lock {
             }
             for (group, requirements) in &package.metadata.dependency_groups {
                 for requirement in requirements {
-                    if production_sources
-                        .get(&requirement.name)
-                        .is_some_and(|sources| {
-                            Self::changes_production_source(requirement, sources)
-                        })
-                        && Self::extend_source_activation_contexts(
-                            &package.id.name,
-                            requirement,
-                            &mut contexts,
-                        )
-                    {
+                    if production_requirements.get(&requirement.name).is_some_and(
+                        |production_requirements| {
+                            Self::changes_production_source(requirement, production_requirements)
+                        },
+                    ) && Self::extend_source_activation_contexts(
+                        &package.id.name,
+                        requirement,
+                        &mut contexts,
+                    ) {
                         contexts
                             .insert(ConflictItem::from((package.id.name.clone(), group.clone())));
                     }
@@ -778,14 +778,20 @@ impl Lock {
         }
     }
 
-    /// Return whether a requirement selects a source that differs from every production source.
+    /// Return whether a requirement selects a source that differs from every overlapping
+    /// production requirement.
     fn changes_production_source(
         requirement: &Requirement,
-        production_sources: &[&RequirementSource],
+        production_requirements: &[&Requirement],
     ) -> bool {
-        !production_sources
+        !production_requirements
             .iter()
-            .any(|source| Self::same_source(source, &requirement.source))
+            .any(|production_requirement| {
+                !production_requirement
+                    .marker
+                    .is_disjoint(requirement.marker)
+                    && Self::same_source(&production_requirement.source, &requirement.source)
+            })
     }
 
     /// Return whether two requirements identify the same source, ignoring registry specifiers.

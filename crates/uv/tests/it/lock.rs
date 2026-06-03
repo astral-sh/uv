@@ -25529,6 +25529,66 @@ fn lock_unconditional_source_shared_with_optional_dependency() -> Result<()> {
     Ok(())
 }
 
+/// A source shared by production and optional dependencies still needs an
+/// activation context when the source declarations have disjoint markers.
+#[test]
+fn lock_multiple_sources_activation_context_requires_marker_overlap() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", marker = "sys_platform == 'linux'" },
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", extra = "alt", marker = "sys_platform == 'darwin'" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let conflicts = lock
+        .get("conflicts")
+        .map(ToString::to_string)
+        .unwrap_or_default();
+    assert_snapshot!(conflicts.trim(), @r#"
+    [[
+        { package = "project", extra = "alt" },
+        { package = "project", extra = "alt" },
+    ]]
+    "#);
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// An extra-only constraint on a URL source should not constrain the production
 /// dependency that resolves from the default index.
 #[test]
