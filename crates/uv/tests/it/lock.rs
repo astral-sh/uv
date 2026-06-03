@@ -25712,6 +25712,71 @@ fn lock_multiple_sources_group_explicit_default_index_needs_no_activation_contex
     Ok(())
 }
 
+/// A group source that matches production throughout its marker space should
+/// not require an activation context because production differs elsewhere.
+#[test]
+fn lock_multiple_sources_group_same_source_disjoint_branch_needs_no_activation_context()
+-> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [dependency-groups]
+        use = ["iniconfig ; sys_platform == 'linux'"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", marker = "sys_platform == 'linux'" },
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", marker = "sys_platform != 'linux'" },
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "use", marker = "sys_platform == 'linux'" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let conflicts = lock
+        .get("conflicts")
+        .map(ToString::to_string)
+        .unwrap_or_default();
+    assert_snapshot!(conflicts.trim(), @"");
+    let project = lock["package"]
+        .as_array_of_tables()
+        .expect("lock packages")
+        .iter()
+        .find(|package| package["name"].as_str() == Some("project"))
+        .expect("project package");
+    let dependency = project["dev-dependencies"]["use"]
+        .as_array()
+        .expect("group dependencies")
+        .iter()
+        .next()
+        .expect("group dependency");
+    assert_snapshot!(
+        dependency.to_string(),
+        @r#"{ name = "iniconfig", version = "1.1.1", source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }, marker = "sys_platform == 'linux'" }"#
+    );
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// A stale lock must be updated when a group-scoped source requires a
 /// materialized production fallback, even if both branches use the default
 /// index.

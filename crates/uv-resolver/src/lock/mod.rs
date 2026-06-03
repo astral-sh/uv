@@ -3391,6 +3391,22 @@ impl Package {
     /// Add production source branches that satisfy source-variant group requirements.
     fn add_source_variant_group_dependencies(&mut self, requires_python: &RequiresPython) {
         for (group, dependency) in self.source_variant_group_dependencies(requires_python) {
+            let group_context = ConflictItem::from((self.id.name.clone(), group.clone()));
+            if let Some(dependencies) = self.dependency_groups.get_mut(&group) {
+                dependencies.retain(|existing| {
+                    if existing.package_id != dependency.package_id
+                        || existing.extra != dependency.extra
+                    {
+                        return true;
+                    }
+                    // The group is always active while traversing this edge.
+                    let mut existing_marker = existing.complexified_marker;
+                    existing_marker.assume_conflict_item(&group_context);
+                    let mut dependency_marker = dependency.complexified_marker;
+                    dependency_marker.assume_conflict_item(&group_context);
+                    existing_marker != dependency_marker
+                });
+            }
             self.add_locked_group_dependency(group, dependency);
         }
     }
@@ -3450,14 +3466,22 @@ impl Package {
                 .iter()
                 .filter(|requirement| source_variant_names.contains(&requirement.name))
             {
+                let requirement_marker = UniversalMarker::from_combined(requirement.marker);
+                let requirement_pep508 = requirement_marker.pep508();
                 let mut branches = self
                     .dependencies
                     .iter()
-                    .filter(|dependency| dependency.package_name() == &requirement.name);
+                    .filter(|dependency| dependency.package_name() == &requirement.name)
+                    .filter(|dependency| {
+                        !dependency
+                            .complexified_marker
+                            .pep508()
+                            .is_disjoint(requirement_pep508)
+                    });
                 let narrow_to_group = branches.next().is_some_and(|first| {
                     branches.any(|dependency| dependency.package_id != first.package_id)
                 });
-                let mut marker = UniversalMarker::from_combined(requirement.marker);
+                let mut marker = requirement_marker;
                 if narrow_to_group {
                     marker.and(group_marker);
                 }
