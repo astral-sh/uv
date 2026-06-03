@@ -85,12 +85,12 @@ impl<'env> TreeDisplay<'env> {
                     .map(|group| (&id.name, group))
             })
             .collect::<Vec<_>>();
-        let evaluate_dependency = |dep: &Dependency| {
+        let evaluate_dependency = |id: &PackageId, extra: Option<&ExtraName>, dep: &Dependency| {
             markers.is_none_or(|markers| {
                 dep.complexified_marker.evaluate(
                     markers,
                     std::iter::empty::<&PackageName>(),
-                    std::iter::empty::<(&PackageName, &ExtraName)>(),
+                    extra.into_iter().map(|extra| (&id.name, extra)),
                     activated_groups.iter().copied(),
                 )
             })
@@ -155,7 +155,7 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if !evaluate_dependency(dep) {
+                if !evaluate_dependency(id, None, dep) {
                     continue;
                 }
 
@@ -296,7 +296,7 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if !evaluate_dependency(dep) {
+                if !evaluate_dependency(id, extra, dep) {
                     continue;
                 }
 
