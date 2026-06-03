@@ -32,6 +32,43 @@ fn newly_activated_extras<'lock>(
         .collect()
 }
 
+fn activate_dependency_group_extras<'lock>(
+    dependencies: &[&'lock Dependency],
+    marker_env: &ResolverMarkerEnvironment,
+    activated_projects: &[&'lock PackageName],
+    activated_extras: &mut Vec<(&'lock PackageName, &'lock ExtraName)>,
+    activated_groups: &[(&'lock PackageName, &'lock GroupName)],
+) {
+    loop {
+        let mut newly_activated = Vec::new();
+        for dependency in dependencies {
+            let additional_activated_extras = newly_activated_extras(dependency, activated_extras);
+            if additional_activated_extras.is_empty()
+                || !dependency.complexified_marker.evaluate(
+                    marker_env,
+                    activated_projects.iter().copied(),
+                    activated_extras
+                        .iter()
+                        .chain(additional_activated_extras.iter())
+                        .copied(),
+                    activated_groups.iter().copied(),
+                )
+            {
+                continue;
+            }
+            for extra in additional_activated_extras {
+                if !newly_activated.contains(&extra) {
+                    newly_activated.push(extra);
+                }
+            }
+        }
+        if newly_activated.is_empty() {
+            break;
+        }
+        activated_extras.extend(newly_activated);
+    }
+}
+
 pub trait Installable<'lock> {
     /// Return the root install path.
     fn install_path(&self) -> &'lock Path;
@@ -64,6 +101,7 @@ pub trait Installable<'lock> {
         let mut activated_projects: Vec<&PackageName> = vec![];
         let mut activated_extras: Vec<(&PackageName, &ExtraName)> = vec![];
         let mut activated_groups: Vec<(&PackageName, &GroupName)> = vec![];
+        let mut selected_group_dependencies = vec![];
         let needs_activation_context = !self.lock().conflicts().is_empty()
             || self.lock().packages.iter().any(|package| {
                 package
@@ -118,7 +156,24 @@ pub trait Installable<'lock> {
                 {
                     activated_groups.push((&dist.id.name, group));
                 }
+
+                selected_group_dependencies.extend(
+                    dist.dependency_groups
+                        .iter()
+                        .filter(|(group, _)| groups.contains(group))
+                        .flat_map(|(_, dependencies)| dependencies),
+                );
             }
+
+            // Make direct dependency-group activation order-independent before evaluating the
+            // selected group edges.
+            activate_dependency_group_extras(
+                &selected_group_dependencies,
+                marker_env,
+                &activated_projects,
+                &mut activated_extras,
+                &activated_groups,
+            );
         }
 
         // Initialize the workspace roots.
