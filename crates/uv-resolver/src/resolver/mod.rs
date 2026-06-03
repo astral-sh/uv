@@ -2185,6 +2185,27 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 });
             }
         }
+        for extra in extras {
+            let activated_extras = Self::recursively_activated_extras(
+                dependencies,
+                project_name,
+                MarkerTree::TRUE,
+                BTreeSet::from([extra.clone()]),
+            );
+            let _ = Self::add_activation_implications(
+                UniversalMarker::from_source_scope(
+                    MarkerTree::TRUE,
+                    project_name,
+                    Some(extra),
+                    None,
+                ),
+                activated_extras
+                    .iter()
+                    .filter(|extra| source_extras.contains(*extra)),
+                project_name,
+                &mut activation_marker,
+            );
+        }
         for (group, requirements) in dev_dependencies {
             for requirement in requirements.iter().filter(|requirement| {
                 &requirement.name == project_name && !requirement.marker.is_false()

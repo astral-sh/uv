@@ -405,6 +405,22 @@ pub trait Installable<'lock> {
                     }
                 }
                 while let Some((package, extra)) = queue.pop_front() {
+                    for requirement in package
+                        .requires_dist()
+                        .iter()
+                        .filter(|requirement| requirement.name == package.id.name)
+                    {
+                        let Some(additional_activated_extras) = activated_requirement_extras(
+                            &package.id.name,
+                            requirement,
+                            marker_env,
+                            &activated_extras,
+                            &next_activated_extras,
+                        ) else {
+                            continue;
+                        };
+                        next_activated_extras.extend(additional_activated_extras);
+                    }
                     let deps = if let Some(extra) = extra {
                         Either::Left(
                             package

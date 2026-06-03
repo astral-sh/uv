@@ -1234,6 +1234,13 @@ impl Lock {
                         queue.push_back((package, Some(extra)));
                     }
                 }
+                group_requirements.extend(
+                    package
+                        .requires_dist()
+                        .iter()
+                        .filter(|requirement| requirement.name == package.id.name)
+                        .map(|requirement| (Some(&package.id.name), requirement)),
+                );
             }
             for group in package
                 .dependency_groups()
@@ -4395,6 +4402,11 @@ impl Package {
     /// Returns the extras the package provides, if any.
     pub fn provides_extras(&self) -> &[ExtraName] {
         &self.metadata.provides_extra
+    }
+
+    /// Returns the package's declared requirements.
+    pub(crate) fn requires_dist(&self) -> &BTreeSet<Requirement> {
+        &self.metadata.requires_dist
     }
 
     /// Returns the dependency groups the package provides, if any.
