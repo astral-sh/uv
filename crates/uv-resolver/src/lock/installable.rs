@@ -112,6 +112,8 @@ pub trait Installable<'lock> {
                 for group in dist
                     .dependency_groups
                     .keys()
+                    .chain(dist.dependency_groups().keys())
+                    .unique()
                     .filter(|group| groups.contains(group))
                 {
                     activated_groups.push((&dist.id.name, group));
