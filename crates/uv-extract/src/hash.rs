@@ -5,6 +5,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncReadExt, ReadBuf};
 
+use rustc_hash::FxHashSet;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 
 #[derive(Debug)]
@@ -107,7 +108,53 @@ impl DirectoryDigestFile {
     }
 }
 
-pub(crate) fn directory_digest(mut files: Vec<DirectoryDigestFile>) -> DirectoryDigest {
+/// An empty directory entry included in an extracted directory digest.
+pub(crate) struct DirectoryDigestDirectory {
+    path: String,
+}
+
+/// Return digest entries for explicit directories that are empty in the extracted tree.
+pub(crate) fn empty_directory_digest_entries<'a>(
+    directories: impl IntoIterator<Item = &'a Path>,
+    files: impl IntoIterator<Item = &'a Path>,
+) -> Vec<DirectoryDigestDirectory> {
+    let mut candidates = FxHashSet::default();
+    let mut non_empty = FxHashSet::default();
+
+    for directory in directories {
+        let path = canonical_path(directory);
+        if path.is_empty() {
+            continue;
+        }
+        mark_canonical_parent_directories(&mut non_empty, &path);
+        candidates.insert(path);
+    }
+
+    if candidates.is_empty() {
+        return Vec::new();
+    }
+
+    for file in files {
+        let path = canonical_path(file);
+        mark_canonical_parent_directories(&mut non_empty, &path);
+    }
+
+    candidates
+        .into_iter()
+        .filter(|path| !non_empty.contains(path))
+        .map(|path| DirectoryDigestDirectory { path })
+        .collect()
+}
+
+/// Compute a deterministic digest for extracted file and empty-directory entries.
+pub(crate) fn directory_digest(
+    mut files: Vec<DirectoryDigestFile>,
+    mut directories: Vec<DirectoryDigestDirectory>,
+) -> DirectoryDigest {
+    // This digest describes uv's extracted archive tree. It is inspired by Go's
+    // dirhash shape, but intentionally includes uv-specific extraction semantics:
+    // file sizes, executable bits, and empty leaf directories.
+    directories.sort_unstable_by(|left, right| left.path.cmp(&right.path));
     files.sort_unstable_by(|left, right| {
         left.path
             .cmp(&right.path)
@@ -117,7 +164,11 @@ pub(crate) fn directory_digest(mut files: Vec<DirectoryDigestFile>) -> Directory
     });
 
     let mut hasher = blake3::Hasher::new();
-    hasher.update(b"uv-extract-directory-digest-v1\0");
+    hasher.update(b"uv-extract-directory-digest-v2\0");
+    for directory in directories {
+        hasher.update(b"dir\0");
+        update_bytes(&mut hasher, directory.path.as_bytes());
+    }
     for file in files {
         hasher.update(b"file\0");
         update_bytes(&mut hasher, file.path.as_bytes());
@@ -126,6 +177,15 @@ pub(crate) fn directory_digest(mut files: Vec<DirectoryDigestFile>) -> Directory
         hasher.update(file.digest.as_bytes());
     }
     DirectoryDigest::new(hasher.finalize().to_hex().to_string())
+}
+
+/// Mark all canonical parent directories of a slash-separated path as non-empty.
+fn mark_canonical_parent_directories(non_empty: &mut FxHashSet<String>, path: &str) {
+    let mut path = path;
+    while let Some((parent, _child)) = path.rsplit_once('/') {
+        non_empty.insert(parent.to_string());
+        path = parent;
+    }
 }
 
 fn update_bytes(hasher: &mut blake3::Hasher, bytes: &[u8]) {
