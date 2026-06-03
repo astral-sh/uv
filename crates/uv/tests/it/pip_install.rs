@@ -8897,6 +8897,68 @@ fn recursive_extra_transitive_url() -> Result<()> {
     Ok(())
 }
 
+/// An inactive platform-gated URL must not allow the same URL as a transitive dependency.
+#[test]
+fn inactive_platform_url_does_not_allow_transitive_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let iniconfig_url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl";
+
+    context
+        .init()
+        .arg("--lib")
+        .arg("allowpkg")
+        .assert()
+        .success();
+    let allowpkg = context.temp_dir.child("allowpkg");
+    let pyproject_toml = allowpkg.child("pyproject.toml");
+    pyproject_toml.write_str(&fs_err::read_to_string(&pyproject_toml)?.replace(
+        "dependencies = []",
+        &format!(r#"dependencies = ["iniconfig @ {iniconfig_url} ; sys_platform == 'win32'"]"#),
+    ))?;
+    context
+        .build()
+        .arg("--wheel")
+        .arg(allowpkg.path())
+        .assert()
+        .success();
+
+    context
+        .init()
+        .arg("--lib")
+        .arg("requester")
+        .assert()
+        .success();
+    let requester = context.temp_dir.child("requester");
+    let pyproject_toml = requester.child("pyproject.toml");
+    pyproject_toml.write_str(&fs_err::read_to_string(&pyproject_toml)?.replace(
+        "dependencies = []",
+        &format!(r#"dependencies = ["iniconfig @ {iniconfig_url}"]"#),
+    ))?;
+    context
+        .build()
+        .arg("--wheel")
+        .arg(requester.path())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(allowpkg.join("dist/allowpkg-0.1.0-py3-none-any.whl"))
+        .arg("requester")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(requester.join("dist")), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to resolve dependencies for `requester` (v0.1.0)
+      ╰─▶ Package `iniconfig` was included as a URL dependency. URL dependencies must be expressed as direct requirements or constraints. Consider adding `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl` to your dependencies or constraints file.
+    "#);
+
+    Ok(())
+}
+
 /// If a package is requested as both editable and non-editable, always install it as editable.
 #[test]
 fn prefer_editable() -> Result<()> {

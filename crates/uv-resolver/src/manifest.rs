@@ -197,6 +197,12 @@ impl Manifest {
                                 .evaluate_markers(env.marker_environment(), lookahead.extras())
                         })
                         .filter(move |requirement| {
+                            requirement
+                                .marker
+                                .without_extras()
+                                .evaluate_optional_environment(env.marker_environment(), &[])
+                        })
+                        .filter(move |requirement| {
                             let marker = if lookahead.direct() {
                                 requirement.marker
                             } else {
