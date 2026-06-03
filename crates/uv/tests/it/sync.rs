@@ -11828,10 +11828,10 @@ fn sync_multiple_sources_only_group_conflicting_prod_fallback_preserves_transiti
     Ok(())
 }
 
-/// A source-agnostic group fallback must not override a selected package's
-/// transitive constraint with an incompatible group dependency.
+/// A source-agnostic group fallback must reject a group dependency that is
+/// incompatible with the selected package's transitive constraint.
 #[test]
-fn sync_multiple_sources_only_group_conflicting_prod_fallback_preserves_transitive_constraint()
+fn sync_multiple_sources_only_group_conflicting_prod_fallback_rejects_transitive_constraint()
 -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -11863,23 +11863,17 @@ fn sync_multiple_sources_only_group_conflicting_prod_fallback_preserves_transiti
         "#,
     )?;
 
-    context.lock().assert().success();
-
     uv_snapshot!(context.filters(), context
-        .sync()
+        .lock()
         .arg("--preview-features")
-        .arg("package-conflicts")
-        .arg("--only-group")
-        .arg("use"), @"
-    success: true
-    exit_code: 0
+        .arg("package-conflicts"), @"
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + urllib3==1.20
+    error: Dependency group `project:use` selects `urllib3==1.20`, which does not satisfy `requests==2.31.0 @ registry+https://pypi.org/simple`'s requirement `urllib3>=1.21.1, <3`
     ");
 
     Ok(())

@@ -488,7 +488,7 @@ impl Lock {
             &requires_python,
             group_source_fallbacks,
             &package_requirements,
-        );
+        )?;
 
         let packages = packages.into_values().collect();
 
@@ -3874,7 +3874,7 @@ fn add_group_source_fallback_dependencies(
     requires_python: &RequiresPython,
     fallbacks: Vec<GroupSourceFallback>,
     package_requirements: &BTreeMap<PackageId, &[Requirement]>,
-) {
+) -> Result<(), LockError> {
     let mut additions = Vec::new();
     let mut group_additions = Vec::new();
 
@@ -3887,9 +3887,8 @@ fn add_group_source_fallback_dependencies(
         }
         let mut seen = FxHashSet::default();
         let mut fallback_additions = Vec::new();
-        let mut valid = true;
 
-        'queue: while let Some((package_id, extra)) = queue.pop_front() {
+        while let Some((package_id, extra)) = queue.pop_front() {
             if !seen.insert((package_id.clone(), extra.clone())) {
                 continue;
             }
@@ -3925,7 +3924,7 @@ fn add_group_source_fallback_dependencies(
                     if marker.is_false() {
                         continue;
                     }
-                    if !group_dependency_satisfies_requirement(
+                    if let Some(requirement) = incompatible_group_dependency_requirement(
                         package_requirements
                             .get(&package_id)
                             .copied()
@@ -3933,8 +3932,14 @@ fn add_group_source_fallback_dependencies(
                         dependency,
                         group_dependency,
                     ) {
-                        valid = false;
-                        break 'queue;
+                        return Err(LockErrorKind::IncompatibleGroupSourceFallback {
+                            project: fallback.project.name.clone(),
+                            group: fallback.group.clone(),
+                            package: package_id,
+                            requirement: Box::new(requirement.clone()),
+                            dependency: group_dependency.clone(),
+                        }
+                        .into());
                     }
 
                     fallback_additions.push((
@@ -3976,10 +3981,8 @@ fn add_group_source_fallback_dependencies(
             }
         }
 
-        if valid {
-            group_additions.push((fallback.project, fallback.group, fallback.dependency));
-            additions.extend(fallback_additions);
-        }
+        group_additions.push((fallback.project, fallback.group, fallback.dependency));
+        additions.extend(fallback_additions);
     }
 
     for (project_id, group, dependency) in group_additions {
@@ -4005,15 +4008,16 @@ fn add_group_source_fallback_dependencies(
             dependencies.push(dependency);
         }
     }
+
+    Ok(())
 }
 
-/// Returns `true` if a dependency-group selection satisfies the package's requirements for a
-/// resolved dependency.
-fn group_dependency_satisfies_requirement(
-    requirements: &[Requirement],
+/// Returns a package requirement that is incompatible with a dependency-group selection.
+fn incompatible_group_dependency_requirement<'a>(
+    requirements: &'a [Requirement],
     dependency: &Dependency,
     group_dependency: &Dependency,
-) -> bool {
+) -> Option<&'a Requirement> {
     let marker = dependency.complexified_marker.pep508();
     requirements
         .iter()
@@ -4021,8 +4025,8 @@ fn group_dependency_satisfies_requirement(
             requirement.name == dependency.package_id.name
                 && !requirement.marker.is_disjoint(marker)
         })
-        .all(|requirement| {
-            requirement
+        .find(|requirement| {
+            !requirement
                 .source
                 .version_specifiers()
                 .zip(group_dependency.package_id.version.as_ref())
@@ -6655,6 +6659,23 @@ enum LockErrorKind {
         /// The name of the dev dependency group.
         group: GroupName,
         /// The ID of the conflicting dependency.
+        dependency: Dependency,
+    },
+    /// An error that occurs when a synthesized dependency-group fallback selects a dependency that
+    /// is incompatible with the selected package's requirements.
+    #[error(
+        "Dependency group `{project}:{group}` selects `{dependency}`, which does not satisfy `{package}`'s requirement `{requirement}`"
+    )]
+    IncompatibleGroupSourceFallback {
+        /// The project that defines the dependency group.
+        project: PackageName,
+        /// The dependency group that selects the incompatible dependency.
+        group: GroupName,
+        /// The selected package with the incompatible requirement.
+        package: PackageId,
+        /// The package requirement that is not satisfied.
+        requirement: Box<Requirement>,
+        /// The dependency selected by the dependency group.
         dependency: Dependency,
     },
     /// An error that occurs when the URL to a file for a wheel or
