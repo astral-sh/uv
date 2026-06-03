@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -46,6 +46,7 @@ impl LoweredRequirement {
         project_indexes: &'data [Index],
         extra: Option<&ExtraName>,
         group: Option<&GroupName>,
+        included_groups: Option<&'data BTreeSet<GroupName>>,
         locations: &'data IndexLocations,
         workspace: &'data Workspace,
         git_member: Option<&'data GitWorkspaceMember<'data>>,
@@ -73,7 +74,9 @@ impl LoweredRequirement {
                     }
 
                     if let Some(target) = source.group() {
-                        if group != Some(target) {
+                        if group != Some(target)
+                            && !included_groups.is_some_and(|groups| groups.contains(target))
+                        {
                             return false;
                         }
                     }

@@ -141,6 +141,7 @@ impl SourcedDependencyGroups {
         let dependency_groups = dependency_groups
             .into_iter()
             .map(|(name, group)| {
+                let included_groups = group.includes;
                 let requirements = group
                     .requirements
                     .into_iter()
@@ -161,6 +162,7 @@ impl SourcedDependencyGroups {
                                 project_indexes,
                                 extra,
                                 Some(&group),
+                                Some(&included_groups),
                                 locations,
                                 project.workspace(),
                                 git_member,

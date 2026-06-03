@@ -137,6 +137,7 @@ impl RequiresDist {
         let dependency_groups = dependency_groups
             .into_iter()
             .map(|(name, flat_group)| {
+                let included_groups = flat_group.includes;
                 let requirements = flat_group
                     .requirements
                     .into_iter()
@@ -157,6 +158,7 @@ impl RequiresDist {
                                 project_indexes,
                                 extra,
                                 Some(&group),
+                                Some(&included_groups),
                                 locations,
                                 project_workspace.workspace(),
                                 git_member,
@@ -200,6 +202,7 @@ impl RequiresDist {
                         project_indexes,
                         extra.as_deref(),
                         group,
+                        None,
                         locations,
                         project_workspace.workspace(),
                         git_member,

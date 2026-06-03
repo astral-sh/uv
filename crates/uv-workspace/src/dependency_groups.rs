@@ -1,6 +1,9 @@
 use std::collections::btree_map::Entry;
 use std::str::FromStr;
-use std::{collections::BTreeMap, path::Path};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::Path,
+};
 
 use thiserror::Error;
 
@@ -20,6 +23,8 @@ pub struct FlatDependencyGroups(BTreeMap<GroupName, FlatDependencyGroup>);
 #[derive(Debug, Default, Clone)]
 pub struct FlatDependencyGroup {
     pub requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
+    /// The dependency groups transitively included by this group.
+    pub includes: BTreeSet<GroupName>,
     pub requires_python: Option<VersionSpecifiers>,
 }
 
@@ -126,6 +131,7 @@ impl FlatDependencyGroups {
 
             parents.push(name);
             let mut requirements = Vec::with_capacity(specifiers.len());
+            let mut includes = BTreeSet::new();
             let mut requires_python_intersection = VersionSpecifiers::empty();
             for specifier in *specifiers {
                 match specifier {
@@ -145,6 +151,8 @@ impl FlatDependencyGroups {
                         resolve_group(resolved, groups, settings, include_group, parents)?;
                         if let Some(included) = resolved.get(include_group) {
                             requirements.extend(included.requirements.iter().cloned());
+                            includes.insert(include_group.clone());
+                            includes.extend(included.includes.iter().cloned());
 
                             // Intersect the requires-python for this group with the included group's
                             requires_python_intersection = requires_python_intersection
@@ -191,6 +199,7 @@ impl FlatDependencyGroups {
                 name.clone(),
                 FlatDependencyGroup {
                     requirements,
+                    includes,
                     requires_python: if requires_python_intersection.is_empty() {
                         None
                     } else {
