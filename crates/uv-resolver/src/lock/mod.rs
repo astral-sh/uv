@@ -2003,6 +2003,7 @@ impl Lock {
         target_markers: &MarkerEnvironment,
         executor_markers: &MarkerEnvironment,
         executor_python: &Version,
+        runtime_package_ids: &FxHashSet<PackageId>,
         stage: BuildResolutionStage,
     ) -> Result<Option<&ResolutionRecord>, LockError> {
         let mut executor_target = None;
@@ -2026,11 +2027,18 @@ impl Lock {
             }) {
                 continue;
             }
+            if resolution.dependencies.iter().any(|dependency| {
+                dependency.match_runtime()
+                    && !runtime_package_ids.contains(&dependency.package_id.unscoped())
+            }) {
+                continue;
+            }
 
             let matches_target = if let Some(target) = resolution.target.as_ref() {
                 target
                     .to_universal_marker(&self.requires_python, &resolution.id)?
-                    .evaluate_no_extras(target_markers)
+                    .pep508()
+                    .evaluate(target_markers, &[])
             } else {
                 true
             };
@@ -2038,18 +2046,30 @@ impl Lock {
                 continue;
             }
 
-            match (has_executor, resolution.target.is_some()) {
-                (true, true) => executor_target.get_or_insert(resolution),
-                (true, false) => executor_fallback.get_or_insert(resolution),
-                (false, true) => legacy_target.get_or_insert(resolution),
-                (false, false) => legacy_fallback.get_or_insert(resolution),
+            let match_runtime_count = resolution
+                .dependencies
+                .iter()
+                .filter(|dependency| dependency.match_runtime())
+                .count();
+            let candidate = match (has_executor, resolution.target.is_some()) {
+                (true, true) => &mut executor_target,
+                (true, false) => &mut executor_fallback,
+                (false, true) => &mut legacy_target,
+                (false, false) => &mut legacy_fallback,
             };
+            if candidate
+                .as_ref()
+                .is_none_or(|(count, _)| match_runtime_count > *count)
+            {
+                *candidate = Some((match_runtime_count, resolution));
+            }
         }
 
         if let Some(resolution) = executor_target
             .or(executor_fallback)
             .or(legacy_target)
             .or(legacy_fallback)
+            .map(|(_, resolution)| resolution)
         {
             Ok(Some(resolution))
         } else if has_records {
@@ -2099,8 +2119,9 @@ impl Lock {
 
         for build_dep in build_dependencies {
             if build_dep.match_runtime()
-                && runtime_package_ids
-                    .is_some_and(|package_ids| !package_ids.contains(&build_dep.package_id))
+                && runtime_package_ids.is_some_and(|package_ids| {
+                    !package_ids.contains(&build_dep.package_id.unscoped())
+                })
             {
                 continue;
             }
@@ -2269,7 +2290,7 @@ impl Lock {
         let runtime_package_ids: FxHashSet<PackageId> = resolution
             .distributions()
             .filter_map(|resolved_dist| package_for_resolved_dist(resolved_dist))
-            .map(|package| package.id.clone())
+            .map(|package| package.id.unscoped())
             .collect();
         let selected_builds: Vec<(PackageId, BuildPackageKey)> = resolution
             .distributions()
@@ -2298,6 +2319,7 @@ impl Lock {
                 target_markers,
                 executor_markers,
                 executor_python,
+                &runtime_package_ids,
                 BuildResolutionStage::Build,
             )?;
             let build_dependencies = build_resolution_record
@@ -2353,6 +2375,7 @@ impl Lock {
                 target_markers,
                 executor_markers,
                 executor_python,
+                &runtime_package_ids,
                 BuildResolutionStage::Build,
             )?;
             let build_dependencies = build_resolution_record
@@ -2408,7 +2431,8 @@ impl Lock {
                     let mut direct_dependencies = Vec::new();
                     for build_dependency in build_dependencies {
                         if build_dependency.match_runtime()
-                            && !runtime_package_ids.contains(&build_dependency.package_id)
+                            && !runtime_package_ids
+                                .contains(&build_dependency.package_id.unscoped())
                         {
                             continue;
                         }
@@ -2483,6 +2507,7 @@ impl Lock {
                 target_markers,
                 executor_markers,
                 executor_python,
+                &runtime_package_ids,
                 BuildResolutionStage::Bootstrap,
             )?;
             let bootstrap_direct_dependencies =

@@ -602,20 +602,56 @@ impl ResolverOutput {
             })
     }
 
-    /// Constrain extra build dependencies to distributions selected by this universal resolution.
-    pub fn match_runtime_extra_build_requires(
+    /// Constrain extra build dependencies to distributions selected by each fork of this
+    /// universal resolution.
+    pub fn match_runtime_extra_build_requires_by_fork(
         &self,
         extra_build_requires: ExtraBuildRequires,
-    ) -> Result<ExtraBuildRequires, ExtraBuildRequiresError> {
-        let mut sources: BTreeMap<PackageName, Vec<(RequirementSource, MarkerTree)>> =
+    ) -> Result<Vec<(Option<UniversalMarker>, ExtraBuildRequires)>, ExtraBuildRequiresError> {
+        let mut all_sources: BTreeMap<PackageName, Vec<(RequirementSource, MarkerTree)>> =
             BTreeMap::new();
         for dist in self.dists().filter(|dist| dist.is_base()) {
-            sources
+            all_sources
                 .entry(dist.name.clone())
                 .or_default()
                 .push((RequirementSource::from(&dist.dist), dist.marker.pep508()));
         }
-        extra_build_requires.match_runtime_sources(&sources)
+        extra_build_requires
+            .clone()
+            .match_runtime_sources(&all_sources)?;
+
+        let forks = if self.fork_markers.is_empty() {
+            vec![None]
+        } else {
+            self.fork_markers.iter().copied().map(Some).collect()
+        };
+        forks
+            .into_iter()
+            .map(|fork| {
+                let mut sources: BTreeMap<PackageName, Vec<(RequirementSource, MarkerTree)>> =
+                    BTreeMap::new();
+                for dist in self.dists().filter(|dist| dist.is_base()) {
+                    if fork.is_some_and(|fork| dist.marker.is_disjoint(fork)) {
+                        continue;
+                    }
+                    sources
+                        .entry(dist.name.clone())
+                        .or_default()
+                        .push((RequirementSource::from(&dist.dist), MarkerTree::TRUE));
+                }
+                let mut fork_extra_build_requires = extra_build_requires.clone();
+                for requirements in fork_extra_build_requires.values_mut() {
+                    requirements.retain(|requirement| {
+                        !requirement.match_runtime
+                            || sources.contains_key(&requirement.requirement.name)
+                    });
+                }
+                Ok((
+                    fork,
+                    fork_extra_build_requires.match_runtime_sources(&sources)?,
+                ))
+            })
+            .collect()
     }
 
     /// Extract the build resolution graph: direct build requirements (root edges)

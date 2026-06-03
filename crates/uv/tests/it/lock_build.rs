@@ -2533,6 +2533,160 @@ def get_requires_for_build_wheel(config_settings=None):
     Ok(())
 }
 
+/// Verify `match-runtime` preserves mutually exclusive runtime branches.
+#[test]
+fn lock_build_dependencies_extra_match_runtime_conflicts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all()?;
+    child_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    child_dir.child("build_backend.py").write_str(
+        r#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    anyio_version = version("anyio")
+    filename = "child-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("child/__init__.py", f'BUILD_ANYIO = "{anyio_version}"\n')
+        wheel.writestr(
+            "child-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "child-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("child-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        extra1 = ["anyio==3.7.1", "child"]
+        extra2 = ["anyio==4.0.0", "child"]
+
+        [tool.uv]
+        conflicts = [[
+            { extra = "extra1" },
+            { extra = "extra2" },
+        ]]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = [{ requirement = "anyio", match-runtime = true }]
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let resolutions = resolution_sections(&lock);
+    let child_resolutions = resolutions
+        .split("[[resolution]]")
+        .filter(|resolution| resolution.contains("\nname = \"child\"\n"))
+        .collect::<Vec<_>>();
+    assert!(
+        child_resolutions.iter().any(|resolution| {
+            resolution.contains(r#"extra = "extra1""#)
+                && resolution.contains(r#"{ name = "anyio", version = "3.7.1""#)
+        }),
+        "{resolutions}"
+    );
+    assert!(
+        child_resolutions.iter().any(|resolution| {
+            resolution.contains(r#"extra = "extra2""#)
+                && resolution.contains(r#"{ name = "anyio", version = "4.0.0""#)
+        }),
+        "{resolutions}"
+    );
+
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    context
+        .sync()
+        .arg("--extra")
+        .arg("extra1")
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context
+        .run()
+        .arg("--no-sync")
+        .arg("python")
+        .arg("-c")
+        .arg("import child; print(child.BUILD_ANYIO)"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.7.1
+
+    ----- stderr -----
+    ");
+
+    fs_err::remove_dir_all(&context.venv)?;
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    context
+        .sync()
+        .arg("--extra")
+        .arg("extra2")
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context
+        .run()
+        .arg("--no-sync")
+        .arg("python")
+        .arg("-c")
+        .arg("import child; print(child.BUILD_ANYIO)"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    4.0.0
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 /// Verify `match-runtime` locked build dependencies replay for a foreign target.
 #[test]
 fn lock_build_dependencies_extra_match_runtime_cross_target() -> Result<()> {
