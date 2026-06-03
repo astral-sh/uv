@@ -322,6 +322,13 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
 fn resolve_pyproject_toml() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12");
 
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.pip_compile())
+            .arg("--show-settings")
+            .arg("requirements.in")
+    );
+
     // Write a `uv.toml` file to the directory.
     let config = context.temp_dir.child("uv.toml");
     config.write_str(indoc::indoc! {r#"
@@ -343,7 +350,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should use the lowest direct version, and generate hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     "#
@@ -353,11 +360,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     fs_err::remove_file(config.path())?;
 
     // Resolution should use the highest version, and omit hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
-        .arg("requirements.in"), @r#"
-    "#
-    );
+        .arg("requirements.in"), @"");
 
     // Add configuration to the `pyproject.toml` file.
     pyproject.write_str(indoc::indoc! {r#"
@@ -373,7 +378,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     "#})?;
 
     // Resolution should use the lowest direct version, and generate hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     "#
@@ -391,6 +396,13 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
 fn resolve_index_url() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12");
 
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.pip_compile())
+            .arg("--show-settings")
+            .arg("requirements.in")
+    );
+
     // Write a `pyproject.toml` file to the directory.
     let pyproject = context.temp_dir.child("pyproject.toml");
     pyproject.write_str(indoc::indoc! {r#"
@@ -406,7 +418,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     "#
@@ -414,7 +426,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
 
     // Providing an additional index URL on the command-line should be merged with the
     // configuration file.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--extra-index-url")
@@ -434,6 +446,13 @@ fn resolve_index_url() -> anyhow::Result<()> {
 fn resolve_find_links() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12");
 
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.pip_compile())
+            .arg("--show-settings")
+            .arg("requirements.in")
+    );
+
     // Write a `pyproject.toml` file to the directory.
     let pyproject = context.temp_dir.child("pyproject.toml");
     pyproject.write_str(indoc::indoc! {r#"
@@ -449,7 +468,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("tqdm")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     "#
@@ -467,6 +486,13 @@ fn resolve_find_links() -> anyhow::Result<()> {
 fn resolve_top_level() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12");
 
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.pip_compile())
+            .arg("--show-settings")
+            .arg("requirements.in")
+    );
+
     // Write out to the top-level (`tool.uv`, rather than `tool.uv.pip`).
     let pyproject = context.temp_dir.child("pyproject.toml");
     pyproject.write_str(indoc::indoc! {r#"
@@ -481,10 +507,10 @@ fn resolve_top_level() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
-        .arg("requirements.in"), @r#"
-    "#
+        .arg("requirements.in"), @"
+    "
     );
 
     // Write out to both the top-level (`tool.uv`) and the pip section (`tool.uv.pip`). The
@@ -506,14 +532,14 @@ fn resolve_top_level() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     "#
     );
 
     // But the command-line should take precedence over both.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--resolution=lowest-direct"), @r#"
@@ -533,18 +559,26 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     let xdg = assert_fs::TempDir::new().expect("Failed to create temp dir");
     let uv = xdg.child("uv");
     let config = uv.child("uv.toml");
+    let context = uv_test::test_context!("3.12");
+
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.pip_compile())
+            .arg("--show-settings")
+            .arg("requirements.in")
+            .env(EnvVars::XDG_CONFIG_HOME, xdg.path())
+    );
+
     config.write_str(indoc::indoc! {r#"
         [pip]
         resolution = "lowest-direct"
     "#})?;
 
-    let context = uv_test::test_context!("3.12");
-
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should use the lowest direct version.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
@@ -559,7 +593,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     "})?;
 
     // Resolution should use the lowest direct version and generate hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
@@ -574,12 +608,10 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     "#})?;
 
     // Resolution should use the highest version.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
-    "#
-    );
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"");
 
     // However, the user-level `tool.uv.pip` settings override the project-level `tool.uv` settings.
     // This is awkward, but we merge the user configuration into the workspace configuration, so
@@ -591,7 +623,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     "#})?;
 
     // Resolution should use the highest version.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
@@ -611,29 +643,41 @@ fn resolve_system_configuration_can_be_disabled() -> anyhow::Result<()> {
     let xdg = assert_fs::TempDir::new().expect("Failed to create temp dir");
     let uv = xdg.child("uv");
     let config = uv.child("uv.toml");
+    let context = uv_test::test_context!("3.12");
+
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.pip_compile())
+            .arg("--show-settings")
+            .arg("requirements.in")
+            .env(EnvVars::XDG_CONFIG_DIRS, xdg.path())
+    );
+
     config.write_str(indoc::indoc! {r#"
         [pip]
         resolution = "lowest-direct"
     "#})?;
 
-    let context = uv_test::test_context!("3.12");
-
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_DIRS, xdg.path())
-        .env_remove(EnvVars::UV_NO_SYSTEM_CONFIG), @r#"
-    "#);
+        .env_remove(EnvVars::UV_NO_SYSTEM_CONFIG), @"
+    ");
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(
+        context.filters(),
+        &baseline,
+        add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_DIRS, xdg.path())
-        .env(EnvVars::UV_NO_SYSTEM_CONFIG, "1"), @r#"
-    "#);
+        .env(EnvVars::UV_NO_SYSTEM_CONFIG, "1"),
+        @""
+    );
 
     Ok(())
 }
@@ -650,11 +694,19 @@ fn resolve_tool() -> anyhow::Result<()> {
     let xdg = assert_fs::TempDir::new().expect("Failed to create temp dir");
     let uv = xdg.child("uv");
     let config = uv.child("uv.toml");
+    let context = uv_test::test_context!("3.12");
+
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.tool_install())
+            .arg("--show-settings")
+            .arg("requirements.in")
+            .env(EnvVars::XDG_CONFIG_HOME, xdg.path())
+    );
+
     config.write_str(indoc::indoc! {r#"
         resolution = "lowest-direct"
     "#})?;
-
-    let context = uv_test::test_context!("3.12");
 
     // Add a local configuration to disable build isolation.
     let config = context.temp_dir.child("uv.toml");
@@ -664,11 +716,11 @@ fn resolve_tool() -> anyhow::Result<()> {
 
     // If we're running a user-level command, like `uv tool install`, we should use lowest direct,
     // but retain build isolation (since we ignore the local configuration).
-    uv_snapshot!(context.filters(), add_shared_args(context.tool_install())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.tool_install())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
-    "#
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
+    "
     );
 
     Ok(())
@@ -683,6 +735,13 @@ fn resolve_tool() -> anyhow::Result<()> {
 )]
 fn resolve_poetry_toml() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12");
+
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.pip_compile())
+            .arg("--show-settings")
+            .arg("requirements.in")
+    );
 
     // Write a `uv.toml` file to the directory.
     let config = context.temp_dir.child("pyproject.toml");
@@ -707,10 +766,10 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should use the lowest direct version, and generate hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
-        .arg("requirements.in"), @r#"
-    "#
+        .arg("requirements.in"), @"
+    "
     );
 
     Ok(())
@@ -726,6 +785,13 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
 )]
 fn resolve_both() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12");
+
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.pip_compile())
+            .arg("--show-settings")
+            .arg("requirements.in")
+    );
 
     // Write a `uv.toml` file to the directory.
     let config = context.temp_dir.child("uv.toml");
@@ -756,7 +822,7 @@ fn resolve_both() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should succeed, but warn that the `pip` section in `pyproject.toml` is ignored.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     "#
@@ -775,6 +841,13 @@ fn resolve_both() -> anyhow::Result<()> {
 )]
 fn resolve_both_special_fields() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12");
+
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.pip_compile())
+            .arg("--show-settings")
+            .arg("requirements.in")
+    );
 
     // Write a `uv.toml` file to the directory.
     let config = context.temp_dir.child("uv.toml");
@@ -806,7 +879,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should succeed, but warn that the `pip` section in `pyproject.toml` is ignored.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     "#
@@ -926,6 +999,17 @@ fn resolve_config_file() -> anyhow::Result<()> {
     // it's already obfuscated in the fixtures.)
     let config_dir = &context.cache_dir;
     let config = config_dir.child("uv.toml");
+    config.write_str("")?;
+
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.pip_compile())
+            .arg("--show-settings")
+            .arg("--config-file")
+            .arg(config.path())
+            .arg("requirements.in")
+    );
+
     config.write_str(indoc::indoc! {r#"
         [pip]
         resolution = "lowest-direct"
@@ -936,7 +1020,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
@@ -1023,15 +1107,23 @@ fn resolve_config_file() -> anyhow::Result<()> {
 fn resolve_skip_empty() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12");
 
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir(&child)?;
+
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.pip_compile())
+            .arg("--show-settings")
+            .arg("requirements.in")
+            .current_dir(&child)
+    );
+
     // Set `lowest-direct` in a `uv.toml`.
     let config = context.temp_dir.child("uv.toml");
     config.write_str(indoc::indoc! {r#"
         [pip]
         resolution = "lowest-direct"
     "#})?;
-
-    let child = context.temp_dir.child("child");
-    fs_err::create_dir(&child)?;
 
     // Create an empty in a `pyproject.toml`.
     let pyproject = child.child("pyproject.toml");
@@ -1045,11 +1137,11 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
 
     // Resolution in `child` should use lowest-direct, skipping the `pyproject.toml`, which lacks a
     // `tool.uv`.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
-        .current_dir(&child), @r#"
-    "#
+        .current_dir(&child), @"
+    "
     );
 
     // Adding a `tool.uv` section should cause us to ignore the `uv.toml`.
@@ -1063,12 +1155,10 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         [tool.uv]
     "#})?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
-        .current_dir(&child), @r#"
-    "#
-    );
+        .current_dir(&child), @"");
 
     Ok(())
 }
@@ -1082,6 +1172,13 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
 fn allow_insecure_host() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12");
 
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.pip_compile())
+            .arg("--show-settings")
+            .arg("requirements.in")
+    );
+
     let config = context.temp_dir.child("uv.toml");
     config.write_str(indoc::indoc! {r#"
         allow-insecure-host = ["google.com", { host = "example.com" }]
@@ -1090,7 +1187,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     "#
@@ -1108,6 +1205,13 @@ fn allow_insecure_host() -> anyhow::Result<()> {
 fn index_priority() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12");
 
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.pip_compile())
+            .arg("--show-settings")
+            .arg("requirements.in")
+    );
+
     let config = context.temp_dir.child("uv.toml");
     config.write_str(indoc::indoc! {r#"
         [[index]]
@@ -1117,7 +1221,7 @@ fn index_priority() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index-url")
@@ -1125,7 +1229,7 @@ fn index_priority() -> anyhow::Result<()> {
     "#
     );
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--default-index")
@@ -1139,7 +1243,7 @@ fn index_priority() -> anyhow::Result<()> {
     "#})?;
 
     // Prefer the `--default-index` from the CLI, and treat it as the default.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--default-index")
@@ -1148,7 +1252,7 @@ fn index_priority() -> anyhow::Result<()> {
     );
 
     // Prefer the `--index` from the CLI, but treat the index from the file as the default.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index")
@@ -1164,7 +1268,7 @@ fn index_priority() -> anyhow::Result<()> {
     "#})?;
 
     // Prefer the `--index-url` from the CLI, and treat it as the default.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index-url")
@@ -1173,7 +1277,7 @@ fn index_priority() -> anyhow::Result<()> {
     );
 
     // Prefer the `--extra-index-url` from the CLI, but not as the default.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--extra-index-url")
@@ -1493,36 +1597,41 @@ fn verify_hashes() -> anyhow::Result<()> {
 fn preview_features() {
     let context = uv_test::test_context!("3.12");
 
-    let cmd = || {
-        let mut cmd = context.version();
-        cmd.arg("--show-settings");
-        add_shared_args(cmd)
-    };
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.version()).arg("--show-settings")
+    );
 
-    uv_snapshot!(context.filters(), cmd().arg("--preview"), @r#"
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview"), @r#"
     "#
     );
 
-    uv_snapshot!(context.filters(), cmd().arg("--preview").arg("--no-preview"), @r#"
+    diff_uv_snapshot!(
+        context.filters(),
+        &baseline,
+        add_shared_args(context.version()).arg("--show-settings").arg("--preview").arg("--no-preview"),
+        @""
+    );
+
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview").arg("--preview-features").arg("python-install-default"), @r#"
     "#
     );
 
-    uv_snapshot!(context.filters(), cmd().arg("--preview").arg("--preview-features").arg("python-install-default"), @r#"
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview-features").arg("python-install-default,python-upgrade"), @r#"
     "#
     );
 
-    uv_snapshot!(context.filters(), cmd().arg("--preview-features").arg("python-install-default,python-upgrade"), @r#"
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview-features").arg("python-install-default").arg("--preview-feature").arg("python-upgrade"), @r#"
     "#
     );
 
-    uv_snapshot!(context.filters(), cmd().arg("--preview-features").arg("python-install-default").arg("--preview-feature").arg("python-upgrade"), @r#"
-    "#
-    );
-
-    uv_snapshot!(context.filters(), cmd()
+    diff_uv_snapshot!(
+        context.filters(),
+        &baseline,
+        add_shared_args(context.version()).arg("--show-settings")
         .arg("--preview-features").arg("python-install-default").arg("--preview-feature").arg("python-upgrade")
-        .arg("--no-preview"), @r#"
-    "#
+        .arg("--no-preview"),
+        @""
     );
 }
 
@@ -1534,18 +1643,23 @@ fn preview_features() {
 fn system_certs_cli_aliases_override_env() {
     let context = uv_test::test_context!("3.12");
 
-    uv_snapshot!(context.filters(), add_shared_args(context.version())
-        .arg("--show-settings")
-        .arg("--no-native-tls")
-        .env(EnvVars::UV_SYSTEM_CERTS, "1"), @r#"
-    "#
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.version()).arg("--show-settings")
     );
 
-    uv_snapshot!(context.filters(), add_shared_args(context.version())
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version())
+        .arg("--show-settings")
+        .arg("--no-native-tls")
+        .env(EnvVars::UV_SYSTEM_CERTS, "1"), @"
+    "
+    );
+
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version())
         .arg("--show-settings")
         .arg("--no-system-certs")
-        .env(EnvVars::UV_NATIVE_TLS, "1"), @r#"
-    "#
+        .env(EnvVars::UV_NATIVE_TLS, "1"), @"
+    "
     );
 }
 
@@ -1557,12 +1671,17 @@ fn system_certs_cli_aliases_override_env() {
 fn system_certs_config_aliases() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12");
 
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.version()).arg("--show-settings")
+    );
+
     let config = context.temp_dir.child("uv.toml");
     config.write_str("system-certs = true\n")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.version())
-        .arg("--show-settings"), @r#"
-    "#
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version())
+        .arg("--show-settings"), @"
+    "
     );
 
     config.write_str(indoc::indoc! {r"
@@ -1570,9 +1689,9 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
         native-tls = true
     "})?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.version())
-        .arg("--show-settings"), @r#"
-    "#
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version())
+        .arg("--show-settings"), @"
+    "
     );
 
     Ok(())
