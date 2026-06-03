@@ -2291,7 +2291,10 @@ requires-python = ">=3.13.post1t"
     #[test]
     fn test_hint_free_threaded_selector() {
         let err = PyprojectTomlError::FreeThreadedSelector("3.13t".to_string());
-        let hint_text = err.hints().into_iter().next().expect("expected at least one hint");
+        let hint_text = err.hints()
+            .into_iter()
+            .next()
+            .expect("expected at least one hint");
         assert!(
             hint_text.contains("uv python pin 3.13t"),
             "hint should suggest `uv python pin 3.13t`, got: {hint_text}"
