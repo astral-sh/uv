@@ -38,6 +38,8 @@ pub enum Error {
     },
     #[error("ZIP file contains multiple entries with different contents for: {}", path.display())]
     DuplicateLocalFileHeader { path: PathBuf },
+    #[error("ZIP file contains multiple entries for the same output path: {}", path.display())]
+    DuplicateOutputPath { path: PathBuf },
     #[error("ZIP file contains a local file header without a corresponding central-directory record entry for: {} ({offset})", path.display())]
     MissingCentralDirectoryEntry { path: PathBuf, offset: u64 },
     #[error("ZIP file contains an end-of-central-directory record entry, but no local file header for: {} ({offset}", path.display())]

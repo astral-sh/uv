@@ -26,11 +26,12 @@ pub(crate) fn enclosed_name(file_name: &str) -> Option<PathBuf> {
     if file_name.contains('\0') {
         return None;
     }
-    let path = PathBuf::from(file_name);
-    for component in path.components() {
+    let mut path = PathBuf::new();
+    for component in Path::new(file_name).components() {
         match component {
             Component::Prefix(_) | Component::RootDir | Component::ParentDir => return None,
-            Component::Normal(_) | Component::CurDir => (),
+            Component::Normal(component) => path.push(component),
+            Component::CurDir => (),
         }
     }
     Some(path)

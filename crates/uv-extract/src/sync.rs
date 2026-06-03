@@ -76,6 +76,8 @@ where
     R: std::io::BufRead + std::io::Seek + Clone + Send + Sync + Unpin,
     AllowStdIo<R>: Clone,
 {
+    validate_unique_output_paths(archive.file().entries())?;
+
     let directories = Mutex::new(FxHashSet::default());
     let skip_validation = insecure_no_validate();
     let filename_display = filename.display().to_string();
@@ -119,6 +121,21 @@ where
     );
 
     Ok((files, directory_digest(hash_files, hash_directories)))
+}
+
+/// Reject entries that would write to the same output path.
+fn validate_unique_output_paths(entries: &[StoredZipEntry]) -> Result<(), Error> {
+    let mut paths = FxHashSet::default();
+    for (file_number, entry) in entries.iter().enumerate() {
+        let file_name = entry_file_name(entry, file_number)?;
+        let Some(path) = crate::stream::enclosed_name(file_name) else {
+            continue;
+        };
+        if !paths.insert(path.clone()) {
+            return Err(Error::DuplicateOutputPath { path });
+        }
+    }
+    Ok(())
 }
 
 /// Extract a single central-directory entry from a seekable ZIP archive.
@@ -254,7 +271,11 @@ where
     R: std::io::BufRead + std::io::Seek + Clone + Send + Sync + Unpin,
     AllowStdIo<R>: Clone,
 {
-    let outfile = fs_err::File::create(path).map_err(Error::Io)?;
+    let outfile = fs_err::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(Error::Io)?;
     let size = entry.uncompressed_size();
     let unix_permissions = entry.unix_permissions();
     let executable = unix_permissions.is_some_and(|mode| mode & 0o111 != 0);
@@ -713,6 +734,8 @@ pub fn strip_component(source: impl AsRef<Path>) -> Result<PathBuf, Error> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::unzip_and_hash;
 
     struct ZipEntry<'a> {
@@ -857,6 +880,92 @@ mod tests {
         assert_eq!(parent_digest, stream_digest);
         assert!(!stream_extract.join("a").exists());
         assert!(!stream_extract.join("b").exists());
+
+        Ok(())
+    }
+
+    #[test]
+    fn sync_rejects_duplicate_output_paths() -> Result<(), Box<dyn std::error::Error>> {
+        let first_entries = [
+            ZipEntry {
+                path: "example/data.txt",
+                contents: b"first",
+                mode: 0o100_644,
+            },
+            ZipEntry {
+                path: "example/data.txt",
+                contents: b"second",
+                mode: 0o100_644,
+            },
+        ];
+        let reversed_entries = [
+            ZipEntry {
+                path: "example/data.txt",
+                contents: b"second",
+                mode: 0o100_644,
+            },
+            ZipEntry {
+                path: "example/data.txt",
+                contents: b"first",
+                mode: 0o100_644,
+            },
+        ];
+        let aliased_entries = [
+            ZipEntry {
+                path: "example/data.txt",
+                contents: b"first",
+                mode: 0o100_644,
+            },
+            ZipEntry {
+                path: "./example/data.txt",
+                contents: b"second",
+                mode: 0o100_644,
+            },
+        ];
+
+        let temp_dir = tempfile::tempdir()?;
+        for (name, entries) in [
+            ("first", first_entries.as_slice()),
+            ("reversed", reversed_entries.as_slice()),
+            ("aliased", aliased_entries.as_slice()),
+        ] {
+            let archive_path = temp_dir.path().join(format!("{name}.whl"));
+            fs_err::write(&archive_path, zip_archive(entries, b"archive comment"))?;
+            let extract = temp_dir.path().join(name);
+            fs_err::create_dir_all(&extract)?;
+
+            let result = unzip_and_hash(fs_err::File::open(&archive_path)?, &extract);
+
+            assert!(matches!(
+                result,
+                Err(crate::Error::DuplicateOutputPath { path })
+                    if path == Path::new("example/data.txt")
+            ));
+            assert!(!extract.join("example/data.txt").exists());
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn sync_rejects_existing_output_paths() -> Result<(), Box<dyn std::error::Error>> {
+        let entries = [ZipEntry {
+            path: "example/data.txt",
+            contents: b"replacement",
+            mode: 0o100_644,
+        }];
+
+        let temp_dir = tempfile::tempdir()?;
+        let archive_path = temp_dir.path().join("archive.whl");
+        fs_err::write(&archive_path, zip_archive(&entries, b"archive comment"))?;
+        let extract = temp_dir.path().join("extract");
+        fs_err::create_dir_all(extract.join("example"))?;
+        fs_err::write(extract.join("example/data.txt"), b"existing")?;
+
+        let result = unzip_and_hash(fs_err::File::open(&archive_path)?, &extract);
+
+        assert!(result.is_err());
+        assert_eq!(fs_err::read(extract.join("example/data.txt"))?, b"existing");
 
         Ok(())
     }
