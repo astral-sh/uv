@@ -13,6 +13,16 @@ use crate::generate_all::Mode;
 /// Contains current supported targets
 const TARGETS_YML_URL: &str = "https://raw.githubusercontent.com/astral-sh/python-build-standalone/refs/tags/20260510/cpython-unix/targets.yml";
 
+// Preserve compiler paths embedded in older downloadable python-build-standalone releases.
+const HISTORICAL_CC_VALUES: [&str; 2] = [
+    "/usr/bin/aarch64-linux-gnu-gcc",
+    "/usr/bin/riscv64-linux-gnu-gcc",
+];
+const HISTORICAL_CXX_VALUES: [&str; 2] = [
+    "/usr/bin/aarch64-linux-gnu-g++",
+    "/usr/bin/riscv64-linux-gnu-g++",
+];
+
 #[derive(clap::Args)]
 pub(crate) struct Args {
     #[arg(long, default_value_t, value_enum)]
@@ -121,6 +131,23 @@ async fn generate() -> Result<String> {
                     .or_default()
                     .insert(from_cxx.to_owned(), "c++".to_string());
             }
+        }
+    }
+
+    for sysconfig_cc_entry in ["CC", "LDSHARED", "BLDSHARED", "LINKCC"] {
+        for from_cc in HISTORICAL_CC_VALUES {
+            replacements
+                .entry(sysconfig_cc_entry)
+                .or_default()
+                .insert(from_cc.to_string(), "cc".to_string());
+        }
+    }
+    for sysconfig_cxx_entry in ["CXX", "LDCXXSHARED"] {
+        for from_cxx in HISTORICAL_CXX_VALUES {
+            replacements
+                .entry(sysconfig_cxx_entry)
+                .or_default()
+                .insert(from_cxx.to_string(), "c++".to_string());
         }
     }
 
