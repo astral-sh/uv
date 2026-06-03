@@ -834,6 +834,93 @@ async fn audit_excludes_inactive_source_variants() {
     ");
 }
 
+/// Extras activated by one dependency-group edge exclude inactive source
+/// variants on sibling edges from the audit.
+#[tokio::test]
+async fn audit_group_sibling_activates_extra() {
+    let context = uv_test::test_context!("3.12");
+
+    let default_index = context.temp_dir.child("default");
+    fs_err::create_dir_all(&default_index).unwrap();
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        default_index.join("ok-2.0.0-py3-none-any.whl"),
+    )
+    .unwrap();
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        context.temp_dir.child("ok-1.0.0-py3-none-any.whl"),
+    )
+    .unwrap();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["ok", "project[foo]"]
+
+        [tool.uv.sources]
+        ok = [
+            { path = "./ok-1.0.0-py3-none-any.whl", group = "use", marker = "extra != 'foo'" },
+        ]
+
+        [[tool.uv.index]]
+        name = "default"
+        url = "./default"
+        format = "flat"
+        default = true
+    "#})
+        .unwrap();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({
+            "queries": [
+                {
+                    "package": { "name": "ok", "ecosystem": "PyPI" },
+                    "version": "2.0.0",
+                }
+            ]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--only-group")
+        .arg("use")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
 /// Non-default dependency groups are included when explicitly requested.
 #[tokio::test]
 async fn audit_dependency_groups() {

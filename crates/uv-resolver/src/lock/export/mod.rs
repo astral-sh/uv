@@ -17,13 +17,13 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItem;
 
 use crate::graph_ops::Reachable;
-use crate::lock::LockErrorKind;
 pub use crate::lock::export::metadata::Metadata;
 pub(crate) use crate::lock::export::pylock_toml::PylockTomlPackage;
 pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlError, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
+use crate::lock::{Dependency, LockErrorKind};
 use crate::universal_marker::resolve_activated_extras;
-use crate::{Installable, LockError, Package};
+use crate::{Installable, Lock, LockError, Package};
 
 pub mod cyclonedx_json;
 mod metadata;
@@ -62,6 +62,7 @@ impl<'lock> ExportableRequirements<'lock> {
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
         let mut activated_items = FxHashMap::default();
+        let mut selected_group_dependencies = Vec::new();
 
         let root = graph.add_node(Node::Root);
 
@@ -130,6 +131,8 @@ impl<'lock> ExportableRequirements<'lock> {
                 })
                 .flatten()
             {
+                selected_group_dependencies.push((&dist.id.name, dep));
+
                 // Track the activated group in the list of known conflicts.
                 activated_items.insert(
                     ConflictItem::from((dist.id.name.clone(), group.clone())),
@@ -171,6 +174,14 @@ impl<'lock> ExportableRequirements<'lock> {
                 }
             }
         }
+
+        // Make direct dependency-group activation order-independent before evaluating the
+        // selected group edges.
+        activate_dependency_group_extras(
+            target.lock(),
+            &selected_group_dependencies,
+            &mut activated_items,
+        );
 
         // Add requirements that are exclusive to the workspace root (e.g., dependency groups in
         // non-project workspace roots).
@@ -362,6 +373,51 @@ impl<'lock> ExportableRequirements<'lock> {
             .collect::<Vec<_>>();
 
         Ok(Self(nodes))
+    }
+}
+
+fn activate_dependency_group_extras(
+    lock: &Lock,
+    dependencies: &[(&PackageName, &Dependency)],
+    activated_items: &mut FxHashMap<ConflictItem, MarkerTree>,
+) {
+    loop {
+        let mut changed = false;
+        for (parent, dependency) in dependencies {
+            if dependency.extra.is_empty() {
+                continue;
+            }
+
+            // An edge can activate the same extras that its marker depends on, so include them
+            // while determining the conditions under which the edge applies.
+            let mut prospective_items = activated_items.clone();
+            for extra in &dependency.extra {
+                prospective_items.insert(
+                    ConflictItem::from((dependency.package_id.name.clone(), extra.clone())),
+                    MarkerTree::TRUE,
+                );
+            }
+
+            let marker = lock.simplify_environment(resolve_activated_extras(
+                dependency.complexified_marker.combined(),
+                Some(parent),
+                &prospective_items,
+            ));
+            if marker.is_false() {
+                continue;
+            }
+
+            for extra in &dependency.extra {
+                let item = ConflictItem::from((dependency.package_id.name.clone(), extra.clone()));
+                let activated_marker = activated_items.entry(item).or_insert(MarkerTree::FALSE);
+                let previous = *activated_marker;
+                activated_marker.or(marker);
+                changed |= *activated_marker != previous;
+            }
+        }
+        if !changed {
+            break;
+        }
     }
 }
 
