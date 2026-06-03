@@ -711,7 +711,7 @@ impl Lock {
     /// Selects an incompatible lock version when dependency selection requires behavior that older
     /// readers do not support.
     fn update_version_for_activation_markers(&mut self) {
-        if self.has_group_source_fallbacks() {
+        if self.requires_group_source_fallback_semantics() {
             self.version = GROUP_SOURCE_FALLBACK_VERSION;
             return;
         }
@@ -798,19 +798,13 @@ impl Lock {
         };
     }
 
-    /// Returns `true` if the lock contains a synthesized production fallback for a dependency
-    /// group.
-    fn has_group_source_fallbacks(&self) -> bool {
+    /// Returns `true` if dependency selection requires synthesized production fallbacks for
+    /// dependency groups.
+    fn requires_group_source_fallback_semantics(&self) -> bool {
         self.packages.iter().any(|package| {
-            package
+            !package
                 .add_group_source_fallbacks(&self.requires_python)
-                .into_iter()
-                .any(|fallback| {
-                    package
-                        .dependency_groups
-                        .get(&fallback.group)
-                        .is_some_and(|dependencies| dependencies.contains(&fallback.dependency))
-                })
+                .is_empty()
         })
     }
 
@@ -1639,7 +1633,9 @@ impl Lock {
         let mut queue: VecDeque<&Package> = VecDeque::new();
         let mut seen = FxHashSet::default();
 
-        if self.version < GROUP_SOURCE_FALLBACK_VERSION && self.has_group_source_fallbacks() {
+        if self.version < GROUP_SOURCE_FALLBACK_VERSION
+            && self.requires_group_source_fallback_semantics()
+        {
             return Ok(SatisfiesResult::MismatchedLockVersion(
                 GROUP_SOURCE_FALLBACK_VERSION,
                 self.version,

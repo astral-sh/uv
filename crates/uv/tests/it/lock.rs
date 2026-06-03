@@ -25682,10 +25682,26 @@ fn lock_multiple_sources_group_fallback_uses_incompatible_version() -> Result<()
     };
     assert_snapshot!(version, @"version = 3");
 
+    let mut lock = lock.parse::<toml_edit::DocumentMut>()?;
+    lock["version"] = toml_edit::value(2);
+    let Some(project) = lock["package"]
+        .as_array_of_tables_mut()
+        .and_then(|packages| {
+            packages.iter_mut().find(|package| {
+                package
+                    .get("name")
+                    .and_then(toml_edit::Item::as_str)
+                    .is_some_and(|name| name == "project")
+            })
+        })
+    else {
+        bail!("lockfile is missing the project package");
+    };
+    project.remove("dev-dependencies");
     context
         .temp_dir
         .child("uv.lock")
-        .write_str(&lock.replacen("version = 3", "version = 2", 1))?;
+        .write_str(&lock.to_string())?;
 
     uv_snapshot!(context.filters(), context
         .lock()
