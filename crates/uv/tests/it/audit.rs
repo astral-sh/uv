@@ -1103,6 +1103,96 @@ async fn audit_group_requirement_does_not_activate_own_extra_marker() {
     ");
 }
 
+/// Extras from inactive dependency groups attached to a project-less root must
+/// not be traversed during audit.
+#[tokio::test]
+async fn audit_inactive_manifest_group_does_not_activate_transitive_extra() {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["child", "other"]
+
+        [dependency-groups]
+        use = ["child[alt] ; extra == 'alt'"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+    "#})
+        .unwrap();
+
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["other"]
+
+        [project.optional-dependencies]
+        alt = ["other[foo]"]
+
+        [tool.uv.sources]
+        other = { workspace = true }
+    "#})
+        .unwrap();
+
+    context
+        .temp_dir
+        .child("other/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "other"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        foo = ["iniconfig==1.1.1"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "foo" },
+        ]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--locked")
+        .arg("--only-group")
+        .arg("use")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 0 packages
+    ");
+}
+
 /// Recursive extras that select a source must be excluded from audit traversal.
 #[tokio::test]
 async fn audit_excludes_recursive_source_variant_edges() {

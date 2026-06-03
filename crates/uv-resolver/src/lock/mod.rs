@@ -1230,6 +1230,9 @@ impl Lock {
                 continue;
             }
             for requirement in requirements {
+                if !requirement.evaluate_markers(None, &[]) {
+                    continue;
+                }
                 for package in self
                     .packages
                     .iter()
