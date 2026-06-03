@@ -3357,19 +3357,32 @@ impl Package {
 
     /// Return whether all production source branches required by source-variant groups are present.
     fn has_source_variant_group_dependencies(&self, requires_python: &RequiresPython) -> bool {
-        self.source_variant_group_dependencies(requires_python)
-            .into_iter()
-            .all(|(group, expected)| {
-                self.dependency_groups
-                    .get(&group)
-                    .is_some_and(|dependencies| {
-                        dependencies.iter().any(|dependency| {
-                            dependency.package_id == expected.package_id
-                                && dependency.simplified_marker == expected.simplified_marker
-                                && dependency.extra.is_superset(&expected.extra)
-                        })
-                    })
-            })
+        let mut expected = BTreeMap::new();
+        for (group, dependency) in self.source_variant_group_dependencies(requires_python) {
+            expected
+                .entry((group, dependency.package_id, dependency.simplified_marker))
+                .or_insert_with(BTreeSet::new)
+                .extend(dependency.extra);
+        }
+
+        let mut actual = BTreeMap::new();
+        for (group, dependencies) in &self.dependency_groups {
+            for dependency in dependencies {
+                let key = (
+                    group.clone(),
+                    dependency.package_id.clone(),
+                    dependency.simplified_marker,
+                );
+                if expected.contains_key(&key) {
+                    actual
+                        .entry(key)
+                        .or_insert_with(BTreeSet::new)
+                        .extend(dependency.extra.iter().cloned());
+                }
+            }
+        }
+
+        expected == actual
     }
 
     /// Return production source branches that satisfy source-variant group requirements.

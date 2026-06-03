@@ -25716,6 +25716,78 @@ fn lock_multiple_sources_group_explicit_default_index_invalidates_stale_lock() -
     Ok(())
 }
 
+/// A stale lock must be updated when materialized group edges retain extras
+/// from the production dependency.
+#[test]
+fn lock_multiple_sources_group_invalidates_stale_production_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio[trio]==4.0.0"]
+
+        [dependency-groups]
+        use = ["anyio==4.0.0"]
+
+        [tool.uv.sources]
+        anyio = { url = "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl", group = "use" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    ");
+
+    let mut stale_lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    for package in stale_lock["package"]
+        .as_array_of_tables_mut()
+        .expect("lock packages")
+        .iter_mut()
+    {
+        if package["name"].as_str() != Some("project") {
+            continue;
+        }
+        for dependency in package["dev-dependencies"]["use"]
+            .as_array_mut()
+            .expect("group dependencies")
+            .iter_mut()
+        {
+            dependency
+                .as_inline_table_mut()
+                .expect("group dependency")
+                .insert(
+                    "extra",
+                    toml_edit::Value::Array(toml_edit::Array::from_iter(["trio"])),
+                );
+        }
+    }
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&stale_lock.to_string())?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// An explicit default-index source still needs an activation context when its
 /// scoped requirement selects a different version.
 #[test]
