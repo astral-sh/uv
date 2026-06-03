@@ -19,6 +19,130 @@ use uv_pypi_types::ResolverMarkerEnvironment;
 use crate::lock::{Dependency, Package, PackageId};
 use crate::{Lock, PackageMap};
 
+fn activate_dependency<'lock>(
+    dependency: &'lock Dependency,
+    markers: &ResolverMarkerEnvironment,
+    activated_extras: &BTreeSet<(&'lock PackageName, &'lock ExtraName)>,
+    activated_groups: &[(&'lock PackageName, &'lock GroupName)],
+    next_activated_extras: &mut BTreeSet<(&'lock PackageName, &'lock ExtraName)>,
+    queue: &mut VecDeque<(&'lock PackageId, Option<&'lock ExtraName>)>,
+    seen: &mut FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
+) {
+    let additional_activated_extras = dependency
+        .extra
+        .iter()
+        .filter_map(|extra| {
+            let key = (&dependency.package_id.name, extra);
+            (!next_activated_extras.contains(&key)).then_some(key)
+        })
+        .collect::<Vec<_>>();
+    if !dependency.complexified_marker.evaluate(
+        markers,
+        std::iter::empty::<&PackageName>(),
+        activated_extras
+            .iter()
+            .chain(additional_activated_extras.iter())
+            .copied(),
+        activated_groups.iter().copied(),
+    ) {
+        return;
+    }
+    next_activated_extras.extend(additional_activated_extras);
+
+    if seen.insert((&dependency.package_id, None)) {
+        queue.push_back((&dependency.package_id, None));
+    }
+    for extra in &dependency.extra {
+        if seen.insert((&dependency.package_id, Some(extra))) {
+            queue.push_back((&dependency.package_id, Some(extra)));
+        }
+    }
+}
+
+fn activated_extras<'lock>(
+    lock: &'lock Lock,
+    markers: Option<&ResolverMarkerEnvironment>,
+    members: &BTreeSet<&'lock PackageId>,
+    groups: &DependencyGroupsWithDefaults,
+    activated_groups: &[(&'lock PackageName, &'lock GroupName)],
+) -> BTreeSet<(&'lock PackageName, &'lock ExtraName)> {
+    let Some(markers) = markers else {
+        return BTreeSet::default();
+    };
+
+    let mut root_queue = VecDeque::new();
+    let mut root_seen = FxHashSet::default();
+    let mut group_dependencies = vec![];
+    for id in members {
+        let package = lock.find_by_id(id);
+        if groups.prod() && root_seen.insert((*id, None)) {
+            root_queue.push_back((*id, None));
+        }
+        group_dependencies.extend(
+            package
+                .dependency_groups
+                .iter()
+                .filter(|(group, _)| groups.contains(group))
+                .flat_map(|(_, dependencies)| dependencies),
+        );
+    }
+
+    let mut activated_extras = BTreeSet::default();
+    let mut seen_activation_contexts = FxHashSet::default();
+    loop {
+        if !seen_activation_contexts.insert(activated_extras.clone()) {
+            break;
+        }
+
+        let mut next_activated_extras = BTreeSet::default();
+        let mut queue = root_queue.clone();
+        let mut seen = root_seen.clone();
+        for dependency in &group_dependencies {
+            activate_dependency(
+                dependency,
+                markers,
+                &activated_extras,
+                activated_groups,
+                &mut next_activated_extras,
+                &mut queue,
+                &mut seen,
+            );
+        }
+
+        while let Some((id, extra)) = queue.pop_front() {
+            let package = lock.find_by_id(id);
+            let dependencies = if let Some(extra) = extra {
+                Either::Left(
+                    package
+                        .optional_dependencies
+                        .get(extra)
+                        .into_iter()
+                        .flatten(),
+                )
+            } else {
+                Either::Right(package.dependencies.iter())
+            };
+            for dependency in dependencies {
+                activate_dependency(
+                    dependency,
+                    markers,
+                    &activated_extras,
+                    activated_groups,
+                    &mut next_activated_extras,
+                    &mut queue,
+                    &mut seen,
+                );
+            }
+        }
+
+        if next_activated_extras == activated_extras {
+            return next_activated_extras;
+        }
+        activated_extras = next_activated_extras;
+    }
+    activated_extras
+}
+
 #[derive(Debug)]
 pub struct TreeDisplay<'env> {
     /// The constructed dependency graph.
@@ -85,12 +209,16 @@ impl<'env> TreeDisplay<'env> {
                     .map(|group| (&id.name, group))
             })
             .collect::<Vec<_>>();
+        let activated_extras = activated_extras(lock, markers, &members, groups, &activated_groups);
         let evaluate_dependency = |id: &PackageId, extra: Option<&ExtraName>, dep: &Dependency| {
             markers.is_none_or(|markers| {
                 dep.complexified_marker.evaluate(
                     markers,
                     std::iter::empty::<&PackageName>(),
-                    extra.into_iter().map(|extra| (&id.name, extra)),
+                    activated_extras
+                        .iter()
+                        .copied()
+                        .chain(extra.into_iter().map(|extra| (&id.name, extra))),
                     activated_groups.iter().copied(),
                 )
             })
