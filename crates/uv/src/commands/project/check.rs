@@ -6,11 +6,14 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
+    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
+    InstallOptions,
 };
 use uv_normalize::DefaultExtras;
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
+use uv_python::{
+    EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
+};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
@@ -20,8 +23,10 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
-    ProjectEnvironment, ProjectError, UniversalState, default_dependency_groups,
+    ProjectEnvironment, ProjectError, UniversalState, WorkspacePython, default_dependency_groups,
+    validate_project_requires_python,
 };
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
@@ -35,6 +40,7 @@ pub(crate) async fn check(
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     no_sync: bool,
+    isolated: bool,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
     python: Option<String>,
@@ -117,30 +123,97 @@ pub(crate) async fn check(
         .map(|p| p.root().to_owned())
         .unwrap_or_else(|| project_dir.to_owned());
 
-    // If we found a project, sync the environment before running checks.
-    let venv_path = if let Some(project) = &project {
-        let default_groups = default_dependency_groups(project.pyproject_toml())?;
-        let default_extras = DefaultExtras::default();
-        let groups = groups.with_defaults(default_groups);
-        let extras = extras.with_defaults(default_extras);
+    let groups = if let Some(project) = &project {
+        groups.with_defaults(default_dependency_groups(project.pyproject_toml())?)
+    } else {
+        DependencyGroupsWithDefaults::none()
+    };
 
-        let venv = ProjectEnvironment::get_or_init(
-            project.workspace(),
-            &groups,
+    // Create an isolated environment, if requested.
+    let temp_dir;
+    let isolated_venv = if isolated {
+        debug!("Creating isolated virtual environment");
+
+        let workspace = project.as_ref().map(VirtualProject::workspace);
+        let WorkspacePython {
+            source,
+            python_request,
+            requires_python,
+        } = WorkspacePython::from_request(
             python.as_deref().map(PythonRequest::parse),
-            &install_mirrors,
-            &client_builder,
+            workspace,
+            &groups,
+            project_dir,
+            no_config,
+        )
+        .await?;
+
+        let reporter = PythonDownloadReporter::single(printer);
+        let interpreter = PythonInstallation::find_or_download(
+            python_request.as_ref(),
+            EnvironmentPreference::Any,
             python_preference,
             python_downloads,
-            no_sync,
-            no_config,
-            None,
+            &client_builder,
             cache,
-            DryRun::Disabled,
-            printer,
+            Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?
-        .into_environment()?;
+        .into_interpreter();
+
+        if let Some(requires_python) = requires_python.as_ref() {
+            validate_project_requires_python(
+                &interpreter,
+                workspace,
+                &groups,
+                requires_python,
+                &source,
+            )?;
+        }
+
+        temp_dir = cache.venv_dir()?;
+        Some(uv_virtualenv::create_venv(
+            temp_dir.path(),
+            interpreter,
+            uv_virtualenv::Prompt::None,
+            false,
+            uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::TemporaryEnvironment),
+            false,
+            false,
+            false,
+        )?)
+    } else {
+        None
+    };
+
+    // Select an environment and, if we found a project, sync it before running checks.
+    let venv_path = if let Some(project) = &project {
+        let extras = extras.with_defaults(DefaultExtras::default());
+
+        let venv = if let Some(venv) = isolated_venv {
+            venv
+        } else {
+            ProjectEnvironment::get_or_init(
+                project.workspace(),
+                &groups,
+                python.as_deref().map(PythonRequest::parse),
+                &install_mirrors,
+                &client_builder,
+                python_preference,
+                python_downloads,
+                no_sync,
+                no_config,
+                None,
+                cache,
+                DryRun::Disabled,
+                printer,
+            )
+            .await?
+            .into_environment()?
+        };
 
         if no_sync {
             debug!("Skipping environment synchronization due to `--no-sync`");
@@ -160,6 +233,8 @@ pub(crate) async fn check(
                 LockMode::Frozen(frozen_source.into())
             } else if let LockCheck::Enabled(lock_check) = lock_check {
                 LockMode::Locked(venv.interpreter(), lock_check)
+            } else if isolated {
+                LockMode::DryRun(venv.interpreter())
             } else {
                 LockMode::Write(venv.interpreter())
             };
@@ -245,7 +320,7 @@ pub(crate) async fn check(
 
         Some(venv.root().to_owned())
     } else {
-        None
+        isolated_venv.map(|venv| venv.root().to_owned())
     };
 
     let exclude_newer = settings
