@@ -28,7 +28,10 @@ use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion};
+use uv_pep508::{
+    MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
+    MarkerValueVersion,
+};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -1125,14 +1128,15 @@ async fn do_lock(
                 if !build_options.no_build_requirement(None) {
                     let matched_extra_build_requires = resolution
                         .match_runtime_extra_build_requires(extra_build_requires.clone())?;
+                    let executor_environments = executor_environments(interpreter.markers());
                     let build_dispatch = make_build_dispatch(
                         build_preferences.clone(),
                         &matched_extra_build_requires,
                     )
                     .with_universal_build_resolution(
                         requires_python.clone(),
-                        lock_supported_environments.clone(),
-                        artifact_environments.clone(),
+                        executor_environments.clone(),
+                        executor_environments,
                     );
                     let build_database = DistributionDatabase::new(
                         &client,
@@ -1285,6 +1289,12 @@ async fn resolve_all_possible_builds(
         } else {
             context_marker.filter(|marker| !(*marker).is_true())
         };
+        let nested_context_marker = build_markers
+            .get(&key)
+            .copied()
+            .map(UniversalMarker::combined)
+            .filter(|marker| !marker.is_true())
+            .or(context_marker);
         let bootstrap_context = if build_markers.contains_key(&key) {
             lock.build_resolution_context_id_for(
                 &key,
@@ -1461,7 +1471,7 @@ async fn resolve_all_possible_builds(
                     key: dep_key,
                     source_dist,
                     solve_marker: resolve_backend_hook_requirements.then_some(package.marker),
-                    context_marker: resolve_backend_hook_requirements.then_some(package.marker),
+                    context_marker: nested_context_marker,
                 });
             }
         }
@@ -1497,6 +1507,24 @@ fn source_python_marker(marker: MarkerTree) -> MarkerTree {
         python_marker.or(python_clause);
     }
     python_marker
+}
+
+/// Return the marker environment used to resolve dependencies that execute on
+/// the build host.
+fn executor_environments(markers: &MarkerEnvironment) -> SupportedEnvironments {
+    let mut marker = MarkerTree::expression(MarkerExpression::String {
+        key: MarkerValueString::SysPlatform,
+        operator: MarkerOperator::Equal,
+        value: markers.sys_platform().into(),
+    });
+    if !markers.platform_machine().is_empty() {
+        marker.and(MarkerTree::expression(MarkerExpression::String {
+            key: MarkerValueString::PlatformMachine,
+            operator: MarkerOperator::Equal,
+            value: markers.platform_machine().into(),
+        }));
+    }
+    SupportedEnvironments::from_markers(vec![marker])
 }
 
 #[derive(Debug)]
