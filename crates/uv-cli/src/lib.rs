@@ -326,7 +326,6 @@ pub struct GlobalArgs {
         value_delimiter = ',',
         hide = true,
         alias = "preview-feature",
-        value_enum,
     )]
     pub preview_features: Vec<MaybePreviewFeature>,
 
