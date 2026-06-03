@@ -55,9 +55,13 @@ pub(crate) async fn metadata(
         );
     }
 
-    let virtual_project =
-        VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
-            .await?;
+    let virtual_project = VirtualProject::discover(
+        project_dir,
+        &DiscoveryOptions::default(),
+        cache,
+        workspace_cache,
+    )
+    .await?;
     let target = LockTarget::Workspace(virtual_project.workspace());
 
     // Don't enable any groups' requires-python for interpreter discovery.

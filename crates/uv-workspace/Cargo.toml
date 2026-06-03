@@ -17,6 +17,7 @@ workspace = true
 
 [dependencies]
 uv-build-backend = { workspace = true, features = ["schemars"] }
+uv-cache = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-types = { workspace = true }

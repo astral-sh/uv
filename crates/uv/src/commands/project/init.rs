@@ -324,6 +324,7 @@ async fn init_project(
                 members: MemberDiscovery::Ignore(std::iter::once(path.to_path_buf()).collect()),
                 ..DiscoveryOptions::default()
             },
+            cache,
             &workspace_cache,
         )
         .await

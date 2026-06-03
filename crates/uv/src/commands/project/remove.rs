@@ -93,6 +93,7 @@ pub(crate) async fn remove(
             VirtualProject::discover_with_package(
                 project_dir,
                 &DiscoveryOptions::default(),
+                cache,
                 &WorkspaceCache::default(),
                 package.clone(),
             )
@@ -101,6 +102,7 @@ pub(crate) async fn remove(
             VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions::default(),
+                cache,
                 &WorkspaceCache::default(),
             )
             .await?

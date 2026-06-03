@@ -1479,6 +1479,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         self.build_context.locations(),
                         self.build_context.sources().clone(),
                         editable,
+                        self.build_context.cache(),
                         self.build_context.workspace_cache(),
                         credentials_cache,
                     )
@@ -1534,6 +1535,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             self.build_context.locations(),
                             self.build_context.sources().clone(),
                             editable,
+                            self.build_context.cache(),
                             self.build_context.workspace_cache(),
                             credentials_cache,
                         )
@@ -1585,6 +1587,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     self.build_context.locations(),
                     self.build_context.sources().clone(),
                     editable,
+                    self.build_context.cache(),
                     self.build_context.workspace_cache(),
                     credentials_cache,
                 )
@@ -1648,6 +1651,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.build_context.locations(),
                 self.build_context.sources().clone(),
                 editable,
+                self.build_context.cache(),
                 self.build_context.workspace_cache(),
                 credentials_cache,
             )
@@ -1727,6 +1731,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     self.build_context
                         .source_tree_editable_policy()
                         .workspace_member_editable(None),
+                    self.build_context.cache(),
                     self.build_context.workspace_cache(),
                     credentials_cache,
                 )
@@ -2322,6 +2327,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             self.build_context
                                 .source_tree_editable_policy()
                                 .workspace_member_editable(None),
+                            self.build_context.cache(),
                             self.build_context.workspace_cache(),
                             credentials_cache,
                         )
@@ -2359,6 +2365,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 self.build_context
                                     .source_tree_editable_policy()
                                     .workspace_member_editable(None),
+                                self.build_context.cache(),
                                 self.build_context.workspace_cache(),
                                 credentials_cache,
                             )
@@ -2415,6 +2422,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     self.build_context
                         .source_tree_editable_policy()
                         .workspace_member_editable(None),
+                    self.build_context.cache(),
                     self.build_context.workspace_cache(),
                     credentials_cache,
                 )
@@ -2480,6 +2488,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.build_context
                     .source_tree_editable_policy()
                     .workspace_member_editable(None),
+                self.build_context.cache(),
                 self.build_context.workspace_cache(),
                 credentials_cache,
             )

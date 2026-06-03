@@ -129,9 +129,13 @@ pub(crate) async fn lock(
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
     } else {
-        workspace =
-            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
-                .await?;
+        workspace = VirtualProject::discover(
+            project_dir,
+            &DiscoveryOptions::default(),
+            cache,
+            workspace_cache,
+        )
+        .await?;
         LockTarget::Workspace(workspace.workspace())
     };
 

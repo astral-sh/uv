@@ -540,6 +540,7 @@ pub(crate) async fn run(
             let project = VirtualProject::discover_with_package(
                 project_dir,
                 &DiscoveryOptions::default(),
+                &cache,
                 workspace_cache,
                 package.clone(),
             )
@@ -549,6 +550,7 @@ pub(crate) async fn run(
             match VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions::default(),
+                &cache,
                 workspace_cache,
             )
             .await
