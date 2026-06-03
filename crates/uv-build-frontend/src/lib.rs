@@ -94,7 +94,7 @@ struct BuildSystem {
     requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
     /// A string naming a Python object that will be used to perform the build.
     build_backend: Option<String>,
-    /// Specify that their backend code is hosted in-tree, this key contains a list of directories.
+    /// Specifies that backend code is hosted in-tree, this key contains a list of directories.
     backend_path: Option<BackendPath>,
 }
 
@@ -267,7 +267,7 @@ pub struct SourceBuild {
     /// Distribution identifier, e.g., `foo-1.2.3`. Used for error reporting if the name and
     /// version are unknown.
     version_id: Option<String>,
-    /// Whether we do a regular PEP 517 build or an PEP 660 editable build
+    /// Whether we do a regular PEP 517 build or a PEP 660 editable build
     build_kind: BuildKind,
     /// Whether to send build output to `stderr` or `tracing`, etc.
     level: BuildOutput,
@@ -380,7 +380,7 @@ impl SourceBuild {
         };
 
         // Set up the build environment. If build isolation is disabled, we assume the build
-        // environment is already setup.
+        // environment is already set up.
         if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Resolving build requirements");
 
@@ -439,7 +439,7 @@ impl SourceBuild {
         };
 
         // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
-        // environment is already setup.
+        // environment is already set up.
         let runner = PythonRunner::new(source_build_context.concurrent_build_slots.clone(), level);
         if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Creating PEP 517 build environment");
