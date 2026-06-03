@@ -10549,8 +10549,8 @@ fn sync_multiple_sources_index_marker_only_extra_complement() -> Result<()> {
     Ok(())
 }
 
-/// An explicit index scoped to multiple extras must not be visible when only
-/// one of those extras is active.
+/// An explicit index scoped to multiple extras must retain the default fallback
+/// and must not be visible when only one of those extras is active.
 #[test]
 fn sync_multiple_sources_index_extra_with_extra_marker() -> Result<()> {
     let context = uv_test::test_context!("3.12");
