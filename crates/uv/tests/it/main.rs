@@ -39,10 +39,10 @@ mod edit;
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod export;
 
-#[cfg(feature = "test-python")]
+#[cfg(all(feature = "test-python", feature = "test-r2"))]
 mod check;
 
-#[cfg(all(feature = "test-python", feature = "test-pypi"))]
+#[cfg(all(feature = "test-python", feature = "test-r2"))]
 mod format;
 
 mod help;
