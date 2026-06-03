@@ -37725,7 +37725,7 @@ fn lock_path_dependency_optional_extra_source_multiple_extras() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     let lock = context.read("pkg_b/uv.lock");
@@ -37738,6 +37738,13 @@ fn lock_path_dependency_optional_extra_source_multiple_extras() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+        conflicts = [[
+            { package = "pkg-a", extra = "alt" },
+            { package = "pkg-a", extra = "alt" },
+        ], [
+            { package = "pkg-a", extra = "dev" },
+            { package = "pkg-a", extra = "dev" },
+        ]]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -37752,11 +37759,20 @@ fn lock_path_dependency_optional_extra_source_multiple_extras() -> Result<()> {
         ]
 
         [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
+        ]
+
+        [[package]]
         name = "pkg-a"
         version = "0.1.0"
         source = { editable = "../pkg_a" }
         dependencies = [
-            { name = "iniconfig" },
+            { name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "extra != 'extra-5-pkg-a-alt' and extra != 'extra-5-pkg-a-dev'" },
+            { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "extra == 'extra-5-pkg-a-alt' or extra == 'extra-5-pkg-a-dev'" },
         ]
 
         [package.metadata]
@@ -37788,7 +37804,7 @@ fn lock_path_dependency_optional_extra_source_multiple_extras() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     Ok(())
