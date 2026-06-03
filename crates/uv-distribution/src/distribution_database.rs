@@ -768,11 +768,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         }
                     },
                 };
-                // If necessary, exhaust the reader to compute the hash.
-                if !hashes.is_none() {
-                    hasher.finish().await.map_err(Error::HashExhaustion)?;
-                }
 
+                // Exhaust the reader to compute the hash.
+                hasher.finish().await.map_err(Error::HashExhaustion)?;
+
+                // Extract the blake3 hash for content-addressing.
+                let blake3_digest = hasher.blake3_digest();
+
+                let hash_digests: HashDigests = hashers.into_iter().map(HashDigest::from).collect();
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
                 validate_and_heal_record(temp_dir.path(), files.iter(), dist)
@@ -782,7 +785,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let id = self
                     .build_context
                     .cache()
-                    .persist(temp_dir.keep(), wheel_entry.path())
+                    .persist(temp_dir.keep(), wheel_entry.path(), blake3_digest.as_str())
                     .await
                     .map_err(Error::CacheRead)?;
 
@@ -790,11 +793,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
-                Ok(Archive::new(
-                    id,
-                    hashers.into_iter().map(HashDigest::from).collect(),
-                    filename.clone(),
-                ))
+                Ok(Archive::new(id, hash_digests, filename.clone()))
             }
             .instrument(info_span!("wheel", wheel = %dist))
         };
@@ -823,7 +822,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let archive = self
+        let archive: Archive = self
             .client
             .managed(|client| {
                 client.cached_client().get_serde_with_retry(
@@ -942,47 +941,30 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await
                     .map_err(Error::CacheWrite)?;
 
-                // If no hashes are required, extract the wheel without hashing.
-                let (files, hashes) = if hashes.is_none() {
-                    let target = temp_dir.path().to_owned();
-                    let files = match extension {
-                        WheelExtension::Whl => {
-                            let file = file.into_std().await;
-                            tokio::task::spawn_blocking(move || uv_extract::unzip(file, &target))
-                                .await?
-                        }
-                        WheelExtension::WhlZst => {
-                            uv_extract::stream::untar_zst(file, &target).await
-                        }
+                // Create a hasher for each hash algorithm.
+                let algorithms = hashes.algorithms();
+                let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
+                let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
+
+                let files = match extension {
+                    WheelExtension::Whl => {
+                        uv_extract::stream::unzip(query_url, &mut hasher, temp_dir.path())
+                            .await
+                            .map_err(|err| Error::Extract(filename.to_string(), err))?
                     }
-                    .map_err(|err| Error::Extract(filename.to_string(), err))?;
-
-                    (files, HashDigests::empty())
-                } else {
-                    // Create a hasher for each hash algorithm.
-                    let algorithms = hashes.algorithms();
-                    let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
-                    let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
-
-                    let files = match extension {
-                        WheelExtension::Whl => {
-                            uv_extract::stream::unzip(query_url, &mut hasher, temp_dir.path())
-                                .await
-                                .map_err(|err| Error::Extract(filename.to_string(), err))?
-                        }
-                        WheelExtension::WhlZst => {
-                            uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
-                                .await
-                                .map_err(|err| Error::Extract(filename.to_string(), err))?
-                        }
-                    };
-
-                    // If necessary, exhaust the reader to compute the hash.
-                    hasher.finish().await.map_err(Error::HashExhaustion)?;
-                    let hashes = hashers.into_iter().map(HashDigest::from).collect();
-
-                    (files, hashes)
+                    WheelExtension::WhlZst => {
+                        uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
+                            .await
+                            .map_err(|err| Error::Extract(filename.to_string(), err))?
+                    }
                 };
+
+                // Exhaust the reader to compute the hash.
+                hasher.finish().await.map_err(Error::HashExhaustion)?;
+
+                // Extract the blake3 hash for content-addressing.
+                let blake3_digest = hasher.blake3_digest();
+                let hash_digests: HashDigests = hashers.into_iter().map(HashDigest::from).collect();
 
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
@@ -993,7 +975,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let id = self
                     .build_context
                     .cache()
-                    .persist(temp_dir.keep(), wheel_entry.path())
+                    .persist(temp_dir.keep(), wheel_entry.path(), blake3_digest.as_str())
                     .await
                     .map_err(Error::CacheRead)?;
 
@@ -1001,7 +983,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
-                Ok(Archive::new(id, hashes, filename.clone()))
+                Ok(Archive::new(id, hash_digests, filename.clone()))
             }
             .instrument(info_span!("wheel", wheel = %dist))
         };
@@ -1030,7 +1012,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let archive = self
+        let archive: Archive = self
             .client
             .managed(|client| {
                 client.cached_client().get_serde_with_retry(
@@ -1119,14 +1101,36 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 cache: CacheInfo::from_timestamp(modified),
                 build: None,
             })
-        } else if hashes.is_none() {
-            // Otherwise, unzip the wheel.
-            let archive = Archive::new(
-                self.unzip_wheel(path, wheel_entry.path(), DistRef::Built(dist))
-                    .await?,
-                HashDigests::empty(),
-                filename.clone(),
-            );
+        } else if matches!(extension, WheelExtension::Whl) && hashes.is_none() {
+            // Otherwise, unzip the wheel and compute its content-addressed cache key.
+            let (temp_dir, files, blake3_digest) = tokio::task::spawn_blocking({
+                let path = path.to_owned();
+                let root = self.build_context.cache().root().to_path_buf();
+                let filename = filename.to_string();
+                move || -> Result<_, Error> {
+                    let temp_dir = tempfile::tempdir_in(root).map_err(Error::CacheWrite)?;
+                    let (files, blake3_digest) = uv_extract::unzip_and_hash(&path, temp_dir.path())
+                        .map_err(|err| Error::Extract(filename, err))?;
+                    Ok((temp_dir, files, blake3_digest))
+                }
+            })
+            .await??;
+
+            // Before we make the wheel accessible by persisting it, ensure that the RECORD is
+            // valid.
+            validate_and_heal_record(temp_dir.path(), files.iter(), dist)
+                .map_err(Error::InstallWheelError)?;
+
+            // Persist the temporary directory to the directory store.
+            let id = self
+                .build_context
+                .cache()
+                .persist(temp_dir.keep(), wheel_entry.path(), blake3_digest.as_str())
+                .await
+                .map_err(Error::CacheWrite)?;
+
+            // Create an archive.
+            let archive = Archive::new(id, HashDigests::empty(), filename.clone());
 
             // Write the archive pointer to the cache.
             let pointer = PathArchivePointer {
@@ -1148,14 +1152,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 build: None,
             })
         } else {
-            // If necessary, compute the hashes of the wheel.
+            // Otherwise, unzip the wheel and compute the requested hashes.
             let file = fs_err::tokio::File::open(path)
                 .await
                 .map_err(Error::CacheRead)?;
             let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                 .map_err(Error::CacheWrite)?;
 
-            // Create a hasher for each hash algorithm.
+            // Create a hasher for each requested hash algorithm.
             let algorithms = hashes.algorithms();
             let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
@@ -1177,7 +1181,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             // Exhaust the reader to compute the hash.
             hasher.finish().await.map_err(Error::HashExhaustion)?;
 
-            let hashes = hashers.into_iter().map(HashDigest::from).collect();
+            // Extract the blake3 hash for content-addressing.
+            let blake3_digest = hasher.blake3_digest();
+            let hash_digests: HashDigests = hashers.into_iter().map(HashDigest::from).collect();
 
             // Before we make the wheel accessible by persisting it, ensure that the RECORD is
             // valid.
@@ -1188,12 +1194,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let id = self
                 .build_context
                 .cache()
-                .persist(temp_dir.keep(), wheel_entry.path())
+                .persist(temp_dir.keep(), wheel_entry.path(), blake3_digest.as_str())
                 .await
                 .map_err(Error::CacheWrite)?;
 
             // Create an archive.
-            let archive = Archive::new(id, hashes, filename.clone());
+            let archive = Archive::new(id, hash_digests, filename.clone());
 
             // Write the archive pointer to the cache.
             let pointer = PathArchivePointer {
@@ -1224,16 +1230,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         target: &Path,
         dist: DistRef<'_>,
     ) -> Result<ArchiveId, Error> {
-        let (temp_dir, files) = tokio::task::spawn_blocking({
+        let (temp_dir, files, blake3_digest) = tokio::task::spawn_blocking({
             let path = path.to_owned();
             let root = self.build_context.cache().root().to_path_buf();
             move || -> Result<_, Error> {
-                // Unzip the wheel into a temporary directory.
                 let temp_dir = tempfile::tempdir_in(root).map_err(Error::CacheWrite)?;
-                let reader = fs_err::File::open(&path).map_err(Error::CacheWrite)?;
-                let files = uv_extract::unzip(reader, temp_dir.path())
+                let (files, blake3_digest) = uv_extract::unzip_and_hash(&path, temp_dir.path())
                     .map_err(|err| Error::Extract(path.to_string_lossy().into_owned(), err))?;
-                Ok((temp_dir, files))
+                Ok((temp_dir, files, blake3_digest))
             }
         })
         .await??;
@@ -1246,7 +1250,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let id = self
             .build_context
             .cache()
-            .persist(temp_dir.keep(), target)
+            .persist(temp_dir.keep(), target, blake3_digest.as_str())
             .await
             .map_err(Error::CacheWrite)?;
 

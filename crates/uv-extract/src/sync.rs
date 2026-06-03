@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use crate::hash::{Blake3Digest, blake3_hash};
 use crate::vendor::CloneableSeekableReader;
 use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
 use async_zip::base::read::seek::ZipFileReader;
@@ -12,6 +13,22 @@ use rustc_hash::FxHashSet;
 use tracing::warn;
 use uv_configuration::initialize_rayon_once;
 use uv_warnings::warn_user_once;
+
+/// Unzip a `.zip` archive into the target directory while computing its Blake3 hash.
+pub fn unzip_and_hash(
+    path: &Path,
+    target: &Path,
+) -> Result<(Vec<(PathBuf, u64)>, Blake3Digest), Error> {
+    initialize_rayon_once();
+    let (files, blake3_digest) = rayon::join(
+        || {
+            let reader = fs_err::File::open(path).map_err(Error::Io)?;
+            unzip(reader, target)
+        },
+        || blake3_hash(path).map_err(Error::Io),
+    );
+    Ok((files?, blake3_digest?))
+}
 
 /// Unzip a `.zip` archive into the target directory.
 ///

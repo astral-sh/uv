@@ -66,9 +66,39 @@ impl From<Hasher> for HashDigest {
     }
 }
 
+/// A blake3 hash digest, hex-encoded.
+#[derive(Debug, Clone)]
+pub struct Blake3Digest(String);
+
+impl Blake3Digest {
+    /// Create a new [`Blake3Digest`] from a hex-encoded string.
+    pub fn new(hex: String) -> Self {
+        Self(hex)
+    }
+
+    /// Return the hex-encoded digest string.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for Blake3Digest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+/// Compute the Blake3 hash of a file using multi-threaded, memory-mapped I/O.
+pub(crate) fn blake3_hash(path: &std::path::Path) -> Result<Blake3Digest, std::io::Error> {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update_mmap_rayon(path)?;
+    Ok(Blake3Digest::new(hasher.finalize().to_hex().to_string()))
+}
+
 pub struct HashReader<'a, R> {
     reader: R,
     hashers: &'a mut [Hasher],
+    blake3: Box<blake3::Hasher>,
 }
 
 impl<'a, R> HashReader<'a, R>
@@ -76,7 +106,11 @@ where
     R: tokio::io::AsyncRead + Unpin,
 {
     pub fn new(reader: R, hashers: &'a mut [Hasher]) -> Self {
-        HashReader { reader, hashers }
+        HashReader {
+            reader,
+            hashers,
+            blake3: Box::new(blake3::Hasher::new()),
+        }
     }
 
     /// Exhaust the underlying reader.
@@ -84,6 +118,11 @@ where
         while self.read(&mut vec![0; 8192]).await? > 0 {}
 
         Ok(())
+    }
+
+    /// Finalize and return the blake3 digest.
+    pub fn blake3_digest(&self) -> Blake3Digest {
+        Blake3Digest(self.blake3.finalize().to_hex().to_string())
     }
 }
 
@@ -99,9 +138,11 @@ where
         let reader = Pin::new(&mut self.reader);
         match reader.poll_read(cx, buf) {
             Poll::Ready(Ok(())) => {
+                let filled = buf.filled();
                 for hasher in self.hashers.iter_mut() {
-                    hasher.update(buf.filled());
+                    hasher.update(filled);
                 }
+                self.blake3.update(filled);
                 Poll::Ready(Ok(()))
             }
             other => other,

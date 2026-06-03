@@ -144,7 +144,7 @@ impl Hashed for &[HashDigest] {
 mod tests {
     use std::str::FromStr;
 
-    use uv_pypi_types::HashDigest;
+    use uv_pypi_types::{HashAlgorithm, HashDigest};
 
     use super::HashPolicy;
 
@@ -187,5 +187,31 @@ mod tests {
         let policy = HashPolicy::Any(&[sha256.clone(), sha512]);
         assert!(policy.matches(&[sha256]));
         assert!(!policy.matches(&[wrong_sha512]));
+    }
+
+    #[test]
+    fn algorithms_include_only_required_hashes() {
+        let sha256 = HashDigest::from_str(
+            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        )
+        .unwrap();
+        let sha512 = HashDigest::from_str(
+            "sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2",
+        )
+        .unwrap();
+
+        assert_eq!(HashPolicy::None.algorithms(), vec![]);
+        assert_eq!(
+            HashPolicy::Generate(crate::HashGeneration::Url).algorithms(),
+            vec![HashAlgorithm::Sha256]
+        );
+        assert_eq!(
+            HashPolicy::Any(&[sha512.clone(), sha512.clone()]).algorithms(),
+            vec![HashAlgorithm::Sha512]
+        );
+        assert_eq!(
+            HashPolicy::All(&[sha512, sha256]).algorithms(),
+            vec![HashAlgorithm::Sha256, HashAlgorithm::Sha512]
+        );
     }
 }
