@@ -2967,6 +2967,44 @@ fn preview_features() {
     "
     );
 
+    diff_uv_snapshot!(
+        context.filters(),
+        &preview_features,
+        add_shared_args(context.version())
+            .arg("--show-settings")
+            .arg("--preview-features")
+            .arg("python-install-default,unknown-preview-feature,python-upgrade"),
+        @"
+    --- old
+    +++ new
+    @@ -122,3 +122,4 @@
+     }
+
+     ----- stderr -----
+    +warning: Unknown preview feature: `unknown-preview-feature`
+    "
+    );
+
+    diff_uv_snapshot!(
+        context.filters(),
+        &preview_features,
+        add_shared_args(context.version())
+            .arg("--show-settings")
+            .env(
+                EnvVars::UV_PREVIEW_FEATURES,
+                "python-install-default,unknown-preview-feature,python-upgrade",
+            ),
+        @"
+    --- old
+    +++ new
+    @@ -122,3 +122,4 @@
+     }
+
+     ----- stderr -----
+    +warning: Unknown preview feature: `unknown-preview-feature`
+    "
+    );
+
     // Compare against output with both features passed to one `--preview-features` option.
     diff_uv_snapshot!(context.filters(), &preview_features, add_shared_args(context.version()).arg("--show-settings").arg("--preview-features").arg("python-install-default").arg("--preview-feature").arg("python-upgrade"), @""
     );
@@ -2978,6 +3016,44 @@ fn preview_features() {
         .arg("--preview-features").arg("python-install-default").arg("--preview-feature").arg("python-upgrade")
         .arg("--no-preview"),
         @""
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.version())
+            .arg("--show-settings")
+            .arg("--preview-features")
+            .arg("python-install-default,,python-upgrade"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value '' for '--preview-features <PREVIEW_FEATURES>': preview feature name cannot be empty
+
+    For more information, try '--help'.
+    "
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.version())
+            .arg("--show-settings")
+            .env(
+                EnvVars::UV_PREVIEW_FEATURES,
+                "python-install-default,,python-upgrade",
+            ),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value '' for '--preview-features <PREVIEW_FEATURES>': preview feature name cannot be empty
+
+    For more information, try '--help'.
+    "
     );
 }
 
