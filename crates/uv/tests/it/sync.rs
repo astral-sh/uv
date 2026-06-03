@@ -11773,6 +11773,63 @@ fn sync_multiple_sources_only_group_conflicting_prod_fallback_preserves_transiti
     Ok(())
 }
 
+/// A source-agnostic group fallback must not override a selected package's
+/// transitive constraint with an incompatible group dependency.
+#[test]
+fn sync_multiple_sources_only_group_conflicting_prod_fallback_preserves_transitive_constraint()
+-> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["requests==2.31.0"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["requests==2.31.0", "urllib3==1.20"]
+
+        [tool.uv]
+        conflicts = [[
+            { package = "project" },
+            { group = "use" },
+        ]]
+
+        [tool.uv.sources]
+        requests = [
+            { url = "https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--only-group")
+        .arg("use"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + urllib3==1.20
+    ");
+
+    Ok(())
+}
+
 /// Extra predicates on a group-scoped URL source must remain active alongside
 /// the group's source-selection marker.
 #[test]

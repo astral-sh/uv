@@ -318,6 +318,7 @@ impl Lock {
         supported_environments: Vec<MarkerTree>,
     ) -> Result<Self, LockError> {
         let mut packages = BTreeMap::new();
+        let mut package_requirements = BTreeMap::new();
         let requires_python = resolution.requires_python.clone();
         let supported_environments = supported_environments
             .into_iter()
@@ -400,6 +401,13 @@ impl Lock {
             }
 
             let id = package.id.clone();
+            package_requirements.insert(
+                id.clone(),
+                dist.metadata
+                    .as_ref()
+                    .map(|metadata| metadata.requires_dist.as_ref())
+                    .unwrap_or_default(),
+            );
             if let Some(locked_dist) = packages.insert(id, package) {
                 return Err(LockErrorKind::DuplicatePackage {
                     id: locked_dist.id.clone(),
@@ -473,6 +481,7 @@ impl Lock {
             &mut packages,
             &requires_python,
             group_source_fallbacks,
+            &package_requirements,
         );
 
         let packages = packages.into_values().collect();
@@ -2917,7 +2926,8 @@ impl Package {
         Ok(())
     }
 
-    /// Add source-agnostic dependency-group fallbacks from the resolved production dependencies.
+    /// Collect source-agnostic dependency-group fallbacks from the resolved production
+    /// dependencies.
     fn add_group_source_fallbacks(
         &mut self,
         requires_python: &RequiresPython,
@@ -2967,7 +2977,7 @@ impl Package {
 
                     fallbacks.push(GroupSourceFallback {
                         group: group.clone(),
-                        project: self.id.name.clone(),
+                        project: self.id.clone(),
                         dependency: Dependency::new(
                             requires_python,
                             dependency.package_id.clone(),
@@ -2981,16 +2991,6 @@ impl Package {
                             .unwrap_or_default(),
                     });
                 }
-            }
-        }
-
-        for fallback in &fallbacks {
-            let dependencies = self
-                .dependency_groups
-                .entry(fallback.group.clone())
-                .or_default();
-            if !dependencies.contains(&fallback.dependency) {
-                dependencies.push(fallback.dependency.clone());
             }
         }
 
@@ -3804,7 +3804,7 @@ impl Package {
 #[derive(Debug)]
 struct GroupSourceFallback {
     group: GroupName,
-    project: PackageName,
+    project: PackageId,
     dependency: Dependency,
     group_dependencies: Vec<Dependency>,
 }
@@ -3814,19 +3814,23 @@ fn add_group_source_fallback_dependencies(
     packages: &mut BTreeMap<PackageId, Package>,
     requires_python: &RequiresPython,
     fallbacks: Vec<GroupSourceFallback>,
+    package_requirements: &BTreeMap<PackageId, &[Requirement]>,
 ) {
     let mut additions = Vec::new();
+    let mut group_additions = Vec::new();
 
     for fallback in fallbacks {
-        let project = ConflictItem::from(fallback.project);
+        let project = ConflictItem::from(fallback.project.name.clone());
         let fallback_marker = fallback.dependency.complexified_marker;
         let mut queue = VecDeque::from([(fallback.dependency.package_id.clone(), None)]);
         for extra in &fallback.dependency.extra {
             queue.push_back((fallback.dependency.package_id.clone(), Some(extra.clone())));
         }
         let mut seen = FxHashSet::default();
+        let mut fallback_additions = Vec::new();
+        let mut valid = true;
 
-        while let Some((package_id, extra)) = queue.pop_front() {
+        'queue: while let Some((package_id, extra)) = queue.pop_front() {
             if !seen.insert((package_id.clone(), extra.clone())) {
                 continue;
             }
@@ -3862,8 +3866,19 @@ fn add_group_source_fallback_dependencies(
                     if marker.is_false() {
                         continue;
                     }
+                    if !group_dependency_satisfies_requirement(
+                        package_requirements
+                            .get(&package_id)
+                            .copied()
+                            .unwrap_or_default(),
+                        dependency,
+                        group_dependency,
+                    ) {
+                        valid = false;
+                        break 'queue;
+                    }
 
-                    additions.push((
+                    fallback_additions.push((
                         package_id.clone(),
                         extra.clone(),
                         Dependency::new(
@@ -3885,7 +3900,7 @@ fn add_group_source_fallback_dependencies(
                     continue;
                 }
 
-                additions.push((
+                fallback_additions.push((
                     package_id.clone(),
                     extra.clone(),
                     Dependency::new(
@@ -3900,6 +3915,21 @@ fn add_group_source_fallback_dependencies(
                     queue.push_back((dependency.package_id.clone(), Some(extra.clone())));
                 }
             }
+        }
+
+        if valid {
+            group_additions.push((fallback.project, fallback.group, fallback.dependency));
+            additions.extend(fallback_additions);
+        }
+    }
+
+    for (project_id, group, dependency) in group_additions {
+        let Some(project) = packages.get_mut(&project_id) else {
+            continue;
+        };
+        let dependencies = project.dependency_groups.entry(group).or_default();
+        if !dependencies.contains(&dependency) {
+            dependencies.push(dependency);
         }
     }
 
@@ -3916,6 +3946,29 @@ fn add_group_source_fallback_dependencies(
             dependencies.push(dependency);
         }
     }
+}
+
+/// Returns `true` if a dependency-group selection satisfies the package's requirements for a
+/// resolved dependency.
+fn group_dependency_satisfies_requirement(
+    requirements: &[Requirement],
+    dependency: &Dependency,
+    group_dependency: &Dependency,
+) -> bool {
+    let marker = dependency.complexified_marker.pep508();
+    requirements
+        .iter()
+        .filter(|requirement| {
+            requirement.name == dependency.package_id.name
+                && !requirement.marker.is_disjoint(marker)
+        })
+        .all(|requirement| {
+            requirement
+                .source
+                .version_specifiers()
+                .zip(group_dependency.package_id.version.as_ref())
+                .is_some_and(|(specifier, version)| specifier.contains(version))
+        })
 }
 
 /// Attempts to construct a `VerbatimUrl` from the given normalized `Path`.
