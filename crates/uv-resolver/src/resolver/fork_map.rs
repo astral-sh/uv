@@ -128,7 +128,7 @@ impl ForkScope {
 
     fn marker_with_conflict(marker: MarkerTree, conflict: &ConflictItem) -> MarkerTree {
         UniversalMarker::new(
-            marker.without_extras(),
+            encode_package_extras(marker, conflict.package()),
             ConflictMarker::from_conflict_item(conflict),
         )
         .combined()
