@@ -465,9 +465,15 @@ impl Lock {
             }
         }
 
-        for package in packages.values_mut() {
-            package.add_group_source_fallbacks(&requires_python);
-        }
+        let group_source_fallbacks = packages
+            .values_mut()
+            .flat_map(|package| package.add_group_source_fallbacks(&requires_python))
+            .collect();
+        add_group_source_fallback_dependencies(
+            &mut packages,
+            &requires_python,
+            group_source_fallbacks,
+        );
 
         let packages = packages.into_values().collect();
 
@@ -2912,7 +2918,10 @@ impl Package {
     }
 
     /// Add source-agnostic dependency-group fallbacks from the resolved production dependencies.
-    fn add_group_source_fallbacks(&mut self, requires_python: &RequiresPython) {
+    fn add_group_source_fallbacks(
+        &mut self,
+        requires_python: &RequiresPython,
+    ) -> Vec<GroupSourceFallback> {
         let mut fallbacks = Vec::new();
 
         for (group, requirements) in &self.metadata.dependency_groups {
@@ -2946,25 +2955,31 @@ impl Package {
                         continue;
                     }
 
-                    fallbacks.push((
-                        group.clone(),
-                        Dependency::new(
+                    fallbacks.push(GroupSourceFallback {
+                        group: group.clone(),
+                        project: self.id.name.clone(),
+                        dependency: Dependency::new(
                             requires_python,
                             dependency.package_id.clone(),
                             dependency.extra.clone(),
                             marker,
                         ),
-                    ));
+                    });
                 }
             }
         }
 
-        for (group, fallback) in fallbacks {
-            let dependencies = self.dependency_groups.entry(group).or_default();
-            if !dependencies.contains(&fallback) {
-                dependencies.push(fallback);
+        for fallback in &fallbacks {
+            let dependencies = self
+                .dependency_groups
+                .entry(fallback.group.clone())
+                .or_default();
+            if !dependencies.contains(&fallback.dependency) {
+                dependencies.push(fallback.dependency.clone());
             }
         }
+
+        fallbacks
     }
 
     /// Returns `true` if `requirement` is an unsourced base requirement.
@@ -3767,6 +3782,88 @@ impl Package {
         InstallTarget {
             name: self.name(),
             is_local: self.id.source.is_local(),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct GroupSourceFallback {
+    group: GroupName,
+    project: PackageName,
+    dependency: Dependency,
+}
+
+/// Add the selected package's dependencies to a synthesized dependency-group fallback.
+fn add_group_source_fallback_dependencies(
+    packages: &mut BTreeMap<PackageId, Package>,
+    requires_python: &RequiresPython,
+    fallbacks: Vec<GroupSourceFallback>,
+) {
+    let mut additions = Vec::new();
+
+    for fallback in fallbacks {
+        let project = ConflictItem::from(fallback.project);
+        let fallback_marker = fallback.dependency.complexified_marker;
+        let mut queue = VecDeque::from([(fallback.dependency.package_id.clone(), None)]);
+        for extra in &fallback.dependency.extra {
+            queue.push_back((fallback.dependency.package_id.clone(), Some(extra.clone())));
+        }
+        let mut seen = FxHashSet::default();
+
+        while let Some((package_id, extra)) = queue.pop_front() {
+            if !seen.insert((package_id.clone(), extra.clone())) {
+                continue;
+            }
+            let Some(package) = packages.get(&package_id) else {
+                continue;
+            };
+            let dependencies = if let Some(extra) = extra.as_ref() {
+                package
+                    .optional_dependencies
+                    .get(extra)
+                    .map(Vec::as_slice)
+                    .unwrap_or_default()
+            } else {
+                package.dependencies.as_slice()
+            };
+
+            for dependency in dependencies {
+                let mut marker = dependency.complexified_marker;
+                marker.assume_conflict_item(&project);
+                marker.and(fallback_marker);
+                if marker.is_false() {
+                    continue;
+                }
+
+                additions.push((
+                    package_id.clone(),
+                    extra.clone(),
+                    Dependency::new(
+                        requires_python,
+                        dependency.package_id.clone(),
+                        dependency.extra.clone(),
+                        marker,
+                    ),
+                ));
+                queue.push_back((dependency.package_id.clone(), None));
+                for extra in &dependency.extra {
+                    queue.push_back((dependency.package_id.clone(), Some(extra.clone())));
+                }
+            }
+        }
+    }
+
+    for (package_id, extra, dependency) in additions {
+        let Some(package) = packages.get_mut(&package_id) else {
+            continue;
+        };
+        let dependencies = if let Some(extra) = extra {
+            package.optional_dependencies.entry(extra).or_default()
+        } else {
+            &mut package.dependencies
+        };
+        if !dependencies.contains(&dependency) {
+            dependencies.push(dependency);
         }
     }
 }
