@@ -21,7 +21,7 @@ use url::Url;
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults,
-    InstallTarget,
+    InstallOptions, InstallTarget,
 };
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
 use uv_distribution_filename::{
@@ -51,6 +51,7 @@ use uv_platform_tags::{
 use uv_pypi_types::{
     ConflictItem, ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes,
     ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ResolverMarkerEnvironment,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
@@ -895,180 +896,54 @@ impl Lock {
     /// in an external audit source.
     pub fn auditable<'lock>(
         &'lock self,
+        target: &impl Installable<'lock>,
+        markers: Option<&ResolverMarkerEnvironment>,
         extras: &'lock ExtrasSpecificationWithDefaults,
         groups: &'lock DependencyGroupsWithDefaults,
         collect_filter: impl Fn(&Package) -> bool,
-    ) -> Auditable<'lock> {
+    ) -> Result<Auditable<'lock>, LockError> {
+        let install_options = InstallOptions::default();
+        let export::ExportableRequirements(packages) = export::ExportableRequirements::from_lock(
+            target,
+            &[],
+            extras,
+            groups,
+            false,
+            &install_options,
+        )?;
+
         // Dedupe and sort by `(name, version)` during the walk itself. Keep
         // the first `Package` reference we see for each key so that
         // downstream views (e.g. index lookup) have access to the lockfile
         // package.
         let mut by_name_version: BTreeMap<(&PackageName, &Version), &Package> = BTreeMap::default();
-        self.walk_auditable(extras, groups, collect_filter, |package, version| {
-            by_name_version
-                .entry((package.name(), version))
-                .or_insert(package);
-        });
+        for export::ExportableRequirement {
+            package, marker, ..
+        } in packages
+        {
+            if self.members().contains(package.name())
+                || self.root().is_some_and(|root| root.id == package.id)
+                || markers.is_some_and(|markers| !marker.evaluate(markers, &[]))
+                || !collect_filter(package)
+            {
+                continue;
+            }
+            if let Some(version) = package.version() {
+                by_name_version
+                    .entry((package.name(), version))
+                    .or_insert(package);
+            } else {
+                trace!(
+                    "Skipping audit for `{}` because it has no version information",
+                    package.name()
+                );
+            }
+        }
         let packages = by_name_version
             .into_iter()
             .map(|((_, version), package)| (package, version))
             .collect();
-        Auditable { packages }
-    }
-
-    /// Walk the auditable dependency graph, invoking `visit` once per
-    /// non-workspace package with version information.
-    ///
-    /// The traversal is seeded from workspace members, lock-level requirements
-    /// (e.g. PEP 723 scripts), and lock-level dependency groups, then follows
-    /// each reachable dependency exactly once per `(package, extra)` pair,
-    /// respecting the provided extras and dependency-group filters. The same
-    /// package may be visited more than once if it is reached through multiple
-    /// extras — callers should deduplicate as appropriate.
-    fn walk_auditable<'lock, F>(
-        &'lock self,
-        extras: &'lock ExtrasSpecificationWithDefaults,
-        groups: &'lock DependencyGroupsWithDefaults,
-        collect_filter: impl Fn(&Package) -> bool,
-        mut visit: F,
-    ) where
-        F: FnMut(&'lock Package, &'lock Version),
-    {
-        // Enqueue a dependency for auditability checks: base package (no extra) first, then each activated extra.
-        fn enqueue_dep<'lock>(
-            lock: &'lock Lock,
-            seen: &mut FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
-            queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
-            dep: &'lock Dependency,
-        ) {
-            let dep_pkg = lock.find_by_id(&dep.package_id);
-            for maybe_extra in std::iter::once(None).chain(dep.extra.iter().map(Some)) {
-                if seen.insert((&dep.package_id, maybe_extra)) {
-                    queue.push_back((dep_pkg, maybe_extra));
-                }
-            }
-        }
-
-        // Identify workspace members (the implicit root counts for single-member workspaces).
-        let workspace_member_ids: FxHashSet<&PackageId> = if self.members().is_empty() {
-            self.root().into_iter().map(|package| &package.id).collect()
-        } else {
-            self.packages
-                .iter()
-                .filter(|package| self.members().contains(&package.id.name))
-                .map(|package| &package.id)
-                .collect()
-        };
-
-        // Lockfile traversal state: (package, optional extra to activate on that package).
-        let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
-        let mut seen: FxHashSet<(&PackageId, Option<&ExtraName>)> = FxHashSet::default();
-
-        // Seed from workspace members. Always queue with `None` so that we can traverse
-        // their dependency groups; only queue extras when prod mode is active.
-        for package in self
-            .packages
-            .iter()
-            .filter(|p| workspace_member_ids.contains(&p.id))
-        {
-            if seen.insert((&package.id, None)) {
-                queue.push_back((package, None));
-            }
-            if groups.prod() {
-                for extra in extras.extra_names(package.optional_dependencies.keys()) {
-                    if seen.insert((&package.id, Some(extra))) {
-                        queue.push_back((package, Some(extra)));
-                    }
-                }
-            }
-        }
-
-        // Seed from requirements attached directly to the lock (e.g., PEP 723 scripts).
-        for requirement in self.requirements() {
-            for package in self
-                .packages
-                .iter()
-                .filter(|p| p.id.name == requirement.name)
-            {
-                if seen.insert((&package.id, None)) {
-                    queue.push_back((package, None));
-                }
-                for extra in &*requirement.extras {
-                    if seen.insert((&package.id, Some(extra))) {
-                        queue.push_back((package, Some(extra)));
-                    }
-                }
-            }
-        }
-
-        // Seed from dependency groups attached directly to the lock (e.g., project-less
-        // workspace roots).
-        for (group, requirements) in self.dependency_groups() {
-            if !groups.contains(group) {
-                continue;
-            }
-            for requirement in requirements {
-                for package in self
-                    .packages
-                    .iter()
-                    .filter(|p| p.id.name == requirement.name)
-                {
-                    if seen.insert((&package.id, None)) {
-                        queue.push_back((package, None));
-                    }
-                    for extra in &*requirement.extras {
-                        if seen.insert((&package.id, Some(extra))) {
-                            queue.push_back((package, Some(extra)));
-                        }
-                    }
-                }
-            }
-        }
-
-        while let Some((package, extra)) = queue.pop_front() {
-            let is_member = workspace_member_ids.contains(&package.id);
-
-            // Collect non-workspace packages that have version information
-            // and pass the caller's filter.
-            if !is_member && collect_filter(package) {
-                if let Some(version) = package.version() {
-                    visit(package, version);
-                } else {
-                    trace!(
-                        "Skipping audit for `{}` because it has no version information",
-                        package.name()
-                    );
-                }
-            }
-
-            // Follow allowed dependency groups.
-            if is_member && extra.is_none() {
-                for dep in package
-                    .dependency_groups
-                    .iter()
-                    .filter(|(group, _)| groups.contains(group))
-                    .flat_map(|(_, deps)| deps)
-                {
-                    enqueue_dep(self, &mut seen, &mut queue, dep);
-                }
-            }
-
-            // Follow the regular/extra dependencies for this (package, extra) pair.
-            // For workspace members in only-group mode, skip regular dependencies.
-            let dependencies: &[Dependency] = match extra {
-                Some(extra) => package
-                    .optional_dependencies
-                    .get(extra)
-                    .map(Vec::as_slice)
-                    .unwrap_or_default(),
-                None if is_member && !groups.prod() => &[],
-                None => &package.dependencies,
-            };
-
-            for dep in dependencies {
-                enqueue_dep(self, &mut seen, &mut queue, dep);
-            }
-        }
+        Ok(Auditable { packages })
     }
 
     /// Return the workspace root used to generate this lock.

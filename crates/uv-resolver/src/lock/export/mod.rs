@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
 
 use either::Either;
+use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::EdgeRef;
 use petgraph::visit::IntoNodeReferences;
@@ -31,28 +32,28 @@ mod requirements_txt;
 
 /// A flat requirement, with its associated marker.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ExportableRequirement<'lock> {
+pub(super) struct ExportableRequirement<'lock> {
     /// The [`Package`] associated with the requirement.
-    package: &'lock Package,
+    pub(super) package: &'lock Package,
     /// The marker that must be satisfied to install the package.
-    marker: MarkerTree,
+    pub(super) marker: MarkerTree,
     /// The list of packages that depend on this package.
     dependents: Vec<&'lock Package>,
 }
 
 /// A set of flattened, exportable requirements, generated from a lockfile.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ExportableRequirements<'lock>(Vec<ExportableRequirement<'lock>>);
+pub(super) struct ExportableRequirements<'lock>(pub(super) Vec<ExportableRequirement<'lock>>);
 
 impl<'lock> ExportableRequirements<'lock> {
     /// Generate the set of exportable [`ExportableRequirement`] entries from the given lockfile.
-    fn from_lock(
+    pub(super) fn from_lock(
         target: &impl Installable<'lock>,
         prune: &[PackageName],
         extras: &ExtrasSpecificationWithDefaults,
         groups: &DependencyGroupsWithDefaults,
         annotate: bool,
-        install_options: &'lock InstallOptions,
+        install_options: &InstallOptions,
     ) -> Result<Self, LockError> {
         let size_guess = target.lock().packages.len();
         let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
@@ -102,7 +103,12 @@ impl<'lock> ExportableRequirements<'lock> {
 
                 // Push its dependencies on the queue.
                 queue.push_back((dist, None));
-                for extra in extras.extra_names(dist.optional_dependencies.keys()) {
+                for extra in extras.extra_names(
+                    dist.optional_dependencies
+                        .keys()
+                        .chain(dist.provides_extras().iter())
+                        .unique(),
+                ) {
                     queue.push_back((dist, Some(extra)));
                     activated_items.insert(
                         ConflictItem::from((dist.id.name.clone(), extra.clone())),

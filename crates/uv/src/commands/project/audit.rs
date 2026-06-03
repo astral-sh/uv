@@ -12,7 +12,8 @@ use crate::commands::project::default_dependency_groups;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
+    InstallTarget, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    WorkspacePython,
 };
 use crate::commands::reporters::AuditReporter;
 use crate::printer::Printer;
@@ -200,7 +201,7 @@ pub(crate) async fn audit(
     };
 
     // Determine the markers to use for resolution.
-    let _markers = (!universal).then(|| {
+    let markers = (!universal).then(|| {
         resolution_markers(
             python_version.as_ref(),
             python_platform.as_ref(),
@@ -212,7 +213,25 @@ pub(crate) async fn audit(
     // respecting the user's extras and dependency-group filters. Workspace members are excluded
     // (they are local and have no external package identity), as are packages without a version.
     // The `Auditable` view offers per-version and per-project projections from a single walk.
-    let auditable = lock.auditable(&extras, &groups, |_| true);
+    let install_target = match target {
+        LockTarget::Workspace(workspace) if workspace.is_non_project() => {
+            InstallTarget::NonProjectWorkspace {
+                workspace,
+                lock: &lock,
+            }
+        }
+        LockTarget::Workspace(workspace) => InstallTarget::Workspace {
+            workspace,
+            lock: &lock,
+        },
+        LockTarget::Script(script) => InstallTarget::Script {
+            script,
+            lock: &lock,
+        },
+    };
+    let auditable = lock.auditable(&install_target, markers.as_ref(), &extras, &groups, |_| {
+        true
+    })?;
     let mut projects = auditable.projects(target.install_path())?;
 
     // Drop projects whose index is configured as flat, since we know we won't
