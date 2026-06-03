@@ -1704,7 +1704,7 @@ fn script_manifest_extra_scoped_source() -> Result<()> {
         name = "child"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig==2.0.0"]
+        dependencies = ["iniconfig==2.0.0 ; sys_platform == 'win32'"]
 
         [project.optional-dependencies]
         alt = ["iniconfig==1.1.1"]
@@ -1739,12 +1739,18 @@ fn script_manifest_extra_scoped_source() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(context.filters(), context.tree().arg("--script").arg("script.py").arg("--locked"), @"
+    uv_snapshot!(context.filters(), context
+        .tree()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--python-platform")
+        .arg("x86_64-unknown-linux-gnu"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     child v0.1.0
-    └── iniconfig v1.1.1
+    └── iniconfig v1.1.1 (extra: alt)
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -2313,7 +2319,7 @@ fn non_project_group_activates_member_extra_source() -> Result<()> {
         name = "child"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig==2.0.0"]
+        dependencies = ["iniconfig==2.0.0 ; sys_platform == 'win32'"]
 
         [project.optional-dependencies]
         alt = ["iniconfig==1.1.1"]
@@ -2329,13 +2335,19 @@ fn non_project_group_activates_member_extra_source() -> Result<()> {
 
     uv_snapshot!(
         context.filters(),
-        context.tree().arg("--only-group").arg("use").arg("--locked"),
+        context
+            .tree()
+            .arg("--only-group")
+            .arg("use")
+            .arg("--locked")
+            .arg("--python-platform")
+            .arg("x86_64-unknown-linux-gnu"),
         @"
     success: true
     exit_code: 0
     ----- stdout -----
     child v0.1.0 (group: use)
-    └── iniconfig v1.1.1
+    └── iniconfig v1.1.1 (extra: alt)
     child v0.1.0 (*)
     (*) Package tree already displayed
 

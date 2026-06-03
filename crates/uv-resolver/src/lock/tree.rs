@@ -460,6 +460,11 @@ impl<'env> TreeDisplay<'env> {
                     if seen.insert((&package.id, None)) {
                         queue.push_back((&package.id, None));
                     }
+                    for extra in &requirement.extras {
+                        if seen.insert((&package.id, Some(extra))) {
+                            queue.push_back((&package.id, Some(extra)));
+                        }
+                    }
                 }
             }
 
@@ -496,6 +501,11 @@ impl<'env> TreeDisplay<'env> {
                         // Push its dependencies on the queue.
                         if seen.insert((&package.id, None)) {
                             queue.push_back((&package.id, None));
+                        }
+                        for extra in &requirement.extras {
+                            if seen.insert((&package.id, Some(extra))) {
+                                queue.push_back((&package.id, Some(extra)));
+                            }
                         }
                     }
                 }
