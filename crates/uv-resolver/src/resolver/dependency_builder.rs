@@ -219,7 +219,6 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             );
 
             for requirement in complementary_requirements {
-                let extras = Self::required_extras(raw_requirement.marker);
                 let needs_unsourced_complement = raw_requirement
                     .evaluate_markers(self.env.marker_environment(), &[])
                     && self
@@ -228,7 +227,6 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                 let constraints = self.constraints_for_complementary_extra_source(
                     &raw_requirement,
                     requirement.marker,
-                    &extras,
                     python_marker,
                 );
 
@@ -274,11 +272,9 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                 );
 
                 for requirement in complementary_requirements {
-                    let extras = Self::required_extras(raw_requirement.marker);
                     let constraints = self.constraints_for_complementary_extra_source(
                         &raw_requirement,
                         requirement.marker,
-                        &extras,
                         python_marker,
                     );
 
@@ -671,46 +667,22 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         })
     }
 
-    /// Returns the constraints that must be present in the sibling extra or group fork for
-    /// `requirement`.
-    fn constraints_for_requirement(
-        &self,
-        requirement: &Requirement,
-        extra: Option<&ExtraName>,
-        python_marker: MarkerTree,
-    ) -> Vec<Requirement> {
-        self.state
-            .constraints_for_requirement(
-                Cow::Borrowed(requirement),
-                extra,
-                self.env,
-                python_marker,
-                self.python_requirement,
-            )
-            .map(Cow::into_owned)
-            .collect()
-    }
-
     /// Returns constraints for an extra-gated complementary source dependency.
     ///
     /// Source extra markers are encoded as conflict markers on the synthesized dependency edge.
-    /// Root constraints, however, are authored against the raw extra name. Select constraints using
-    /// the raw requirement marker, then emit them under the encoded marker for this fork.
+    /// Root constraints, however, are authored against raw extra names. Encode every overlapping
+    /// constraint predicate relative to the declaring package before combining it with the source
+    /// fork marker.
     fn constraints_for_complementary_extra_source(
         &self,
         raw_requirement: &Requirement,
         marker: MarkerTree,
-        extras: &[ExtraName],
         python_marker: MarkerTree,
     ) -> Vec<Requirement> {
-        if extras.is_empty() {
-            let split_requirement = Self::requirement_with_marker(raw_requirement, marker);
-            return self.constraints_for_requirement(&split_requirement, None, python_marker);
-        }
-
         let Some(constraints) = self.state.constraints.get(&raw_requirement.name) else {
             return Vec::new();
         };
+        let package = self.package.name_no_root().or(self.state.project.as_ref());
 
         constraints
             .iter()
@@ -721,11 +693,10 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                     return None;
                 }
 
-                if !constraint.evaluate_markers(self.env.marker_environment(), extras) {
-                    return None;
-                }
-
-                let mut scoped_marker = raw_marker.without_extras();
+                let mut scoped_marker = package.map_or_else(
+                    || raw_marker.without_extras(),
+                    |package| encode_package_extras(raw_marker, package),
+                );
                 scoped_marker.and(marker);
                 if scoped_marker.is_false()
                     || python_marker.is_disjoint(scoped_marker)
