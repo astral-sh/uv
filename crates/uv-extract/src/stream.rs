@@ -12,7 +12,9 @@ use tracing::{debug, warn};
 use uv_distribution_filename::SourceDistExtension;
 use uv_warnings::warn_user_once;
 
-use crate::hash::{DirectoryDigest, DirectoryDigestFile, directory_digest, empty_directory_paths};
+use crate::dirhash::{
+    DirectoryDigest, DirectoryDigestFile, directory_digest, empty_directory_paths,
+};
 use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
@@ -66,7 +68,7 @@ struct ComputedEntry {
 /// Unpack a `.zip` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unzipping files as they're being downloaded. If the archive
-/// is already fully on disk, consider using `unzip_archive`, which can use multiple
+/// is already fully on disk, consider using [`crate::unzip`], which can use multiple
 /// threads to work faster in that case.
 ///
 /// `source_hint` is used for warning messages, to identify the source of the ZIP archive

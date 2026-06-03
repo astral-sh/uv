@@ -22,7 +22,8 @@ use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, File, HashPolicy, Hashed, IndexUrl,
     InstalledDist, Name, SourceDist, ToUrlError,
 };
-use uv_extract::hash::{DirectoryDigest, Hasher};
+use uv_extract::dirhash::DirectoryDigest;
+use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_git::{GIT_LFS, GitError};
 use uv_install_wheel::validate_and_heal_record;
