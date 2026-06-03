@@ -439,7 +439,6 @@ impl<'a> BuildDispatch<'a> {
         resolution: &LockedBuildResolution,
         requirements: &[Requirement],
     ) -> Option<Resolution> {
-        let requirements = resolution.initial_requirements().unwrap_or(requirements);
         let direct_dependencies = resolution
             .bootstrap_direct_dependencies()
             .unwrap_or_else(|| resolution.direct_dependencies());

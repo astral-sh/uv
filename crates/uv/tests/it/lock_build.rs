@@ -2533,6 +2533,154 @@ def get_requires_for_build_wheel(config_settings=None):
     Ok(())
 }
 
+/// Verify source-matched `match-runtime` requirements replay without resolving mutable metadata.
+#[test]
+fn lock_build_dependencies_extra_match_runtime_source_replay() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let builder_dir = context.temp_dir.child("runtime-builder");
+    builder_dir.create_dir_all()?;
+    let builder_pyproject = builder_dir.child("pyproject.toml");
+    builder_pyproject.write_str(
+        r#"
+        [project]
+        name = "runtime-builder"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    builder_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "runtime_builder-1.0.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("runtime_builder.py", "")
+        wheel.writestr(
+            "runtime_builder-1.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: runtime-builder\nVersion: 1.0.0\n",
+        )
+        wheel.writestr(
+            "runtime_builder-1.0.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("runtime_builder-1.0.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+    let builder_url = Url::from_directory_path(builder_dir.path()).unwrap();
+
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all()?;
+    child_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    child_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    import runtime_builder
+    filename = "child-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("child/__init__.py", "")
+        wheel.writestr(
+            "child-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "child-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("child-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child", "runtime-builder @ {builder_url}"]
+
+        [tool.uv.sources]
+        child = {{ path = "child" }}
+
+        [tool.uv.extra-build-dependencies]
+        child = [{{ requirement = "runtime-builder", match-runtime = true }}]
+        "#,
+        ))?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .assert()
+        .success();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child", "runtime-builder @ {builder_url}"]
+
+        [tool.uv]
+        build-constraint-dependencies = ["runtime-builder==999"]
+
+        [tool.uv.sources]
+        child = {{ path = "child" }}
+
+        [tool.uv.extra-build-dependencies]
+        child = [{{ requirement = "runtime-builder", match-runtime = true }}]
+        "#,
+        ))?;
+
+    context
+        .sync()
+        .arg("--frozen")
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 /// Verify `match-runtime` preserves mutually exclusive runtime branches.
 #[test]
 fn lock_build_dependencies_extra_match_runtime_conflicts() -> Result<()> {
