@@ -10688,6 +10688,60 @@ fn sync_multiple_sources_metadata_only_group() -> Result<()> {
     Ok(())
 }
 
+/// Materialized source fallback edges should use the extras requested by the
+/// group, not the extras requested by the production dependency.
+#[test]
+fn sync_multiple_sources_group_fallback_preserves_group_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio[trio]==4.0.0"]
+
+        [dependency-groups]
+        use = ["anyio==4.0.0"]
+
+        [tool.uv.sources]
+        anyio = [
+            { url = "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl", group = "use", marker = "sys_platform == 'win32'" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .sync()
+            .arg("--locked")
+            .arg("--only-group")
+            .arg("use")
+            .arg("--python-platform")
+            .arg("x86_64-apple-darwin"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    Ok(())
+}
+
 #[test]
 fn sync_multiple_sources_group_activates_extra_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");

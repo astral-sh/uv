@@ -3340,29 +3340,26 @@ impl Package {
     fn add_source_variant_group_dependencies(&mut self, requires_python: &RequiresPython) {
         let mut dependencies = Vec::new();
         for (group, requirements) in &self.metadata.dependency_groups {
-            let mut requirements_by_name = BTreeMap::<&PackageName, (MarkerTree, bool)>::default();
-            for requirement in requirements {
-                let (marker, has_explicit_source) = requirements_by_name
-                    .entry(&requirement.name)
-                    .or_insert((MarkerTree::FALSE, false));
-                marker.or(requirement.marker);
-                *has_explicit_source |= match &requirement.source {
+            let source_variant_names = requirements
+                .iter()
+                .filter(|requirement| match &requirement.source {
                     RequirementSource::Registry {
                         index, conflict, ..
                     } => index.is_some() || conflict.is_some(),
                     _ => true,
-                };
-            }
-
-            for (name, (marker, has_explicit_source)) in requirements_by_name {
-                if !has_explicit_source {
-                    continue;
-                }
-                let marker = UniversalMarker::from_combined(marker);
+                })
+                .map(|requirement| &requirement.name)
+                .collect::<BTreeSet<_>>();
+            for requirement in requirements
+                .iter()
+                .filter(|requirement| source_variant_names.contains(&requirement.name))
+            {
+                let marker = UniversalMarker::from_combined(requirement.marker);
+                let extras = requirement.extras.iter().cloned().collect::<BTreeSet<_>>();
                 dependencies.extend(
                     self.dependencies
                         .iter()
-                        .filter(|dependency| dependency.package_name() == name)
+                        .filter(|dependency| dependency.package_name() == &requirement.name)
                         .filter_map(|dependency| {
                             let mut dependency_marker = dependency.complexified_marker;
                             dependency_marker.and(marker);
@@ -3372,7 +3369,7 @@ impl Package {
                                     Dependency::new(
                                         requires_python,
                                         dependency.package_id.clone(),
-                                        dependency.extra.clone(),
+                                        extras.clone(),
                                         dependency_marker,
                                     ),
                                 )
