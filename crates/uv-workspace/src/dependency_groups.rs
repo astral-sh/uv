@@ -1,6 +1,6 @@
 use std::collections::btree_map::Entry;
 use std::str::FromStr;
-use std::{collections::BTreeMap, collections::BTreeSet, path::Path};
+use std::{collections::BTreeMap, path::Path};
 
 use thiserror::Error;
 
@@ -21,8 +21,17 @@ pub struct FlatDependencyGroups(BTreeMap<GroupName, FlatDependencyGroup>);
 pub struct FlatDependencyGroup {
     pub requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
     pub requires_python: Option<VersionSpecifiers>,
-    /// The groups whose source selectors apply to these flattened requirements.
-    pub source_groups: BTreeSet<GroupName>,
+    source_groups: Vec<GroupName>,
+}
+
+impl FlatDependencyGroup {
+    /// Consume the group into its requirements and the groups whose source selectors apply to
+    /// each requirement.
+    pub fn into_requirements_with_source_groups(
+        self,
+    ) -> impl Iterator<Item = (uv_pep508::Requirement<VerbatimParsedUrl>, GroupName)> {
+        self.requirements.into_iter().zip(self.source_groups)
+    }
 }
 
 impl FlatDependencyGroups {
@@ -82,7 +91,9 @@ impl FlatDependencyGroups {
                 .entry(DEV_DEPENDENCIES.clone())
                 .or_insert_with(FlatDependencyGroup::default);
             group.requirements.extend(dev_dependencies.clone());
-            group.source_groups.insert(DEV_DEPENDENCIES.clone());
+            group
+                .source_groups
+                .extend(dev_dependencies.iter().map(|_| DEV_DEPENDENCIES.clone()));
         }
 
         Ok(dependency_groups)
@@ -129,12 +140,15 @@ impl FlatDependencyGroups {
             parents.push(name);
             let mut requirements = Vec::with_capacity(specifiers.len());
             let mut requires_python_intersection = VersionSpecifiers::empty();
-            let mut source_groups = BTreeSet::from([name.clone()]);
+            let mut source_groups = Vec::with_capacity(specifiers.len());
             for specifier in *specifiers {
                 match specifier {
                     DependencyGroupSpecifier::Requirement(requirement) => {
                         match uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(requirement) {
-                            Ok(requirement) => requirements.push(requirement),
+                            Ok(requirement) => {
+                                requirements.push(requirement);
+                                source_groups.push(name.clone());
+                            }
                             Err(err) => {
                                 return Err(DependencyGroupErrorInner::GroupParseError(
                                     name.clone(),
@@ -226,11 +240,6 @@ impl FlatDependencyGroups {
     /// Return the requirements for a given group, if any.
     pub fn get(&self, group: &GroupName) -> Option<&FlatDependencyGroup> {
         self.0.get(group)
-    }
-
-    /// Iterate over the flattened dependency groups.
-    pub fn iter(&self) -> impl Iterator<Item = (&GroupName, &FlatDependencyGroup)> {
-        self.0.iter()
     }
 
     /// Return the entry for a given group, if any.

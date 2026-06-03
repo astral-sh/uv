@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::path::Path;
 use std::slice;
 
@@ -135,10 +135,6 @@ impl RequiresDist {
         // Now that we've resolved the dependency groups, we can validate that each source references
         // a valid extra or group, if present.
         Self::validate_sources(project_sources, &metadata, &dependency_groups)?;
-        let dependency_group_source_groups = dependency_groups
-            .iter()
-            .map(|(group, flat_group)| (group.clone(), flat_group.source_groups.clone()))
-            .collect::<BTreeMap<_, _>>();
 
         // Lower conditional sources against production dependencies. These variants are consumed
         // only during resolution; the regular lowered requirements remain unchanged for metadata
@@ -172,51 +168,48 @@ impl RequiresDist {
             .collect::<Result<Vec<_>, _>>()?;
 
         // Lower the dependency groups.
-        let dependency_groups = dependency_groups
-            .into_iter()
-            .map(|(name, flat_group)| {
-                let source_groups = flat_group.source_groups;
-                let requirements = flat_group
-                    .requirements
-                    .into_iter()
-                    .flat_map(|requirement| {
-                        // Check if sources should be disabled for this specific package
-                        if no_sources.for_package(&requirement.name) {
-                            vec![Ok(Requirement::from(requirement))].into_iter()
-                        } else {
-                            let requirement_name = requirement.name.clone();
-                            let group = name.clone();
+        let mut lowered_dependency_groups = BTreeMap::new();
+        let mut dependency_group_source_groups = BTreeMap::new();
+        for (group, flat_group) in dependency_groups {
+            let mut requirements = Vec::new();
+            let mut source_groups = Vec::new();
+            for (requirement, source_group) in flat_group.into_requirements_with_source_groups() {
+                if no_sources.for_package(&requirement.name) {
+                    requirements.push(Requirement::from(requirement));
+                    source_groups.push(source_group);
+                    continue;
+                }
 
-                            LoweredRequirement::from_requirement_with_source_groups(
-                                requirement,
-                                Some(&metadata.name),
-                                project_workspace.project_root(),
-                                project_sources,
-                                project_indexes,
-                                &group,
-                                &source_groups,
-                                locations,
-                                project_workspace.workspace(),
-                                git_member,
-                                editable,
-                                credentials_cache,
-                            )
-                            .map(move |requirement| match requirement {
-                                Ok(requirement) => Ok(requirement.into_inner()),
-                                Err(err) => Err(MetadataError::GroupLoweringError(
-                                    group.clone(),
-                                    requirement_name.clone(),
-                                    Box::new(err),
-                                )),
-                            })
-                            .collect::<Vec<_>>()
-                            .into_iter()
-                        }
-                    })
-                    .collect::<Result<Box<_>, _>>()?;
-                Ok::<(GroupName, Box<_>), MetadataError>((name, requirements))
-            })
-            .collect::<Result<BTreeMap<_, _>, _>>()?;
+                let requirement_name = requirement.name.clone();
+                for requirement in LoweredRequirement::from_requirement_with_source_group(
+                    requirement,
+                    Some(&metadata.name),
+                    project_workspace.project_root(),
+                    project_sources,
+                    project_indexes,
+                    &group,
+                    &source_group,
+                    locations,
+                    project_workspace.workspace(),
+                    git_member,
+                    editable,
+                    credentials_cache,
+                ) {
+                    let requirement = requirement.map_err(|err| {
+                        MetadataError::GroupLoweringError(
+                            group.clone(),
+                            requirement_name.clone(),
+                            Box::new(err),
+                        )
+                    })?;
+                    requirements.push(requirement.into_inner());
+                    source_groups.push(source_group.clone());
+                }
+            }
+            dependency_group_source_groups.insert(group.clone(), source_groups.into_boxed_slice());
+            lowered_dependency_groups.insert(group, requirements.into_boxed_slice());
+        }
+        let dependency_groups = lowered_dependency_groups;
 
         // Lower the requirements.
         let requires_dist = Box::into_iter(metadata.requires_dist);
@@ -283,7 +276,7 @@ impl RequiresDist {
         source_variants: Vec<SourceVariant>,
         requires_dist: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Box<[Requirement]>>,
-        dependency_group_source_groups: &BTreeMap<GroupName, BTreeSet<GroupName>>,
+        dependency_group_source_groups: &BTreeMap<GroupName, Box<[GroupName]>>,
     ) -> Vec<SourceVariant> {
         let mut variants = Vec::new();
         for variant in source_variants {
@@ -300,15 +293,17 @@ impl RequiresDist {
             } else if let Some(group) = variant.group.as_ref() {
                 dependency_groups
                     .iter()
-                    .filter(|(selected_group, _)| {
-                        dependency_group_source_groups
-                            .get(*selected_group)
-                            .is_some_and(|source_groups| source_groups.contains(group))
-                    })
                     .flat_map(|(selected_group, requirements)| {
                         requirements
                             .iter()
-                            .map(move |requirement| (Some(selected_group), requirement))
+                            .zip(
+                                dependency_group_source_groups
+                                    .get(selected_group)
+                                    .into_iter()
+                                    .flatten(),
+                            )
+                            .filter(move |(_, source_group)| *source_group == group)
+                            .map(move |(requirement, _)| (Some(selected_group), requirement))
                     })
                     .filter(|(_, requirement)| {
                         requirement.name == variant.requirement.name
