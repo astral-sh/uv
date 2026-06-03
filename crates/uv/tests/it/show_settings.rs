@@ -350,7 +350,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should use the lowest direct version, and generate hashes.
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+    let uv_toml = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     "#
@@ -378,10 +378,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     "#})?;
 
     // Resolution should use the lowest direct version, and generate hashes.
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+    // Compare against output of the same command before replacing `uv.toml` with `pyproject.toml`.
+    diff_uv_snapshot!(context.filters(), &uv_toml, add_shared_args(context.pip_compile())
         .arg("--show-settings")
-        .arg("requirements.in"), @r#"
-    "#
+        .arg("requirements.in"), @"
+    "
     );
 
     Ok(())
@@ -418,7 +419,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+    let configured = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     "#
@@ -426,7 +427,8 @@ fn resolve_index_url() -> anyhow::Result<()> {
 
     // Providing an additional index URL on the command-line should be merged with the
     // configuration file.
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+    // Compare against output of the same command without `--extra-index-url`.
+    diff_uv_snapshot!(context.filters(), &configured, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--extra-index-url")
@@ -532,18 +534,19 @@ fn resolve_top_level() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+    let combined = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     "#
     );
 
     // But the command-line should take precedence over both.
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+    // Compare against output of the same command without `--resolution=lowest-direct`.
+    diff_uv_snapshot!(context.filters(), &combined, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
-        .arg("--resolution=lowest-direct"), @r#"
-    "#
+        .arg("--resolution=lowest-direct"), @"
+    "
     );
 
     Ok(())
@@ -578,11 +581,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should use the lowest direct version.
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+    let user_configuration = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
-    "#
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
+    "
     );
 
     // Add a local configuration to generate hashes.
@@ -593,11 +596,12 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     "})?;
 
     // Resolution should use the lowest direct version and generate hashes.
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+    // Compare against output of the same command without the local `generate-hashes = true` setting.
+    diff_uv_snapshot!(context.filters(), &user_configuration, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
-    "#
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
+    "
     );
 
     // Add a local configuration to override the user configuration.
@@ -622,12 +626,13 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         resolution = "highest"
     "#})?;
 
-    // Resolution should use the highest version.
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+    // Resolution should use the lowest direct version.
+    // Compare against output of the same command without the local top-level
+    // `resolution = "highest"` setting.
+    diff_uv_snapshot!(context.filters(), &user_configuration, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
-    "#
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @""
     );
 
     Ok(())
@@ -1221,7 +1226,7 @@ fn index_priority() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+    let index_url = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index-url")
@@ -1229,12 +1234,12 @@ fn index_priority() -> anyhow::Result<()> {
     "#
     );
 
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+    // Compare against output of the same command with `--index-url` instead of `--default-index`.
+    diff_uv_snapshot!(context.filters(), &index_url, add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--default-index")
-        .arg("https://cli.pypi.org/simple"), @r#"
-    "#
+        .arg("https://cli.pypi.org/simple"), @""
     );
 
     let config = context.temp_dir.child("uv.toml");
@@ -1243,21 +1248,23 @@ fn index_priority() -> anyhow::Result<()> {
     "#})?;
 
     // Prefer the `--default-index` from the CLI, and treat it as the default.
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+    // Compare against output with `[[index]]` in the config and `--index-url` on the CLI.
+    let default_index = diff_uv_snapshot!(context.filters(), &index_url, add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--default-index")
-        .arg("https://cli.pypi.org/simple"), @r#"
-    "#
+        .arg("https://cli.pypi.org/simple"), @"
+    "
     );
 
     // Prefer the `--index` from the CLI, but treat the index from the file as the default.
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+    // Compare against output of the same command with `--default-index` instead of `--index`.
+    diff_uv_snapshot!(context.filters(), &default_index, add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index")
-        .arg("https://cli.pypi.org/simple"), @r#"
-    "#
+        .arg("https://cli.pypi.org/simple"), @"
+    "
     );
 
     let config = context.temp_dir.child("uv.toml");
@@ -1268,21 +1275,22 @@ fn index_priority() -> anyhow::Result<()> {
     "#})?;
 
     // Prefer the `--index-url` from the CLI, and treat it as the default.
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+    // Compare against output with legacy `index-url` in the config and `--default-index` on the CLI.
+    let index_url = diff_uv_snapshot!(context.filters(), &default_index, add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index-url")
-        .arg("https://cli.pypi.org/simple"), @r#"
-    "#
+        .arg("https://cli.pypi.org/simple"), @""
     );
 
     // Prefer the `--extra-index-url` from the CLI, but not as the default.
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+    // Compare against output of the same command with `--index-url` instead of `--extra-index-url`.
+    diff_uv_snapshot!(context.filters(), &index_url, add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--extra-index-url")
-        .arg("https://cli.pypi.org/simple"), @r#"
-    "#
+        .arg("https://cli.pypi.org/simple"), @"
+    "
     );
 
     Ok(())
@@ -1602,8 +1610,8 @@ fn preview_features() {
         add_shared_args(context.version()).arg("--show-settings")
     );
 
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview"), @r#"
-    "#
+    let preview = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview"), @"
+    "
     );
 
     diff_uv_snapshot!(
@@ -1613,16 +1621,16 @@ fn preview_features() {
         @""
     );
 
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview").arg("--preview-features").arg("python-install-default"), @r#"
-    "#
+    // Compare against output of `--preview` alone.
+    diff_uv_snapshot!(context.filters(), &preview, add_shared_args(context.version()).arg("--show-settings").arg("--preview").arg("--preview-features").arg("python-install-default"), @""
     );
 
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview-features").arg("python-install-default,python-upgrade"), @r#"
-    "#
+    let preview_features = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview-features").arg("python-install-default,python-upgrade"), @"
+    "
     );
 
-    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview-features").arg("python-install-default").arg("--preview-feature").arg("python-upgrade"), @r#"
-    "#
+    // Compare against output with both features passed to one `--preview-features` option.
+    diff_uv_snapshot!(context.filters(), &preview_features, add_shared_args(context.version()).arg("--show-settings").arg("--preview-features").arg("python-install-default").arg("--preview-feature").arg("python-upgrade"), @""
     );
 
     diff_uv_snapshot!(
