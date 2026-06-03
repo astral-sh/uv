@@ -10416,6 +10416,121 @@ fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
 }
 
 #[test]
+fn sync_multiple_sources_index_extra_marker_requires_both_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let default_index = context.temp_dir.child("default/ok");
+    default_index.create_dir_all()?;
+    let default_wheel = default_index.child("ok-1.0.0-py3-none-any.whl");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        &default_wheel,
+    )?;
+    let default_wheel_url =
+        Url::from_file_path(default_wheel.path()).map_err(|()| anyhow!("invalid wheel path"))?;
+    default_index
+        .child("index.html")
+        .write_str(&formatdoc! {r#"
+        <a href="{}">ok-1.0.0-py3-none-any.whl</a>
+        "#,
+            default_wheel_url
+        })?;
+
+    let explicit_index = context.temp_dir.child("explicit/ok");
+    explicit_index.create_dir_all()?;
+    let explicit_wheel = explicit_index.child("ok-2.0.0-py3-none-any.whl");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        &explicit_wheel,
+    )?;
+    let explicit_wheel_url =
+        Url::from_file_path(explicit_wheel.path()).map_err(|()| anyhow!("invalid wheel path"))?;
+    explicit_index
+        .child("index.html")
+        .write_str(&formatdoc! {r#"
+        <a href="{}">ok-2.0.0-py3-none-any.whl</a>
+        "#,
+            explicit_wheel_url
+        })?;
+
+    let explicit_index_url = Url::from_file_path(context.temp_dir.join("explicit"))
+        .map_err(|()| anyhow!("invalid index path"))?;
+    let default_index_url = Url::from_file_path(context.temp_dir.join("default"))
+        .map_err(|()| anyhow!("invalid index path"))?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [project.optional-dependencies]
+        alt = ["ok"]
+        foo = []
+
+        [tool.uv.sources]
+        ok = [{{ index = "explicit", extra = "alt", marker = "extra == 'foo'" }}]
+
+        [[tool.uv.index]]
+        name = "explicit"
+        url = "{}"
+        explicit = true
+
+        [[tool.uv.index]]
+        name = "default"
+        url = "{}"
+        default = true
+        "#,
+        explicit_index_url,
+        default_index_url,
+    })?;
+
+    context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--extra").arg("alt"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--extra").arg("alt")
+        .arg("--extra").arg("foo"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - ok==1.0.0
+     + ok==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn sync_multiple_sources_extra_url_conflict() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

@@ -39,11 +39,17 @@ impl ForkScope {
         let marker = conflict
             .as_ref()
             .map_or(requirement.marker, |conflict_item| {
-                UniversalMarker::new(
-                    requirement.marker.without_extras(),
+                let mut marker = UniversalMarker::from_source_scope(
+                    requirement.marker,
+                    conflict_item.package(),
+                    None,
+                    None,
+                );
+                marker.and(UniversalMarker::new(
+                    MarkerTree::TRUE,
                     ConflictMarker::from_conflict_item(conflict_item),
-                )
-                .combined()
+                ));
+                marker.combined()
             });
         Self { marker, conflict }
     }
