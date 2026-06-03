@@ -1326,6 +1326,56 @@ fn metadata_only_group_scoped_source() -> Result<()> {
     Ok(())
 }
 
+/// Empty extras activated by dependency group requirements must affect source
+/// selection in the dependency tree.
+#[test]
+fn dependency_group_empty_extra_activates_scoped_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["project[foo]", "iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(
+        context.filters(),
+        context.tree().arg("--only-group").arg("use").arg("--locked"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── iniconfig v1.1.1
+    ├── iniconfig v1.1.1 (group: use)
+    └── project v0.1.0 (group: use) (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
 /// Extra-scoped sources should be reflected on optional dependency edges.
 #[test]
 fn extra_scoped_source() -> Result<()> {

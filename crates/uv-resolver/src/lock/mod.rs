@@ -1166,6 +1166,19 @@ impl Lock {
                 root_activated_contexts
                     .insert(ConflictItem::from((package.id.name.clone(), group.clone())));
             }
+            for requirement in package
+                .dependency_groups()
+                .iter()
+                .filter(|(group, _)| groups.contains(group))
+                .flat_map(|(_, requirements)| requirements)
+            {
+                for extra in &*requirement.extras {
+                    root_activated_contexts.insert(ConflictItem::from((
+                        requirement.name.clone(),
+                        extra.clone(),
+                    )));
+                }
+            }
         }
 
         // Seed from requirements attached directly to the lock (e.g., PEP 723 scripts).

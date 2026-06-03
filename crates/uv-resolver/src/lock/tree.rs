@@ -11,6 +11,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_console::human_readable_bytes;
+use uv_distribution_types::Requirement;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -59,6 +60,30 @@ fn activate_dependency<'lock>(
     }
 }
 
+fn activate_requirement<'lock>(
+    package: &'lock PackageName,
+    requirement: &'lock Requirement,
+    markers: &ResolverMarkerEnvironment,
+    activated_extras: &BTreeSet<(&'lock PackageName, &'lock ExtraName)>,
+    next_activated_extras: &mut BTreeSet<(&'lock PackageName, &'lock ExtraName)>,
+) {
+    let mut package_extras = activated_extras
+        .iter()
+        .filter_map(|(candidate, extra)| (*candidate == package).then_some((*extra).clone()))
+        .collect::<Vec<_>>();
+    if requirement.name == *package {
+        package_extras.extend(requirement.extras.iter().cloned());
+    }
+    if requirement.evaluate_markers(Some(markers), &package_extras) {
+        next_activated_extras.extend(
+            requirement
+                .extras
+                .iter()
+                .map(|extra| (&requirement.name, extra)),
+        );
+    }
+}
+
 fn activated_extras<'lock>(
     lock: &'lock Lock,
     markers: Option<&ResolverMarkerEnvironment>,
@@ -74,6 +99,7 @@ fn activated_extras<'lock>(
     let mut root_seen = FxHashSet::default();
     let mut root_activated_extras = BTreeSet::default();
     let mut group_dependencies = vec![];
+    let mut group_requirements = vec![];
     for id in members {
         let package = lock.find_by_id(id);
         if groups.prod() {
@@ -97,6 +123,17 @@ fn activated_extras<'lock>(
                 .iter()
                 .filter(|(group, _)| groups.contains(group))
                 .flat_map(|(_, dependencies)| dependencies),
+        );
+        group_requirements.extend(
+            package
+                .dependency_groups()
+                .iter()
+                .filter(|(group, _)| groups.contains(group))
+                .flat_map(|(_, requirements)| {
+                    requirements
+                        .iter()
+                        .map(|requirement| (&id.name, requirement))
+                }),
         );
     }
 
@@ -142,6 +179,15 @@ fn activated_extras<'lock>(
         let mut next_activated_extras = root_activated_extras.clone();
         let mut queue = root_queue.clone();
         let mut seen = root_seen.clone();
+        for (package, requirement) in &group_requirements {
+            activate_requirement(
+                package,
+                requirement,
+                markers,
+                &activated_extras,
+                &mut next_activated_extras,
+            );
+        }
         for dependency in &group_dependencies {
             activate_dependency(
                 dependency,
