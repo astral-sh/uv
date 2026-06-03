@@ -49,6 +49,95 @@ fn sync() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that `uv sync` reuses remote wheels cached by `uv pip install`.
+#[test]
+fn sync_reuses_pip_install_wheel_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    // Create a lockfile with hashes, but populate the wheel cache via `uv pip install`.
+    context.lock().assert().success();
+    context
+        .pip_install()
+        .arg("iniconfig==2.0.0")
+        .assert()
+        .success();
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--offline"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+/// Ensure that `uv sync` reuses remote source distributions cached by `uv pip install`.
+#[test]
+fn sync_reuses_pip_install_sdist_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    // Create a lockfile with hashes, but populate the source distribution cache via `uv pip
+    // install`.
+    context.lock().assert().success();
+    context
+        .pip_install()
+        .arg("iniconfig==2.0.0")
+        .arg("--no-binary")
+        .arg("iniconfig")
+        .assert()
+        .success();
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--offline")
+        .arg("--no-binary-package")
+        .arg("iniconfig"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn locked() -> Result<()> {
     let context = uv_test::test_context!("3.12");
