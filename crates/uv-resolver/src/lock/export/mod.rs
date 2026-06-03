@@ -66,6 +66,29 @@ impl<'lock> ExportableRequirements<'lock> {
 
         let root = graph.add_node(Node::Root);
 
+        // Collect requirements that are exclusive to the workspace root (e.g., dependency groups
+        // in non-project workspace roots).
+        let root_requirements = target
+            .lock()
+            .requirements()
+            .iter()
+            .chain(
+                target
+                    .lock()
+                    .dependency_groups()
+                    .iter()
+                    .filter_map(|(group, deps)| {
+                        if groups.contains(group) {
+                            Some(deps)
+                        } else {
+                            None
+                        }
+                    })
+                    .flatten(),
+            )
+            .filter(|dep| !prune.contains(&dep.name))
+            .collect::<Vec<_>>();
+
         // Add the workspace packages to the queue.
         for root_name in target.roots() {
             if prune.contains(root_name) {
@@ -172,6 +195,21 @@ impl<'lock> ExportableRequirements<'lock> {
             }
         }
 
+        // Root-exclusive requirements can activate extras and workspace projects that selected
+        // workspace-member group edges depend on.
+        for requirement in &root_requirements {
+            for extra in &requirement.extras {
+                let item = ConflictItem::from((requirement.name.clone(), extra.clone()));
+                let marker = activated_items.entry(item).or_insert(MarkerTree::FALSE);
+                marker.or(requirement.marker);
+            }
+            if target.lock().members().contains(&requirement.name) {
+                let item = ConflictItem::from(requirement.name.clone());
+                let marker = activated_items.entry(item).or_insert(MarkerTree::FALSE);
+                marker.or(requirement.marker);
+            }
+        }
+
         // Make direct dependency-group activation order-independent before evaluating the
         // selected group edges.
         activate_dependency_group_items(
@@ -179,29 +217,6 @@ impl<'lock> ExportableRequirements<'lock> {
             &selected_group_dependencies,
             &mut activated_items,
         );
-
-        // Add requirements that are exclusive to the workspace root (e.g., dependency groups in
-        // non-project workspace roots).
-        let root_requirements = target
-            .lock()
-            .requirements()
-            .iter()
-            .chain(
-                target
-                    .lock()
-                    .dependency_groups()
-                    .iter()
-                    .filter_map(|(group, deps)| {
-                        if groups.contains(group) {
-                            Some(deps)
-                        } else {
-                            None
-                        }
-                    })
-                    .flatten(),
-            )
-            .filter(|dep| !prune.contains(&dep.name))
-            .collect::<Vec<_>>();
 
         // Index the lockfile by package name, to avoid making multiple passes over the lockfile.
         if !root_requirements.is_empty() {

@@ -180,6 +180,39 @@ pub trait Installable<'lock> {
                 );
             }
 
+            // Root-exclusive groups can activate extras and workspace projects that selected
+            // workspace-member group edges depend on.
+            for dependency in self
+                .lock()
+                .dependency_groups()
+                .iter()
+                .filter_map(|(group, dependencies)| groups.contains(group).then_some(dependencies))
+                .flatten()
+                .filter(|dependency| dependency.marker.evaluate(marker_env, &[]))
+            {
+                for extra in &dependency.extras {
+                    let item = (&dependency.name, extra);
+                    if !activated_extras.contains(&item) {
+                        activated_extras.push(item);
+                    }
+                }
+
+                let dist = self
+                    .lock()
+                    .find_by_markers(&dependency.name, marker_env)
+                    .map_err(|_| LockErrorKind::MultipleRootPackages {
+                        name: dependency.name.clone(),
+                    })?
+                    .ok_or_else(|| LockErrorKind::MissingRootPackage {
+                        name: dependency.name.clone(),
+                    })?;
+                if self.lock().is_workspace_package(&dist.id)
+                    && !activated_projects.contains(&&dist.id.name)
+                {
+                    activated_projects.push(&dist.id.name);
+                }
+            }
+
             // Make direct dependency-group activation order-independent before evaluating the
             // selected group edges.
             activate_dependency_group_items(
