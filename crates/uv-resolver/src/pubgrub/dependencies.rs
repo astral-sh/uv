@@ -39,7 +39,7 @@ impl DependencySource {
     ///
     /// Registry requirements only carry a source here when they are tied to a group-scoped
     /// explicit index. Direct URL-like requirements always preserve their verbatim URL.
-    fn from_requirement(requirement: &Requirement) -> Self {
+    pub(crate) fn from_requirement(requirement: &Requirement) -> Self {
         match &requirement.source {
             RequirementSource::Registry { .. }
                 if matches!(

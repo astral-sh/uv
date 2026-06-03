@@ -459,7 +459,7 @@ impl ConflictMarker {
 
     /// Create a conflict marker that is true only when the given group for the
     /// given package is activated.
-    fn group(package: &PackageName, group: &GroupName) -> Self {
+    pub(crate) fn group(package: &PackageName, group: &GroupName) -> Self {
         let operator = uv_pep508::ExtraOperator::Equal;
         let name = uv_pep508::MarkerValueExtra::Extra(encode_package_group(package, group));
         let expr = uv_pep508::MarkerExpression::Extra { operator, name };

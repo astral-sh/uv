@@ -795,17 +795,19 @@ impl Lock {
 
             // Version-1 readers only activate extras and groups represented by resolved
             // dependency edges, not activation items present solely in package metadata.
-            if include.iter().chain(&exclude).any(|item| {
-                let kind = item.kind();
-                kind.extra()
-                    .is_some_and(|extra| metadata_only_extras.contains(&(item.package(), extra)))
-                    || kind.group().is_some_and(|group| {
+            if include
+                .iter()
+                .chain(&exclude)
+                .any(|item| match item.kind() {
+                    ConflictKind::Extra(extra) => {
+                        metadata_only_extras.contains(&(item.package(), extra))
+                    }
+                    ConflictKind::Group(group) => {
                         metadata_only_groups.contains(&(item.package(), group))
-                    })
-                    || (kind.extra().is_none()
-                        && kind.group().is_none()
-                        && group_activated_projects.contains(item.package()))
-            }) {
+                    }
+                    ConflictKind::Project => group_activated_projects.contains(item.package()),
+                })
+            {
                 self.version = ACTIVATION_MARKER_VERSION;
                 return;
             }
