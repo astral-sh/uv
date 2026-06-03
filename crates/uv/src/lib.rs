@@ -538,6 +538,24 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         debug!("Disabling the uv cache due to `--no-cache`");
     }
     let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
+    let cache_dir = std::path::absolute(cache.root())?;
+    if CWD.starts_with(&cache_dir) {
+        bail!(
+            "The current directory `{}` is inside the cache directory `{}`",
+            CWD.user_display(),
+            cache_dir.user_display()
+        );
+    } else if let Ok(cache_dir) = fs_err::canonicalize(&cache_dir)
+        && let Ok(current_dir) = fs_err::canonicalize(&*CWD)
+        && current_dir.starts_with(&cache_dir)
+    {
+        bail!(
+            "The current directory `{}` is inside the cache directory `{}`",
+            current_dir.user_display(),
+            cache_dir.user_display()
+        );
+    };
+
     let workspace_cache = WorkspaceCache::default();
 
     // Configure the global network settings.

@@ -1,12 +1,83 @@
-#[cfg(unix)]
 use anyhow::Result;
-#[cfg(unix)]
 use assert_fs::prelude::*;
 #[cfg(unix)]
 use std::process::Command;
 
 #[cfg(unix)]
-use uv_test::{get_bin, uv_snapshot};
+use uv_fs::create_symlink;
+#[cfg(unix)]
+use uv_test::get_bin;
+use uv_test::uv_snapshot;
+
+/// When the current directory is inside the cache directory, we should error before using the
+/// cache.
+#[test]
+fn cache_current_dir_inside_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.command()
+        .arg("cache")
+        .arg("dir")
+        .current_dir(context.cache_dir.path()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The current directory `.` is inside the cache directory `.`
+    ");
+
+    let child = context.cache_dir.child("child");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.command()
+        .arg("cache")
+        .arg("dir")
+        .current_dir(child.path()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The current directory `.` is inside the cache directory `[CACHE_DIR]/`
+    ");
+
+    Ok(())
+}
+
+/// When the current directory is inside a symlinked cache directory, we should error before using
+/// the cache.
+#[test]
+#[cfg(unix)]
+fn cache_current_dir_inside_symlinked_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let cache_link = context.temp_dir.child("cache-link");
+    create_symlink(context.cache_dir.path(), cache_link.path())?;
+
+    let child = context.cache_dir.child("child");
+    child.create_dir_all()?;
+
+    let mut command = Command::new(get_bin!());
+    command
+        .arg("cache")
+        .arg("dir")
+        .arg("--cache-dir")
+        .arg(cache_link.path());
+    context.add_shared_env(&mut command, false);
+    command.current_dir(child.path());
+
+    uv_snapshot!(context.filters(), command, @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The current directory `.` is inside the cache directory `[CACHE_DIR]/`
+    ");
+
+    Ok(())
+}
 
 /// When the cache directory cannot be created (e.g., due to permissions), we should show a
 /// chained error message that indicates we failed to initialize the cache.
