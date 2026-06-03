@@ -778,20 +778,24 @@ impl Lock {
         }
     }
 
-    /// Return whether a requirement selects a source that differs from every overlapping
-    /// production requirement.
+    /// Return whether a requirement selects a source outside the marker space covered by
+    /// same-source production requirements.
     fn changes_production_source(
         requirement: &Requirement,
         production_requirements: &[&Requirement],
     ) -> bool {
-        !production_requirements
+        let same_source_marker = production_requirements
             .iter()
-            .any(|production_requirement| {
-                !production_requirement
-                    .marker
-                    .is_disjoint(requirement.marker)
-                    && Self::same_source(&production_requirement.source, &requirement.source)
+            .filter(|production_requirement| {
+                Self::same_source(&production_requirement.source, &requirement.source)
             })
+            .fold(MarkerTree::FALSE, |mut marker, production_requirement| {
+                marker.or(production_requirement.marker);
+                marker
+            });
+        let mut uncovered_marker = requirement.marker;
+        uncovered_marker.and(same_source_marker.negate());
+        !uncovered_marker.is_false()
     }
 
     /// Return whether two requirements identify the same source, ignoring registry specifiers.
