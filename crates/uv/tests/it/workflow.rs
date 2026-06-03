@@ -203,7 +203,7 @@ fn packse_add_remove_one_package() {
 
     // Back to where we started.
     let new_lock = context.read("uv.lock");
-    let diff = diff_snapshot(&lock, &new_lock);
+    let diff = diff_snapshot(&lock, &new_lock, 10);
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -387,7 +387,7 @@ fn packse_promote_transitive_to_direct_then_remove() {
 
     // Back to where we started.
     let new_lock = context.read("uv.lock");
-    let diff = diff_snapshot(&lock, &new_lock);
+    let diff = diff_snapshot(&lock, &new_lock, 10);
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -571,7 +571,7 @@ fn jax_instability() -> Result<()> {
     // See: https://github.com/astral-sh/uv/issues/6063
     // See: https://github.com/astral-sh/uv/issues/6158
     let new_lock = context.read("uv.lock");
-    let diff = diff_snapshot(&lock, &new_lock);
+    let diff = diff_snapshot(&lock, &new_lock, 10);
     insta::with_settings!({
         filters => context.filters(),
     }, {

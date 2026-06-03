@@ -1907,7 +1907,7 @@ impl TestContext {
         );
         assert!(status.success(), "{snapshot}");
         let new_lock = fs_err::read_to_string(&lock_path).unwrap();
-        diff_snapshot(&old_lock, &new_lock)
+        diff_snapshot(&old_lock, &new_lock, 10)
     }
 
     /// Read a file in the temporary directory
@@ -1965,14 +1965,14 @@ impl TestContext {
 
 /// Creates a "unified" diff between the two line-oriented strings suitable
 /// for snapshotting.
-pub fn diff_snapshot(old: &str, new: &str) -> String {
+pub fn diff_snapshot(old: &str, new: &str, context_radius: usize) -> String {
     static TRIM_TRAILING_WHITESPACE: std::sync::LazyLock<Regex> =
         std::sync::LazyLock::new(|| Regex::new(r"(?m)^\s+$").unwrap());
 
     let diff = similar::TextDiff::from_lines(old, new);
     let unified = diff
         .unified_diff()
-        .context_radius(10)
+        .context_radius(context_radius)
         .header("old", "new")
         .to_string();
     // Not totally clear why, but some lines end up containing only
@@ -1996,7 +1996,7 @@ macro_rules! diff_uv_snapshot {
             Some($crate::WindowsFilters::Platform),
             None,
         );
-        ::insta::assert_snapshot!($crate::diff_snapshot($old, &new), @$snapshot);
+        ::insta::assert_snapshot!($crate::diff_snapshot($old, &new, 3), @$snapshot);
         new
     }};
 }

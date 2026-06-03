@@ -272,14 +272,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         @"
     --- old
     +++ new
-    @@ -149,21 +149,21 @@
-             extra_build_variables: ExtraBuildVariables(
-                 {},
-             ),
-             build_options: BuildOptions {
-                 no_binary: None,
-                 no_build: None,
-             },
+    @@ -156,7 +156,7 @@
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -288,13 +281,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
-                 {},
-             ),
-             output_file: None,
-             no_strip_extras: false,
-             no_strip_markers: false,
-             no_annotate: false,
-             no_header: false,
     "
     );
 
@@ -310,14 +296,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         @"
     --- old
     +++ new
-    @@ -161,21 +161,21 @@
-             fork_strategy: RequiresPython,
-             dependency_metadata: DependencyMetadata(
-                 {},
-             ),
-             output_file: None,
-             no_strip_extras: false,
-             no_strip_markers: false,
+    @@ -168,7 +168,7 @@
              no_annotate: false,
              no_header: false,
              custom_compile_command: None,
@@ -326,13 +305,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
              config_setting: ConfigSettings(
                  {},
              ),
-             config_settings_package: PackageConfigSettings(
-                 {},
-             ),
-             python_version: None,
-             python_platform: None,
-             universal: false,
-             exclude_newer: ExcludeNewer {
     "
     );
 
@@ -7337,14 +7309,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         @"
     --- old
     +++ new
-    @@ -147,22 +147,20 @@
-             no_emit_package: [],
-             emit_index_url: false,
-             emit_find_links: false,
-             emit_build_options: false,
-             emit_marker_expression: false,
-             emit_index_annotation: false,
-             annotation_style: Split,
+    @@ -154,9 +154,7 @@
              link_mode: Clone,
              compile_bytecode: false,
              sources: None,
@@ -7355,12 +7320,6 @@ fn verify_hashes() -> anyhow::Result<()> {
              upgrade: Upgrade {
                  strategy: None,
                  constraints: {},
-             },
-             reinstall: None,
-         },
-     }
-
-     ----- stderr -----
     "
     );
 
@@ -7375,14 +7334,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         @"
     --- old
     +++ new
-    @@ -148,21 +148,21 @@
-             emit_index_url: false,
-             emit_find_links: false,
-             emit_build_options: false,
-             emit_marker_expression: false,
-             emit_index_annotation: false,
-             annotation_style: Split,
-             link_mode: Clone,
+    @@ -155,7 +155,7 @@
              compile_bytecode: false,
              sources: None,
              hash_checking: Some(
@@ -7391,13 +7343,6 @@ fn verify_hashes() -> anyhow::Result<()> {
              ),
              upgrade: Upgrade {
                  strategy: None,
-                 constraints: {},
-             },
-             reinstall: None,
-         },
-     }
-
-     ----- stderr -----
     "
     );
 
@@ -7412,14 +7357,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         @"
     --- old
     +++ new
-    @@ -147,22 +147,20 @@
-             no_emit_package: [],
-             emit_index_url: false,
-             emit_find_links: false,
-             emit_build_options: false,
-             emit_marker_expression: false,
-             emit_index_annotation: false,
-             annotation_style: Split,
+    @@ -154,9 +154,7 @@
              link_mode: Clone,
              compile_bytecode: false,
              sources: None,
@@ -7430,12 +7368,6 @@ fn verify_hashes() -> anyhow::Result<()> {
              upgrade: Upgrade {
                  strategy: None,
                  constraints: {},
-             },
-             reinstall: None,
-         },
-     }
-
-     ----- stderr -----
     "
     );
 
@@ -7450,14 +7382,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         @"
     --- old
     +++ new
-    @@ -147,22 +147,20 @@
-             no_emit_package: [],
-             emit_index_url: false,
-             emit_find_links: false,
-             emit_build_options: false,
-             emit_marker_expression: false,
-             emit_index_annotation: false,
-             annotation_style: Split,
+    @@ -154,9 +154,7 @@
              link_mode: Clone,
              compile_bytecode: false,
              sources: None,
@@ -7468,12 +7393,6 @@ fn verify_hashes() -> anyhow::Result<()> {
              upgrade: Upgrade {
                  strategy: None,
                  constraints: {},
-             },
-             reinstall: None,
-         },
-     }
-
-     ----- stderr -----
     "
     );
 
@@ -9095,14 +9014,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         @r#"
     --- old
     +++ new
-    @@ -153,25 +153,18 @@
-             emit_marker_expression: false,
-             emit_index_annotation: false,
-             annotation_style: Split,
-             link_mode: Clone,
-             compile_bytecode: false,
-             sources: None,
-             hash_checking: Some(
+    @@ -160,14 +160,7 @@
                  Verify,
              ),
              upgrade: Upgrade {
@@ -9118,10 +9030,6 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                  constraints: {},
              },
              reinstall: None,
-         },
-     }
-
-     ----- stderr -----
     "#
     );
 
@@ -9144,14 +9052,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         @r#"
     --- old
     +++ new
-    @@ -153,25 +153,18 @@
-             emit_marker_expression: false,
-             emit_index_annotation: false,
-             annotation_style: Split,
-             link_mode: Clone,
-             compile_bytecode: false,
-             sources: None,
-             hash_checking: Some(
+    @@ -160,14 +160,7 @@
                  Verify,
              ),
              upgrade: Upgrade {
@@ -9167,10 +9068,6 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                  constraints: {},
              },
              reinstall: None,
-         },
-     }
-
-     ----- stderr -----
     "#
     );
 
@@ -9191,14 +9088,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         @r#"
     --- old
     +++ new
-    @@ -156,21 +156,21 @@
-             link_mode: Clone,
-             compile_bytecode: false,
-             sources: None,
-             hash_checking: Some(
-                 Verify,
-             ),
-             upgrade: Upgrade {
+    @@ -163,7 +163,7 @@
                  strategy: Some(
                      {
                          PackageName(
@@ -9207,12 +9097,6 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                          ),
                      },
                      {},
-                 ),
-                 constraints: {},
-             },
-             reinstall: None,
-         },
-     }
     "#
     );
 
@@ -9227,14 +9111,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         @r#"
     --- old
     +++ new
-    @@ -156,21 +156,21 @@
-             link_mode: Clone,
-             compile_bytecode: false,
-             sources: None,
-             hash_checking: Some(
-                 Verify,
-             ),
-             upgrade: Upgrade {
+    @@ -163,7 +163,7 @@
                  strategy: Some(
                      {
                          PackageName(
@@ -9243,12 +9120,6 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                          ),
                      },
                      {},
-                 ),
-                 constraints: {},
-             },
-             reinstall: None,
-         },
-     }
     "#
     );
 
@@ -9264,14 +9135,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         @r#"
     --- old
     +++ new
-    @@ -158,20 +158,23 @@
-             sources: None,
-             hash_checking: Some(
-                 Verify,
-             ),
-             upgrade: Upgrade {
-                 strategy: Some(
-                     {
+    @@ -165,6 +165,9 @@
                          PackageName(
                              "sniffio",
                          ),
@@ -9281,13 +9145,6 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                      },
                      {},
                  ),
-                 constraints: {},
-             },
-             reinstall: None,
-         },
-     }
-
-     ----- stderr -----
     "#
     );
 
@@ -9458,14 +9315,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         @r#"
     --- old
     +++ new
-    @@ -91,24 +91,17 @@
-                 {},
-             ),
-             extra_build_variables: ExtraBuildVariables(
-                 {},
-             ),
-             prerelease: IfNecessaryOrExplicit,
-             resolution: Highest,
+    @@ -98,14 +98,7 @@
              sources: None,
              torch_backend: None,
              upgrade: Upgrade {
@@ -9481,9 +9331,6 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                  constraints: {},
              },
          },
-     }
-
-     ----- stderr -----
     "#
     );
 
@@ -9509,14 +9356,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         @r#"
     --- old
     +++ new
-    @@ -91,24 +91,17 @@
-                 {},
-             ),
-             extra_build_variables: ExtraBuildVariables(
-                 {},
-             ),
-             prerelease: IfNecessaryOrExplicit,
-             resolution: Highest,
+    @@ -98,14 +98,7 @@
              sources: None,
              torch_backend: None,
              upgrade: Upgrade {
@@ -9532,9 +9372,6 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                  constraints: {},
              },
          },
-     }
-
-     ----- stderr -----
     "#
     );
 
@@ -9558,14 +9395,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         @r#"
     --- old
     +++ new
-    @@ -94,21 +94,21 @@
-                 {},
-             ),
-             prerelease: IfNecessaryOrExplicit,
-             resolution: Highest,
-             sources: None,
-             torch_backend: None,
-             upgrade: Upgrade {
+    @@ -101,7 +101,7 @@
                  strategy: Some(
                      {
                          PackageName(
@@ -9574,13 +9404,6 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                          ),
                      },
                      {},
-                 ),
-                 constraints: {},
-             },
-         },
-     }
-
-     ----- stderr -----
     "#
     );
 
@@ -9594,14 +9417,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         @r#"
     --- old
     +++ new
-    @@ -94,21 +94,21 @@
-                 {},
-             ),
-             prerelease: IfNecessaryOrExplicit,
-             resolution: Highest,
-             sources: None,
-             torch_backend: None,
-             upgrade: Upgrade {
+    @@ -101,7 +101,7 @@
                  strategy: Some(
                      {
                          PackageName(
@@ -9610,13 +9426,6 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                          ),
                      },
                      {},
-                 ),
-                 constraints: {},
-             },
-         },
-     }
-
-     ----- stderr -----
     "#
     );
 
@@ -9631,14 +9440,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         @r#"
     --- old
     +++ new
-    @@ -96,19 +96,22 @@
-             prerelease: IfNecessaryOrExplicit,
-             resolution: Highest,
-             sources: None,
-             torch_backend: None,
-             upgrade: Upgrade {
-                 strategy: Some(
-                     {
+    @@ -103,6 +103,9 @@
                          PackageName(
                              "sniffio",
                          ),
@@ -9648,12 +9450,6 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                      },
                      {},
                  ),
-                 constraints: {},
-             },
-         },
-     }
-
-     ----- stderr -----
     "#
     );
 
@@ -9870,14 +9666,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
         @r#"
     --- old
     +++ new
-    @@ -97,21 +97,27 @@
-                     },
-                 },
-             ),
-             groups: [],
-             break_system_packages: false,
-             target: None,
-             prefix: None,
+    @@ -104,7 +104,13 @@
              index_strategy: FirstIndex,
              keyring_provider: Disabled,
              torch_backend: None,
@@ -9892,13 +9681,6 @@ fn build_isolation_override() -> anyhow::Result<()> {
              extra_build_dependencies: ExtraBuildDependencies(
                  {},
              ),
-             extra_build_variables: ExtraBuildVariables(
-                 {},
-             ),
-             build_options: BuildOptions {
-                 no_binary: None,
-                 no_build: None,
-             },
     "#);
 
     Ok(())
