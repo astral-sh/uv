@@ -128,7 +128,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     );
 
     // Resolution should use the highest version, and generate hashes.
-    // Compare against the configured command to isolate the CLI resolution override.
+    // Compare against output of the same command without `--resolution=highest`.
     let highest_resolution = diff_uv_snapshot!(context.filters(), &configured, add_shared_args(context.pip_compile())
             .arg("--show-settings")
             .arg("requirements.in")
@@ -148,7 +148,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     );
 
     // Resolution should use the highest version, and omit hashes.
-    // Compare against the preceding CLI override to isolate `--no-generate-hashes`.
+    // Compare against output of the same command without `--no-generate-hashes`.
     diff_uv_snapshot!(context.filters(), &highest_resolution, add_shared_args(context.pip_compile())
             .arg("--show-settings")
             .arg("requirements.in")
@@ -1983,6 +1983,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--show-settings"), @"");
 
+    // Compare against output of the same command without `--no-verify-hashes`.
     diff_uv_snapshot!(context.filters(), &default, add_shared_args(context.pip_install())
             .arg("-r")
             .arg("requirements.in")
@@ -2004,6 +2005,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     "
     );
 
+    // Compare against output of the same command without `--require-hashes`.
     diff_uv_snapshot!(context.filters(), &default, add_shared_args(context.pip_install())
             .arg("-r")
             .arg("requirements.in")
@@ -2023,6 +2025,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     "
     );
 
+    // Compare against output of the same command without `--no-require-hashes`.
     diff_uv_snapshot!(context.filters(), &default, add_shared_args(context.pip_install())
             .arg("-r")
             .arg("requirements.in")
@@ -2044,6 +2047,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     "
     );
 
+    // Compare against output of the same command without `UV_NO_VERIFY_HASHES=1`.
     diff_uv_snapshot!(context.filters(), &default, add_shared_args(context.pip_install())
             .arg("-r")
             .arg("requirements.in")
@@ -2065,6 +2069,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     "
     );
 
+    // Compare against output without `--verify-hashes` and `--no-require-hashes`.
     diff_uv_snapshot!(
         context.filters(),
         &default,
@@ -2338,6 +2343,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     "})?;
 
     // Despite `upgrade = false` in the configuration file, we should mark `idna` for upgrade.
+    // Compare against output before adding `upgrade = false`, with `--no-upgrade --upgrade-package sniffio`.
     diff_uv_snapshot!(
         context.filters(),
         &no_upgrade,
@@ -2376,6 +2382,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     "})?;
 
     // Despite `--upgrade-package idna` in the command line, we should upgrade all packages.
+    // Compare against output before adding `upgrade = true`, with `--no-upgrade --upgrade-package sniffio`.
     diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.pip_compile())
             .arg("--upgrade-package")
             .arg("idna")
@@ -2409,6 +2416,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     "#})?;
 
     // Despite `upgrade-package = ["idna"]` in the configuration file, we should disable upgrades.
+    // Compare against output before adding `upgrade-package = ["idna"]`, with `--upgrade-package sniffio`.
     diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.pip_compile())
             .arg("--no-upgrade")
             .arg("--show-settings")
@@ -2428,6 +2436,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     );
 
     // Despite `upgrade-package = ["idna"]` in the configuration file, we should enable all upgrades.
+    // Compare against output before adding `upgrade-package = ["idna"]`, with `--no-upgrade --upgrade-package sniffio`.
     diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.pip_compile())
             .arg("--upgrade")
             .arg("--show-settings")
@@ -2447,6 +2456,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     );
 
     // Mark both `sniffio` and `idna` for upgrade.
+    // Compare against output before adding `upgrade-package = ["idna"]`, with `--no-upgrade`.
     diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.pip_compile())
             .arg("--upgrade-package")
             .arg("sniffio")
@@ -2533,6 +2543,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     "#})?;
 
     // Despite `upgrade = false` in the configuration file, we should mark `idna` for upgrade.
+    // Compare against output before adding `upgrade = false`, with `--no-upgrade --upgrade-package sniffio`.
     diff_uv_snapshot!(
         context.filters(),
         &no_upgrade,
@@ -2574,6 +2585,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     "#})?;
 
     // Despite `--upgrade-package idna` on the CLI, we should upgrade all packages.
+    // Compare against output before adding `upgrade = true`, with `--no-upgrade --upgrade-package sniffio`.
     diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.lock())
             .arg("--upgrade-package")
             .arg("idna")
@@ -2610,6 +2622,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     "#})?;
 
     // Despite `upgrade-package = ["idna"]` in the configuration file, we should disable upgrades.
+    // Compare against output before adding `upgrade-package = ["idna"]`, with `--upgrade-package sniffio`.
     diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.lock())
             .arg("--no-upgrade")
             .arg("--show-settings"), @r#"
@@ -2628,6 +2641,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     );
 
     // Despite `upgrade-package = ["idna"]` in the configuration file, we should enable all upgrades.
+    // Compare against output before adding `upgrade-package = ["idna"]`, with `--no-upgrade --upgrade-package sniffio`.
     diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.lock())
             .arg("--upgrade")
             .arg("--show-settings"), @r#"
@@ -2646,6 +2660,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     );
 
     // Mark both `sniffio` and `idna` for upgrade.
+    // Compare against output before adding `upgrade-package = ["idna"]`, with `--no-upgrade`.
     diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.lock())
             .arg("--upgrade-package")
             .arg("sniffio")
@@ -2724,6 +2739,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
         no-build-isolation = false
     "})?;
 
+    // Compare against output before changing `no-build-isolation` from `true` to `false`.
     diff_uv_snapshot!(context.filters(), &shared, add_shared_args(context.pip_compile())
             .arg("--show-settings")
             .arg("requirements.in")
