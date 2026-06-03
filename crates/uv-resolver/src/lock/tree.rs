@@ -85,6 +85,11 @@ fn activated_extras<'lock>(
                     root_queue.push_back((*id, Some(extra)));
                 }
             }
+            for extra in package.provides_extras() {
+                if !package.optional_dependencies.contains_key(extra) {
+                    root_activated_extras.insert((&id.name, extra));
+                }
+            }
         }
         group_dependencies.extend(
             package
