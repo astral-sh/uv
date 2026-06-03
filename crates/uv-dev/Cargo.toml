@@ -1,6 +1,6 @@
 [package]
 name = "uv-dev"
-version = "0.0.51"
+version = "0.0.52"
 description = "This is an internal component crate of uv"
 publish = false
 

@@ -3,6 +3,30 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.19
+
+Released on 2026-06-03.
+
+### Python
+
+- Add CPython 3.15.0b2 ([#19531](https://github.com/astral-sh/uv/pull/19531))
+
+### Enhancements
+
+- Always compute SHA256 for remote distributions ([#19662](https://github.com/astral-sh/uv/pull/19662))
+- Add PyEmscripten platform (PEP 783) ([#19629](https://github.com/astral-sh/uv/pull/19629))
+- Add Pyodide 2025 target triple ([#19653](https://github.com/astral-sh/uv/pull/19653))
+
+### Preview features
+
+- Make preview features for commands have names that aren't ambiguous with the command ([#19645](https://github.com/astral-sh/uv/pull/19645))
+- Respect `--isolated` in `uv check` ([#19666](https://github.com/astral-sh/uv/pull/19666))
+
+### Bug fixes
+
+- Continue tool uninstall after dangling receipts ([#19623](https://github.com/astral-sh/uv/pull/19623))
+- Skip Unix-specific installation steps when cross-installing Windows Python distributions ([#19424](https://github.com/astral-sh/uv/pull/19424))
+
 ## 0.11.18
 
 Released on 2026-06-01.
