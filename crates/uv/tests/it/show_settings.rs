@@ -36,6 +36,176 @@ fn pip_compile_baseline() {
     capture_uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            system_certs: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipCompileSettings {
+        format: None,
+        src_file: [
+            "requirements.in",
+        ],
+        constraints: [],
+        overrides: [],
+        excludes: [],
+        build_constraints: [],
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        excludes_from_workspace: [],
+        build_constraints_from_workspace: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                indexes: [],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+                python_downloads_json_url: None,
+            },
+            system: false,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
+            groups: [],
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            torch_backend: None,
+            build_isolation: Isolate,
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: None,
+            hash_checking: Some(
+                Verify,
+            ),
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
     "#);
 }
 
@@ -51,6 +221,174 @@ fn pip_install_baseline() {
         .arg("--show-settings")
         .arg("-r")
         .arg("requirements.in"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            system_certs: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipInstallSettings {
+        package: [],
+        requirements: [
+            "requirements.in",
+        ],
+        editables: [],
+        editable: None,
+        constraints: [],
+        overrides: [],
+        excludes: [],
+        build_constraints: [],
+        dry_run: Disabled,
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        excludes_from_workspace: [],
+        build_constraints_from_workspace: [],
+        modifications: Sufficient,
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                indexes: [],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+                python_downloads_json_url: None,
+            },
+            system: false,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
+            groups: [],
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            torch_backend: None,
+            build_isolation: Isolate,
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: None,
+            hash_checking: Some(
+                Verify,
+            ),
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
     "#);
 }
 
@@ -64,6 +402,113 @@ fn lock_baseline() {
 
     capture_uv_snapshot!(context.filters(), add_shared_args(context.lock())
         .arg("--show-settings"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            system_certs: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    LockSettings {
+        lock_check: Disabled,
+        frozen: None,
+        dry_run: Disabled,
+        script: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverSettings {
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+            fork_strategy: RequiresPython,
+            index_locations: IndexLocations {
+                indexes: [],
+                flat_index: [],
+                no_index: false,
+            },
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            link_mode: Clone,
+            build_isolation: Isolate,
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
+            prerelease: IfNecessaryOrExplicit,
+            resolution: Highest,
+            sources: None,
+            torch_backend: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
+        },
+    }
+
+    ----- stderr -----
     "#);
 }
 
@@ -77,6 +522,127 @@ fn version_baseline() {
 
     capture_uv_snapshot!(context.filters(), add_shared_args(context.version())
         .arg("--show-settings"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            system_certs: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    VersionSettings {
+        value: None,
+        bump: [],
+        short: false,
+        output_format: Text,
+        dry_run: false,
+        lock_check: Disabled,
+        frozen: None,
+        active: None,
+        no_sync: false,
+        package: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                build_isolation: Isolate,
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
+                extra_build_variables: ExtraBuildVariables(
+                    {},
+                ),
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: None,
+                torch_backend: None,
+                upgrade: Upgrade {
+                    strategy: None,
+                    constraints: {},
+                },
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+        malware_settings: MalwareCheckSettings {
+            enabled: false,
+            malware_check_url: None,
+        },
+    }
+
+    ----- stderr -----
     "#);
 }
 
@@ -91,6 +657,160 @@ fn tool_install_baseline() {
     capture_uv_snapshot!(context.filters(), add_shared_args(context.tool_install())
         .arg("--show-settings")
         .arg("anyio"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            system_certs: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    ToolInstallSettings {
+        package: "anyio",
+        from: None,
+        with: [],
+        with_requirements: [],
+        with_executables_from: [],
+        with_editable: [],
+        constraints: [],
+        overrides: [],
+        excludes: [],
+        build_constraints: [],
+        lfs: Disabled,
+        python: None,
+        python_platform: None,
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        options: ResolverInstallerOptions {
+            index: None,
+            index_url: None,
+            extra_index_url: None,
+            no_index: None,
+            find_links: None,
+            index_strategy: None,
+            keyring_provider: None,
+            resolution: None,
+            prerelease: None,
+            fork_strategy: None,
+            dependency_metadata: None,
+            config_settings: None,
+            config_settings_package: None,
+            build_isolation: None,
+            extra_build_dependencies: None,
+            extra_build_variables: None,
+            exclude_newer: None,
+            exclude_newer_package: None,
+            link_mode: Some(
+                Clone,
+            ),
+            torch_backend: None,
+            compile_bytecode: None,
+            no_sources: None,
+            no_sources_package: None,
+            upgrade: None,
+            reinstall: None,
+            no_build: None,
+            no_build_package: None,
+            no_binary: None,
+            no_binary_package: None,
+        },
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                build_isolation: Isolate,
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
+                extra_build_variables: ExtraBuildVariables(
+                    {},
+                ),
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: None,
+                torch_backend: None,
+                upgrade: Upgrade {
+                    strategy: None,
+                    constraints: {},
+                },
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+        force: false,
+        editable: false,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+    }
+
+    ----- stderr -----
     "#);
 }
 
