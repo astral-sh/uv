@@ -12,7 +12,9 @@ use tracing::{debug, warn};
 use uv_distribution_filename::SourceDistExtension;
 use uv_warnings::warn_user_once;
 
-use crate::hash::{DirectoryDigest, DirectoryDigestFile, directory_digest};
+use crate::hash::{
+    DirectoryDigest, DirectoryDigestFile, directory_digest, empty_directory_digest_entries,
+};
 use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
@@ -104,6 +106,7 @@ pub async fn unzip_and_hash<D: Display, R: tokio::io::AsyncRead + Unpin>(
     let mut local_headers = FxHashMap::default();
     let mut files = Vec::new();
     let mut hash_files = Vec::new();
+    let mut digest_directories = FxHashSet::default();
     let mut offset = 0;
 
     while let Some(mut entry) = zip.next_with_entry().await? {
@@ -490,7 +493,9 @@ pub async fn unzip_and_hash<D: Display, R: tokio::io::AsyncRead + Unpin>(
                                 }
                             }
                         }
-                        if !is_dir && let Some(digest) = local_header.digest {
+                        if is_dir {
+                            digest_directories.insert(relpath.clone());
+                        } else if let Some(digest) = local_header.digest {
                             let executable = entry
                                 .unix_permissions()
                                 .is_some_and(|mode| mode & 0o111 != 0);
@@ -637,7 +642,12 @@ pub async fn unzip_and_hash<D: Display, R: tokio::io::AsyncRead + Unpin>(
         }
     }
 
-    Ok((files, directory_digest(hash_files)))
+    let hash_directories = empty_directory_digest_entries(
+        digest_directories.iter().map(PathBuf::as_path),
+        files.iter().map(|(path, _)| path.as_path()),
+    );
+
+    Ok((files, directory_digest(hash_files, hash_directories)))
 }
 
 /// Unpack the given tar archive into the destination directory.

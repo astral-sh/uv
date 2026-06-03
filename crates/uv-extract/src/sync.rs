@@ -1,14 +1,17 @@
-use std::io::{Read, Seek, SeekFrom};
+use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock, mpsc};
 
-use crate::hash::{DirectoryDigest, DirectoryDigestFile, directory_digest};
+use crate::hash::{
+    DirectoryDigest, DirectoryDigestFile, directory_digest, empty_directory_digest_entries,
+};
 use crate::vendor::CloneableSeekableReader;
 use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
+use async_zip::StoredZipEntry;
 use async_zip::base::read::seek::ZipFileReader;
 use async_zip::error::ZipError;
 use futures::executor::block_on;
-use futures::io::{AllowStdIo, AsyncReadExt, AsyncWriteExt};
+use futures::io::{AllowStdIo, AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, AsyncWriteExt};
 use rayon::prelude::*;
 use rustc_hash::FxHashSet;
 use tracing::warn;
@@ -24,8 +27,19 @@ const STORED_HASH_FAST_PATH_THRESHOLD: u64 = 8 * 1024 * 1024;
 const STORED_HASH_FAST_PATH_THRESHOLD: u64 = 1;
 const STORED_HASH_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 const PARALLEL_HASH_THRESHOLD: u64 = 8 * 1024 * 1024;
+const PARALLEL_HASH_BUFFER_POOL_THRESHOLD: u64 = 64 * 1024 * 1024;
 const PARALLEL_HASH_BUFFER_SIZE: usize = 16 * 1024 * 1024;
+const PARALLEL_HASH_BUFFER_COUNT: usize = 2;
 static HASH_THREAD_POOL: OnceLock<Option<rayon::ThreadPool>> = OnceLock::new();
+
+/// A successfully extracted file, or an explicit directory that can affect the digest.
+enum ExtractedEntry {
+    File {
+        file: (PathBuf, u64),
+        hash_file: DirectoryDigestFile,
+    },
+    Directory(PathBuf),
+}
 
 /// Unzip a `.zip` archive into the target directory.
 ///
@@ -72,153 +86,320 @@ where
         .into_par_iter()
         .map(|file_number| {
             let mut archive = archive.clone();
-            let entry = archive.file().entries()[file_number].clone();
-            let file_name = match entry.filename().as_str() {
-                Ok(file_name) => file_name,
-                Err(ZipError::StringNotUtf8) => {
-                    return Err(Error::CentralDirectoryEntryNotUtf8 {
-                        index: file_number as u64,
-                    });
-                }
-                Err(err) => return Err(err.into()),
-            };
-
-            let compression = CompressionMethod::from(entry.compression());
-            if !compression.is_well_known() {
-                warn_user_once!(
-                    "One or more file entries in '{filename}' use the '{compression}' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the '{stored}', '{deflate}', or '{zstd}' compression methods.",
-                    filename = filename_display,
-                    stored = CompressionMethod::Stored,
-                    deflate = CompressionMethod::Deflated,
-                    zstd = CompressionMethod::Zstd,
-                );
-            }
-
-            if let Err(e) = validate_archive_member_name(file_name) {
-                if !skip_validation {
-                    return Err(e);
-                }
-            }
-
-            // Determine the path of the file within the wheel.
-            let Some(enclosed_name) = crate::stream::enclosed_name(file_name) else {
-                warn!("Skipping unsafe file name: {file_name}");
-                return Ok(None);
-            };
-
-            // Create necessary parent directories.
-            let path = target.join(&enclosed_name);
-            if entry.dir()? {
-                let mut directories = directories.lock().unwrap();
-                if directories.insert(path.clone()) {
-                    fs_err::create_dir_all(path).map_err(Error::Io)?;
-                }
-                return Ok(None);
-            }
-
-            if let Some(parent) = path.parent() {
-                let mut directories = directories.lock().unwrap();
-                if directories.insert(parent.to_path_buf()) {
-                    fs_err::create_dir_all(parent).map_err(Error::Io)?;
-                }
-            }
-
-            // Copy the file contents.
-            let outfile = fs_err::File::create(&path).map_err(Error::Io)?;
-            let size = entry.uncompressed_size();
-            let unix_permissions = entry.unix_permissions();
-            let executable = unix_permissions.is_some_and(|mode| mode & 0o111 != 0);
-            let writer = if let Ok(size) = usize::try_from(size) {
-                std::io::BufWriter::with_capacity(std::cmp::min(size, 1024 * 1024), outfile)
-            } else {
-                std::io::BufWriter::new(outfile)
-            };
-            let use_stored_hash_fast_path = matches!(compression, CompressionMethod::Stored)
-                && size >= STORED_HASH_FAST_PATH_THRESHOLD
-                && entry.compressed_size() == size;
-            let (copied, computed_crc32, digest) = if use_stored_hash_fast_path {
-                let (copied, stored_digest) = std::thread::scope(|scope| {
-                    let stored_digest =
-                        scope.spawn(|| hash_stored_entry(filename, entry.header_offset(), size));
-                    let copied = block_on(copy_entry(&mut archive, file_number, writer, false));
-                    (copied, stored_digest.join())
-                });
-                let (copied, computed_crc32, digest) = copied?;
-                debug_assert!(digest.is_none());
-                let stored_digest = stored_digest.map_err(|_| thread_panic_error())??;
-                (copied, computed_crc32, stored_digest)
-            } else if size >= PARALLEL_HASH_THRESHOLD {
-                copy_entry_with_hash_thread(&mut archive, file_number, writer)?
-            } else {
-                let (copied, computed_crc32, digest) = block_on(copy_entry(
-                    &mut archive,
-                    file_number,
-                    writer,
-                    true,
-                ))?;
-                let Some(digest) = digest else {
-                    return Err(Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "missing digest for ZIP entry",
-                    )));
-                };
-                (copied, computed_crc32, digest)
-            };
-
-            if copied != size && !skip_validation {
-                return Err(Error::BadUncompressedSize {
-                    path: enclosed_name.clone(),
-                    computed: copied,
-                    expected: size,
-                });
-            }
-
-            if computed_crc32 != entry.crc32() && !skip_validation {
-                return Err(Error::BadCrc32 {
-                    path: enclosed_name.clone(),
-                    computed: computed_crc32,
-                    expected: entry.crc32(),
-                });
-            }
-
-            // See `uv_extract::stream::unzip`. For simplicity, this is identical with the code there except for being
-            // sync.
-            #[cfg(unix)]
-            {
-                use std::fs::Permissions;
-                use std::os::unix::fs::PermissionsExt;
-
-                if let Some(mode) = unix_permissions {
-                    // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/utils/unpacking.py#L88-L100
-                    let has_any_executable_bit = mode & 0o111;
-                    if has_any_executable_bit != 0 {
-                        let permissions = fs_err::metadata(&path).map_err(Error::Io)?.permissions();
-                        if permissions.mode() & 0o111 != 0o111 {
-                            fs_err::set_permissions(
-                                &path,
-                                Permissions::from_mode(permissions.mode() | 0o111),
-                            )
-                            .map_err(Error::Io)?;
-                        }
-                    }
-                }
-            }
-
-            let hash_file = DirectoryDigestFile::new(&enclosed_name, size, executable, digest);
-            Ok(Some(((enclosed_name, size), hash_file)))
+            extract_entry(
+                &mut archive,
+                file_number,
+                target,
+                &directories,
+                skip_validation,
+                &filename_display,
+            )
         })
-        // Filter out directories and skipped dangerous paths, we only want to collect the files.
+        // Filter out skipped dangerous paths, then collect files and directory candidates.
         .filter_map(Result::transpose)
         .collect::<Result<Vec<_>, Error>>()?;
 
     let mut files = Vec::with_capacity(extracted.len());
     let mut hash_files = Vec::with_capacity(extracted.len());
-    for (file, hash_file) in extracted {
-        files.push(file);
-        hash_files.push(hash_file);
+    let mut digest_directories = FxHashSet::default();
+    for extracted in extracted {
+        match extracted {
+            ExtractedEntry::File { file, hash_file } => {
+                files.push(file);
+                hash_files.push(hash_file);
+            }
+            ExtractedEntry::Directory(path) => {
+                digest_directories.insert(path);
+            }
+        }
+    }
+    let hash_directories = empty_directory_digest_entries(
+        digest_directories.iter().map(PathBuf::as_path),
+        files.iter().map(|(path, _)| path.as_path()),
+    );
+
+    Ok((files, directory_digest(hash_files, hash_directories)))
+}
+
+/// Extract a single central-directory entry from a seekable ZIP archive.
+fn extract_entry<R>(
+    archive: &mut ZipFileReader<AllowStdIo<R>>,
+    file_number: usize,
+    target: &Path,
+    directories: &Mutex<FxHashSet<PathBuf>>,
+    skip_validation: bool,
+    filename_display: &str,
+) -> Result<Option<ExtractedEntry>, Error>
+where
+    R: std::io::BufRead + std::io::Seek + Clone + Send + Sync + Unpin,
+    AllowStdIo<R>: Clone,
+{
+    let entry = archive.file().entries()[file_number].clone();
+    let file_name = entry_file_name(&entry, file_number)?;
+    let compression = CompressionMethod::from(entry.compression());
+    warn_on_unsupported_compression(filename_display, &compression);
+
+    if let Err(err) = validate_archive_member_name(file_name) {
+        if !skip_validation {
+            return Err(err);
+        }
     }
 
-    Ok((files, directory_digest(hash_files)))
+    let Some(enclosed_name) = crate::stream::enclosed_name(file_name) else {
+        warn!("Skipping unsafe file name: {file_name}");
+        return Ok(None);
+    };
+
+    let path = target.join(&enclosed_name);
+    if entry.dir()? {
+        create_directory_once(directories, &path)?;
+        validate_directory_entry(&entry, &enclosed_name, skip_validation)?;
+        return Ok(Some(ExtractedEntry::Directory(enclosed_name)));
+    }
+
+    if let Some(parent) = path.parent() {
+        create_directory_once(directories, parent)?;
+    }
+
+    extract_file_entry(
+        archive,
+        &entry,
+        file_number,
+        enclosed_name,
+        &path,
+        &compression,
+        skip_validation,
+    )
+    .map(Some)
+}
+
+/// Return an entry file name from the central directory.
+fn entry_file_name(entry: &StoredZipEntry, file_number: usize) -> Result<&str, Error> {
+    match entry.filename().as_str() {
+        Ok(file_name) => Ok(file_name),
+        Err(ZipError::StringNotUtf8) => Err(Error::CentralDirectoryEntryNotUtf8 {
+            index: file_number as u64,
+        }),
+        Err(err) => Err(err.into()),
+    }
+}
+
+/// Warn for compression methods that uv still accepts but does not recommend.
+fn warn_on_unsupported_compression(filename: &str, compression: &CompressionMethod) {
+    if compression.is_well_known() {
+        return;
+    }
+
+    warn_user_once!(
+        "One or more file entries in '{filename}' use the '{compression}' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the '{stored}', '{deflate}', or '{zstd}' compression methods.",
+        stored = CompressionMethod::Stored,
+        deflate = CompressionMethod::Deflated,
+        zstd = CompressionMethod::Zstd,
+    );
+}
+
+/// Create a directory once across parallel extraction workers.
+fn create_directory_once(
+    directories: &Mutex<FxHashSet<PathBuf>>,
+    path: &Path,
+) -> Result<(), Error> {
+    let mut directories = directories.lock().map_err(|_| directory_lock_error())?;
+    if directories.insert(path.to_path_buf()) {
+        fs_err::create_dir_all(path).map_err(Error::Io)?;
+    }
+
+    Ok(())
+}
+
+/// Validate the metadata for a directory entry.
+fn validate_directory_entry(
+    entry: &StoredZipEntry,
+    path: &Path,
+    skip_validation: bool,
+) -> Result<(), Error> {
+    if skip_validation {
+        return Ok(());
+    }
+
+    if entry.crc32() != 0 {
+        return Err(Error::BadCrc32 {
+            path: path.to_path_buf(),
+            computed: 0,
+            expected: entry.crc32(),
+        });
+    }
+
+    if entry.uncompressed_size() != 0 {
+        return Err(Error::BadUncompressedSize {
+            path: path.to_path_buf(),
+            computed: 0,
+            expected: entry.uncompressed_size(),
+        });
+    }
+
+    Ok(())
+}
+
+/// Extract a regular file entry and return its digest metadata.
+fn extract_file_entry<R>(
+    archive: &mut ZipFileReader<AllowStdIo<R>>,
+    entry: &StoredZipEntry,
+    file_number: usize,
+    enclosed_name: PathBuf,
+    path: &Path,
+    compression: &CompressionMethod,
+    skip_validation: bool,
+) -> Result<ExtractedEntry, Error>
+where
+    R: std::io::BufRead + std::io::Seek + Clone + Send + Sync + Unpin,
+    AllowStdIo<R>: Clone,
+{
+    let outfile = fs_err::File::create(path).map_err(Error::Io)?;
+    let size = entry.uncompressed_size();
+    let unix_permissions = entry.unix_permissions();
+    let executable = unix_permissions.is_some_and(|mode| mode & 0o111 != 0);
+    let writer = buffered_file_writer(outfile, size);
+
+    let (copied, computed_crc32, digest) =
+        copy_entry_with_digest(archive, entry, file_number, writer, compression, size)?;
+    validate_file_entry(
+        &enclosed_name,
+        copied,
+        size,
+        computed_crc32,
+        entry.crc32(),
+        skip_validation,
+    )?;
+    preserve_executable_bit(path, unix_permissions)?;
+
+    let hash_file = DirectoryDigestFile::new(&enclosed_name, size, executable, digest);
+    Ok(ExtractedEntry::File {
+        file: (enclosed_name, size),
+        hash_file,
+    })
+}
+
+/// Build a buffered writer sized for the expected entry contents.
+fn buffered_file_writer(file: fs_err::File, size: u64) -> std::io::BufWriter<fs_err::File> {
+    if let Ok(size) = usize::try_from(size) {
+        std::io::BufWriter::with_capacity(std::cmp::min(size, 1024 * 1024), file)
+    } else {
+        std::io::BufWriter::new(file)
+    }
+}
+
+/// Copy an entry to disk while computing its content digest.
+fn copy_entry_with_digest<R>(
+    archive: &mut ZipFileReader<AllowStdIo<R>>,
+    entry: &StoredZipEntry,
+    file_number: usize,
+    writer: std::io::BufWriter<fs_err::File>,
+    compression: &CompressionMethod,
+    size: u64,
+) -> Result<(u64, u32, blake3::Hash), Error>
+where
+    R: std::io::BufRead + std::io::Seek + Clone + Send + Sync + Unpin,
+    AllowStdIo<R>: Clone,
+{
+    let use_stored_hash_fast_path = matches!(compression, &CompressionMethod::Stored)
+        && size >= STORED_HASH_FAST_PATH_THRESHOLD
+        && entry.compressed_size() == size;
+
+    if use_stored_hash_fast_path {
+        let header_offset = entry.header_offset();
+        let mut hash_archive = archive.clone();
+        let (copied, stored_digest) = std::thread::scope(|scope| {
+            let stored_digest =
+                scope.spawn(move || hash_stored_entry(&mut hash_archive, header_offset, size));
+            let copied = block_on(copy_entry(archive, file_number, writer, false));
+            (copied, stored_digest.join())
+        });
+        let (copied, computed_crc32, digest) = copied?;
+        debug_assert!(digest.is_none());
+        let stored_digest = stored_digest.map_err(|_| thread_panic_error())??;
+        return Ok((copied, computed_crc32, stored_digest));
+    }
+
+    if size >= PARALLEL_HASH_THRESHOLD {
+        return copy_entry_with_hash_thread(archive, file_number, writer, size);
+    }
+
+    let (copied, computed_crc32, digest) =
+        block_on(copy_entry(archive, file_number, writer, true))?;
+    let Some(digest) = digest else {
+        return Err(Error::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "missing digest for ZIP entry",
+        )));
+    };
+    Ok((copied, computed_crc32, digest))
+}
+
+/// Validate the copied size and CRC for a file entry.
+fn validate_file_entry(
+    path: &Path,
+    copied: u64,
+    expected_size: u64,
+    computed_crc32: u32,
+    expected_crc32: u32,
+    skip_validation: bool,
+) -> Result<(), Error> {
+    if skip_validation {
+        return Ok(());
+    }
+
+    if copied != expected_size {
+        return Err(Error::BadUncompressedSize {
+            path: path.to_path_buf(),
+            computed: copied,
+            expected: expected_size,
+        });
+    }
+
+    if computed_crc32 != expected_crc32 {
+        return Err(Error::BadCrc32 {
+            path: path.to_path_buf(),
+            computed: computed_crc32,
+            expected: expected_crc32,
+        });
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+/// Preserve executable permissions according to pip's wheel extraction behavior.
+fn preserve_executable_bit(path: &Path, unix_permissions: Option<u16>) -> Result<(), Error> {
+    use std::fs::Permissions;
+    use std::os::unix::fs::PermissionsExt;
+
+    let Some(mode) = unix_permissions else {
+        return Ok(());
+    };
+
+    // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/utils/unpacking.py#L88-L100
+    if mode & 0o111 == 0 {
+        return Ok(());
+    }
+
+    let permissions = fs_err::metadata(path).map_err(Error::Io)?.permissions();
+    if permissions.mode() & 0o111 == 0o111 {
+        return Ok(());
+    }
+
+    fs_err::set_permissions(path, Permissions::from_mode(permissions.mode() | 0o111))
+        .map_err(Error::Io)
+}
+
+#[cfg(not(unix))]
+/// Preserve executable permissions according to pip's wheel extraction behavior.
+fn preserve_executable_bit(_path: &Path, _unix_permissions: Option<u16>) -> Result<(), Error> {
+    Ok(())
+}
+
+/// Return an error for a poisoned directory memoization lock.
+fn directory_lock_error() -> Error {
+    Error::Io(std::io::Error::other("directory set lock poisoned"))
 }
 
 async fn copy_entry<R>(
@@ -257,7 +438,24 @@ where
     ))
 }
 
+/// Copy an entry while hashing contents on a separate thread.
 fn copy_entry_with_hash_thread<R>(
+    archive: &mut ZipFileReader<AllowStdIo<R>>,
+    file_number: usize,
+    writer: std::io::BufWriter<fs_err::File>,
+    size: u64,
+) -> Result<(u64, u32, blake3::Hash), Error>
+where
+    R: std::io::BufRead + std::io::Seek + Unpin,
+{
+    if size < PARALLEL_HASH_BUFFER_POOL_THRESHOLD {
+        return copy_entry_with_allocating_hash_thread(archive, file_number, writer);
+    }
+    copy_entry_with_buffer_pool_hash_thread(archive, file_number, writer)
+}
+
+/// Copy and hash an entry using freshly allocated buffers for each transferred chunk.
+fn copy_entry_with_allocating_hash_thread<R>(
     archive: &mut ZipFileReader<AllowStdIo<R>>,
     file_number: usize,
     writer: std::io::BufWriter<fs_err::File>,
@@ -308,32 +506,156 @@ where
     })
 }
 
-fn hash_stored_entry(
-    filename: &Path,
+/// Copy and hash an entry using a small recycled buffer pool to reduce large allocations.
+fn copy_entry_with_buffer_pool_hash_thread<R>(
+    archive: &mut ZipFileReader<AllowStdIo<R>>,
+    file_number: usize,
+    writer: std::io::BufWriter<fs_err::File>,
+) -> Result<(u64, u32, blake3::Hash), Error>
+where
+    R: std::io::BufRead + std::io::Seek + Unpin,
+{
+    std::thread::scope(|scope| {
+        struct HashChunk {
+            buffer: Vec<u8>,
+            read: usize,
+        }
+
+        let (sender, receiver) = mpsc::sync_channel::<HashChunk>(PARALLEL_HASH_BUFFER_COUNT);
+        let (buffer_sender, buffer_receiver) =
+            mpsc::sync_channel::<Vec<u8>>(PARALLEL_HASH_BUFFER_COUNT);
+        for _ in 0..PARALLEL_HASH_BUFFER_COUNT {
+            buffer_sender
+                .send(vec![0; PARALLEL_HASH_BUFFER_SIZE])
+                .map_err(|_| {
+                    Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::BrokenPipe,
+                        "failed to initialize ZIP entry hash buffer",
+                    ))
+                })?;
+        }
+
+        let recycle_sender = buffer_sender.clone();
+        drop(buffer_sender);
+        let hash_thread = scope.spawn(move || {
+            let mut hasher = blake3::Hasher::new();
+            while let Ok(chunk) = receiver.recv() {
+                hasher.update(&chunk.buffer[..chunk.read]);
+                if recycle_sender.send(chunk.buffer).is_err() {
+                    break;
+                }
+            }
+            hasher.finalize()
+        });
+
+        let copied = block_on(async {
+            let mut file = archive.reader_with_entry(file_number).await?;
+            let mut writer = AllowStdIo::new(writer);
+            let mut copied = 0;
+            loop {
+                let mut buffer = buffer_receiver.recv().map_err(|_| {
+                    Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::BrokenPipe,
+                        "failed to receive ZIP entry hash buffer",
+                    ))
+                })?;
+                let read = file
+                    .read(&mut buffer)
+                    .await
+                    .map_err(Error::io_or_compression)?;
+                if read == 0 {
+                    break;
+                }
+                writer.write_all(&buffer[..read]).await.map_err(Error::Io)?;
+                copied += read as u64;
+                sender.send(HashChunk { buffer, read }).map_err(|_| {
+                    Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::BrokenPipe,
+                        "failed to send ZIP entry chunk to hash thread",
+                    ))
+                })?;
+            }
+            writer.flush().await.map_err(Error::Io)?;
+            Ok::<_, Error>((copied, file.compute_hash()))
+        });
+
+        drop(sender);
+        let digest = hash_thread.join().map_err(|_| thread_panic_error())?;
+        copied.map(|(copied, computed_crc32)| (copied, computed_crc32, digest))
+    })
+}
+
+/// Hash a stored entry's raw bytes from an already-open archive reader.
+fn hash_stored_entry<R>(
+    archive: &mut ZipFileReader<AllowStdIo<R>>,
     header_offset: u64,
     compressed_size: u64,
-) -> Result<blake3::Hash, Error> {
-    let mut file = fs_err::File::open(filename).map_err(Error::Io)?;
-    let data_offset = stored_entry_data_offset(&mut file, header_offset)?;
-    file.seek(SeekFrom::Start(data_offset)).map_err(Error::Io)?;
-
-    let mut hasher = blake3::Hasher::new();
-    let mut remaining = compressed_size;
-    let mut buffer = vec![0; STORED_HASH_BUFFER_SIZE];
-    while remaining > 0 {
-        let read_size = usize::try_from(remaining.min(buffer.len() as u64)).map_err(|_| {
-            Error::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "stored ZIP entry is too large to hash",
-            ))
-        })?;
-        file.read_exact(&mut buffer[..read_size])
+) -> Result<blake3::Hash, Error>
+where
+    R: std::io::BufRead + std::io::Seek + Unpin,
+{
+    block_on(async {
+        let reader = archive.inner_mut();
+        let data_offset = stored_entry_data_offset(reader, header_offset).await?;
+        reader
+            .seek(SeekFrom::Start(data_offset))
+            .await
             .map_err(Error::Io)?;
-        update_hash_rayon(&mut hasher, &buffer[..read_size]);
-        remaining -= read_size as u64;
+
+        let mut hasher = blake3::Hasher::new();
+        let mut remaining = compressed_size;
+        let mut buffer = vec![0; STORED_HASH_BUFFER_SIZE];
+        while remaining > 0 {
+            let read_size = usize::try_from(remaining.min(buffer.len() as u64)).map_err(|_| {
+                Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "stored ZIP entry is too large to hash",
+                ))
+            })?;
+            reader
+                .read_exact(&mut buffer[..read_size])
+                .await
+                .map_err(Error::Io)?;
+            update_hash_rayon(&mut hasher, &buffer[..read_size]);
+            remaining -= read_size as u64;
+        }
+
+        Ok(hasher.finalize())
+    })
+}
+
+/// Return the byte offset of a stored entry's payload from its local file header.
+async fn stored_entry_data_offset<R>(reader: &mut R, header_offset: u64) -> Result<u64, Error>
+where
+    R: AsyncRead + AsyncSeek + Unpin,
+{
+    reader
+        .seek(SeekFrom::Start(header_offset))
+        .await
+        .map_err(Error::Io)?;
+    let mut header = [0; LOCAL_FILE_HEADER_LENGTH_USIZE];
+    reader.read_exact(&mut header).await.map_err(Error::Io)?;
+
+    let signature = u32::from_le_bytes([header[0], header[1], header[2], header[3]]);
+    if signature != LOCAL_FILE_HEADER_SIGNATURE {
+        return Err(Error::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "invalid ZIP local file header signature",
+        )));
     }
 
-    Ok(hasher.finalize())
+    let filename_length = u64::from(u16::from_le_bytes([header[26], header[27]]));
+    let extra_field_length = u64::from(u16::from_le_bytes([header[28], header[29]]));
+    header_offset
+        .checked_add(LOCAL_FILE_HEADER_LENGTH)
+        .and_then(|offset| offset.checked_add(filename_length))
+        .and_then(|offset| offset.checked_add(extra_field_length))
+        .ok_or_else(|| {
+            Error::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "ZIP local file header is too large",
+            ))
+        })
 }
 
 fn thread_panic_error() -> Error {
@@ -362,34 +684,6 @@ fn build_hash_thread_pool() -> Option<rayon::ThreadPool> {
         .thread_name(|index| format!("uv-extract-hash-{index}"))
         .build()
         .ok()
-}
-
-fn stored_entry_data_offset(file: &mut fs_err::File, header_offset: u64) -> Result<u64, Error> {
-    file.seek(SeekFrom::Start(header_offset))
-        .map_err(Error::Io)?;
-    let mut header = [0; LOCAL_FILE_HEADER_LENGTH_USIZE];
-    file.read_exact(&mut header).map_err(Error::Io)?;
-
-    let signature = u32::from_le_bytes([header[0], header[1], header[2], header[3]]);
-    if signature != LOCAL_FILE_HEADER_SIGNATURE {
-        return Err(Error::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "invalid ZIP local file header signature",
-        )));
-    }
-
-    let filename_length = u64::from(u16::from_le_bytes([header[26], header[27]]));
-    let extra_field_length = u64::from(u16::from_le_bytes([header[28], header[29]]));
-    header_offset
-        .checked_add(LOCAL_FILE_HEADER_LENGTH)
-        .and_then(|offset| offset.checked_add(filename_length))
-        .and_then(|offset| offset.checked_add(extra_field_length))
-        .ok_or_else(|| {
-            Error::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "ZIP local file header is too large",
-            ))
-        })
 }
 
 /// Extract the top-level directory from an unpacked archive.
@@ -508,7 +802,234 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn directory_digest_includes_empty_directories() -> Result<(), Box<dyn std::error::Error>> {
+        let base_entries = [
+            ZipEntry {
+                path: "example/__init__.py",
+                contents: b"VALUE = 1\n",
+                mode: 0o100_644,
+            },
+            ZipEntry {
+                path: "example-1.0.0.dist-info/METADATA",
+                contents: b"Name: example\nVersion: 1.0.0\n",
+                mode: 0o100_644,
+            },
+        ];
+        let explicit_parent_entries = [
+            ZipEntry {
+                path: "example/",
+                contents: b"",
+                mode: 0o040_755,
+            },
+            ZipEntry {
+                path: "example/__init__.py",
+                contents: b"VALUE = 1\n",
+                mode: 0o100_644,
+            },
+            ZipEntry {
+                path: "example-1.0.0.dist-info/METADATA",
+                contents: b"Name: example\nVersion: 1.0.0\n",
+                mode: 0o100_644,
+            },
+        ];
+        let empty_directory_entries = [
+            ZipEntry {
+                path: "example/__init__.py",
+                contents: b"VALUE = 1\n",
+                mode: 0o100_644,
+            },
+            ZipEntry {
+                path: "example/empty-data/",
+                contents: b"",
+                mode: 0o040_755,
+            },
+            ZipEntry {
+                path: "example-1.0.0.dist-info/METADATA",
+                contents: b"Name: example\nVersion: 1.0.0\n",
+                mode: 0o100_644,
+            },
+        ];
+
+        let temp_dir = tempfile::tempdir()?;
+        let base_archive_path = temp_dir.path().join("base.whl");
+        let explicit_parent_archive_path = temp_dir.path().join("explicit-parent.whl");
+        let empty_directory_archive_path = temp_dir.path().join("empty-directory.whl");
+        fs_err::write(
+            &base_archive_path,
+            zip_archive(&base_entries, b"base archive comment"),
+        )?;
+        fs_err::write(
+            &explicit_parent_archive_path,
+            zip_archive(&explicit_parent_entries, b"explicit parent archive comment"),
+        )?;
+        fs_err::write(
+            &empty_directory_archive_path,
+            zip_archive(&empty_directory_entries, b"empty directory archive comment"),
+        )?;
+
+        let base_extract = temp_dir.path().join("base");
+        let explicit_parent_extract = temp_dir.path().join("explicit-parent");
+        let empty_directory_extract = temp_dir.path().join("empty-directory");
+        fs_err::create_dir_all(&base_extract)?;
+        fs_err::create_dir_all(&explicit_parent_extract)?;
+        fs_err::create_dir_all(&empty_directory_extract)?;
+
+        let (_base_files, base_digest) =
+            unzip_and_hash(fs_err::File::open(&base_archive_path)?, &base_extract)?;
+        let (_explicit_parent_files, explicit_parent_digest) = unzip_and_hash(
+            fs_err::File::open(&explicit_parent_archive_path)?,
+            &explicit_parent_extract,
+        )?;
+        let (empty_directory_files, empty_directory_digest) = unzip_and_hash(
+            fs_err::File::open(&empty_directory_archive_path)?,
+            &empty_directory_extract,
+        )?;
+
+        assert_eq!(base_digest, explicit_parent_digest);
+        assert_ne!(base_digest, empty_directory_digest);
+        assert_eq!(empty_directory_files.len(), 2);
+        assert!(empty_directory_extract.join("example/empty-data").is_dir());
+
+        let stream_extract = temp_dir.path().join("stream-empty-directory");
+        fs_err::create_dir_all(&stream_extract)?;
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        let (stream_files, stream_digest) = runtime.block_on(async {
+            let file = fs_err::tokio::File::open(&empty_directory_archive_path).await?;
+            let result =
+                crate::stream::unzip_and_hash("empty-directory.whl", file, &stream_extract).await?;
+            Ok::<_, Box<dyn std::error::Error>>(result)
+        })?;
+
+        assert_eq!(empty_directory_digest, stream_digest);
+        assert_eq!(stream_files.len(), 2);
+        assert!(stream_extract.join("example/empty-data").is_dir());
+
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stored_entry_digest_uses_opened_archive_handle() -> Result<(), Box<dyn std::error::Error>> {
+        let original_entries = [ZipEntry {
+            path: "example/data.txt",
+            contents: b"original-data",
+            mode: 0o100_644,
+        }];
+        let replacement_entries = [ZipEntry {
+            path: "example/data.txt",
+            contents: b"replaced-data",
+            mode: 0o100_644,
+        }];
+        let original_archive = zip_archive(&original_entries, b"original archive comment");
+        let replacement_archive = zip_archive(&replacement_entries, b"replacement archive comment");
+
+        let temp_dir = tempfile::tempdir()?;
+        let expected_archive_path = temp_dir.path().join("expected.whl");
+        fs_err::write(&expected_archive_path, &original_archive)?;
+        let expected_extract = temp_dir.path().join("expected");
+        fs_err::create_dir_all(&expected_extract)?;
+        let (_expected_files, expected_digest) = unzip_and_hash(
+            fs_err::File::open(&expected_archive_path)?,
+            &expected_extract,
+        )?;
+
+        let archive_path = temp_dir.path().join("replaced.whl");
+        fs_err::write(&archive_path, &original_archive)?;
+        let opened_archive = fs_err::File::open(&archive_path)?;
+        fs_err::remove_file(&archive_path)?;
+        fs_err::write(&archive_path, replacement_archive)?;
+
+        let extract = temp_dir.path().join("extract");
+        fs_err::create_dir_all(&extract)?;
+        let (_files, digest) = unzip_and_hash(opened_archive, &extract)?;
+
+        assert_eq!(digest, expected_digest);
+        assert_eq!(
+            fs_err::read(extract.join("example/data.txt"))?,
+            b"original-data"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn stored_entry_digest_handles_local_extra_fields() -> Result<(), Box<dyn std::error::Error>> {
+        let entries = [ZipEntry {
+            path: "example/data.txt",
+            contents: b"stored-data-with-local-extra-field",
+            mode: 0o100_644,
+        }];
+        let archive = zip_archive_with_local_extra(
+            &entries,
+            &[
+                0xef, 0xbe, // Header ID.
+                0x04, 0x00, // Data size.
+                b'u', b'v', b'x', b'\0',
+            ],
+            b"local extra field archive comment",
+        );
+
+        let temp_dir = tempfile::tempdir()?;
+        let archive_path = temp_dir.path().join("local-extra.whl");
+        fs_err::write(&archive_path, archive)?;
+        let extract = temp_dir.path().join("extract");
+        fs_err::create_dir_all(&extract)?;
+
+        let (files, _digest) = unzip_and_hash(fs_err::File::open(&archive_path)?, &extract)?;
+
+        assert_eq!(files.len(), 1);
+        assert_eq!(
+            fs_err::read(extract.join("example/data.txt"))?,
+            b"stored-data-with-local-extra-field"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn sync_rejects_directory_entries_with_payload() -> Result<(), Box<dyn std::error::Error>> {
+        let entries = [ZipEntry {
+            path: "example/not-empty/",
+            contents: b"payload",
+            mode: 0o040_755,
+        }];
+
+        let temp_dir = tempfile::tempdir()?;
+        let archive_path = temp_dir.path().join("directory-payload.whl");
+        fs_err::write(
+            &archive_path,
+            zip_archive(&entries, b"directory payload archive comment"),
+        )?;
+        let extract = temp_dir.path().join("extract");
+        fs_err::create_dir_all(&extract)?;
+
+        let result = unzip_and_hash(fs_err::File::open(&archive_path)?, &extract);
+
+        assert!(matches!(
+            result,
+            Err(crate::Error::BadCrc32 {
+                computed: 0,
+                expected,
+                ..
+            }) if expected == crc32(b"payload")
+        ));
+
+        Ok(())
+    }
+
     fn zip_archive(entries: &[ZipEntry<'_>], comment: &[u8]) -> Vec<u8> {
+        zip_archive_with_local_extra(entries, b"", comment)
+    }
+
+    /// Build a stored ZIP archive whose local file headers include `local_extra`.
+    fn zip_archive_with_local_extra(
+        entries: &[ZipEntry<'_>],
+        local_extra: &[u8],
+        comment: &[u8],
+    ) -> Vec<u8> {
         let mut archive = Vec::new();
         let mut central_directory_entries = Vec::new();
 
@@ -516,8 +1037,9 @@ mod tests {
             let local_header_offset =
                 u32::try_from(archive.len()).expect("test archive offset fits in u32");
             let crc32 = crc32(entry.contents);
-            write_local_file_header(&mut archive, entry, crc32);
+            write_local_file_header(&mut archive, entry, crc32, local_extra);
             archive.extend_from_slice(entry.path.as_bytes());
+            archive.extend_from_slice(local_extra);
             archive.extend_from_slice(entry.contents);
             central_directory_entries.push((entry, crc32, local_header_offset));
         }
@@ -543,7 +1065,12 @@ mod tests {
         archive
     }
 
-    fn write_local_file_header(archive: &mut Vec<u8>, entry: &ZipEntry<'_>, crc32: u32) {
+    fn write_local_file_header(
+        archive: &mut Vec<u8>,
+        entry: &ZipEntry<'_>,
+        crc32: u32,
+        local_extra: &[u8],
+    ) {
         write_u32(archive, 0x0403_4b50);
         write_u16(archive, 20);
         write_u16(archive, 0);
@@ -563,7 +1090,10 @@ mod tests {
             archive,
             u16::try_from(entry.path.len()).expect("test path length fits in u16"),
         );
-        write_u16(archive, 0);
+        write_u16(
+            archive,
+            u16::try_from(local_extra.len()).expect("test extra field length fits in u16"),
+        );
     }
 
     fn write_central_directory_header(
