@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::Path;
 use std::slice;
 
@@ -173,22 +173,24 @@ impl RequiresDist {
         for (group, flat_group) in dependency_groups {
             let mut requirements = Vec::new();
             let mut source_groups = Vec::new();
-            for (requirement, source_group) in flat_group.into_requirements_with_source_groups() {
+            for (requirement, requirement_source_groups) in
+                flat_group.into_requirements_with_source_groups()
+            {
                 if no_sources.for_package(&requirement.name) {
                     requirements.push(Requirement::from(requirement));
-                    source_groups.push(source_group);
+                    source_groups.push(requirement_source_groups);
                     continue;
                 }
 
                 let requirement_name = requirement.name.clone();
-                for requirement in LoweredRequirement::from_requirement_with_source_group(
+                for requirement in LoweredRequirement::from_requirement_with_source_groups(
                     requirement,
                     Some(&metadata.name),
                     project_workspace.project_root(),
                     project_sources,
                     project_indexes,
                     &group,
-                    &source_group,
+                    &requirement_source_groups,
                     locations,
                     project_workspace.workspace(),
                     git_member,
@@ -203,7 +205,7 @@ impl RequiresDist {
                         )
                     })?;
                     requirements.push(requirement.into_inner());
-                    source_groups.push(source_group.clone());
+                    source_groups.push(requirement_source_groups.clone());
                 }
             }
             dependency_group_source_groups.insert(group.clone(), source_groups.into_boxed_slice());
@@ -276,7 +278,7 @@ impl RequiresDist {
         source_variants: Vec<SourceVariant>,
         requires_dist: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Box<[Requirement]>>,
-        dependency_group_source_groups: &BTreeMap<GroupName, Box<[GroupName]>>,
+        dependency_group_source_groups: &BTreeMap<GroupName, Box<[BTreeSet<GroupName>]>>,
     ) -> Vec<SourceVariant> {
         let mut variants = Vec::new();
         for variant in source_variants {
@@ -302,7 +304,7 @@ impl RequiresDist {
                                     .into_iter()
                                     .flatten(),
                             )
-                            .filter(move |(_, source_group)| *source_group == group)
+                            .filter(move |(_, source_groups)| source_groups.contains(group))
                             .map(move |(requirement, _)| (Some(selected_group), requirement))
                     })
                     .filter(|(_, requirement)| {

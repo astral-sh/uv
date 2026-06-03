@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -61,7 +61,7 @@ enum SourceSelection {
     Context {
         extra: Option<ExtraName>,
         group: Option<GroupName>,
-        source_group: Option<GroupName>,
+        source_groups: BTreeSet<GroupName>,
     },
     /// Select every source that is conditional on an extra or dependency group.
     Conditional,
@@ -98,7 +98,7 @@ impl LoweredRequirement {
             SourceSelection::Context {
                 extra: extra.cloned(),
                 group: group.cloned(),
-                source_group: group.cloned(),
+                source_groups: group.into_iter().cloned().collect(),
             },
             locations,
             workspace,
@@ -109,16 +109,15 @@ impl LoweredRequirement {
         .map(|requirement| requirement.map(LoweredSourceRequirement::into_lowered_requirement))
     }
 
-    /// Combine a dependency-group requirement with sources selected by the group that introduced
-    /// it.
-    pub(crate) fn from_requirement_with_source_group<'data>(
+    /// Combine a dependency-group requirement with sources selected by the groups that contain it.
+    pub(crate) fn from_requirement_with_source_groups<'data>(
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         project_name: Option<&'data PackageName>,
         project_dir: &'data Path,
         project_sources: &'data BTreeMap<PackageName, Sources>,
         project_indexes: &'data [Index],
         group: &GroupName,
-        source_group: &GroupName,
+        source_groups: &BTreeSet<GroupName>,
         locations: &'data IndexLocations,
         workspace: &'data Workspace,
         git_member: Option<&'data GitWorkspaceMember<'data>>,
@@ -134,7 +133,7 @@ impl LoweredRequirement {
             SourceSelection::Context {
                 extra: None,
                 group: Some(group.clone()),
-                source_group: Some(source_group.clone()),
+                source_groups: source_groups.clone(),
             },
             locations,
             workspace,
@@ -192,8 +191,8 @@ impl LoweredRequirement {
             SourceSelection::Context {
                 extra,
                 group,
-                source_group,
-            } => Some((extra, group, source_group)),
+                source_groups,
+            } => Some((extra, group, source_groups)),
             SourceSelection::Conditional => None,
         };
         let include_remaining = context.is_some();
@@ -220,7 +219,7 @@ impl LoweredRequirement {
             sources
                 .iter()
                 .filter(|source| match &context {
-                    Some((extra, group, source_group)) => {
+                    Some((extra, group, source_groups)) => {
                         if let Some(target) = source.extra() {
                             if extra.as_ref() != Some(target) {
                                 return false;
@@ -228,7 +227,7 @@ impl LoweredRequirement {
                         }
 
                         if let Some(target) = source.group() {
-                            if source_group.as_ref() != Some(target) {
+                            if !source_groups.contains(target) {
                                 return false;
                             }
                         }

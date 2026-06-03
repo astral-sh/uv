@@ -1,6 +1,9 @@
 use std::collections::btree_map::Entry;
 use std::str::FromStr;
-use std::{collections::BTreeMap, path::Path};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::Path,
+};
 
 use thiserror::Error;
 
@@ -21,7 +24,7 @@ pub struct FlatDependencyGroups(BTreeMap<GroupName, FlatDependencyGroup>);
 pub struct FlatDependencyGroup {
     pub requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
     pub requires_python: Option<VersionSpecifiers>,
-    source_groups: Vec<GroupName>,
+    source_groups: Vec<BTreeSet<GroupName>>,
 }
 
 impl FlatDependencyGroup {
@@ -29,7 +32,12 @@ impl FlatDependencyGroup {
     /// each requirement.
     pub fn into_requirements_with_source_groups(
         self,
-    ) -> impl Iterator<Item = (uv_pep508::Requirement<VerbatimParsedUrl>, GroupName)> {
+    ) -> impl Iterator<
+        Item = (
+            uv_pep508::Requirement<VerbatimParsedUrl>,
+            BTreeSet<GroupName>,
+        ),
+    > {
         self.requirements.into_iter().zip(self.source_groups)
     }
 }
@@ -91,9 +99,11 @@ impl FlatDependencyGroups {
                 .entry(DEV_DEPENDENCIES.clone())
                 .or_insert_with(FlatDependencyGroup::default);
             group.requirements.extend(dev_dependencies.clone());
-            group
-                .source_groups
-                .extend(dev_dependencies.iter().map(|_| DEV_DEPENDENCIES.clone()));
+            group.source_groups.extend(
+                dev_dependencies
+                    .iter()
+                    .map(|_| BTreeSet::from([DEV_DEPENDENCIES.clone()])),
+            );
         }
 
         Ok(dependency_groups)
@@ -147,7 +157,7 @@ impl FlatDependencyGroups {
                         match uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(requirement) {
                             Ok(requirement) => {
                                 requirements.push(requirement);
-                                source_groups.push(name.clone());
+                                source_groups.push(BTreeSet::from([name.clone()]));
                             }
                             Err(err) => {
                                 return Err(DependencyGroupErrorInner::GroupParseError(
@@ -162,7 +172,12 @@ impl FlatDependencyGroups {
                         resolve_group(resolved, groups, settings, include_group, parents)?;
                         if let Some(included) = resolved.get(include_group) {
                             requirements.extend(included.requirements.iter().cloned());
-                            source_groups.extend(included.source_groups.iter().cloned());
+                            source_groups.extend(included.source_groups.iter().cloned().map(
+                                |mut source_groups| {
+                                    source_groups.insert(name.clone());
+                                    source_groups
+                                },
+                            ));
 
                             // Intersect the requires-python for this group with the included group's
                             requires_python_intersection = requires_python_intersection
