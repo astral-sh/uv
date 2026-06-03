@@ -25217,8 +25217,8 @@ fn lock_multiple_sources_group_activated_extra_uses_incompatible_version() -> Re
     Ok(())
 }
 
-/// Metadata-only dependency groups require version-2 source-marker handling
-/// even when the lock contains unrelated declared conflicts.
+/// Metadata-only dependency groups with synthesized production fallbacks
+/// require version-3 lock handling.
 #[test]
 fn lock_multiple_sources_metadata_group_uses_incompatible_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -25261,7 +25261,7 @@ fn lock_multiple_sources_metadata_group_uses_incompatible_version() -> Result<()
     let Some(version) = lock.lines().next() else {
         bail!("lockfile is empty");
     };
-    assert_snapshot!(version, @"version = 2");
+    assert_snapshot!(version, @"version = 3");
 
     Ok(())
 }
@@ -25635,6 +25635,70 @@ fn lock_multiple_sources_group_base_and_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Source-agnostic dependency-group fallbacks require a lock version that
+/// readers without synthesized fallback dependencies reject.
+#[test]
+fn lock_multiple_sources_group_fallback_uses_incompatible_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["requests==2.31.0"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["requests"]
+
+        [tool.uv]
+        conflicts = [[
+            { package = "project" },
+            { group = "use" },
+        ]]
+
+        [tool.uv.sources]
+        requests = [
+            { url = "https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    let lock = context.read("uv.lock");
+    let Some(version) = lock.lines().next() else {
+        bail!("lockfile is empty");
+    };
+    assert_snapshot!(version, @"version = 3");
+
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.replacen("version = 3", "version = 2", 1))?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())

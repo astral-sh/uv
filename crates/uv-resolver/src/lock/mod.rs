@@ -86,12 +86,18 @@ pub const VERSION: u32 = 1;
 /// readers cannot evaluate.
 pub const ACTIVATION_MARKER_VERSION: u32 = 2;
 
+/// The lockfile version used when dependency groups contain synthesized production fallbacks.
+const GROUP_SOURCE_FALLBACK_VERSION: u32 = 3;
+
 /// The current revision of the lockfile format.
 const REVISION: u32 = 3;
 
 /// Returns whether this uv version can read the given lockfile version.
 pub fn supports_lock_version(version: u32) -> bool {
-    matches!(version, VERSION | ACTIVATION_MARKER_VERSION)
+    matches!(
+        version,
+        VERSION | ACTIVATION_MARKER_VERSION | GROUP_SOURCE_FALLBACK_VERSION
+    )
 }
 
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
@@ -702,9 +708,14 @@ impl Lock {
         self
     }
 
-    /// Selects an incompatible lock version when dependency markers require activation behavior
-    /// that version-1 readers do not support.
+    /// Selects an incompatible lock version when dependency selection requires behavior that older
+    /// readers do not support.
     fn update_version_for_activation_markers(&mut self) {
+        if self.has_group_source_fallbacks() {
+            self.version = GROUP_SOURCE_FALLBACK_VERSION;
+            return;
+        }
+
         let mut has_activation_markers = false;
         let metadata_only_groups = self
             .packages
@@ -785,6 +796,22 @@ impl Lock {
         } else {
             VERSION
         };
+    }
+
+    /// Returns `true` if the lock contains a synthesized production fallback for a dependency
+    /// group.
+    fn has_group_source_fallbacks(&self) -> bool {
+        self.packages.iter().any(|package| {
+            package
+                .add_group_source_fallbacks(&self.requires_python)
+                .into_iter()
+                .any(|fallback| {
+                    package
+                        .dependency_groups
+                        .get(&fallback.group)
+                        .is_some_and(|dependencies| dependencies.contains(&fallback.dependency))
+                })
+        })
     }
 
     /// Record the required platforms that were used to generate this lock.
@@ -1612,6 +1639,13 @@ impl Lock {
         let mut queue: VecDeque<&Package> = VecDeque::new();
         let mut seen = FxHashSet::default();
 
+        if self.version < GROUP_SOURCE_FALLBACK_VERSION && self.has_group_source_fallbacks() {
+            return Ok(SatisfiesResult::MismatchedLockVersion(
+                GROUP_SOURCE_FALLBACK_VERSION,
+                self.version,
+            ));
+        }
+
         // Validate that the lockfile was generated with the same root members.
         {
             let expected = members.iter().cloned().collect::<BTreeSet<_>>();
@@ -2404,6 +2438,8 @@ impl<'tags> TagPolicy<'tags> {
 pub enum SatisfiesResult<'lock> {
     /// The lockfile satisfies the requirements.
     Satisfied,
+    /// The lockfile uses an incompatible version for its dependency graph.
+    MismatchedLockVersion(u32, u32),
     /// The lockfile uses a different set of workspace members.
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
     /// A workspace member switched from virtual to non-virtual or vice versa.
@@ -2929,7 +2965,7 @@ impl Package {
     /// Collect source-agnostic dependency-group fallbacks from the resolved production
     /// dependencies.
     fn add_group_source_fallbacks(
-        &mut self,
+        &self,
         requires_python: &RequiresPython,
     ) -> Vec<GroupSourceFallback> {
         let mut fallbacks = Vec::new();

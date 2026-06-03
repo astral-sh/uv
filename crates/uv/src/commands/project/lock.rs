@@ -1262,6 +1262,12 @@ impl ValidatedLock {
                 debug!("Existing `uv.lock` satisfies workspace requirements");
                 Ok(Self::Satisfies(lock))
             }
+            SatisfiesResult::MismatchedLockVersion(expected, actual) => {
+                debug!(
+                    "Resolving despite existing lockfile due to incompatible lock version: expected `{expected}`, found `{actual}`"
+                );
+                Ok(Self::Preferable(lock))
+            }
             SatisfiesResult::MismatchedMembers(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched members:\n  Requested: {:?}\n  Existing: {:?}",
