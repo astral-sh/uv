@@ -67,7 +67,7 @@ fn activate_requirement<'lock>(
     activated_extras: &BTreeSet<(&'lock PackageName, &'lock ExtraName)>,
     next_activated_extras: &mut BTreeSet<(&'lock PackageName, &'lock ExtraName)>,
 ) {
-    let mut package_extras = activated_extras
+    let package_extras = activated_extras
         .iter()
         .filter_map(|(candidate, extra)| {
             package
@@ -75,9 +75,6 @@ fn activate_requirement<'lock>(
                 .then_some((*extra).clone())
         })
         .collect::<Vec<_>>();
-    if package.is_some_and(|package| requirement.name == *package) {
-        package_extras.extend(requirement.extras.iter().cloned());
-    }
     if requirement.evaluate_markers(Some(markers), &package_extras) {
         next_activated_extras.extend(
             requirement

@@ -1035,10 +1035,10 @@ async fn audit_group_empty_extra_activates_source_variant_edges() {
     ");
 }
 
-/// Extras from dependency group requirements with inactive markers must not
-/// affect source selection during audit traversal.
+/// Extras requested by dependency group requirements must not satisfy those
+/// requirements' own markers during audit traversal.
 #[tokio::test]
-async fn audit_group_requirement_marker_excludes_empty_extra() {
+async fn audit_group_requirement_does_not_activate_own_extra_marker() {
     let context = uv_test::test_context!("3.12");
 
     context
@@ -1052,11 +1052,10 @@ async fn audit_group_requirement_marker_excludes_empty_extra() {
         dependencies = ["iniconfig>=1"]
 
         [project.optional-dependencies]
-        bar = []
         foo = []
 
         [dependency-groups]
-        use = ["project[foo] ; extra == 'bar'", "iniconfig"]
+        use = ["project[foo] ; extra == 'foo'", "iniconfig"]
 
         [tool.uv.sources]
         iniconfig = [

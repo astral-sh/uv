@@ -1110,7 +1110,7 @@ impl Lock {
             requirement: &Requirement,
             activated_contexts: &BTreeSet<ConflictItem>,
         ) -> Option<Vec<ConflictItem>> {
-            let mut package_extras = activated_contexts
+            let package_extras = activated_contexts
                 .iter()
                 .filter_map(|context| {
                     package
@@ -1119,9 +1119,6 @@ impl Lock {
                         .flatten()
                 })
                 .collect::<Vec<_>>();
-            if package.is_some_and(|package| requirement.name == *package) {
-                package_extras.extend(requirement.extras.iter().cloned());
-            }
             requirement
                 .evaluate_markers(None, &package_extras)
                 .then(|| {

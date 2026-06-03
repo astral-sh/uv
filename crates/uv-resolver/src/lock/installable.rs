@@ -39,13 +39,10 @@ fn activated_requirement_extras<'lock>(
     activated_extras: &[(&'lock PackageName, &'lock ExtraName)],
     next_activated_extras: &[(&'lock PackageName, &'lock ExtraName)],
 ) -> Option<Vec<(&'lock PackageName, &'lock ExtraName)>> {
-    let mut package_extras = activated_extras
+    let package_extras = activated_extras
         .iter()
         .filter_map(|(candidate, extra)| (*candidate == package).then_some((*extra).clone()))
         .collect::<Vec<_>>();
-    if requirement.name == *package {
-        package_extras.extend(requirement.extras.iter().cloned());
-    }
     requirement
         .evaluate_markers(Some(marker_env), &package_extras)
         .then(|| {
