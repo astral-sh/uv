@@ -725,9 +725,7 @@ impl Lock {
                     }
                 }
             }
-            if matches!(&package.id.source, Source::Git(..)) {
-                self.extend_source_activation_contexts_from_edges(package, &mut contexts);
-            }
+            self.extend_source_activation_contexts_from_edges(package, &mut contexts);
         }
         contexts
     }
