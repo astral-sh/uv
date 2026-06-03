@@ -671,17 +671,13 @@ impl Lock {
     /// Record the conflicting groups that were used to generate this lock.
     #[must_use]
     pub fn with_conflicts(mut self, conflicts: Conflicts) -> Self {
-        self.source_activation_contexts = self.expected_source_activation_contexts(&conflicts);
+        self.source_activation_contexts = self.expected_source_activation_contexts();
         self.conflicts = conflicts;
         self
     }
 
     /// Return source-selection contexts that older lockfile readers must activate.
-    fn expected_source_activation_contexts(&self, conflicts: &Conflicts) -> BTreeSet<ConflictItem> {
-        if !conflicts.is_empty() {
-            return BTreeSet::new();
-        }
-
+    fn expected_source_activation_contexts(&self) -> BTreeSet<ConflictItem> {
         let mut contexts = BTreeSet::new();
         for package in &self.packages {
             let production_dependencies = package
@@ -1704,8 +1700,7 @@ impl Lock {
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<SatisfiesResult<'_>, LockError> {
-        let expected_source_activation_contexts =
-            self.expected_source_activation_contexts(&self.conflicts);
+        let expected_source_activation_contexts = self.expected_source_activation_contexts();
         if expected_source_activation_contexts != self.source_activation_contexts {
             return Ok(SatisfiesResult::MismatchedSourceActivationContexts(
                 expected_source_activation_contexts,
