@@ -670,14 +670,17 @@ impl Lock {
 
     /// Record the conflicting groups that were used to generate this lock.
     #[must_use]
-    pub fn with_conflicts(mut self, conflicts: Conflicts) -> Self {
+    pub fn with_conflicts(mut self, conflicts: Conflicts, indexes: &IndexLocations) -> Self {
         self.conflicts = conflicts;
-        self.source_activation_contexts = self.expected_source_activation_contexts();
+        self.source_activation_contexts = self.expected_source_activation_contexts(Some(indexes));
         self
     }
 
     /// Return source-selection contexts that older lockfile readers must activate.
-    fn expected_source_activation_contexts(&self) -> BTreeSet<ConflictItem> {
+    fn expected_source_activation_contexts(
+        &self,
+        indexes: Option<&IndexLocations>,
+    ) -> BTreeSet<ConflictItem> {
         let mut contexts = BTreeSet::new();
         for package in &self.packages {
             Self::extend_source_activation_contexts_from_metadata(
@@ -692,6 +695,7 @@ impl Lock {
                             .iter()
                             .map(move |requirement| (group, requirement))
                     }),
+                indexes,
                 &mut contexts,
             );
             self.extend_source_activation_contexts_from_edges(package, &mut contexts);
@@ -704,6 +708,7 @@ impl Lock {
         package: &PackageName,
         requirements: impl IntoIterator<Item = &'a Requirement>,
         group_requirements: impl IntoIterator<Item = (&'a GroupName, &'a Requirement)>,
+        indexes: Option<&IndexLocations>,
         contexts: &mut BTreeSet<ConflictItem>,
     ) {
         let requirements = requirements.into_iter().collect::<Vec<_>>();
@@ -725,7 +730,7 @@ impl Lock {
             if production_requirements
                 .get(&requirement.name)
                 .is_some_and(|requirements| {
-                    Self::changes_production_source(requirement, requirements)
+                    Self::changes_production_source(requirement, requirements, indexes)
                 })
             {
                 Self::extend_source_activation_contexts(package, requirement, contexts);
@@ -734,7 +739,7 @@ impl Lock {
         for (group, requirement) in group_requirements {
             if production_requirements.get(&requirement.name).is_some_and(
                 |production_requirements| {
-                    Self::changes_production_source(requirement, production_requirements)
+                    Self::changes_production_source(requirement, production_requirements, indexes)
                 },
             ) && Self::extend_source_activation_contexts(package, requirement, contexts)
             {
@@ -794,11 +799,12 @@ impl Lock {
     fn changes_production_source(
         requirement: &Requirement,
         production_requirements: &[&Requirement],
+        indexes: Option<&IndexLocations>,
     ) -> bool {
         let same_source_marker = production_requirements
             .iter()
             .filter(|production_requirement| {
-                Self::same_source(&production_requirement.source, &requirement.source)
+                Self::same_source(&production_requirement.source, &requirement.source, indexes)
             })
             .fold(MarkerTree::FALSE, |mut marker, production_requirement| {
                 marker.or(production_requirement.marker);
@@ -810,20 +816,28 @@ impl Lock {
     }
 
     /// Return whether two requirements identify the same source, ignoring registry specifiers.
-    fn same_source(left: &RequirementSource, right: &RequirementSource) -> bool {
+    fn same_source(
+        left: &RequirementSource,
+        right: &RequirementSource,
+        indexes: Option<&IndexLocations>,
+    ) -> bool {
         match (left, right) {
             (
                 RequirementSource::Registry {
-                    index: left_index,
-                    conflict: left_conflict,
-                    ..
+                    index: left_index, ..
                 },
                 RequirementSource::Registry {
-                    index: right_index,
-                    conflict: right_conflict,
-                    ..
+                    index: right_index, ..
                 },
-            ) => left_index == right_index && left_conflict == right_conflict,
+            ) => match (left_index.as_ref(), right_index.as_ref()) {
+                (Some(left), Some(right)) => left == right,
+                (None, None) => true,
+                (Some(index), None) | (None, Some(index)) => indexes
+                    .and_then(IndexLocations::default_index)
+                    .is_some_and(|default| {
+                        index.url() == default.url() && index.format == default.format
+                    }),
+            },
             _ => left == right,
         }
     }
@@ -1935,7 +1949,7 @@ impl Lock {
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<SatisfiesResult<'_>, LockError> {
-        let expected_source_activation_contexts = self.expected_source_activation_contexts();
+        let expected_source_activation_contexts = self.expected_source_activation_contexts(indexes);
         if expected_source_activation_contexts != self.source_activation_contexts {
             return Ok(SatisfiesResult::MismatchedSourceActivationContexts(
                 expected_source_activation_contexts,
@@ -2322,6 +2336,7 @@ impl Lock {
                                 .iter()
                                 .map(move |requirement| (group, requirement))
                         }),
+                    indexes,
                     &mut expected_source_activation_contexts,
                 );
                 if expected_source_activation_contexts != self.source_activation_contexts {

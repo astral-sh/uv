@@ -25582,6 +25582,78 @@ fn lock_unconditional_source_shared_with_optional_dependency() -> Result<()> {
     Ok(())
 }
 
+/// An extra-scoped explicit index that points at the default index does not
+/// need a source activation context.
+#[test]
+fn lock_multiple_sources_explicit_default_index_needs_no_activation_context() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = { index = "pypi-explicit", extra = "alt" }
+
+        [[tool.uv.index]]
+        name = "pypi-explicit"
+        url = "https://pypi.org/simple"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .lock()
+            .arg("--default-index")
+            .arg("https://pypi.org/simple"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let conflicts = lock
+        .get("conflicts")
+        .map(ToString::to_string)
+        .unwrap_or_default();
+    assert_snapshot!(conflicts.trim(), @"");
+
+    // Re-run with `--locked`.
+    uv_snapshot!(
+        context.filters(),
+        context
+            .lock()
+            .arg("--locked")
+            .arg("--default-index")
+            .arg("https://pypi.org/simple"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
 /// A source shared by production and optional dependencies still needs an
 /// activation context when the source declarations have disjoint markers.
 #[test]

@@ -1002,7 +1002,7 @@ async fn do_lock(
                 lock_supported_environments.clone().into_markers(),
             )?
             .with_manifest(manifest)
-            .with_conflicts(conflicts)
+            .with_conflicts(conflicts, index_locations)
             .with_required_environments(lock_required_environments.into_markers());
 
             if previous.as_ref().is_some_and(|previous| *previous == lock) {
