@@ -25712,6 +25712,62 @@ fn lock_multiple_sources_group_explicit_default_index_needs_no_activation_contex
     Ok(())
 }
 
+/// Materialized group edges must evaluate requirement markers against the
+/// package extras activated by the group.
+#[test]
+fn lock_multiple_sources_group_materialized_marker_activates_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["project[foo]", "iniconfig ; extra == 'foo'"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "use" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let project = lock["package"]
+        .as_array_of_tables()
+        .expect("lock packages")
+        .iter()
+        .find(|package| package["name"].as_str() == Some("project"))
+        .expect("project package");
+    let dependency = project["dev-dependencies"]["use"]
+        .as_array()
+        .expect("group dependencies")
+        .iter()
+        .find(|dependency| {
+            dependency
+                .as_inline_table()
+                .and_then(|dependency| dependency.get("name"))
+                .and_then(toml_edit::Value::as_str)
+                == Some("iniconfig")
+        })
+        .expect("iniconfig dependency");
+    assert_snapshot!(
+        dependency.to_string(),
+        @r#"{ name = "iniconfig", version = "1.1.1", source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }, marker = "extra == 'extra-7-project-foo' and extra == 'group-7-project-use'" }"#
+    );
+
+    Ok(())
+}
+
 /// A group source that matches production throughout its marker space should
 /// not require an activation context because production differs elsewhere.
 #[test]

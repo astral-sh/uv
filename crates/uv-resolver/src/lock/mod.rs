@@ -3473,7 +3473,12 @@ impl Package {
                 .iter()
                 .filter(|requirement| source_variant_names.contains(&requirement.name))
             {
-                let requirement_marker = UniversalMarker::from_combined(requirement.marker);
+                let requirement_marker = UniversalMarker::from_source_scope(
+                    requirement.marker,
+                    &self.id.name,
+                    None,
+                    None,
+                );
                 let requirement_pep508 = requirement_marker.pep508();
                 let mut branches = self
                     .dependencies
