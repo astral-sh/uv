@@ -8859,6 +8859,78 @@ fn tool_uv_sources_ignore_unrequested_dependency_groups_for_path_install() -> Re
     Ok(())
 }
 
+/// Extra-scoped explicit indexes must remain available during specific
+/// resolution.
+#[test]
+fn tool_uv_sources_extra_explicit_index_for_path_install() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let default_index = context.temp_dir.child("default");
+    default_index.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        default_index.join("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    let explicit_index = context.temp_dir.child("explicit");
+    explicit_index.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        explicit_index.join("ok-2.0.0-py3-none-any.whl"),
+    )?;
+
+    let package = context.temp_dir.child("pkg");
+    package.create_dir_all()?;
+    package.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "pkg"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        alt = ["ok"]
+
+        [tool.uv.sources]
+        ok = [
+            {{ index = "explicit", extra = "alt" }},
+        ]
+
+        [[tool.uv.index]]
+        name = "explicit"
+        url = "{}"
+        format = "flat"
+        explicit = true
+
+        [[tool.uv.index]]
+        name = "default"
+        url = "{}"
+        format = "flat"
+        default = true
+    "#,
+        explicit_index.portable_display(),
+        default_index.portable_display()
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("{}[alt]", package.path().display())), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + ok==2.0.0
+     + pkg==0.1.0 (from file://[TEMP_DIR]/pkg)
+    ");
+
+    Ok(())
+}
+
 /// Allow transitive URLs via recursive extras.
 #[test]
 fn recursive_extra_transitive_url() -> Result<()> {

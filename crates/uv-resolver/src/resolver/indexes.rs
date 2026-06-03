@@ -43,8 +43,10 @@ impl Indexes {
             let mut has_extra = false;
             requirement.marker.visit_extras(|_, _| has_extra = true);
             // Transitive package metadata does not retain its declaring project in `origin`.
-            // Complementary source edges preserve these extra-scoped indexes directly.
-            if requirement.origin.is_none() && has_extra {
+            // During universal resolution, complementary source edges preserve these extra-scoped
+            // indexes directly. Specific resolution evaluates the active extra immediately, so it
+            // must retain the index mapping here.
+            if env.marker_environment().is_none() && requirement.origin.is_none() && has_extra {
                 continue;
             }
             indexes.add_with_project(requirement.as_ref(), index.clone(), project);
