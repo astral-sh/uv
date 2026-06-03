@@ -2974,6 +2974,11 @@ impl Package {
                             dependency.extra.clone(),
                             marker,
                         ),
+                        group_dependencies: self
+                            .dependency_groups
+                            .get(group)
+                            .cloned()
+                            .unwrap_or_default(),
                     });
                 }
             }
@@ -3801,6 +3806,7 @@ struct GroupSourceFallback {
     group: GroupName,
     project: PackageName,
     dependency: Dependency,
+    group_dependencies: Vec<Dependency>,
 }
 
 /// Add the selected package's dependencies to a synthesized dependency-group fallback.
@@ -3838,10 +3844,44 @@ fn add_group_source_fallback_dependencies(
             };
 
             for dependency in dependencies {
-                let mut marker = dependency.complexified_marker;
-                marker.assume_conflict_item(&project);
-                marker.and(fallback_marker);
-                if marker.is_false() {
+                let mut remaining_marker = dependency.complexified_marker;
+                remaining_marker.assume_conflict_item(&project);
+                remaining_marker.and(fallback_marker);
+
+                for group_dependency in fallback
+                    .group_dependencies
+                    .iter()
+                    .filter(|candidate| candidate.package_id.name == dependency.package_id.name)
+                {
+                    let mut marker = UniversalMarker::new(
+                        dependency.complexified_marker.pep508(),
+                        ConflictMarker::TRUE,
+                    );
+                    marker.and(group_dependency.complexified_marker);
+                    marker.and(fallback_marker);
+                    if marker.is_false() {
+                        continue;
+                    }
+
+                    additions.push((
+                        package_id.clone(),
+                        extra.clone(),
+                        Dependency::new(
+                            requires_python,
+                            group_dependency.package_id.clone(),
+                            dependency.extra.clone(),
+                            marker,
+                        ),
+                    ));
+                    queue.push_back((group_dependency.package_id.clone(), None));
+                    for extra in &dependency.extra {
+                        queue.push_back((group_dependency.package_id.clone(), Some(extra.clone())));
+                    }
+
+                    remaining_marker
+                        .and(UniversalMarker::from_combined(marker.combined().negate()));
+                }
+                if remaining_marker.is_false() {
                     continue;
                 }
 
@@ -3852,7 +3892,7 @@ fn add_group_source_fallback_dependencies(
                         requires_python,
                         dependency.package_id.clone(),
                         dependency.extra.clone(),
-                        marker,
+                        remaining_marker,
                     ),
                 ));
                 queue.push_back((dependency.package_id.clone(), None));
