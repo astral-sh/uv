@@ -23,9 +23,24 @@ pub struct FlatDependencyGroups(BTreeMap<GroupName, FlatDependencyGroup>);
 #[derive(Debug, Default, Clone)]
 pub struct FlatDependencyGroup {
     pub requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
-    /// The dependency groups transitively included by this group.
-    pub includes: BTreeSet<GroupName>,
+    /// For each requirement, the dependency groups through which it was included.
+    requirement_includes: Vec<BTreeSet<GroupName>>,
     pub requires_python: Option<VersionSpecifiers>,
+}
+
+impl FlatDependencyGroup {
+    /// Consume the group and return each requirement with the dependency groups through which it
+    /// was included.
+    pub fn into_requirements_with_includes(
+        self,
+    ) -> impl Iterator<
+        Item = (
+            uv_pep508::Requirement<VerbatimParsedUrl>,
+            BTreeSet<GroupName>,
+        ),
+    > {
+        self.requirements.into_iter().zip(self.requirement_includes)
+    }
 }
 
 impl FlatDependencyGroups {
@@ -81,11 +96,13 @@ impl FlatDependencyGroups {
         // way, and letting things include-group a group that isn't defined would be a
         // mess for other python tools.
         if let Some(dev_dependencies) = dev_dependencies {
-            dependency_groups
+            let group = dependency_groups
                 .entry(DEV_DEPENDENCIES.clone())
-                .or_insert_with(FlatDependencyGroup::default)
-                .requirements
-                .extend(dev_dependencies.clone());
+                .or_insert_with(FlatDependencyGroup::default);
+            for requirement in dev_dependencies {
+                group.requirements.push(requirement.clone());
+                group.requirement_includes.push(BTreeSet::new());
+            }
         }
 
         Ok(dependency_groups)
@@ -131,13 +148,14 @@ impl FlatDependencyGroups {
 
             parents.push(name);
             let mut requirements = Vec::with_capacity(specifiers.len());
-            let mut includes = BTreeSet::new();
             let mut requires_python_intersection = VersionSpecifiers::empty();
             for specifier in *specifiers {
                 match specifier {
                     DependencyGroupSpecifier::Requirement(requirement) => {
                         match uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(requirement) {
-                            Ok(requirement) => requirements.push(requirement),
+                            Ok(requirement) => {
+                                requirements.push((requirement, BTreeSet::new()));
+                            }
                             Err(err) => {
                                 return Err(DependencyGroupErrorInner::GroupParseError(
                                     name.clone(),
@@ -150,9 +168,17 @@ impl FlatDependencyGroups {
                     DependencyGroupSpecifier::IncludeGroup { include_group } => {
                         resolve_group(resolved, groups, settings, include_group, parents)?;
                         if let Some(included) = resolved.get(include_group) {
-                            requirements.extend(included.requirements.iter().cloned());
-                            includes.insert(include_group.clone());
-                            includes.extend(included.includes.iter().cloned());
+                            requirements.extend(
+                                included
+                                    .requirements
+                                    .iter()
+                                    .cloned()
+                                    .zip(included.requirement_includes.iter().cloned())
+                                    .map(|(requirement, mut includes)| {
+                                        includes.insert(include_group.clone());
+                                        (requirement, includes)
+                                    }),
+                            );
 
                             // Intersect the requires-python for this group with the included group's
                             requires_python_intersection = requires_python_intersection
@@ -186,7 +212,7 @@ impl FlatDependencyGroups {
                 // Add the group requires-python as a marker to each requirement
                 // We don't use `requires_python_intersection` because each `include-group`
                 // should already have its markers applied to these.
-                for requirement in &mut requirements {
+                for (requirement, _) in &mut requirements {
                     let extra_markers =
                         RequiresPython::from_specifiers(requires_python).to_marker_tree();
                     requirement.marker.and(extra_markers);
@@ -195,11 +221,12 @@ impl FlatDependencyGroups {
 
             parents.pop();
 
+            let (requirements, requirement_includes) = requirements.into_iter().unzip();
             resolved.insert(
                 name.clone(),
                 FlatDependencyGroup {
                     requirements,
-                    includes,
+                    requirement_includes,
                     requires_python: if requires_python_intersection.is_empty() {
                         None
                     } else {

@@ -11317,6 +11317,73 @@ fn sync_multiple_sources_included_group_activates_source() -> Result<()> {
     Ok(())
 }
 
+/// Sources from an included group must not apply to direct requirements in the including group.
+#[test]
+fn sync_multiple_sources_included_group_does_not_override_direct_requirement() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let default_index = context.temp_dir.child("default");
+    fs_err::create_dir_all(&default_index)?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        default_index.join("ok-2.0.0-py3-none-any.whl"),
+    )?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        context.temp_dir.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        inner = ["ok ; sys_platform == 'win32'"]
+        outer = [
+            { include-group = "inner" },
+            "ok ; sys_platform != 'win32'",
+        ]
+
+        [tool.uv.sources]
+        ok = [
+            { path = "./ok-1.0.0-py3-none-any.whl", group = "inner" },
+        ]
+
+        [[tool.uv.index]]
+        name = "default"
+        url = "./default"
+        format = "flat"
+        default = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--group")
+        .arg("outer")
+        .arg("--no-install-project"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==2.0.0
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn sync_multiple_sources_group_url_with_positive_extra_marker() -> Result<()> {
     let context = uv_test::test_context!("3.12");

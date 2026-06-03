@@ -3790,8 +3790,13 @@ impl Forks {
                 // For example, given `requires-python = ">=3.7"` and `uv ; python_version >= "3.8"`,
                 // where uv itself only supports Python 3.8 and later, we need to fork to ensure
                 // that the resolution can find a solution.
-                if marker::requires_python(dep.package.marker())
-                    .is_none_or(|bound| !python_requirement.raises(&bound))
+                // Source-specific edges with environment markers must also fork before recording
+                // their source, so the source does not leak into a later environment fork where
+                // the dependency marker is false.
+                let source_marker = dep.package.marker().without_extras();
+                if (dep.source.is_unspecified() || source_marker.is_true())
+                    && marker::requires_python(dep.package.marker())
+                        .is_none_or(|bound| !python_requirement.raises(&bound))
                 {
                     let dep = deps.pop().unwrap();
                     let marker = dep.package.marker();

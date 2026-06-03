@@ -141,11 +141,9 @@ impl SourcedDependencyGroups {
         let dependency_groups = dependency_groups
             .into_iter()
             .map(|(name, group)| {
-                let included_groups = group.includes;
                 let requirements = group
-                    .requirements
-                    .into_iter()
-                    .flat_map(|requirement| {
+                    .into_requirements_with_includes()
+                    .flat_map(|(requirement, included_groups)| {
                         // Check if sources should be disabled for this specific package
                         if no_sources.for_package(&requirement.name) {
                             vec![Ok(Requirement::from(requirement))].into_iter()

@@ -103,6 +103,11 @@ impl DependencySource {
         }
     }
 
+    /// Returns `true` if the dependency edge does not constrain the package source.
+    pub(crate) fn is_unspecified(&self) -> bool {
+        matches!(self, Self::Unspecified)
+    }
+
     /// Return the conflict item attached to this source, if any.
     fn conflicting_item(&self) -> Option<ConflictItemRef<'_>> {
         match self {
