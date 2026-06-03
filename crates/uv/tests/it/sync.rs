@@ -10601,6 +10601,64 @@ fn sync_multiple_sources_group_activates_dependency_extra() -> Result<()> {
     Ok(())
 }
 
+/// A dependency group on a non-project workspace root must activate extras
+/// required by source-selection markers.
+#[test]
+fn sync_multiple_sources_root_group_activates_dependency_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [dependency-groups]
+        alt = ["pkg-a[alt]"]
+
+        [tool.uv.workspace]
+        members = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = { workspace = true }
+        "#,
+    )?;
+
+    let package = context.temp_dir.child("pkg-a");
+    fs_err::create_dir_all(&package)?;
+    package.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "alt" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("alt"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==1.1.1 (from https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl)
+     + pkg-a==0.1.0 (from file://[TEMP_DIR]/pkg-a)
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn sync_derivation_chain() -> Result<()> {
     let context = uv_test::test_context!("3.12");
