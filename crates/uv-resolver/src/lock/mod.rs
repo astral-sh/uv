@@ -67,7 +67,7 @@ pub use crate::lock::installable::Installable;
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::TreeDisplay;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
-use crate::universal_marker::{ConflictMarker, UniversalMarker};
+use crate::universal_marker::{ConflictMarker, UniversalMarker, encode_package_extras};
 use crate::{
     ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage, ExcludeNewerSpan, ExcludeNewerValue,
     InMemoryIndex, MetadataResponse, PrereleaseMode, ResolutionMode, ResolverOutput,
@@ -462,6 +462,10 @@ impl Lock {
                     )?;
                 }
             }
+        }
+
+        for package in packages.values_mut() {
+            package.add_group_source_fallbacks(&requires_python);
         }
 
         let packages = packages.into_values().collect();
@@ -3030,6 +3034,79 @@ impl Package {
 
         deps.push(dep);
         Ok(())
+    }
+
+    /// Add source-agnostic dependency-group fallbacks from the resolved production dependencies.
+    fn add_group_source_fallbacks(&mut self, requires_python: &RequiresPython) {
+        let mut fallbacks = Vec::new();
+
+        for (group, requirements) in &self.metadata.dependency_groups {
+            for requirement in requirements {
+                if !Self::is_unsourced_base_requirement(requirement)
+                    || !requirements.iter().any(|candidate| {
+                        candidate.name == requirement.name
+                            && Self::is_source_specific_base_requirement(candidate)
+                    })
+                    || !self.metadata.requires_dist.iter().any(|candidate| {
+                        candidate.name == requirement.name
+                            && Self::is_unsourced_base_requirement(candidate)
+                    })
+                {
+                    continue;
+                }
+
+                let group_marker = UniversalMarker::new(
+                    encode_package_extras(requirement.marker, &self.id.name),
+                    ConflictMarker::group(&self.id.name, group),
+                );
+                for dependency in &self.dependencies {
+                    if dependency.package_id.name != requirement.name {
+                        continue;
+                    }
+
+                    let mut marker = dependency.complexified_marker;
+                    marker.and(group_marker);
+                    if marker.is_false() {
+                        continue;
+                    }
+
+                    fallbacks.push((
+                        group.clone(),
+                        Dependency::new(
+                            requires_python,
+                            dependency.package_id.clone(),
+                            dependency.extra.clone(),
+                            marker,
+                        ),
+                    ));
+                }
+            }
+        }
+
+        for (group, fallback) in fallbacks {
+            let dependencies = self.dependency_groups.entry(group).or_default();
+            if !dependencies.contains(&fallback) {
+                dependencies.push(fallback);
+            }
+        }
+    }
+
+    /// Returns `true` if `requirement` is an unsourced base requirement.
+    fn is_unsourced_base_requirement(requirement: &Requirement) -> bool {
+        matches!(
+            requirement.source,
+            RequirementSource::Registry { index: None, .. }
+        ) && requirement.extras.is_empty()
+            && requirement.groups.is_empty()
+    }
+
+    /// Returns `true` if `requirement` is a source-specific base requirement.
+    fn is_source_specific_base_requirement(requirement: &Requirement) -> bool {
+        !matches!(
+            requirement.source,
+            RequirementSource::Registry { index: None, .. }
+        ) && requirement.extras.is_empty()
+            && requirement.groups.is_empty()
     }
 
     /// Convert the [`Package`] to a [`Dist`] that can be used in installation, along with its hash.
