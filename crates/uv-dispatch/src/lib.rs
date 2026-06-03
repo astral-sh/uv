@@ -443,29 +443,30 @@ impl<'a> BuildDispatch<'a> {
             .bootstrap_direct_dependencies()
             .unwrap_or_else(|| resolution.direct_dependencies());
         let markers = self.interpreter.resolver_marker_environment();
+        let initial_requirements = resolution.initial_requirements().unwrap_or(requirements);
         let mut selected = Resolution::default();
-        for requirement in requirements
+        for initial_requirement in initial_requirements
             .iter()
             .filter(|requirement| requirement.evaluate_markers(Some(&markers), &[]))
         {
             let dependency = direct_dependencies
                 .iter()
-                .find(|dependency| locked_dependency_satisfies(requirement, dependency))
+                .find(|dependency| locked_dependency_satisfies(initial_requirement, dependency))
                 .or_else(|| {
                     // Match-runtime requirements are source-matched when replay begins, while
-                    // ordinary direct paths are source-matched in the stored initial requirements.
-                    // Prefer the current requirement, then use its lowered stored counterpart.
-                    resolution
-                        .initial_requirements()?
+                    // the stored initial requirement retains its original registry source. Use
+                    // current requirements only to find the source-matched counterpart of a
+                    // locked initial root; otherwise mutable source changes could bypass the lock.
+                    requirements
                         .iter()
-                        .filter(|initial_requirement| {
-                            initial_requirement.name == requirement.name
-                                && initial_requirement.extras == requirement.extras
-                                && initial_requirement.evaluate_markers(Some(&markers), &[])
+                        .filter(|requirement| {
+                            requirement.name == initial_requirement.name
+                                && requirement.extras == initial_requirement.extras
+                                && requirement.evaluate_markers(Some(&markers), &[])
                         })
-                        .find_map(|initial_requirement| {
+                        .find_map(|requirement| {
                             direct_dependencies.iter().find(|dependency| {
-                                locked_dependency_satisfies(initial_requirement, dependency)
+                                locked_dependency_satisfies(requirement, dependency)
                             })
                         })
                 })?;

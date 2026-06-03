@@ -2759,6 +2759,21 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         .assert()
         .success();
 
+    let missing_url = Url::from_directory_path(context.temp_dir.child("missing").path()).unwrap();
+    child_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["missing @ {missing_url}"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+    ))?;
+
     context
         .temp_dir
         .child("pyproject.toml")
