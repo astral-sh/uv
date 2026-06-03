@@ -174,7 +174,7 @@ impl<'lock> ExportableRequirements<'lock> {
 
         // Make direct dependency-group activation order-independent before evaluating the
         // selected group edges.
-        activate_dependency_group_extras(
+        activate_dependency_group_items(
             target.lock(),
             &selected_group_dependencies,
             &mut activated_items,
@@ -373,7 +373,7 @@ impl<'lock> ExportableRequirements<'lock> {
     }
 }
 
-fn activate_dependency_group_extras(
+fn activate_dependency_group_items(
     lock: &Lock,
     dependencies: &[(&PackageName, &Dependency)],
     activated_items: &mut FxHashMap<ConflictItem, MarkerTree>,
@@ -381,13 +381,20 @@ fn activate_dependency_group_extras(
     loop {
         let mut changed = false;
         for (parent, dependency) in dependencies {
-            if dependency.extra.is_empty() {
+            let activates_project = dependency.package_id.name == **parent;
+            if dependency.extra.is_empty() && !activates_project {
                 continue;
             }
 
-            // An edge can activate the same extras that its marker depends on, so include them
+            // An edge can activate the same items that its marker depends on, so include them
             // while determining the conditions under which the edge applies.
             let mut prospective_items = activated_items.clone();
+            if activates_project {
+                prospective_items.insert(
+                    ConflictItem::from(dependency.package_id.name.clone()),
+                    MarkerTree::TRUE,
+                );
+            }
             for extra in &dependency.extra {
                 prospective_items.insert(
                     ConflictItem::from((dependency.package_id.name.clone(), extra.clone())),
@@ -404,6 +411,13 @@ fn activate_dependency_group_extras(
                 continue;
             }
 
+            if activates_project {
+                let item = ConflictItem::from(dependency.package_id.name.clone());
+                let activated_marker = activated_items.entry(item).or_insert(MarkerTree::FALSE);
+                let previous = *activated_marker;
+                activated_marker.or(marker);
+                changed |= *activated_marker != previous;
+            }
             for extra in &dependency.extra {
                 let item = ConflictItem::from((dependency.package_id.name.clone(), extra.clone()));
                 let activated_marker = activated_items.entry(item).or_insert(MarkerTree::FALSE);
