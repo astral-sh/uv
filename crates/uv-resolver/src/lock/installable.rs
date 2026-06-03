@@ -171,9 +171,8 @@ pub trait Installable<'lock> {
                 .flatten()
             {
                 let additional_activated_extras = newly_activated_extras(dep, &activated_extras);
-                if !dep.complexified_marker.evaluate_for_package(
+                if !dep.complexified_marker.evaluate(
                     marker_env,
-                    &dist.id.name,
                     activated_projects.iter().copied(),
                     activated_extras
                         .iter()
@@ -416,9 +415,8 @@ pub trait Installable<'lock> {
                 for dep in deps {
                     let additional_activated_extras =
                         newly_activated_extras(dep, &activated_extras);
-                    if !dep.complexified_marker.evaluate_for_package(
+                    if !dep.complexified_marker.evaluate(
                         marker_env,
-                        &package.id.name,
                         activated_projects.iter().copied(),
                         activated_extras
                             .iter()
@@ -509,9 +507,8 @@ pub trait Installable<'lock> {
                 Either::Right(package.dependencies.iter())
             };
             for dep in deps {
-                if !dep.complexified_marker.evaluate_for_package(
+                if !dep.complexified_marker.evaluate(
                     marker_env,
-                    &package.id.name,
                     activated_projects.iter().copied(),
                     activated_extras.iter().copied(),
                     activated_groups.iter().copied(),

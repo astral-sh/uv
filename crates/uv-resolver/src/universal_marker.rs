@@ -299,16 +299,15 @@ impl UniversalMarker {
         self.marker.evaluate(env, &[])
     }
 
-    /// Returns true if this universal marker is satisfied by the given marker environment and list
-    /// of activated extras and groups for a dependency declared by `package`.
+    /// Returns true if this universal marker is satisfied by the given marker
+    /// environment and list of activated extras and groups.
     ///
-    /// The activated extras and groups should be the complete set activated for a particular
-    /// context. Each extra and group must be scoped to the package that it's enabled for, while raw
-    /// PEP 508 extra markers are evaluated relative to `package`.
-    pub(crate) fn evaluate_for_package<P, E, G>(
+    /// The activated extras and groups should be the complete set activated
+    /// for a particular context. And each extra and group must be scoped to
+    /// the particular package that it's enabled for.
+    pub(crate) fn evaluate<P, E, G>(
         self,
         env: &MarkerEnvironment,
-        package: &PackageName,
         projects: impl Iterator<Item = P>,
         extras: impl Iterator<Item = (P, E)>,
         groups: impl Iterator<Item = (P, G)>,
@@ -318,21 +317,14 @@ impl UniversalMarker {
         E: Borrow<ExtraName>,
         G: Borrow<GroupName>,
     {
-        let extras = extras.collect::<Vec<_>>();
         let projects = projects.map(|package| encode_project(package.borrow()));
-        let scoped_extras = extras
-            .iter()
-            .filter(|(candidate, _)| candidate.borrow() == package)
-            .map(|(_, extra)| extra.borrow().clone());
-        let extras = extras
-            .iter()
-            .map(|(package, extra)| encode_package_extra(package.borrow(), extra.borrow()));
+        let extras =
+            extras.map(|(package, extra)| encode_package_extra(package.borrow(), extra.borrow()));
         let groups =
             groups.map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
         self.marker.evaluate(
             env,
             &projects
-                .chain(scoped_extras)
                 .chain(extras)
                 .chain(groups)
                 .collect::<Vec<ExtraName>>(),
