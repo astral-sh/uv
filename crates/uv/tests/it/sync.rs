@@ -10868,7 +10868,7 @@ fn sync_multiple_sources_group_extra_excludes_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0

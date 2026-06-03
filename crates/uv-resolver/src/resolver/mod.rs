@@ -149,7 +149,9 @@ struct FlattenedRequirement<'a> {
 /// Conditional source variants and solver-only relationships between their activation contexts.
 struct ExpandedSourceVariants {
     variants: Vec<SourceVariant>,
-    recursive_activation_marker: UniversalMarker,
+    activation_marker: UniversalMarker,
+    activation_extras: BTreeSet<ExtraName>,
+    activation_groups: BTreeSet<GroupName>,
 }
 
 impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
@@ -1963,9 +1965,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     )
                 } else if env.marker_environment().is_none() && (extra.is_some() || group.is_some())
                 {
+                    let source_variants = if metadata.source_variants.is_empty() {
+                        None
+                    } else {
+                        Some(self.source_variants_with_recursive_extras(
+                            &metadata.requires_dist,
+                            &metadata.dependency_groups,
+                            &metadata.provides_extra,
+                            &metadata.source_variants,
+                            name,
+                            env,
+                            python_requirement,
+                        ))
+                    };
                     self.dependencies_with_scoped_sources(
                         requirements,
-                        &metadata.source_variants,
+                        source_variants.as_ref(),
                         name,
                         extra.as_ref(),
                         group.as_ref(),
@@ -2105,8 +2120,33 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
     }
 
-    /// Extend conditional source variants to extras that recursively activate them, and record
-    /// solver-only activation relationships and extras unconditionally activated by groups.
+    /// Record that the trigger marker activates each of the given extras.
+    fn add_activation_implications<'a>(
+        trigger: UniversalMarker,
+        extras: impl IntoIterator<Item = &'a ExtraName>,
+        project_name: &PackageName,
+        activation_marker: &mut UniversalMarker,
+    ) -> BTreeSet<ExtraName> {
+        let mut implied_extras = BTreeSet::new();
+        for extra in extras {
+            let mut implication = trigger.negate();
+            implication.or(UniversalMarker::from_source_scope(
+                MarkerTree::TRUE,
+                project_name,
+                Some(extra),
+                None,
+            ));
+            if implication.is_true() {
+                continue;
+            }
+            activation_marker.and(implication);
+            implied_extras.insert(extra.clone());
+        }
+        implied_extras
+    }
+
+    /// Extend conditional source variants to recursive extras and record solver-only activation
+    /// relationships.
     fn source_variants_with_recursive_extras(
         &self,
         dependencies: &[Requirement],
@@ -2118,7 +2158,72 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         python_requirement: &PythonRequirement,
     ) -> ExpandedSourceVariants {
         let mut variants = source_variants.to_vec();
-        let mut recursive_activation_marker = UniversalMarker::TRUE;
+        let mut activation_marker = UniversalMarker::TRUE;
+        let mut activation_extras = BTreeSet::new();
+        let mut activation_groups = BTreeSet::new();
+        let mut source_extras = BTreeSet::new();
+        let mut selector_extras = BTreeSet::new();
+        for variant in source_variants {
+            if let Some(extra) = variant.extra.as_ref() {
+                source_extras.insert(extra.clone());
+                selector_extras.insert(extra.clone());
+            }
+            variant.requirement.marker.visit_extras(|_, extra| {
+                source_extras.insert(extra.clone());
+            });
+            source_extras.extend(variant.constraint_extras.iter().cloned());
+            for constraint in self.constraints_for_requirement(
+                Cow::Borrowed(&variant.requirement),
+                variant.extra.as_ref(),
+                true,
+                env,
+                python_requirement.to_marker_tree(),
+                python_requirement,
+            ) {
+                constraint.marker.visit_extras(|_, extra| {
+                    source_extras.insert(extra.clone());
+                });
+            }
+        }
+        for (group, requirements) in dev_dependencies {
+            for requirement in requirements.iter().filter(|requirement| {
+                &requirement.name == project_name && !requirement.marker.is_false()
+            }) {
+                let activated_extras = Self::recursively_activated_extras(
+                    dependencies,
+                    project_name,
+                    requirement.marker,
+                    requirement.extras.iter().cloned().collect(),
+                );
+                let activated_extras = activated_extras
+                    .into_iter()
+                    .filter(|extra| source_extras.contains(extra))
+                    .collect::<BTreeSet<_>>();
+                if activated_extras.is_empty() {
+                    continue;
+                }
+                let implied_extras = Self::add_activation_implications(
+                    UniversalMarker::from_source_scope(
+                        requirement.marker,
+                        project_name,
+                        None,
+                        Some(group),
+                    ),
+                    &activated_extras,
+                    project_name,
+                    &mut activation_marker,
+                );
+                if implied_extras.is_empty() {
+                    continue;
+                }
+                activation_groups.insert(group.clone());
+                activation_extras.extend(
+                    implied_extras
+                        .into_iter()
+                        .filter(|extra| !selector_extras.contains(extra)),
+                );
+            }
+        }
         for variant in &mut variants {
             let Some(group) = variant.group.as_ref() else {
                 continue;
@@ -2179,25 +2284,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     requirement.marker,
                     BTreeSet::from([extra.clone()]),
                 );
-                let activation_marker = UniversalMarker::from_source_scope(
+                let trigger = UniversalMarker::from_source_scope(
                     requirement.marker,
                     project_name,
                     Some(extra),
                     None,
                 );
-                for constraint_extra in &constraint_extras {
-                    if constraint_extra == extra {
-                        continue;
-                    }
-                    let mut implication = activation_marker.negate();
-                    implication.or(UniversalMarker::from_source_scope(
-                        MarkerTree::TRUE,
-                        project_name,
-                        Some(constraint_extra),
-                        None,
-                    ));
-                    recursive_activation_marker.and(implication);
-                }
+                let _ = Self::add_activation_implications(
+                    trigger,
+                    &constraint_extras,
+                    project_name,
+                    &mut activation_marker,
+                );
                 let variant = SourceVariant {
                     requirement: requirement.into_owned(),
                     extra: Some(extra.clone()),
@@ -2216,7 +2314,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
         ExpandedSourceVariants {
             variants,
-            recursive_activation_marker,
+            activation_marker,
+            activation_extras,
+            activation_groups,
         }
     }
 
@@ -2266,7 +2366,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 variant.extra.as_ref(),
                 variant.group.as_ref(),
             );
-            solver_marker.and(source_variants.recursive_activation_marker);
+            solver_marker.and(source_variants.activation_marker);
             if variant.extra.is_some() || variant.group.is_some() || !requirement.marker.is_true() {
                 selector_markers
                     .entry(requirement.name.clone())
@@ -2330,7 +2430,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             None,
                         ));
                     }
-                    marker.and(source_variants.recursive_activation_marker);
+                    marker.and(source_variants.activation_marker);
                     let source_extra_scopes = UniversalMarker::source_extra_scopes(
                         constraint.marker,
                         project_name,
@@ -2402,7 +2502,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         None,
                     );
                     marker.and(selector_marker.negate());
-                    marker.and(source_variants.recursive_activation_marker);
+                    marker.and(source_variants.activation_marker);
                     if marker.is_false() || !env.included_by_marker(marker.combined()) {
                         return Vec::new();
                     }
@@ -2471,7 +2571,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         )
     }
 
-    /// Scope source-bearing optional and group dependencies to the context that introduced them.
+    /// Scope source-bearing and source-activation dependencies to the context that introduced them.
     ///
     /// Source identity is stateful during resolution. Keeping these edges scoped prevents a URL or
     /// explicit index from being installed into a fork before the corresponding extra or group is
@@ -2479,7 +2579,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn dependencies_with_scoped_sources(
         &self,
         requirements: Vec<FlattenedRequirement<'_>>,
-        source_variants: &[SourceVariant],
+        source_variants: Option<&ExpandedSourceVariants>,
         project_name: &PackageName,
         extra: Option<&ExtraName>,
         group: Option<&GroupName>,
@@ -2491,16 +2591,59 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let source_extra = requirement.source_extra.as_ref();
             let requirement = requirement.requirement;
             let source = DependencySource::from_source(&requirement.source);
-            let source_variant = source_variants.iter().any(|variant| {
-                variant.requirement.name == requirement.name
-                    && DependencySource::from_source(&variant.requirement.source) == source
-                    && if variant.extra.is_some() || variant.group.is_some() {
-                        variant.extra.as_ref() == source_extra && variant.group.as_ref() == group
-                    } else {
-                        variant.requirement.marker == requirement.marker
-                    }
+            let source_variant = source_variants.is_some_and(|source_variants| {
+                source_variants.variants.iter().any(|variant| {
+                    variant.requirement.name == requirement.name
+                        && DependencySource::from_source(&variant.requirement.source) == source
+                        && if variant.extra.is_some() || variant.group.is_some() {
+                            variant.extra.as_ref() == source_extra
+                                && variant.group.as_ref() == group
+                        } else {
+                            variant.requirement.marker == requirement.marker
+                        }
+                })
             });
             if !source_variant || source == DependencySource::Unspecified {
+                let scoped_extra = extra.is_some_and(|extra| {
+                    source_variants.is_some_and(|source_variants| {
+                        source_variants.activation_extras.contains(extra)
+                    })
+                });
+                let scoped_group_self = group.is_some_and(|group| {
+                    &requirement.name == project_name
+                        && source_variants.is_some_and(|source_variants| {
+                            source_variants.activation_groups.contains(group)
+                        })
+                });
+                if scoped_extra || scoped_group_self {
+                    let edge_marker = requirement.marker;
+                    let mut marker = UniversalMarker::from_source_scope(
+                        requirement.marker,
+                        project_name,
+                        extra,
+                        group,
+                    );
+                    if let Some(source_variants) = source_variants {
+                        marker.and(source_variants.activation_marker);
+                    }
+                    if marker.is_false() || !env.included_by_marker(marker.combined()) {
+                        continue;
+                    }
+                    dependencies.extend(PubGrubDependency::from_requirement_with_marker(
+                        &self.conflicts,
+                        requirement,
+                        marker.combined(),
+                        DependencySourceContext {
+                            conflict: Self::source_conflict_item(project_name, extra, group),
+                            edge_marker: Some(edge_marker),
+                            ..DependencySourceContext::default()
+                        },
+                        source,
+                        group,
+                        Some(parent_package),
+                    ));
+                    continue;
+                }
                 dependencies.extend(PubGrubDependency::from_requirement(
                     &self.conflicts,
                     requirement,
@@ -2536,8 +2679,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 ));
             }
 
-            let marker =
+            let mut marker =
                 UniversalMarker::from_source_scope(requirement.marker, project_name, extra, group);
+            if group.is_some_and(|group| {
+                source_variants.is_some_and(|source_variants| {
+                    source_variants.activation_groups.contains(group)
+                })
+            }) && let Some(source_variants) = source_variants
+            {
+                marker.and(source_variants.activation_marker);
+            }
             let conflict_scoped = Self::source_is_conflict_scoped(&requirement);
             let source_extra_scopes = UniversalMarker::source_extra_scopes(
                 requirement.marker,

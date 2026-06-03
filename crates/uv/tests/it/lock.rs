@@ -26412,6 +26412,52 @@ fn lock_multiple_sources_group_constraint_recursively_activated_extra() -> Resul
     Ok(())
 }
 
+/// Dependency groups must imply the extras they activate when resolving
+/// conditional sources.
+#[test]
+fn lock_multiple_sources_group_implies_activated_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [project.optional-dependencies]
+        foo = ["iniconfig<2"]
+        beta = ["iniconfig"]
+
+        [dependency-groups]
+        use = ["project[foo]", "project[beta]"]
+
+        [tool.uv]
+        constraint-dependencies = ["iniconfig>=2 ; extra != 'foo'"]
+
+        [tool.uv.sources]
+        iniconfig = { index = "pypi-explicit", extra = "beta" }
+
+        [[tool.uv.index]]
+        name = "pypi-explicit"
+        url = "https://pypi.org/simple"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// An extra-marked constraint must apply to a source selected by an extra
 /// marker, even when the source has no explicit extra selector.
 #[tokio::test]
