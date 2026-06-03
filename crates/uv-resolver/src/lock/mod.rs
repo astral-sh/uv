@@ -682,6 +682,17 @@ impl Lock {
     /// that version-1 readers do not support.
     fn update_version_for_activation_markers(&mut self) {
         let mut has_activation_markers = false;
+        let has_group_activated_extras = self
+            .packages
+            .iter()
+            .flat_map(|package| package.dependency_groups.values().flatten())
+            .any(|dependency| !dependency.extra.is_empty())
+            || self
+                .manifest
+                .dependency_groups
+                .values()
+                .flatten()
+                .any(|requirement| !requirement.extras.is_empty());
 
         for dependency in self.packages.iter().flat_map(|package| {
             package
@@ -705,8 +716,10 @@ impl Lock {
         }
 
         // Version-1 readers only collect the activation context when declared conflicts are
-        // present.
-        self.version = if has_activation_markers && self.conflicts.is_empty() {
+        // present, and do not record extras activated by dependency-group edges.
+        self.version = if has_activation_markers
+            && (self.conflicts.is_empty() || has_group_activated_extras)
+        {
             ACTIVATION_MARKER_VERSION
         } else {
             VERSION

@@ -25148,6 +25148,75 @@ fn lock_multiple_sources_extra_source_split_uses_incompatible_version() -> Resul
     Ok(())
 }
 
+/// Dependency-group edges that activate extras require version-2 source-marker
+/// handling even when the lock contains unrelated declared conflicts.
+#[test]
+fn lock_multiple_sources_group_activated_extra_uses_incompatible_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        foo = []
+        bar = []
+
+        [dependency-groups]
+        alt = ["pkg-a[alt]"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                { extra = "foo" },
+                { extra = "bar" },
+            ],
+        ]
+
+        [tool.uv.workspace]
+        members = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = { workspace = true }
+        "#,
+    )?;
+
+    let package = context.temp_dir.child("pkg-a");
+    fs_err::create_dir_all(&package)?;
+    package.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "alt" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    let lock = context.read("uv.lock");
+    let Some(version) = lock.lines().next() else {
+        bail!("lockfile is empty");
+    };
+    assert_snapshot!(version, @"version = 2");
+
+    Ok(())
+}
+
 /// Like `lock_multiple_sources_extra_base_and_optional`, but with an explicit
 /// index instead of a URL. The base dependency should remain on the default
 /// index when the extra is disabled.
