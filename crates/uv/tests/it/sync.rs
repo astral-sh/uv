@@ -10667,6 +10667,24 @@ fn sync_multiple_sources_metadata_only_group() -> Result<()> {
     "
     );
 
+    uv_snapshot!(
+        context.filters(),
+        context.sync().arg("--only-group").arg("use"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - iniconfig==1.1.1 (from https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl)
+     + iniconfig==2.0.0
+    "
+    );
+
     Ok(())
 }
 

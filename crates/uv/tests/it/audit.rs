@@ -917,10 +917,44 @@ async fn audit_metadata_only_group_source_variant_edges() {
         .mount(&server)
         .await;
 
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({
+            "queries": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
+                "version": "2.0.0"
+            }]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
     uv_snapshot!(context.filters(), context
         .audit()
         .arg("--preview-features")
         .arg("audit")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--only-group")
+        .arg("use")
         .arg("--service-url")
         .arg(server.uri()), @"
     success: true

@@ -460,6 +460,10 @@ impl Lock {
             }
         }
 
+        for package in packages.values_mut() {
+            package.add_source_variant_group_dependencies(&requires_python);
+        }
+
         let packages = packages.into_values().collect();
 
         let options = ResolverOptions {
@@ -3328,6 +3332,62 @@ impl Package {
         root: &Path,
     ) -> Result<(), LockError> {
         let dep = Dependency::from_annotated_dist(requires_python, annotated_dist, marker, root)?;
+        self.add_locked_group_dependency(group, dep);
+        Ok(())
+    }
+
+    /// Add production source branches that satisfy source-variant group requirements.
+    fn add_source_variant_group_dependencies(&mut self, requires_python: &RequiresPython) {
+        let mut dependencies = Vec::new();
+        for (group, requirements) in &self.metadata.dependency_groups {
+            let mut requirements_by_name = BTreeMap::<&PackageName, (MarkerTree, bool)>::default();
+            for requirement in requirements {
+                let (marker, has_explicit_source) = requirements_by_name
+                    .entry(&requirement.name)
+                    .or_insert((MarkerTree::FALSE, false));
+                marker.or(requirement.marker);
+                *has_explicit_source |= match &requirement.source {
+                    RequirementSource::Registry {
+                        index, conflict, ..
+                    } => index.is_some() || conflict.is_some(),
+                    _ => true,
+                };
+            }
+
+            for (name, (marker, has_explicit_source)) in requirements_by_name {
+                if !has_explicit_source {
+                    continue;
+                }
+                let marker = UniversalMarker::from_combined(marker);
+                dependencies.extend(
+                    self.dependencies
+                        .iter()
+                        .filter(|dependency| dependency.package_name() == name)
+                        .filter_map(|dependency| {
+                            let mut dependency_marker = dependency.complexified_marker;
+                            dependency_marker.and(marker);
+                            (!dependency_marker.is_false()).then(|| {
+                                (
+                                    group.clone(),
+                                    Dependency::new(
+                                        requires_python,
+                                        dependency.package_id.clone(),
+                                        dependency.extra.clone(),
+                                        dependency_marker,
+                                    ),
+                                )
+                            })
+                        }),
+                );
+            }
+        }
+
+        for (group, dependency) in dependencies {
+            self.add_locked_group_dependency(group, dependency);
+        }
+    }
+
+    fn add_locked_group_dependency(&mut self, group: GroupName, dep: Dependency) {
         let deps = self.dependency_groups.entry(group).or_default();
         for existing_dep in &mut *deps {
             if existing_dep.package_id == dep.package_id
@@ -3336,12 +3396,11 @@ impl Package {
                 && existing_dep.simplified_marker == dep.simplified_marker
             {
                 existing_dep.extra.extend(dep.extra);
-                return Ok(());
+                return;
             }
         }
 
         deps.push(dep);
-        Ok(())
     }
 
     /// Convert the [`Package`] to a [`Dist`] that can be used in installation, along with its hash.

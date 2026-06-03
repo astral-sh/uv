@@ -1300,7 +1300,23 @@ fn metadata_only_group_scoped_source() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     project v0.1.0
-    └── iniconfig v1.1.1
+    ├── iniconfig v1.1.1
+    └── iniconfig v1.1.1 (group: use)
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context.tree().arg("--only-group").arg("use").arg("--locked"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── iniconfig v2.0.0 (group: use)
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
