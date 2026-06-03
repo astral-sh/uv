@@ -25524,6 +25524,53 @@ fn lock_multiple_sources_recursive_extra_preserves_source_scope() -> Result<()> 
     Ok(())
 }
 
+/// Recursive source variants must preserve every nested extra guaranteed by
+/// the outer extra.
+#[test]
+fn lock_multiple_sources_recursive_extra_preserves_all_source_scopes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig<2"]
+        beta = ["iniconfig"]
+        all = ["project[alt]", "project[beta]"]
+
+        [tool.uv]
+        constraint-dependencies = ["iniconfig>=2 ; extra != 'alt'"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { index = "pypi-explicit", extra = "alt" },
+            { index = "pypi-explicit", extra = "beta" },
+        ]
+
+        [[tool.uv.index]]
+        name = "pypi-explicit"
+        url = "https://pypi.org/simple"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// An unconditional source shared by production and optional dependencies does
 /// not need a source activation context.
 #[test]
