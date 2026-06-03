@@ -1,5 +1,5 @@
 use std::io::Cursor;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Result, anyhow};
@@ -51,6 +51,120 @@ fn write_tar_gz(file: File, entries: &[(&str, &str)]) -> Result<()> {
     let writer = block_on(tar.into_inner())?;
     writer.into_inner().into_inner().finish()?;
     Ok(())
+}
+
+fn write_content_addressed_test_wheel(path: &Path) -> Result<()> {
+    let mut writer = ZipFileWriter::new(Vec::new());
+    for (name, contents, mode) in [
+        ("sharedmode/regular.py", "VALUE = 1\n", 0o100_644),
+        ("sharedmode/executable.py", "VALUE = 1\n", 0o100_755),
+        (
+            "sharedmode-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.1\nName: sharedmode\nVersion: 0.1.0\n",
+            0o100_644,
+        ),
+        (
+            "sharedmode-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+            0o100_644,
+        ),
+        (
+            "sharedmode-0.1.0.dist-info/RECORD",
+            "sharedmode/regular.py,,\nsharedmode/executable.py,,\nsharedmode-0.1.0.dist-info/METADATA,,\nsharedmode-0.1.0.dist-info/WHEEL,,\nsharedmode-0.1.0.dist-info/RECORD,,\n",
+            0o100_644,
+        ),
+    ] {
+        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored).unix_permissions(mode);
+        block_on(writer.write_entry_whole(entry, contents.as_bytes()))?;
+    }
+    fs_err::write(path, block_on(writer.close())?)?;
+
+    Ok(())
+}
+
+#[test]
+fn install_uses_content_addressed_archive_files() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context.temp_dir.join("sharedmode-0.1.0-py3-none-any.whl");
+    write_content_addressed_test_wheel(&wheel)?;
+
+    context
+        .pip_install()
+        .arg("--no-index")
+        .arg(&wheel)
+        .assert()
+        .success();
+
+    let archive_files = context.cache_dir.child("archive-files-v0");
+    archive_files
+        .child("regular")
+        .assert(predicates::path::is_dir());
+    archive_files
+        .child("executable")
+        .assert(predicates::path::is_dir());
+
+    let regular = find_archive_file(
+        context.cache_dir.child("archive-v0").path(),
+        "sharedmode/regular.py",
+    )?;
+    let executable = find_archive_file(
+        context.cache_dir.child("archive-v0").path(),
+        "sharedmode/executable.py",
+    )?;
+
+    assert!(
+        hardlink_count(&regular)? >= 2,
+        "regular file was not linked to the archive file store"
+    );
+    assert!(
+        hardlink_count(&executable)? >= 2,
+        "executable file was not linked to the archive file store"
+    );
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        assert_eq!(fs_err::metadata(&regular)?.permissions().mode() & 0o111, 0);
+        assert_ne!(
+            fs_err::metadata(&executable)?.permissions().mode() & 0o111,
+            0
+        );
+    }
+
+    Ok(())
+}
+
+fn find_archive_file(root: &Path, suffix: &str) -> Result<PathBuf> {
+    for entry in WalkDir::new(root) {
+        let entry = entry?;
+        if entry.file_type().is_file() && entry.path().ends_with(Path::new(suffix)) {
+            return Ok(entry.path().to_path_buf());
+        }
+    }
+    Err(anyhow!("failed to find archive file `{suffix}`"))
+}
+
+fn hardlink_count(path: &Path) -> Result<u64> {
+    let metadata = fs_err::metadata(path)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        Ok(metadata.nlink())
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        Ok(u64::from(metadata.number_of_links()))
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = metadata;
+        Ok(u64::MAX)
+    }
 }
 
 #[test]

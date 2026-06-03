@@ -1,6 +1,7 @@
 use blake2::digest::consts::U32;
 use sha2::Digest;
-use std::path::{Component, Path};
+use std::io;
+use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncReadExt, ReadBuf};
@@ -90,6 +91,73 @@ impl std::fmt::Display for DirectoryDigest {
     }
 }
 
+/// A file extracted from an archive, along with the metadata needed to identify it by content.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct ExtractedFile {
+    path: PathBuf,
+    size: u64,
+    executable: bool,
+    digest: blake3::Hash,
+}
+
+impl ExtractedFile {
+    pub(crate) fn new(path: PathBuf, size: u64, executable: bool, digest: blake3::Hash) -> Self {
+        Self {
+            path,
+            size,
+            executable,
+            digest,
+        }
+    }
+
+    /// Return the path of the extracted file within the archive.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Return the size of the extracted file.
+    pub fn size(&self) -> u64 {
+        self.size
+    }
+
+    /// Return whether the extracted file should be executable.
+    pub fn executable(&self) -> bool {
+        self.executable
+    }
+
+    /// Return the hex-encoded content digest of the extracted file.
+    pub fn digest_hex(&self) -> String {
+        self.digest.to_hex().to_string()
+    }
+
+    /// Convert the extracted file into a `(path, size)` pair.
+    pub fn into_record(self) -> (PathBuf, u64) {
+        (self.path, self.size)
+    }
+
+    /// Return the extracted file as a `(path, size)` pair.
+    pub fn to_record(&self) -> (PathBuf, u64) {
+        (self.path.clone(), self.size)
+    }
+
+    /// Recompute the extracted file's digest from its current contents on disk.
+    pub fn rehash_from(&self, root: &Path) -> io::Result<Self> {
+        let contents = fs_err::read(root.join(&self.path))?;
+        let size = u64::try_from(contents.len()).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "extracted file is too large to hash",
+            )
+        })?;
+        Ok(Self {
+            path: self.path.clone(),
+            size,
+            executable: self.executable,
+            digest: blake3::hash(&contents),
+        })
+    }
+}
+
 pub(crate) struct DirectoryDigestFile {
     path: String,
     size: u64,
@@ -106,11 +174,28 @@ impl DirectoryDigestFile {
             digest,
         }
     }
+
+    fn from_extracted(file: &ExtractedFile) -> Self {
+        Self {
+            path: canonical_path(&file.path),
+            size: file.size,
+            executable: file.executable,
+            digest: file.digest,
+        }
+    }
 }
 
 /// An empty directory entry included in an extracted directory digest.
 pub(crate) struct DirectoryDigestDirectory {
     path: String,
+}
+
+impl DirectoryDigestDirectory {
+    fn new(path: &Path) -> Self {
+        Self {
+            path: canonical_path(path),
+        }
+    }
 }
 
 /// Return digest entries for explicit directories that are empty in the extracted tree.
@@ -146,8 +231,25 @@ pub(crate) fn empty_directory_digest_entries<'a>(
         .collect()
 }
 
+/// Compute a deterministic digest for extracted files and empty-directory paths.
+pub fn directory_digest<'a>(
+    files: &[ExtractedFile],
+    empty_directories: impl IntoIterator<Item = &'a Path>,
+) -> DirectoryDigest {
+    directory_digest_entries(
+        files
+            .iter()
+            .map(DirectoryDigestFile::from_extracted)
+            .collect(),
+        empty_directories
+            .into_iter()
+            .map(DirectoryDigestDirectory::new)
+            .collect(),
+    )
+}
+
 /// Compute a deterministic digest for extracted file and empty-directory entries.
-pub(crate) fn directory_digest(
+pub(crate) fn directory_digest_entries(
     mut files: Vec<DirectoryDigestFile>,
     mut directories: Vec<DirectoryDigestDirectory>,
 ) -> DirectoryDigest {

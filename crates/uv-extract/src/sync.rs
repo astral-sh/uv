@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock, mpsc};
 
 use crate::hash::{
-    DirectoryDigest, DirectoryDigestFile, directory_digest, empty_directory_digest_entries,
+    DirectoryDigest, DirectoryDigestFile, ExtractedFile, directory_digest_entries,
+    empty_directory_digest_entries,
 };
 use crate::vendor::CloneableSeekableReader;
 use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
@@ -35,7 +36,7 @@ static HASH_THREAD_POOL: OnceLock<Option<rayon::ThreadPool>> = OnceLock::new();
 /// A successfully extracted file, or an explicit directory that can affect the digest.
 enum ExtractedEntry {
     File {
-        file: (PathBuf, u64),
+        file: ExtractedFile,
         hash_file: DirectoryDigestFile,
     },
     Directory(PathBuf),
@@ -46,7 +47,7 @@ enum ExtractedEntry {
 /// Returns the list of unpacked files and their sizes.
 pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>, Error> {
     let (files, _digest) = unzip_and_hash(reader, target)?;
-    Ok(files)
+    Ok(files.into_iter().map(ExtractedFile::into_record).collect())
 }
 
 /// Unzip a `.zip` archive into the target directory while computing a digest of the extracted files.
@@ -56,7 +57,7 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
 pub fn unzip_and_hash(
     reader: fs_err::File,
     target: &Path,
-) -> Result<(Vec<(PathBuf, u64)>, DirectoryDigest), Error> {
+) -> Result<(Vec<ExtractedFile>, DirectoryDigest), Error> {
     let (reader, filename) = reader.into_parts();
 
     // Parse the central directory once, then clone the archive reader per Rayon worker so
@@ -71,7 +72,7 @@ fn unzip_archive<R>(
     archive: &ZipFileReader<AllowStdIo<R>>,
     filename: &Path,
     target: &Path,
-) -> Result<(Vec<(PathBuf, u64)>, DirectoryDigest), Error>
+) -> Result<(Vec<ExtractedFile>, DirectoryDigest), Error>
 where
     R: std::io::BufRead + std::io::Seek + Clone + Send + Sync + Unpin,
     AllowStdIo<R>: Clone,
@@ -115,10 +116,13 @@ where
     }
     let hash_directories = empty_directory_digest_entries(
         digest_directories.iter().map(PathBuf::as_path),
-        files.iter().map(|(path, _)| path.as_path()),
+        files.iter().map(ExtractedFile::path),
     );
 
-    Ok((files, directory_digest(hash_files, hash_directories)))
+    Ok((
+        files,
+        directory_digest_entries(hash_files, hash_directories),
+    ))
 }
 
 /// Extract a single central-directory entry from a seekable ZIP archive.
@@ -273,10 +277,8 @@ where
     preserve_executable_bit(path, unix_permissions)?;
 
     let hash_file = DirectoryDigestFile::new(&enclosed_name, size, executable, digest);
-    Ok(ExtractedEntry::File {
-        file: (enclosed_name, size),
-        hash_file,
-    })
+    let file = ExtractedFile::new(enclosed_name, size, executable, digest);
+    Ok(ExtractedEntry::File { file, hash_file })
 }
 
 /// Build a buffered writer sized for the expected entry contents.

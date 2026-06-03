@@ -126,6 +126,7 @@ fn prune_cached_env() {
                 r"\[CACHE_DIR\](\\|\/)(.*?)(\\|\/).*",
                 "[CACHE_DIR]/$2/[ENTRY]",
             ),
+            (r"Removed \d+ files", "Removed [N] files"),
         ])
         .collect();
 
@@ -172,6 +173,7 @@ fn prune_stale_symlink() -> Result<()> {
                 r"\[CACHE_DIR\](\\|\/)(.*?)(\\|\/).*",
                 "[CACHE_DIR]/$2/[ENTRY]",
             ),
+            (r"Removed \d+ files", "Removed [N] files"),
         ])
         .collect();
 
@@ -185,7 +187,7 @@ fn prune_stale_symlink() -> Result<()> {
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
-    Removed 44 files ([SIZE])
+    Removed [N] files ([SIZE])
     ");
 
     Ok(())

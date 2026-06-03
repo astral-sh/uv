@@ -1,6 +1,6 @@
 use std::future::Future;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -12,7 +12,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, info_span, instrument, warn};
 use url::Url;
 
-use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
+use uv_cache::{ArchiveFileId, ArchiveId, Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
@@ -22,7 +22,7 @@ use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, File, HashPolicy, Hashed, IndexUrl,
     InstalledDist, Name, SourceDist, ToUrlError,
 };
-use uv_extract::hash::{DirectoryDigest, Hasher};
+use uv_extract::hash::{DirectoryDigest, ExtractedFile, Hasher, directory_digest};
 use uv_fs::write_atomic;
 use uv_git::{GIT_LFS, GitError};
 use uv_install_wheel::validate_and_heal_record;
@@ -739,7 +739,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
 
-                let (files, digest) = match progress {
+                let (record_files, extracted_files, digest) = match progress {
                     Some((reporter, progress)) => {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
                         match extension {
@@ -751,14 +751,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                                 )
                                 .await
                                 .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                                (files, Some(digest))
+                                (record_files(&files), Some(files), Some(digest))
                             }
                             WheelExtension::WhlZst => {
                                 let files =
                                     uv_extract::stream::untar_zst(&mut reader, temp_dir.path())
                                         .await
                                         .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                                (files, None)
+                                (files, None, None)
                             }
                         }
                     }
@@ -771,13 +771,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             )
                             .await
                             .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                            (files, Some(digest))
+                            (record_files(&files), Some(files), Some(digest))
                         }
                         WheelExtension::WhlZst => {
                             let files = uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
                                 .await
                                 .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                            (files, None)
+                            (files, None, None)
                         }
                     },
                 };
@@ -788,12 +788,19 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
-                validate_and_heal_record(temp_dir.path(), files.iter(), dist)
+                validate_and_heal_record(temp_dir.path(), record_files.iter(), dist)
                     .map_err(Error::InstallWheelError)?;
+                let (extracted_files, digest) =
+                    finalize_extracted_files(temp_dir.path(), extracted_files, digest)?;
 
                 // Persist the temporary directory to the directory store.
                 let id = self
-                    .persist_extracted_wheel(temp_dir, wheel_entry.path(), digest)
+                    .persist_extracted_wheel(
+                        temp_dir,
+                        wheel_entry.path(),
+                        extracted_files.as_deref(),
+                        digest,
+                    )
                     .await?;
 
                 if let Some((reporter, progress)) = progress {
@@ -953,9 +960,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .map_err(Error::CacheWrite)?;
 
                 // If no hashes are required, extract the wheel without hashing.
-                let (files, hashes, digest) = if hashes.is_none() {
+                let (record_files, extracted_files, hashes, digest) = if hashes.is_none() {
                     let target = temp_dir.path().to_owned();
-                    let (files, digest) = match extension {
+                    let (record_files, extracted_files, digest) = match extension {
                         WheelExtension::Whl => {
                             let file = file.into_std().await;
                             let (files, digest) = tokio::task::spawn_blocking(move || {
@@ -963,24 +970,24 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             })
                             .await?
                             .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                            (files, Some(digest))
+                            (record_files(&files), Some(files), Some(digest))
                         }
                         WheelExtension::WhlZst => {
                             let files = uv_extract::stream::untar_zst(file, &target)
                                 .await
                                 .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                            (files, None)
+                            (files, None, None)
                         }
                     };
 
-                    (files, HashDigests::empty(), digest)
+                    (record_files, extracted_files, HashDigests::empty(), digest)
                 } else {
                     // Create a hasher for each hash algorithm.
                     let algorithms = hashes.algorithms();
                     let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
                     let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
-                    let (files, digest) = match extension {
+                    let (files, extracted_files, digest) = match extension {
                         WheelExtension::Whl => {
                             let (files, digest) = uv_extract::stream::unzip_and_hash(
                                 query_url,
@@ -989,13 +996,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             )
                             .await
                             .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                            (files, Some(digest))
+                            (record_files(&files), Some(files), Some(digest))
                         }
                         WheelExtension::WhlZst => {
                             let files = uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
                                 .await
                                 .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                            (files, None)
+                            (files, None, None)
                         }
                     };
 
@@ -1003,17 +1010,24 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     hasher.finish().await.map_err(Error::HashExhaustion)?;
                     let hashes = hashers.into_iter().map(HashDigest::from).collect();
 
-                    (files, hashes, digest)
+                    (files, extracted_files, hashes, digest)
                 };
 
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
-                validate_and_heal_record(temp_dir.path(), files.iter(), dist)
+                validate_and_heal_record(temp_dir.path(), record_files.iter(), dist)
                     .map_err(Error::InstallWheelError)?;
+                let (extracted_files, digest) =
+                    finalize_extracted_files(temp_dir.path(), extracted_files, digest)?;
 
                 // Persist the temporary directory to the directory store.
                 let id = self
-                    .persist_extracted_wheel(temp_dir, wheel_entry.path(), digest)
+                    .persist_extracted_wheel(
+                        temp_dir,
+                        wheel_entry.path(),
+                        extracted_files.as_deref(),
+                        digest,
+                    )
                     .await?;
 
                 if let Some((reporter, progress)) = progress {
@@ -1180,7 +1194,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
             // Unzip the wheel to a temporary directory.
-            let (files, digest) = match extension {
+            let (record_files, extracted_files, digest) = match extension {
                 WheelExtension::Whl => {
                     let (files, digest) = uv_extract::stream::unzip_and_hash(
                         path.display(),
@@ -1189,13 +1203,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     )
                     .await
                     .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                    (files, Some(digest))
+                    (record_files(&files), Some(files), Some(digest))
                 }
                 WheelExtension::WhlZst => {
                     let files = uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
                         .await
                         .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                    (files, None)
+                    (files, None, None)
                 }
             };
 
@@ -1206,12 +1220,19 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             // Before we make the wheel accessible by persisting it, ensure that the RECORD is
             // valid.
-            validate_and_heal_record(temp_dir.path(), files.iter(), dist)
+            validate_and_heal_record(temp_dir.path(), record_files.iter(), dist)
                 .map_err(Error::InstallWheelError)?;
+            let (extracted_files, digest) =
+                finalize_extracted_files(temp_dir.path(), extracted_files, digest)?;
 
             // Persist the temporary directory to the directory store.
             let id = self
-                .persist_extracted_wheel(temp_dir, wheel_entry.path(), digest)
+                .persist_extracted_wheel(
+                    temp_dir,
+                    wheel_entry.path(),
+                    extracted_files.as_deref(),
+                    digest,
+                )
                 .await?;
 
             // Create an archive.
@@ -1260,13 +1281,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         })
         .await??;
 
+        let record_files = record_files(&files);
+
         // Before we make the wheel accessible by persisting it, ensure that the RECORD is valid.
-        validate_and_heal_record(temp_dir.path(), files.iter(), dist)
+        validate_and_heal_record(temp_dir.path(), record_files.iter(), dist)
             .map_err(Error::InstallWheelError)?;
+        let (files, digest) = finalize_extracted_files(temp_dir.path(), Some(files), Some(digest))?;
 
         // Persist the temporary directory to the directory store.
         let id = self
-            .persist_extracted_wheel(temp_dir, target, Some(digest))
+            .persist_extracted_wheel(temp_dir, target, files.as_deref(), digest)
             .await?;
 
         Ok(id)
@@ -1277,9 +1301,19 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         temp_dir: tempfile::TempDir,
         target: &Path,
+        files: Option<&[ExtractedFile]>,
         digest: Option<DirectoryDigest>,
     ) -> Result<ArchiveId, Error> {
         let cache = self.build_context.cache();
+        if let Some(files) = files {
+            let cache = cache.clone();
+            let temp_dir_path = temp_dir.path().to_path_buf();
+            let files = files.to_vec();
+            tokio::task::spawn_blocking(move || {
+                hardlink_archive_files(&cache, &temp_dir_path, &files).map_err(Error::CacheWrite)
+            })
+            .await??;
+        }
         let temp_dir = temp_dir.keep();
         let id = match digest {
             Some(digest) => {
@@ -1313,6 +1347,139 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub fn client(&self) -> &ManagedClient<'a> {
         &self.client
     }
+}
+
+fn record_files(files: &[ExtractedFile]) -> Vec<(PathBuf, u64)> {
+    files.iter().map(ExtractedFile::to_record).collect()
+}
+
+fn finalize_extracted_files(
+    temp_dir: &Path,
+    files: Option<Vec<ExtractedFile>>,
+    digest: Option<DirectoryDigest>,
+) -> Result<(Option<Vec<ExtractedFile>>, Option<DirectoryDigest>), Error> {
+    let Some(files) = files else {
+        return Ok((None, digest));
+    };
+
+    let files = files
+        .into_iter()
+        .map(|file| {
+            if is_record_file(file.path()) {
+                file.rehash_from(temp_dir).map_err(Error::CacheRead)
+            } else {
+                Ok(file)
+            }
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
+    let empty_directories = empty_directory_paths(temp_dir).map_err(Error::CacheRead)?;
+    let digest = directory_digest(&files, empty_directories.iter().map(PathBuf::as_path));
+
+    Ok((Some(files), Some(digest)))
+}
+
+fn empty_directory_paths(root: &Path) -> io::Result<Vec<PathBuf>> {
+    let mut empty_directories = Vec::new();
+    collect_empty_directory_paths(root, root, &mut empty_directories)?;
+    Ok(empty_directories)
+}
+
+fn collect_empty_directory_paths(
+    root: &Path,
+    directory: &Path,
+    empty_directories: &mut Vec<PathBuf>,
+) -> io::Result<bool> {
+    let mut is_empty = true;
+    for entry in fs_err::read_dir(directory)? {
+        let entry = entry?;
+        is_empty = false;
+        if entry.file_type()?.is_dir()
+            && collect_empty_directory_paths(root, &entry.path(), empty_directories)?
+        {
+            let path = entry.path();
+            let relative = path.strip_prefix(root).map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("empty directory escaped extraction root: {err}"),
+                )
+            })?;
+            empty_directories.push(relative.to_path_buf());
+        }
+    }
+
+    Ok(is_empty)
+}
+
+fn is_record_file(path: &Path) -> bool {
+    path.file_name()
+        .is_some_and(|file_name| file_name == "RECORD")
+        && path
+            .parent()
+            .and_then(Path::file_name)
+            .and_then(|file_name| file_name.to_str())
+            .is_some_and(|parent| parent.ends_with(".dist-info"))
+}
+
+fn hardlink_archive_files(
+    cache: &Cache,
+    temp_dir: &Path,
+    files: &[ExtractedFile],
+) -> io::Result<()> {
+    for file in files {
+        let digest = file.digest_hex();
+        let id = ArchiveFileId::from_content_digest(&digest, file.executable());
+        let archive_file = cache.archive_file(&id);
+        let extracted_file = temp_dir.join(file.path());
+        persist_archive_file(&extracted_file, &archive_file, file.executable())?;
+    }
+
+    Ok(())
+}
+
+fn persist_archive_file(src: &Path, dst: &Path, executable: bool) -> io::Result<()> {
+    let Some(parent) = dst.parent() else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "archive file path must have a parent directory",
+        ));
+    };
+    fs_err::create_dir_all(parent)?;
+
+    match fs_err::hard_link(src, dst) {
+        Ok(()) => normalize_archive_file_permissions(dst, executable),
+        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+            normalize_archive_file_permissions(dst, executable)?;
+            fs_err::remove_file(src)?;
+            fs_err::hard_link(dst, src)
+        }
+        Err(err) => Err(err),
+    }
+}
+
+#[cfg(unix)]
+fn normalize_archive_file_permissions(path: &Path, executable: bool) -> io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut permissions = fs_err::metadata(path)?.permissions();
+    let mode = permissions.mode();
+    let normalized = if executable {
+        mode | 0o111
+    } else {
+        mode & !0o111
+    };
+    if normalized != mode {
+        permissions.set_mode(normalized);
+        fs_err::set_permissions(path, permissions)?;
+    }
+
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn normalize_archive_file_permissions(path: &Path, executable: bool) -> io::Result<()> {
+    let _ = path;
+    let _ = executable;
+    Ok(())
 }
 
 /// A wrapper around `RegistryClient` that manages a concurrency limit.

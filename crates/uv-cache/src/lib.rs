@@ -21,7 +21,7 @@ use crate::removal::Remover;
 pub use crate::removal::{Removal, rm_rf};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
-pub use archive::ArchiveId;
+pub use archive::{ArchiveFileId, ArchiveId};
 
 mod archive;
 mod by_timestamp;
@@ -300,6 +300,11 @@ impl Cache {
     /// Return the path to an archive in the cache.
     pub fn archive(&self, id: &ArchiveId) -> PathBuf {
         self.bucket(CacheBucket::Archive).join(id)
+    }
+
+    /// Return the path to an archive file in the cache.
+    pub fn archive_file(&self, id: &ArchiveFileId) -> PathBuf {
+        self.bucket(CacheBucket::ArchiveFiles).join(id)
     }
 
     /// Create a temporary directory to be used as a Python virtual environment.
@@ -594,6 +599,8 @@ impl Cache {
             }
         }
 
+        summary += self.prune_archive_files()?;
+
         Ok(summary)
     }
 
@@ -718,6 +725,44 @@ impl Cache {
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => (),
             Err(err) => return Err(err),
+        }
+
+        summary += self.prune_archive_files()?;
+
+        Ok(summary)
+    }
+
+    /// Remove archive file objects that are no longer linked from any archive directory.
+    fn prune_archive_files(&self) -> Result<Removal, io::Error> {
+        let root = self.bucket(CacheBucket::ArchiveFiles);
+        if !root.exists() {
+            return Ok(Removal::default());
+        }
+
+        let mut summary = Removal::default();
+        for entry in walkdir::WalkDir::new(&root)
+            .min_depth(1)
+            .contents_first(true)
+        {
+            let entry = entry?;
+            if entry.file_type().is_file() {
+                let metadata = entry.metadata()?;
+                if hardlink_count(&metadata) <= 1 {
+                    summary += rm_rf(entry.path())?;
+                }
+            } else if entry.file_type().is_dir() {
+                match fs_err::remove_dir(entry.path()) {
+                    Ok(()) => {
+                        summary.num_dirs += 1;
+                    }
+                    Err(err)
+                        if matches!(
+                            err.kind(),
+                            io::ErrorKind::DirectoryNotEmpty | io::ErrorKind::NotFound
+                        ) => {}
+                    Err(err) => return Err(err),
+                }
+            }
         }
 
         Ok(summary)
@@ -938,6 +983,26 @@ impl FromStr for Link {
         })?;
 
         Ok(Self { id, version })
+    }
+}
+
+fn hardlink_count(metadata: &std::fs::Metadata) -> u64 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        metadata.nlink()
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        u64::from(metadata.number_of_links())
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = metadata;
+        u64::MAX
     }
 }
 
@@ -1187,6 +1252,10 @@ pub enum CacheBucket {
     /// that cache entries can be atomically replaced and removed, as storing directories in the
     /// other buckets directly would make atomic operations impossible.
     Archive,
+    /// A content-addressed store of files used by unzipped wheel archives.
+    ///
+    /// Files in unzipped wheel archives are hard-linked to entries in this bucket.
+    ArchiveFiles,
     /// Ephemeral virtual environments used to execute PEP 517 builds and other operations.
     Builds,
     /// Reusable virtual environments used to invoke Python tools.
@@ -1220,6 +1289,7 @@ impl CacheBucket {
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",
+            Self::ArchiveFiles => "archive-files-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
@@ -1329,6 +1399,7 @@ impl CacheBucket {
             Self::Git
             | Self::Interpreter
             | Self::Archive
+            | Self::ArchiveFiles
             | Self::Builds
             | Self::Environments
             | Self::Python
@@ -1350,6 +1421,7 @@ impl CacheBucket {
             Self::Interpreter,
             Self::Simple,
             Self::Archive,
+            Self::ArchiveFiles,
             Self::Builds,
             Self::Environments,
             Self::Binaries,
