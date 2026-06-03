@@ -11887,6 +11887,83 @@ fn sync_multiple_sources_only_group_conflicting_prod_fallback_preserves_transiti
     Ok(())
 }
 
+/// A source-agnostic group fallback must accept a group dependency that
+/// matches a selected package's transitive direct requirement.
+#[test]
+fn sync_multiple_sources_only_group_conflicting_prod_fallback_accepts_matching_transitive_source()
+-> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    let basic_package = context
+        .temp_dir
+        .child("basic_package-0.1.0-py3-none-any.whl");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
+        &basic_package,
+    )?;
+    let basic_package_url = Url::from_file_path(basic_package.path())
+        .map_err(|()| anyhow!("failed to convert package path to file URL"))?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["requests==2.31.0"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["requests", "basic-package"]
+
+        [tool.uv]
+        conflicts = [[
+            {{ package = "project" }},
+            {{ group = "use" }},
+        ]]
+        dependency-metadata = [
+            {{
+                name = "requests",
+                version = "2.31.0",
+                requires-dist = ["basic-package @ {basic_package_url}"],
+            }},
+        ]
+
+        [tool.uv.sources]
+        requests = [
+            {{ url = "https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl", group = "use", marker = "extra == 'foo'" }},
+        ]
+        basic-package = [
+            {{ path = "./basic_package-0.1.0-py3-none-any.whl", group = "use" }},
+        ]
+        "#,
+    })?;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--only-group")
+        .arg("use"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + basic-package==0.1.0 (from file://[TEMP_DIR]/basic_package-0.1.0-py3-none-any.whl)
+     + requests==2.31.0
+    ");
+
+    Ok(())
+}
+
 /// A source-agnostic group fallback must reject a group dependency that is
 /// incompatible with the selected package's transitive constraint.
 #[test]

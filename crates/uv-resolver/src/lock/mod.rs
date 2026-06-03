@@ -4038,12 +4038,13 @@ fn incompatible_group_dependency_requirement<'a>(
                     .without_extras()
                     .is_disjoint(marker.pep508())
         })
-        .find(|requirement| {
-            !requirement
-                .source
-                .version_specifiers()
-                .zip(group_dependency.package_id.version.as_ref())
-                .is_some_and(|(specifier, version)| specifier.contains(version))
+        .find(|requirement| match &requirement.source {
+            RequirementSource::Registry { specifier, .. } => !group_dependency
+                .package_id
+                .version
+                .as_ref()
+                .is_some_and(|version| specifier.contains(version)),
+            _ => group_dependency.package_id != dependency.package_id,
         })
 }
 
