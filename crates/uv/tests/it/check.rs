@@ -4,7 +4,7 @@ use assert_fs::prelude::*;
 use indoc::indoc;
 
 use uv_static::EnvVars;
-use uv_test::uv_snapshot;
+use uv_test::{TestContext, uv_snapshot};
 
 #[test]
 fn check_project() -> Result<()> {
@@ -256,13 +256,21 @@ fn check_isolated_no_project() -> Result<()> {
     "
     );
 
-    let filters = context
-        .filters()
+    // Linux reports the temporary environment's site-packages through both `lib` and `lib64`;
+    // remove the alias before standard filters normalize the paths.
+    let filters = TestContext::path_patterns(&context.cache_dir)
         .into_iter()
-        .chain([(
-            r"info:   4\. \[CACHE_DIR\]/builds-v0/\[TMP\]/site-packages \(site-packages\)\n",
-            "",
-        )])
+        .map(|cache_dir| {
+            (
+                format!(
+                    r"info:   \d+\. {cache_dir}builds-v0[/\\]\.tmp[^/\\]+[/\\]lib64[/\\]python3\.12[/\\]site-packages \(site-packages\)\n"
+                ),
+                String::new(),
+            )
+        })
+        .chain(context.filters().into_iter().map(|(pattern, replacement)| {
+            (pattern.to_string(), replacement.to_string())
+        }))
         .collect::<Vec<_>>();
 
     uv_snapshot!(
