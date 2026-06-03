@@ -27,13 +27,10 @@ pub(crate) fn enclosed_name(file_name: &str) -> Option<PathBuf> {
         return None;
     }
     let path = PathBuf::from(file_name);
-    let mut depth = 0usize;
     for component in path.components() {
         match component {
-            Component::Prefix(_) | Component::RootDir => return None,
-            Component::ParentDir => depth = depth.checked_sub(1)?,
-            Component::Normal(_) => depth += 1,
-            Component::CurDir => (),
+            Component::Prefix(_) | Component::RootDir | Component::ParentDir => return None,
+            Component::Normal(_) | Component::CurDir => (),
         }
     }
     Some(path)

@@ -803,6 +803,65 @@ mod tests {
     }
 
     #[test]
+    fn parent_directory_entries_are_skipped() -> Result<(), Box<dyn std::error::Error>> {
+        let parent_entries = [ZipEntry {
+            path: "a/../b",
+            contents: b"contents",
+            mode: 0o100_644,
+        }];
+        let nested_entries = [ZipEntry {
+            path: "a/b",
+            contents: b"contents",
+            mode: 0o100_644,
+        }];
+
+        let temp_dir = tempfile::tempdir()?;
+        let parent_archive_path = temp_dir.path().join("parent.whl");
+        let nested_archive_path = temp_dir.path().join("nested.whl");
+        fs_err::write(
+            &parent_archive_path,
+            zip_archive(&parent_entries, b"parent archive comment"),
+        )?;
+        fs_err::write(
+            &nested_archive_path,
+            zip_archive(&nested_entries, b"nested archive comment"),
+        )?;
+
+        let parent_extract = temp_dir.path().join("parent");
+        let nested_extract = temp_dir.path().join("nested");
+        fs_err::create_dir_all(&parent_extract)?;
+        fs_err::create_dir_all(&nested_extract)?;
+
+        let (parent_files, parent_digest) =
+            unzip_and_hash(fs_err::File::open(&parent_archive_path)?, &parent_extract)?;
+        let (_nested_files, nested_digest) =
+            unzip_and_hash(fs_err::File::open(&nested_archive_path)?, &nested_extract)?;
+
+        assert!(parent_files.is_empty());
+        assert_ne!(parent_digest, nested_digest);
+        assert!(!parent_extract.join("a").exists());
+        assert!(!parent_extract.join("b").exists());
+
+        let stream_extract = temp_dir.path().join("stream-parent");
+        fs_err::create_dir_all(&stream_extract)?;
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        let (stream_files, stream_digest) = runtime.block_on(async {
+            let file = fs_err::tokio::File::open(&parent_archive_path).await?;
+            let result = crate::stream::unzip_and_hash("parent.whl", file, &stream_extract).await?;
+            Ok::<_, Box<dyn std::error::Error>>(result)
+        })?;
+
+        assert!(stream_files.is_empty());
+        assert_eq!(parent_digest, stream_digest);
+        assert!(!stream_extract.join("a").exists());
+        assert!(!stream_extract.join("b").exists());
+
+        Ok(())
+    }
+
+    #[test]
     fn directory_digest_includes_empty_directories() -> Result<(), Box<dyn std::error::Error>> {
         let base_entries = [
             ZipEntry {
