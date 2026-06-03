@@ -2123,7 +2123,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let Some(group) = variant.group.as_ref() else {
                 continue;
             };
-            variant.constraint_extras.extend(
+            let mut constraint_extras = std::mem::take(&mut variant.constraint_extras);
+            constraint_extras.extend(
                 dev_dependencies
                     .get(group)
                     .into_iter()
@@ -2136,6 +2137,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .is_disjoint(requirement.marker.negate())
                     })
                     .flat_map(|requirement| requirement.extras.iter().cloned()),
+            );
+            variant.constraint_extras = Self::recursively_activated_extras(
+                dependencies,
+                project_name,
+                variant.requirement.marker,
+                constraint_extras,
             );
         }
         for extra in extras {
