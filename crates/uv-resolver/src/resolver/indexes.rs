@@ -27,6 +27,11 @@ impl Indexes {
         dependencies: DependencyMode,
     ) -> Self {
         let mut indexes = ForkMap::default();
+        let project = manifest.project.as_ref().or_else(|| {
+            let mut projects = manifest.workspace_members.iter();
+            let project = projects.next()?;
+            projects.next().is_none().then_some(project)
+        });
 
         for requirement in manifest.requirements(env, dependencies) {
             let RequirementSource::Registry {
@@ -35,7 +40,7 @@ impl Indexes {
             else {
                 continue;
             };
-            indexes.add(requirement.as_ref(), index.clone());
+            indexes.add_with_project(requirement.as_ref(), index.clone(), project);
         }
 
         Self(indexes)

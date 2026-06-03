@@ -35,7 +35,29 @@ pub(super) struct ForkScope {
 impl ForkScope {
     /// Derives the fork scope implied by a requirement's marker and conflict state.
     pub(super) fn from_requirement(requirement: &Requirement) -> Self {
+        Self::from_requirement_with_project(requirement, None)
+    }
+
+    /// Derives the fork scope implied by a requirement and its declaring project.
+    fn from_requirement_with_project(
+        requirement: &Requirement,
+        project: Option<&PackageName>,
+    ) -> Self {
         let Some(conflict) = Self::conflict_for_requirement(requirement) else {
+            if matches!(
+                requirement.source,
+                RequirementSource::Registry { index: Some(_), .. }
+            ) && let Some(project_name) = requirement
+                .origin
+                .as_ref()
+                .and_then(|origin| match origin {
+                    RequirementOrigin::Project(_, project_name) => Some(project_name),
+                    _ => None,
+                })
+                .or(project)
+            {
+                return Self::from_package_marker(requirement.marker, project_name);
+            }
             return Self {
                 marker: requirement.marker,
                 fork_marker: requirement.marker,
@@ -156,12 +178,22 @@ impl<T> ForkMap<T> {
 
     /// Associate a value with the [`Requirement`] in a given fork.
     pub(crate) fn add(&mut self, requirement: &Requirement, value: T) {
+        self.add_with_project(requirement, value, None);
+    }
+
+    /// Associate a value with the [`Requirement`] in a fork scoped to its declaring project.
+    pub(crate) fn add_with_project(
+        &mut self,
+        requirement: &Requirement,
+        value: T,
+        project: Option<&PackageName>,
+    ) {
         self.0
             .entry(requirement.name.clone())
             .or_default()
             .push(Entry {
                 value,
-                scope: ForkScope::from_requirement(requirement),
+                scope: ForkScope::from_requirement_with_project(requirement, project),
             });
     }
 
