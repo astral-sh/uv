@@ -137,16 +137,43 @@ fn activated_extras<'lock>(
                 }),
         );
     }
-    group_requirements.extend(
-        lock.dependency_groups()
-            .iter()
-            .filter(|(group, _)| groups.contains(group))
-            .flat_map(|(_, requirements)| {
-                requirements.iter().map(|requirement| (None, requirement))
-            }),
-    );
-
     for requirement in lock.requirements() {
+        for package in lock
+            .packages()
+            .iter()
+            .filter(|package| package.id.name == requirement.name)
+        {
+            let marker = if package.fork_markers.is_empty() {
+                requirement.marker
+            } else {
+                let mut combined = MarkerTree::FALSE;
+                for fork_marker in &package.fork_markers {
+                    combined.or(fork_marker.pep508());
+                }
+                combined.and(requirement.marker);
+                combined
+            };
+            if marker.is_false() || !marker.evaluate(markers, &[]) {
+                continue;
+            }
+
+            if root_seen.insert((&package.id, None)) {
+                root_queue.push_back((&package.id, None));
+            }
+            for extra in &requirement.extras {
+                root_activated_extras.insert((&package.id.name, extra));
+                if root_seen.insert((&package.id, Some(extra))) {
+                    root_queue.push_back((&package.id, Some(extra)));
+                }
+            }
+        }
+    }
+    for requirement in lock
+        .dependency_groups()
+        .iter()
+        .filter(|(group, _)| groups.contains(group))
+        .flat_map(|(_, requirements)| requirements)
+    {
         for package in lock
             .packages()
             .iter()

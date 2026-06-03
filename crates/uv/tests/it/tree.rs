@@ -2359,6 +2359,92 @@ fn non_project_group_activates_member_extra_source() -> Result<()> {
     Ok(())
 }
 
+/// Extras requested by dependency groups attached to a non-project workspace
+/// root must be traversed while source activation contexts stabilize.
+#[test]
+fn non_project_group_activates_transitive_member_extra_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["child", "other"]
+
+        [dependency-groups]
+        use = ["child[alt]"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["other"]
+
+        [project.optional-dependencies]
+        alt = ["other[foo]"]
+
+        [tool.uv.sources]
+        other = { workspace = true }
+        "#,
+    )?;
+
+    let other = context.temp_dir.child("other");
+    other.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "other"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        foo = ["iniconfig==1.1.1"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "foo" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .tree()
+            .arg("--only-group")
+            .arg("use")
+            .arg("--package")
+            .arg("child")
+            .arg("--no-dedupe")
+            .arg("--locked"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    child v0.1.0
+    ├── other v0.1.0
+    │   └── iniconfig v1.1.1
+    └── other[foo] v0.1.0 (extra: alt)
+        ├── iniconfig v1.1.1
+        └── iniconfig v1.1.1 (extra: foo)
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
 #[test]
 fn script() -> Result<()> {
     let context = uv_test::test_context!("3.12");
