@@ -131,8 +131,6 @@ impl<'lock> ExportableRequirements<'lock> {
                 })
                 .flatten()
             {
-                selected_group_dependencies.push((&dist.id.name, dep));
-
                 // Track the activated group in the list of known conflicts.
                 activated_items.insert(
                     ConflictItem::from((dist.id.name.clone(), group.clone())),
@@ -142,6 +140,8 @@ impl<'lock> ExportableRequirements<'lock> {
                 if prune.contains(&dep.package_id.name) {
                     continue;
                 }
+
+                selected_group_dependencies.push((&dist.id.name, dep));
 
                 let dep_dist = target.lock().find_by_id(&dep.package_id);
 
