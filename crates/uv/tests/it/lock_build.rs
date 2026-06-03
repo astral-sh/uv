@@ -1703,6 +1703,128 @@ def get_requires_for_build_wheel(config_settings=None):
     Ok(())
 }
 
+/// Verify that a selectable workspace member's build lock is not restricted
+/// to the marker of an incoming dependency edge.
+#[test]
+fn lock_build_dependencies_workspace_root_widens_marker_reachability() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let (conditional_marker, target_platform) = if cfg!(target_os = "windows") {
+        ("sys_platform == 'win32'", "linux")
+    } else {
+        ("sys_platform == 'linux'", "windows")
+    };
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("seed-0.1.0-py3-none-any.whl"),
+        "seed",
+        "0.1.0",
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["a", "b"]
+        "#,
+    )?;
+
+    let member_a = context.temp_dir.child("a");
+    member_a.create_dir_all()?;
+    member_a.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["b ; {conditional_marker}"]
+
+        [tool.uv.sources]
+        b = {{ workspace = true }}
+        "#
+    ))?;
+
+    let member_b = context.temp_dir.child("b");
+    member_b.create_dir_all()?;
+    member_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["seed==0.1.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    member_b.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_editable(config_settings=None):
+    return []
+
+def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "b-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("b/__init__.py", "")
+        wheel.writestr(
+            "b-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: b\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "b-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("b-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let resolutions = resolution_sections(&lock);
+    let member_b_resolutions = resolutions
+        .split("[[resolution]]")
+        .filter(|resolution| resolution.contains("\nname = \"b\"\n"))
+        .collect::<Vec<_>>();
+    assert_eq!(member_b_resolutions.len(), 2, "{resolutions}");
+    assert!(
+        member_b_resolutions
+            .iter()
+            .all(|resolution| !resolution.contains("\ntarget = ")),
+        "{resolutions}"
+    );
+
+    context
+        .sync()
+        .arg("--package")
+        .arg("b")
+        .arg("--python-platform")
+        .arg(target_platform)
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 /// Verify that stored build dependencies are used as preferences during
 /// subsequent resolves, producing the same versions.
 #[test]

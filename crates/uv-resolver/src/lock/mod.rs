@@ -718,6 +718,26 @@ impl Lock {
             build_markers.insert(key.clone(), UniversalMarker::FALSE);
         }
 
+        if let Some(root_index) = resolution
+            .graph
+            .node_indices()
+            .find(|&index| matches!(resolution.graph[index], ResolutionGraphNode::Root))
+        {
+            for edge in resolution.graph.edges(root_index) {
+                let ResolutionGraphNode::Dist(dist) = &resolution.graph[edge.target()] else {
+                    continue;
+                };
+                let id = PackageId::from_annotated_dist(dist, root)?;
+                let Some(key) = selected_source_package_keys.get(&id) else {
+                    continue;
+                };
+                build_markers
+                    .entry(key.clone())
+                    .and_modify(|marker| marker.or(*edge.weight()))
+                    .or_insert(*edge.weight());
+            }
+        }
+
         for package in packages.values() {
             for dependency in package
                 .dependencies
