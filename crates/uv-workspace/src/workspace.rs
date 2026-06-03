@@ -42,8 +42,9 @@ type CachedWorkspaceResult = Result<Arc<Workspace>, WorkspaceError>;
 /// The cache is indexed both by the workspace root and by the path of each workspace member.
 ///
 /// The cache makes assumptions about [`DiscoveryOptions`]:
-/// * `stop_discovery_at` is only used for isolation workspaces in the cache. We avoid traversing
-///   into the cache if `cache` is accidentally included in the workspace member glob.
+/// * `stop_discovery_at` is only used for isolation workspaces in the cache. Otherwise, we avoid
+///   traversing into an external cache if `cache` is accidentally included in the workspace member
+///   glob.
 /// * TODO(konsti): Support caching for [`MemberDiscovery`] modes that aren't `All`.
 #[derive(Debug, Default, Clone)]
 pub struct WorkspaceCache {
@@ -188,6 +189,10 @@ pub enum MemberDiscovery {
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
 pub struct DiscoveryOptions {
     /// The path to stop discovery at.
+    ///
+    /// Assumption: This is only used for directories in the cache to avoid them escaping the cache.
+    /// If you want to use it for other cases too, you need to also update the cache handling in
+    /// the workspace discovery glob walking.
     pub stop_discovery_at: Option<PathBuf>,
     /// The strategy to use when discovering workspace members.
     pub members: MemberDiscovery,
@@ -1049,13 +1054,19 @@ impl Workspace {
         // Avoid reading a `pyproject.toml` more than once.
         let mut seen = FxHashSet::default();
 
-        // We may receive an uninitialized cache with a relative cache root.
-        let cache_root = if cache.root().is_absolute() {
-            cache.root().to_path_buf()
-        } else {
-            CWD.join(cache.root())
-        };
-        let cache_root = normalize_path(&cache_root).into_owned();
+        let external_cache_root = options
+            .stop_discovery_at
+            .is_none()
+            .then(|| {
+                // We may receive an uninitialized cache with a relative cache root.
+                let cache_root = if cache.root().is_absolute() {
+                    cache.root().to_path_buf()
+                } else {
+                    CWD.join(cache.root())
+                };
+                normalize_path(&cache_root).into_owned()
+            })
+            .filter(|cache_root| !workspace_root.starts_with(cache_root));
 
         // Add the project at the workspace root, if it exists and if it's distinct from the current
         // project. If it is the current project, it is added as such in the next step.
@@ -1091,7 +1102,10 @@ impl Workspace {
             {
                 let member_root = member_root
                     .map_err(|err| WorkspaceErrorKind::GlobWalk(absolute_glob.clone(), err))?;
-                if member_root.starts_with(&cache_root) {
+                if external_cache_root
+                    .as_ref()
+                    .is_some_and(|cache_root| member_root.starts_with(cache_root))
+                {
                     debug!(
                         "Ignoring cache directory while discovering workspace members: `{}`",
                         member_root.simplified_display()
