@@ -680,54 +680,67 @@ impl Lock {
     fn expected_source_activation_contexts(&self) -> BTreeSet<ConflictItem> {
         let mut contexts = BTreeSet::new();
         for package in &self.packages {
-            let production_requirements = package
-                .metadata
-                .requires_dist
-                .iter()
-                .filter(|requirement| requirement.evaluate_markers(None, &[]))
-                .fold(
-                    FxHashMap::<_, Vec<_>>::default(),
-                    |mut requirements, requirement| {
+            Self::extend_source_activation_contexts_from_metadata(
+                &package.id.name,
+                package.metadata.requires_dist.iter(),
+                package
+                    .metadata
+                    .dependency_groups
+                    .iter()
+                    .flat_map(|(group, requirements)| {
                         requirements
-                            .entry(&requirement.name)
-                            .or_default()
-                            .push(requirement);
-                        requirements
-                    },
-                );
-            for requirement in &package.metadata.requires_dist {
-                if production_requirements
-                    .get(&requirement.name)
-                    .is_some_and(|requirements| {
-                        Self::changes_production_source(requirement, requirements)
-                    })
-                {
-                    Self::extend_source_activation_contexts(
-                        &package.id.name,
-                        requirement,
-                        &mut contexts,
-                    );
-                }
-            }
-            for (group, requirements) in &package.metadata.dependency_groups {
-                for requirement in requirements {
-                    if production_requirements.get(&requirement.name).is_some_and(
-                        |production_requirements| {
-                            Self::changes_production_source(requirement, production_requirements)
-                        },
-                    ) && Self::extend_source_activation_contexts(
-                        &package.id.name,
-                        requirement,
-                        &mut contexts,
-                    ) {
-                        contexts
-                            .insert(ConflictItem::from((package.id.name.clone(), group.clone())));
-                    }
-                }
-            }
+                            .iter()
+                            .map(move |requirement| (group, requirement))
+                    }),
+                &mut contexts,
+            );
             self.extend_source_activation_contexts_from_edges(package, &mut contexts);
         }
         contexts
+    }
+
+    /// Add source activation contexts from package metadata.
+    fn extend_source_activation_contexts_from_metadata<'a>(
+        package: &PackageName,
+        requirements: impl IntoIterator<Item = &'a Requirement>,
+        group_requirements: impl IntoIterator<Item = (&'a GroupName, &'a Requirement)>,
+        contexts: &mut BTreeSet<ConflictItem>,
+    ) {
+        let requirements = requirements.into_iter().collect::<Vec<_>>();
+        let production_requirements = requirements
+            .iter()
+            .copied()
+            .filter(|requirement| requirement.evaluate_markers(None, &[]))
+            .fold(
+                FxHashMap::<_, Vec<_>>::default(),
+                |mut requirements, requirement| {
+                    requirements
+                        .entry(&requirement.name)
+                        .or_default()
+                        .push(requirement);
+                    requirements
+                },
+            );
+        for requirement in requirements {
+            if production_requirements
+                .get(&requirement.name)
+                .is_some_and(|requirements| {
+                    Self::changes_production_source(requirement, requirements)
+                })
+            {
+                Self::extend_source_activation_contexts(package, requirement, contexts);
+            }
+        }
+        for (group, requirement) in group_requirements {
+            if production_requirements.get(&requirement.name).is_some_and(
+                |production_requirements| {
+                    Self::changes_production_source(requirement, production_requirements)
+                },
+            ) && Self::extend_source_activation_contexts(package, requirement, contexts)
+            {
+                contexts.insert(ConflictItem::from((package.clone(), group.clone())));
+            }
+        }
     }
 
     /// Add source activation contexts from locked dependency edges.
@@ -2279,6 +2292,46 @@ impl Lock {
                 }
             }
 
+            // Older locks omit metadata for immutable Git packages. Re-read that metadata before
+            // accepting the lock, since the old dependency edges alone cannot distinguish a
+            // conditional source from an unconditional source shared by an optional dependency.
+            if matches!(&package.id.source, Source::Git(..))
+                && package.metadata.requires_dist.is_empty()
+                && package.metadata.dependency_groups.is_empty()
+            {
+                let HashedDist { dist, .. } =
+                    package.to_dist(root, TagPolicy::Preferred(tags), build_options, markers)?;
+                let archive = database
+                    .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+                    .await
+                    .map_err(|err| LockErrorKind::Resolution {
+                        id: package.id.clone(),
+                        err,
+                    })?;
+                let mut expected_source_activation_contexts =
+                    self.source_activation_contexts.clone();
+                Self::extend_source_activation_contexts_from_metadata(
+                    &package.id.name,
+                    archive.metadata.requires_dist.iter(),
+                    archive
+                        .metadata
+                        .dependency_groups
+                        .iter()
+                        .flat_map(|(group, requirements)| {
+                            requirements
+                                .iter()
+                                .map(move |requirement| (group, requirement))
+                        }),
+                    &mut expected_source_activation_contexts,
+                );
+                if expected_source_activation_contexts != self.source_activation_contexts {
+                    return Ok(SatisfiesResult::MismatchedSourceActivationContexts(
+                        expected_source_activation_contexts,
+                        &self.source_activation_contexts,
+                    ));
+                }
+            }
+
             // If the package is immutable, we don't need to validate it (or its dependencies).
             if package.id.source.is_immutable() {
                 continue;
@@ -3113,9 +3166,13 @@ impl Package {
         let id = PackageId::from_annotated_dist(annotated_dist, root)?;
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist)?;
-        let requires_dist = if id.source.is_immutable() {
-            BTreeSet::default()
-        } else {
+        let retain_metadata = !id.source.is_immutable()
+            || matches!(&id.source, Source::Git(..))
+                && annotated_dist
+                    .metadata
+                    .as_ref()
+                    .is_some_and(|metadata| !metadata.source_variants.is_empty());
+        let requires_dist = if retain_metadata {
             annotated_dist
                 .metadata
                 .as_ref()
@@ -3126,20 +3183,20 @@ impl Package {
                 .map(|requirement| requirement.relative_to(root))
                 .collect::<Result<_, _>>()
                 .map_err(LockErrorKind::RequirementRelativePath)?
-        };
-        let provides_extra = if id.source.is_immutable() {
-            Box::default()
         } else {
+            BTreeSet::default()
+        };
+        let provides_extra = if retain_metadata {
             annotated_dist
                 .metadata
                 .as_ref()
                 .expect("metadata is present")
                 .provides_extra
                 .clone()
-        };
-        let dependency_groups = if id.source.is_immutable() {
-            BTreeMap::default()
         } else {
+            Box::default()
+        };
+        let dependency_groups = if retain_metadata {
             annotated_dist
                 .metadata
                 .as_ref()
@@ -3156,6 +3213,8 @@ impl Package {
                     Ok::<_, LockError>((group.clone(), requirements))
                 })
                 .collect::<Result<_, _>>()?
+        } else {
+            BTreeMap::default()
         };
         Ok(Self {
             id,

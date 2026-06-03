@@ -5,6 +5,8 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 #[cfg(feature = "test-git")]
 use std::process::Command;
+#[cfg(feature = "test-git")]
+use toml_edit::{Array, InlineTable, Item, Table, Value, value};
 use url::Url;
 
 use uv_fs::Simplified;
@@ -25244,7 +25246,10 @@ fn lock_multiple_sources_extra_git_dependency() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["child[alt]"]
+        dependencies = ["child"]
+
+        [project.optional-dependencies]
+        use = ["child[alt]"]
 
         [tool.uv.sources]
         child = {{ git = "{repository_url}" }}
@@ -25279,6 +25284,54 @@ fn lock_multiple_sources_extra_git_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    ");
+
+    // Locks created before source-scoped dependency edges were persisted made the alternate source
+    // unconditional. The immutable Git package has no locked metadata, so validate its current
+    // source declarations before accepting a one-source lock.
+    let mut stale_lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    stale_lock.remove("conflicts");
+    let packages = stale_lock["package"]
+        .as_array_of_tables_mut()
+        .expect("lock packages");
+    packages.retain(|package| {
+        package["name"].as_str() != Some("iniconfig")
+            || package
+                .get("source")
+                .and_then(Item::as_inline_table)
+                .is_some_and(|source| source.contains_key("url"))
+    });
+    for package in packages.iter_mut() {
+        if package["name"].as_str() != Some("child") {
+            continue;
+        }
+
+        let mut dependency = InlineTable::new();
+        dependency.insert("name", Value::from("iniconfig"));
+        package.insert(
+            "dependencies",
+            value(Array::from_iter([Value::InlineTable(dependency.clone())])),
+        );
+        let mut optional_dependencies = Table::new();
+        optional_dependencies.insert(
+            "alt",
+            value(Array::from_iter([Value::InlineTable(dependency)])),
+        );
+        package.insert("optional-dependencies", Item::Table(optional_dependencies));
+    }
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&stale_lock.to_string())?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-cache"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
