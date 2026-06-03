@@ -2944,7 +2944,17 @@ impl Package {
                     ConflictMarker::group(&self.id.name, group),
                 );
                 for dependency in &self.dependencies {
-                    if dependency.package_id.name != requirement.name {
+                    if dependency.package_id.name != requirement.name
+                        || !matches!(
+                            &requirement.source,
+                            RequirementSource::Registry { specifier, .. }
+                                if dependency
+                                    .package_id
+                                    .version
+                                    .as_ref()
+                                    .is_some_and(|version| specifier.contains(version))
+                        )
+                    {
                         continue;
                     }
 
