@@ -32,40 +32,54 @@ fn newly_activated_extras<'lock>(
         .collect()
 }
 
-fn activate_dependency_group_extras<'lock>(
-    dependencies: &[&'lock Dependency],
+fn activate_dependency_group_items<'lock>(
+    dependencies: &[(&'lock PackageName, &'lock Dependency)],
     marker_env: &ResolverMarkerEnvironment,
-    activated_projects: &[&'lock PackageName],
+    activated_projects: &mut Vec<&'lock PackageName>,
     activated_extras: &mut Vec<(&'lock PackageName, &'lock ExtraName)>,
     activated_groups: &[(&'lock PackageName, &'lock GroupName)],
 ) {
     loop {
-        let mut newly_activated = Vec::new();
-        for dependency in dependencies {
+        let mut newly_activated_projects = Vec::new();
+        let mut newly_activated_extra_items = Vec::new();
+        for (parent, dependency) in dependencies {
+            let additional_activated_project = (dependency.package_id.name == **parent
+                && !activated_projects.contains(&&dependency.package_id.name))
+            .then_some(&dependency.package_id.name);
             let additional_activated_extras = newly_activated_extras(dependency, activated_extras);
-            if additional_activated_extras.is_empty()
-                || !dependency.complexified_marker.evaluate(
-                    marker_env,
-                    activated_projects.iter().copied(),
-                    activated_extras
-                        .iter()
-                        .chain(additional_activated_extras.iter())
-                        .copied(),
-                    activated_groups.iter().copied(),
-                )
-            {
+            if additional_activated_project.is_none() && additional_activated_extras.is_empty() {
                 continue;
             }
+            if !dependency.complexified_marker.evaluate(
+                marker_env,
+                activated_projects
+                    .iter()
+                    .copied()
+                    .chain(additional_activated_project),
+                activated_extras
+                    .iter()
+                    .chain(additional_activated_extras.iter())
+                    .copied(),
+                activated_groups.iter().copied(),
+            ) {
+                continue;
+            }
+            if let Some(project) = additional_activated_project
+                && !newly_activated_projects.contains(&project)
+            {
+                newly_activated_projects.push(project);
+            }
             for extra in additional_activated_extras {
-                if !newly_activated.contains(&extra) {
-                    newly_activated.push(extra);
+                if !newly_activated_extra_items.contains(&extra) {
+                    newly_activated_extra_items.push(extra);
                 }
             }
         }
-        if newly_activated.is_empty() {
+        if newly_activated_projects.is_empty() && newly_activated_extra_items.is_empty() {
             break;
         }
-        activated_extras.extend(newly_activated);
+        activated_projects.extend(newly_activated_projects);
+        activated_extras.extend(newly_activated_extra_items);
     }
 }
 
@@ -161,16 +175,20 @@ pub trait Installable<'lock> {
                     dist.dependency_groups
                         .iter()
                         .filter(|(group, _)| groups.contains(group))
-                        .flat_map(|(_, dependencies)| dependencies),
+                        .flat_map(|(_, dependencies)| {
+                            dependencies
+                                .iter()
+                                .map(|dependency| (&dist.id.name, dependency))
+                        }),
                 );
             }
 
             // Make direct dependency-group activation order-independent before evaluating the
             // selected group edges.
-            activate_dependency_group_extras(
+            activate_dependency_group_items(
                 &selected_group_dependencies,
                 marker_env,
-                &activated_projects,
+                &mut activated_projects,
                 &mut activated_extras,
                 &activated_groups,
             );
