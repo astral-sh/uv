@@ -10752,15 +10752,9 @@ fn sync_multiple_sources_excluded_branch_extra() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
-        conflicts = [
-            [
-                { package = "b", extra = "feature" },
-                { package = "b", extra = "feature" },
-            ],
-            [
-                { package = "p", extra = "alt" },
-                { package = "p", extra = "alt" },
-            ],
+        source-activation-contexts = [
+            { package = "b", extra = "feature" },
+            { package = "p", extra = "alt" },
         ]
 
         [[package]]
