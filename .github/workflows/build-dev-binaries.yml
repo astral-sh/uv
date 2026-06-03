@@ -51,6 +51,8 @@ jobs:
 
       - name: "Use bundled LLD"
         run: |
+          # The direct rustc opt-in is unstable here, so route the C driver to
+          # rustc's bundled LLD wrapper instead of installing mold.
           bundled_lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/gcc-ld"
           test -x "${bundled_lld_dir}/ld.lld"
           echo "RUSTFLAGS=-C link-arg=-B${bundled_lld_dir} -C link-arg=-fuse-ld=lld" >> "${GITHUB_ENV}"
@@ -115,6 +117,8 @@ jobs:
 
       - name: "Use bundled LLD"
         run: |
+          # The direct rustc opt-in is unstable here, so route the C driver to
+          # rustc's bundled LLD wrapper instead of installing mold.
           bundled_lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/gcc-ld"
           test -x "${bundled_lld_dir}/ld.lld"
           echo "RUSTFLAGS=-C link-arg=-B${bundled_lld_dir} -C link-arg=-fuse-ld=lld" >> "${GITHUB_ENV}"
