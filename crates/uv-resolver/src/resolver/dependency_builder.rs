@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::slice;
 
 use pubgrub::Ranges;
 
@@ -200,7 +199,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             );
 
             for requirement in complementary_requirements {
-                let extra = Self::single_required_extra(raw_requirement.marker);
+                let extras = Self::required_extras(raw_requirement.marker);
                 let needs_unsourced_complement = raw_requirement
                     .evaluate_markers(self.env.marker_environment(), &[])
                     && self
@@ -209,7 +208,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                 let constraints = self.constraints_for_complementary_extra_source(
                     &raw_requirement,
                     requirement.marker,
-                    extra.as_ref(),
+                    &extras,
                     python_marker,
                 );
 
@@ -577,6 +576,24 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         implication.is_true().then_some(extra)
     }
 
+    /// Returns every positive extra required by `marker`.
+    fn required_extras(marker: MarkerTree) -> Vec<ExtraName> {
+        let mut candidates = Vec::new();
+
+        marker.visit_extras(|operator, candidate| {
+            if operator == MarkerOperator::Equal && !candidates.contains(candidate) {
+                candidates.push(candidate.clone());
+            }
+        });
+
+        candidates.retain(|extra| {
+            let mut implication = marker;
+            implication.implies(Self::extra_marker(extra));
+            implication.is_true()
+        });
+        candidates
+    }
+
     /// Returns whether `marker` references at least one extra.
     fn has_extra(marker: MarkerTree) -> bool {
         let mut has_extra = false;
@@ -650,13 +667,13 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         &self,
         raw_requirement: &Requirement,
         marker: MarkerTree,
-        extra: Option<&ExtraName>,
+        extras: &[ExtraName],
         python_marker: MarkerTree,
     ) -> Vec<Requirement> {
-        let Some(extra) = extra else {
+        if extras.is_empty() {
             let split_requirement = Self::requirement_with_marker(raw_requirement, marker);
             return self.constraints_for_requirement(&split_requirement, None, python_marker);
-        };
+        }
 
         let Some(constraints) = self.state.constraints.get(&raw_requirement.name) else {
             return Vec::new();
@@ -671,9 +688,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                     return None;
                 }
 
-                if !constraint
-                    .evaluate_markers(self.env.marker_environment(), slice::from_ref(extra))
-                {
+                if !constraint.evaluate_markers(self.env.marker_environment(), extras) {
                     return None;
                 }
 
@@ -901,6 +916,21 @@ mod tests {
         assert_eq!(
             DependencyBuilder::<EmptyInstalledPackages>::single_required_extra(marker),
             None
+        );
+        assert!(DependencyBuilder::<EmptyInstalledPackages>::required_extras(marker).is_empty());
+    }
+
+    #[test]
+    fn conjunctive_source_marker_has_required_extras() {
+        let marker =
+            MarkerTree::from_str("extra == 'alt' and extra == 'foo'").expect("valid marker");
+
+        assert_eq!(
+            DependencyBuilder::<EmptyInstalledPackages>::required_extras(marker),
+            vec![
+                ExtraName::from_str("alt").expect("valid extra"),
+                ExtraName::from_str("foo").expect("valid extra"),
+            ]
         );
     }
 }

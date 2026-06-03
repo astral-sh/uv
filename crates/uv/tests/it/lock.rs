@@ -36405,6 +36405,102 @@ fn lock_path_dependency_explicit_index_optional_extra_source_constraint() -> Res
     Ok(())
 }
 
+/// Test that complementary explicit-index dependencies synthesized from a path
+/// dependency retain constraints that require multiple extras.
+#[test]
+fn lock_path_dependency_explicit_index_multi_extra_source_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let default_index = context.temp_dir.child("default");
+    fs_err::create_dir_all(&default_index)?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        default_index.join("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    let explicit_index = context.temp_dir.child("explicit");
+    fs_err::create_dir_all(&explicit_index)?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        explicit_index.join("ok-2.0.0-py3-none-any.whl"),
+    )?;
+
+    let pkg_a = context.temp_dir.child("pkg_a");
+    fs_err::create_dir_all(&pkg_a)?;
+
+    let pyproject_toml = pkg_a.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [project.optional-dependencies]
+        alt = ["ok"]
+        foo = []
+
+        [tool.uv.sources]
+        ok = [
+            { index = "explicit", extra = "alt", marker = "extra == 'foo'" },
+        ]
+
+        [[tool.uv.index]]
+        name = "explicit"
+        url = "../explicit"
+        format = "flat"
+        explicit = true
+        "#,
+    )?;
+
+    let pkg_b = context.temp_dir.child("pkg_b");
+    fs_err::create_dir_all(&pkg_b)?;
+
+    let pyproject_toml = pkg_b.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [tool.uv]
+        constraint-dependencies = ["ok<2 ; extra == 'alt' and extra == 'foo'"]
+
+        [tool.uv.sources]
+        pkg-a = { path = "../pkg_a/", editable = true }
+
+        [[tool.uv.index]]
+        name = "default"
+        url = "../default"
+        format = "flat"
+        default = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_b), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+      × No solution found when resolving dependencies for split (markers: extra == 'extra-5-pkg-a-alt' and extra == 'extra-5-pkg-a-foo'):
+      ╰─▶ Because only ok{extra == 'extra-5-pkg-a-alt' and extra == 'extra-5-pkg-a-foo'}==2.0.0 is available and pkg-a==0.1.0 depends on ok{extra == 'extra-5-pkg-a-alt' and extra == 'extra-5-pkg-a-foo'}, we can conclude that pkg-a==0.1.0 depends on ok==2.0.0.
+          And because pkg-a==0.1.0 depends on ok<2, we can conclude that pkg-a==0.1.0 cannot be used.
+          And because only pkg-a==0.1.0 is available and your project depends on pkg-a, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    ");
+
+    Ok(())
+}
+
 /// Test that complementary source splits for path dependencies are emitted per
 /// extra when the same source applies to multiple sibling extras.
 #[test]
