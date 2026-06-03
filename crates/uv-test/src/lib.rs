@@ -44,7 +44,7 @@ static TEST_TIMESTAMP: &str = "2024-03-25T00:00:00Z";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
-pub const LATEST_PYTHON_3_15: &str = "3.15.0b1";
+pub const LATEST_PYTHON_3_15: &str = "3.15.0b2";
 pub const LATEST_PYTHON_3_14: &str = "3.14.5";
 pub const LATEST_PYTHON_3_13: &str = "3.13.13";
 pub const LATEST_PYTHON_3_12: &str = "3.12.13";
