@@ -465,6 +465,59 @@ impl Edge<'_> {
             Self::Dev { dep_extras, .. } => dep_extras,
         }
     }
+
+    /// Propagate the reachability marker and activation context across this edge.
+    fn propagate(
+        &self,
+        parent: &Node<'_>,
+        child: &Node<'_>,
+        mut parent_marker: MarkerTree,
+        mut parent_map: FxHashMap<ConflictItem, MarkerTree>,
+    ) -> (MarkerTree, FxHashMap<ConflictItem, MarkerTree>) {
+        if let Node::Package(child) = child {
+            for extra in self.dep_extras() {
+                let item = ConflictItem::from((child.name().clone(), (*extra).clone()));
+                parent_map.insert(item, parent_marker);
+            }
+        }
+
+        let scope_package = match parent {
+            Node::Package(package) => Some(package.name()),
+            Node::Root => None,
+        };
+
+        match self {
+            Self::Prod { .. } => {}
+            Self::Optional { extra, .. } => {
+                // The optional extra is active for this edge itself, so add it before resolving
+                // any active extras on the edge.
+                if let Node::Package(parent) = parent {
+                    let item = ConflictItem::from((parent.name().clone(), (*extra).clone()));
+                    parent_map.insert(item, parent_marker);
+                }
+            }
+            Self::Dev { group, .. } => {
+                // The dependency group is active for this edge itself, so add it before resolving
+                // any active extras on the edge.
+                if let Node::Package(parent) = parent {
+                    let item = ConflictItem::from((parent.name().clone(), (*group).clone()));
+                    parent_map.insert(item, parent_marker);
+                }
+            }
+        }
+
+        let marker = resolve_activated_extras(*self.marker(), scope_package, &parent_map);
+
+        // Propagate the edge to the known conflicts.
+        for value in parent_map.values_mut() {
+            value.and(marker);
+        }
+
+        // Propagate the edge to the node itself.
+        parent_marker.and(marker);
+
+        (parent_marker, parent_map)
+    }
 }
 
 impl Reachable<MarkerTree> for Edge<'_> {
@@ -552,93 +605,41 @@ fn conflict_marker_reachability<'lock>(
         // on `parent`, combine it with the marker on the edge, then add `flask[dotenv]` to
         // the inference map on the `flask` node.
         for child_edge in graph.edges_directed(parent_index, Direction::Outgoing) {
-            let mut parent_marker = reachability[&parent_index];
+            let parent_marker = reachability[&parent_index];
 
             // The marker for all paths to the child through the parent.
-            let mut parent_map = conflict_maps
+            let parent_map = conflict_maps
                 .get(&parent_index)
                 .cloned()
                 .unwrap_or_else(|| known_conflicts.clone());
-
-            if let Node::Package(child) = graph[child_edge.target()] {
-                for extra in child_edge.weight().dep_extras() {
-                    let item = ConflictItem::from((child.name().clone(), (*extra).clone()));
-                    parent_map.insert(item, parent_marker);
-                }
-            }
-
-            let scope_package = match &graph[parent_index] {
-                Node::Package(package) => Some(package.name()),
-                Node::Root => None,
-            };
-
-            match child_edge.weight() {
-                Edge::Prod { marker, .. } => {
-                    // Resolve any active extras on the edge.
-                    let marker = resolve_activated_extras(*marker, scope_package, &parent_map);
-
-                    // Propagate the edge to the known conflicts.
-                    for value in parent_map.values_mut() {
-                        value.and(marker);
-                    }
-
-                    // Propagate the edge to the node itself.
-                    parent_marker.and(marker);
-                }
-                Edge::Optional { extra, marker, .. } => {
-                    // The optional extra is active for this edge itself, so add it before
-                    // resolving any active extras on the edge.
-                    if let Node::Package(parent) = graph[parent_index] {
-                        let item = ConflictItem::from((parent.name().clone(), (*extra).clone()));
-                        parent_map.insert(item, parent_marker);
-                    }
-
-                    // Resolve any active extras on the edge.
-                    let marker = resolve_activated_extras(*marker, scope_package, &parent_map);
-
-                    // Propagate the edge to the known conflicts.
-                    for value in parent_map.values_mut() {
-                        value.and(marker);
-                    }
-
-                    // Propagate the edge to the node itself.
-                    parent_marker.and(marker);
-                }
-                Edge::Dev { group, marker, .. } => {
-                    // The dependency group is active for this edge itself, so add it before
-                    // resolving any active extras on the edge.
-                    if let Node::Package(parent) = graph[parent_index] {
-                        let item = ConflictItem::from((parent.name().clone(), (*group).clone()));
-                        parent_map.insert(item, parent_marker);
-                    }
-
-                    // Resolve any active extras on the edge.
-                    let marker = resolve_activated_extras(*marker, scope_package, &parent_map);
-
-                    // Propagate the edge to the known conflicts.
-                    for value in parent_map.values_mut() {
-                        value.and(marker);
-                    }
-
-                    // Propagate the edge to the node itself.
-                    parent_marker.and(marker);
-                }
-            }
+            let (mut parent_marker, parent_map) = child_edge.weight().propagate(
+                &graph[parent_index],
+                &graph[child_edge.target()],
+                parent_marker,
+                parent_map,
+            );
 
             // Combine the inferred conflicts with the existing conflicts on the node.
-            match conflict_maps.entry(child_edge.target()) {
+            let conflict_map_changed = match conflict_maps.entry(child_edge.target()) {
                 Entry::Occupied(mut existing) => {
+                    let mut changed = false;
                     let child_map = existing.get_mut();
                     for (key, value) in parent_map {
-                        let mut after = child_map.get(&key).copied().unwrap_or(MarkerTree::FALSE);
+                        let before = child_map.get(&key).copied().unwrap_or(MarkerTree::FALSE);
+                        let mut after = before;
                         after.or(value);
-                        child_map.entry(key).or_insert(MarkerTree::FALSE).or(value);
+                        if after != before {
+                            child_map.insert(key, after);
+                            changed = true;
+                        }
                     }
+                    changed
                 }
                 Entry::Vacant(vacant) => {
                     vacant.insert(parent_map);
+                    true
                 }
-            }
+            };
 
             // Combine the inferred marker with the existing marker on the node.
             match reachability.entry(child_edge.target()) {
@@ -649,10 +650,80 @@ fn conflict_marker_reachability<'lock>(
                     if parent_marker != *existing.get() {
                         existing.insert(parent_marker);
                         queue.push(child_edge.target());
+                    } else if conflict_map_changed {
+                        queue.push(child_edge.target());
                     }
                 }
                 Entry::Vacant(vacant) => {
                     vacant.insert(parent_marker);
+                    queue.push(child_edge.target());
+                }
+            }
+        }
+    }
+
+    resolved_conflict_marker_reachability(graph, fork_markers, known_conflicts, &conflict_maps)
+}
+
+/// Determine package reachability after activation contexts have stabilized.
+fn resolved_conflict_marker_reachability<'lock>(
+    graph: &Graph<Node<'lock>, Edge<'lock>>,
+    fork_markers: &[Edge<'lock>],
+    known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
+    conflict_maps: &FxHashMap<NodeIndex, FxHashMap<ConflictItem, MarkerTree>>,
+) -> FxHashMap<NodeIndex, MarkerTree> {
+    let mut reachability = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
+    let mut queue: Vec<_> = graph
+        .node_indices()
+        .filter(|node_index| {
+            graph
+                .edges_directed(*node_index, Direction::Incoming)
+                .next()
+                .is_none()
+        })
+        .collect();
+
+    let root_markers = if fork_markers.is_empty() {
+        MarkerTree::TRUE
+    } else {
+        fork_markers
+            .iter()
+            .fold(MarkerTree::FALSE, |mut acc, edge| {
+                acc.or(*edge.marker());
+                acc
+            })
+    };
+    for root_index in &queue {
+        reachability.insert(*root_index, root_markers);
+    }
+
+    while let Some(parent_index) = queue.pop() {
+        let parent_map = conflict_maps.get(&parent_index).unwrap_or(known_conflicts);
+        let scope_package = match &graph[parent_index] {
+            Node::Package(package) => Some(package.name()),
+            Node::Root => None,
+        };
+        let parent_marker =
+            resolve_activated_extras(reachability[&parent_index], scope_package, parent_map);
+
+        for child_edge in graph.edges_directed(parent_index, Direction::Outgoing) {
+            let (mut child_marker, _) = child_edge.weight().propagate(
+                &graph[parent_index],
+                &graph[child_edge.target()],
+                parent_marker,
+                parent_map.clone(),
+            );
+
+            match reachability.entry(child_edge.target()) {
+                Entry::Occupied(mut existing) => {
+                    child_marker.or(*existing.get());
+                    if child_marker != *existing.get() {
+                        existing.insert(child_marker);
+                        queue.push(child_edge.target());
+                    }
+                }
+                Entry::Vacant(vacant) => {
+                    vacant.insert(child_marker);
                     queue.push(child_edge.target());
                 }
             }
