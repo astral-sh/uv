@@ -16,7 +16,7 @@ use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ResolverMarkerEnvironment;
 
-use crate::lock::{Package, PackageId};
+use crate::lock::{Dependency, Package, PackageId};
 use crate::{Lock, PackageMap};
 
 #[derive(Debug)]
@@ -73,6 +73,27 @@ impl<'env> TreeDisplay<'env> {
                     }
                 })
                 .collect()
+        };
+
+        let activated_groups = members
+            .iter()
+            .flat_map(|id| {
+                lock.find_by_id(id)
+                    .dependency_groups
+                    .keys()
+                    .filter(|group| groups.contains(group))
+                    .map(|group| (&id.name, group))
+            })
+            .collect::<Vec<_>>();
+        let evaluate_dependency = |dep: &Dependency| {
+            markers.is_none_or(|markers| {
+                dep.complexified_marker.evaluate(
+                    markers,
+                    std::iter::empty::<&PackageName>(),
+                    std::iter::empty::<(&PackageName, &ExtraName)>(),
+                    activated_groups.iter().copied(),
+                )
+            })
         };
 
         // Create a graph.
@@ -134,9 +155,7 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
-                {
+                if !evaluate_dependency(dep) {
                     continue;
                 }
 
@@ -277,9 +296,7 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
-                {
+                if !evaluate_dependency(dep) {
                     continue;
                 }
 
