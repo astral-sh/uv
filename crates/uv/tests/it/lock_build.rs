@@ -33,18 +33,7 @@ fn resolution_sections(lock: &str) -> String {
         .expect("resolution section to exist");
     let rest = &lock[start..];
     let end = rest.find("\n[[package]]").unwrap_or(rest.len());
-    rest[..end]
-        .trim_end()
-        .lines()
-        .map(|line| {
-            if line.trim_start().starts_with("executor = {") {
-                "executor = { marker = \"[EXECUTOR]\", python = \"[PYTHON]\" }"
-            } else {
-                line
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+    rest[..end].trim_end().to_string()
 }
 
 fn write_wheel(path: &ChildPath, name: &str, version: &str) -> Result<()> {
@@ -158,7 +147,6 @@ fn lock_build_dependencies() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
         ]
@@ -170,7 +158,6 @@ fn lock_build_dependencies() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
@@ -183,7 +170,6 @@ fn lock_build_dependencies() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
@@ -192,7 +178,6 @@ fn lock_build_dependencies() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
@@ -201,7 +186,6 @@ fn lock_build_dependencies() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:build:[BUILD-ID]"
@@ -210,7 +194,6 @@ fn lock_build_dependencies() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -222,7 +205,6 @@ fn lock_build_dependencies() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -234,7 +216,6 @@ fn lock_build_dependencies() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -620,8 +601,122 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     Ok(())
 }
 
-/// Verify that build requirements and artifacts are selected for the executor,
-/// not the runtime target environments.
+/// Verify implementation markers are replayed without executor-specific records.
+#[test]
+fn lock_build_dependencies_preserve_implementation_branches_without_executor_records() -> Result<()>
+{
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("seed-0.1.0-py3-none-any.whl"),
+        "seed",
+        "0.1.0",
+    )?;
+    write_wheel(
+        &links_dir.child("seed-0.2.0-py3-none-any.whl"),
+        "seed",
+        "0.2.0",
+    )?;
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.13"
+
+        [build-system]
+        requires = [
+            "seed==0.1.0 ; implementation_name == 'cpython'",
+            "seed==0.2.0 ; implementation_name != 'cpython'",
+        ]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    import seed
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep/__init__.py", "")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.13"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(
+        dep.contains(r#"version = "0.1.0""#)
+            && dep.contains(r#"marker = "implementation_name == 'cpython'""#),
+        "{dep}"
+    );
+    assert!(
+        dep.contains(r#"version = "0.2.0""#)
+            && dep.contains(r#"marker = "implementation_name != 'cpython'""#),
+        "{dep}"
+    );
+    assert!(!lock.contains("\nexecutor = "), "{lock}");
+
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Verify target environments do not prune executor markers and build artifacts
+/// remain compatible with the executor.
 #[test]
 fn lock_build_dependencies_resolve_markers_against_executor() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1022,7 +1117,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
         ]
@@ -1034,7 +1128,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
@@ -1047,7 +1140,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
@@ -1056,7 +1148,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
@@ -1065,7 +1156,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:build:[BUILD-ID]"
@@ -1074,7 +1164,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -1086,7 +1175,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -1098,7 +1186,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -1196,7 +1283,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
         ]
@@ -1208,7 +1294,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
@@ -1221,7 +1306,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
@@ -1230,7 +1314,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
@@ -1239,7 +1322,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:build:[BUILD-ID]"
@@ -1248,7 +1330,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -1260,7 +1341,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -1272,7 +1352,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -1826,7 +1905,6 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "dep-a"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
         ]
@@ -1838,7 +1916,6 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "dep-a"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
@@ -1851,7 +1928,6 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "dep-b"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
         ]
@@ -1863,7 +1939,6 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "dep-b"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
@@ -1876,7 +1951,6 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
@@ -1885,7 +1959,6 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
@@ -1894,7 +1967,6 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:build:[BUILD-ID]"
@@ -1903,7 +1975,6 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -1915,7 +1986,6 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -1927,7 +1997,6 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -2095,7 +2164,6 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
         ]
@@ -2107,7 +2175,6 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
@@ -2120,7 +2187,6 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
@@ -2129,7 +2195,6 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
@@ -2138,7 +2203,6 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:build:[BUILD-ID]"
@@ -2147,7 +2211,6 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -2159,7 +2222,6 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -2171,7 +2233,6 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -2346,7 +2407,6 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
         ]
@@ -2358,7 +2418,6 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
@@ -2371,7 +2430,6 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
@@ -2380,7 +2438,6 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
@@ -2389,7 +2446,6 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:build:[BUILD-ID]"
@@ -2398,7 +2454,6 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -2410,7 +2465,6 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -2422,7 +2476,6 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -3046,6 +3099,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     let lock = context.read("uv.lock");
     let child = package_section(&lock, "child");
     assert!(child.contains("match-runtime = true"), "{child}");
+    assert!(!lock.contains("\nexecutor = "), "{lock}");
 
     uv_snapshot!(context.filters(), context
         .sync()
@@ -3066,31 +3120,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
      + child==0.1.0 (from file://[TEMP_DIR]/child)
      + idna==3.6
      + sniffio==1.3.1
-    ");
-
-    let lock = context.read("uv.lock");
-    let incompatible_lock = lock.replace(r#"python = "3.12""#, r#"python = "3.11""#);
-    assert_ne!(lock, incompatible_lock);
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(&incompatible_lock)?;
-
-    uv_snapshot!(context.filters(), context
-        .sync()
-        .arg("--python-platform")
-        .arg(target_platform)
-        .arg("--no-cache")
-        .arg("--no-index")
-        .arg("--frozen")
-        .arg("--preview-features")
-        .arg("extra-build-dependencies,lock-build-dependencies"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: The lockfile does not contain a build resolution for `child==0.1.0 @ directory+child` compatible with the current target and build executor
     ");
 
     Ok(())
@@ -4309,7 +4338,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         name = "builder"
         version = "1.0.0"
         source = { directory = "[TEMP_DIR]/builder" }
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "nested-backend", version = "1.0.0" },
         ]
@@ -4323,7 +4351,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         name = "builder"
         version = "1.0.0"
         source = { directory = "[TEMP_DIR]/builder" }
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "nested-backend", version = "1.0.0" },
         ]
@@ -4335,7 +4362,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         mode = "isolated"
         stage = "bootstrap"
         name = "dep-a"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "builder", version = "1.0.0", source = { directory = "[TEMP_DIR]/builder" } },
             { name = "helper", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
@@ -4348,7 +4374,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         mode = "isolated"
         stage = "build"
         name = "dep-a"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "builder", version = "1.0.0", source = { directory = "[TEMP_DIR]/builder" } },
             { name = "helper", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
@@ -4361,7 +4386,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         mode = "isolated"
         stage = "bootstrap"
         name = "dep-b"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "builder", version = "1.0.0", source = { directory = "[TEMP_DIR]/builder" }, resolution-id = "build:dep-b:wheel:bootstrap:[BUILD-ID]" },
             { name = "helper", version = "2.0.0", source = { registry = "[TEMP_DIR]/links" } },
@@ -4374,7 +4398,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         mode = "isolated"
         stage = "build"
         name = "dep-b"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "builder", version = "1.0.0", source = { directory = "[TEMP_DIR]/builder" }, resolution-id = "build:dep-b:wheel:build:[BUILD-ID]" },
             { name = "helper", version = "2.0.0", source = { registry = "[TEMP_DIR]/links" } },
@@ -4544,7 +4567,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         mode = "isolated"
         stage = "bootstrap"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "builder", version = "1.0.0" },
         ]
@@ -4556,7 +4578,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         mode = "isolated"
         stage = "build"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "builder", version = "1.0.0" },
         ]
@@ -4678,7 +4699,6 @@ def get_requires_for_build_wheel(config_settings=None):
         stage = "bootstrap"
         name = "dep-a"
         target = { marker = "sys_platform == 'linux'" }
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
             { name = "helper", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
@@ -4692,7 +4712,6 @@ def get_requires_for_build_wheel(config_settings=None):
         stage = "build"
         name = "dep-a"
         target = { marker = "sys_platform == 'linux'" }
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
             { name = "helper", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
@@ -4705,7 +4724,6 @@ def get_requires_for_build_wheel(config_settings=None):
         mode = "isolated"
         stage = "bootstrap"
         name = "dep-b"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" }, resolution-id = "build:dep-b:wheel:bootstrap:[BUILD-ID]" },
             { name = "helper", version = "2.0.0", source = { registry = "[TEMP_DIR]/links" } },
@@ -4718,7 +4736,6 @@ def get_requires_for_build_wheel(config_settings=None):
         mode = "isolated"
         stage = "build"
         name = "dep-b"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" }, resolution-id = "build:dep-b:wheel:build:[BUILD-ID]" },
             { name = "helper", version = "2.0.0", source = { registry = "[TEMP_DIR]/links" } },
@@ -4832,7 +4849,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         mode = "isolated"
         stage = "bootstrap"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" }, resolution-id = "build:dep:wheel:bootstrap:[BUILD-ID]" },
             { name = "leaf", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
@@ -4845,7 +4861,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         mode = "isolated"
         stage = "build"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" }, resolution-id = "build:dep:wheel:build:[BUILD-ID]" },
             { name = "leaf", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
@@ -5315,7 +5330,9 @@ fn lock_build_dependencies_use_conditional_source_python_range() -> Result<()> {
         resolutions.split("[[resolution]]").any(|resolution| {
             resolution.contains("\nname = \"dep\"\n")
                 && resolution.contains(r#"target = { marker = "python_full_version >= '3.12'" }"#)
-                && resolution.contains(r#"{ name = "builder", version = "0.1.0" }"#)
+                && resolution.contains(
+                    r#"{ name = "builder", version = "0.1.0", marker = "python_full_version >= '3.12'" }"#
+                )
         }),
         "{lock}"
     );
@@ -5323,10 +5340,11 @@ fn lock_build_dependencies_use_conditional_source_python_range() -> Result<()> {
     Ok(())
 }
 
-/// Verify that universal build dependency locks respect the project's
-/// supported marker environments.
+/// Verify that runtime supported environments do not prune executor marker
+/// branches from universal build dependency locks.
 #[test]
-fn lock_build_dependencies_use_supported_environments() -> Result<()> {
+fn lock_build_dependencies_do_not_use_runtime_supported_environments_for_executor_markers()
+-> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let builder_dir = context.temp_dir.child("builder");
@@ -5336,7 +5354,7 @@ fn lock_build_dependencies_use_supported_environments() -> Result<()> {
         [project]
         name = "builder"
         version = "0.1.0"
-        requires-python = ">=3.13"
+        requires-python = ">=3.12"
         "#,
     )?;
     let builder_url = Url::from_directory_path(builder_dir.path()).unwrap();
@@ -5387,7 +5405,13 @@ fn lock_build_dependencies_use_supported_environments() -> Result<()> {
         .success();
 
     let lock = context.read("uv.lock");
-    assert!(!lock.contains("[[package]]\nname = \"builder\""), "{lock}");
+    assert!(lock.contains("[[package]]\nname = \"builder\""), "{lock}");
+    assert!(
+        package_section(&lock, "dep").contains(
+            r#"{ name = "builder", version = "0.1.0", marker = "sys_platform == 'win32'" }"#
+        ),
+        "{lock}"
+    );
 
     Ok(())
 }
@@ -6307,7 +6331,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "calver"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
         ]
@@ -6319,7 +6342,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "calver"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
@@ -6332,7 +6354,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
         ]
@@ -6344,7 +6365,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
@@ -6357,7 +6377,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
@@ -6366,7 +6385,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:hatch-vcs:wheel:bootstrap:[BUILD-ID]"
@@ -6375,7 +6393,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "hatch-vcs"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "hatchling", version = "1.22.4" },
         ]
@@ -6387,7 +6404,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "hatch-vcs"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "hatchling", version = "1.22.4" },
         ]
@@ -6399,7 +6415,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "iniconfig"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "hatch-vcs", version = "0.4.0" },
             { name = "hatchling", version = "1.22.4" },
@@ -6412,7 +6427,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "iniconfig"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "hatch-vcs", version = "0.4.0" },
             { name = "hatchling", version = "1.22.4" },
@@ -6425,7 +6439,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "packaging"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -6437,7 +6450,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "packaging"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -6449,7 +6461,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "pathspec"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -6461,7 +6472,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "pathspec"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -6473,7 +6483,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "pluggy"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "setuptools-scm", version = "8.0.4" },
@@ -6487,7 +6496,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "pluggy"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "setuptools-scm", version = "8.0.4" },
@@ -6502,7 +6510,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "setuptools-scm"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
         ]
@@ -6514,7 +6521,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "setuptools-scm"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
         ]
@@ -6526,7 +6532,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:build:[BUILD-ID]"
@@ -6535,7 +6540,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -6547,7 +6551,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "trove-classifiers"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "calver", version = "2022.6.26" },
             { name = "setuptools", version = "69.2.0" },
@@ -6560,7 +6563,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "trove-classifiers"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "calver", version = "2022.6.26" },
             { name = "setuptools", version = "69.2.0" },
@@ -6574,7 +6576,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "typing-extensions"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -6586,7 +6587,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "typing-extensions"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -6598,7 +6598,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -6610,7 +6609,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -6918,7 +6916,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "calver"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
         ]
@@ -6930,7 +6927,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "calver"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
@@ -6943,7 +6939,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "iniconfig", version = "2.0.0" },
             { name = "setuptools", version = "69.2.0" },
@@ -6957,7 +6952,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "iniconfig", version = "2.0.0" },
             { name = "setuptools", version = "69.2.0" },
@@ -6971,7 +6965,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
@@ -6980,7 +6973,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:hatch-vcs:wheel:bootstrap:[BUILD-ID]"
@@ -6989,7 +6981,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "hatch-vcs"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "hatchling", version = "1.22.4" },
         ]
@@ -7001,7 +6992,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "hatch-vcs"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "hatchling", version = "1.22.4" },
         ]
@@ -7013,7 +7003,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "hatchling"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:hatchling:wheel:build:[BUILD-ID]"
@@ -7022,7 +7011,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "hatchling"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "packaging", version = "24.0" },
             { name = "pathspec", version = "0.12.1" },
@@ -7037,7 +7025,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "iniconfig"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "hatch-vcs", version = "0.4.0" },
             { name = "hatchling", version = "1.22.4" },
@@ -7050,7 +7037,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "iniconfig"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "hatch-vcs", version = "0.4.0" },
             { name = "hatchling", version = "1.22.4" },
@@ -7063,7 +7049,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "packaging"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -7075,7 +7060,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "packaging"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -7087,7 +7071,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "pathspec"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -7099,7 +7082,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "pathspec"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -7111,7 +7093,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "pluggy"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "setuptools-scm", version = "8.0.4" },
@@ -7125,7 +7106,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "pluggy"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "setuptools-scm", version = "8.0.4" },
@@ -7140,7 +7120,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "setuptools-scm"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
         ]
@@ -7152,7 +7131,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "setuptools-scm"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
@@ -7165,7 +7143,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:build:[BUILD-ID]"
@@ -7174,7 +7151,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -7186,7 +7162,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "trove-classifiers"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "calver", version = "2022.6.26" },
             { name = "setuptools", version = "69.2.0" },
@@ -7199,7 +7174,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "trove-classifiers"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "calver", version = "2022.6.26" },
             { name = "setuptools", version = "69.2.0" },
@@ -7213,7 +7187,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "typing-extensions"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -7225,7 +7198,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "typing-extensions"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -7237,7 +7209,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -7249,7 +7220,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -7807,7 +7777,6 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
@@ -7820,7 +7789,6 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
@@ -7833,7 +7801,6 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
@@ -7842,7 +7809,6 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
@@ -7851,7 +7817,6 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:build:[BUILD-ID]"
@@ -7860,7 +7825,6 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -7872,7 +7836,6 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -7884,7 +7847,6 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -8234,7 +8196,9 @@ def get_requires_for_build_wheel(config_settings=None):
 
     let lock = context.read("uv.lock");
     assert!(
-        package_section(&lock, "builder").contains(r#"{ name = "seed", version = "0.1.0" }"#),
+        package_section(&lock, "builder").contains(&format!(
+            r#"{{ name = "seed", version = "0.1.0", marker = "{executor_marker}" }}"#
+        )),
         "{lock}"
     );
 
@@ -8323,28 +8287,21 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
 
     let lock = context.read("uv.lock");
 
-    // Only the executor-specific branch is locked, and transitive dependencies
-    // remain outside the direct build requirement list.
+    // Both marker branches are locked, while transitive dependencies remain
+    // outside the direct build requirement list.
     let dep = package_section(&lock, "dep");
-    if cfg!(target_os = "linux") {
-        assert!(
-            dep.contains(r#"{ name = "anyio", version = "4.3.0" }"#),
-            "{lock}"
-        );
-        assert!(
-            !dep.contains(r#"{ name = "iniconfig", version = "2.0.0" }"#),
-            "{lock}"
-        );
-    } else {
-        assert!(
-            dep.contains(r#"{ name = "iniconfig", version = "2.0.0" }"#),
-            "{lock}"
-        );
-        assert!(
-            !dep.contains(r#"{ name = "anyio", version = "4.3.0" }"#),
-            "{lock}"
-        );
-    }
+    assert!(
+        dep.contains(
+            r#"{ name = "anyio", version = "4.3.0", marker = "sys_platform == 'linux'" }"#
+        ),
+        "{lock}"
+    );
+    assert!(
+        dep.contains(
+            r#"{ name = "iniconfig", version = "2.0.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" }"#
+        ),
+        "{lock}"
+    );
     assert!(!dep.contains(r#"{ name = "idna","#), "{lock}");
     assert!(!dep.contains(r#"{ name = "sniffio","#), "{lock}");
 
@@ -8433,7 +8390,6 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
@@ -8446,7 +8402,6 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "dep"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
@@ -8459,7 +8414,6 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
@@ -8468,7 +8422,6 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
@@ -8477,7 +8430,6 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:build:[BUILD-ID]"
@@ -8486,7 +8438,6 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -8498,7 +8449,6 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -8510,7 +8460,6 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -9342,7 +9291,6 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "dep2"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
         ]
@@ -9354,7 +9302,6 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "dep2"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
@@ -9367,7 +9314,6 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
@@ -9376,7 +9322,6 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "flit-core"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:bootstrap:[BUILD-ID]"
@@ -9385,7 +9330,6 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
 
         [[resolution]]
         id = "build:setuptools:wheel:build:[BUILD-ID]"
@@ -9394,7 +9338,6 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "setuptools"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "wheel", version = "0.43.0" },
         ]
@@ -9406,7 +9349,6 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         mode = "isolated"
         stage = "bootstrap"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -9418,7 +9360,6 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         mode = "isolated"
         stage = "build"
         name = "wheel"
-        executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]

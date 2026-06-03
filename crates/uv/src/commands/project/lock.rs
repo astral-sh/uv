@@ -28,7 +28,10 @@ use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
+use uv_pep508::{
+    MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
+    MarkerValueVersion,
+};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -1136,7 +1139,14 @@ async fn do_lock(
                     general_extra_build_requires
                         .retain(|name, _| !match_runtime_packages.contains(name));
                     let mut build_resolutions = BuildResolutionGraphMap::new();
+                    let executor_artifact_environments =
+                        executor_artifact_environments(interpreter.markers());
 
+                    // Build backend hooks are assumed to return the same requirements for every
+                    // executor, except for variation expressed by PEP 508 environment markers on
+                    // those requirements. Discovering arbitrary executor-dependent hook results
+                    // would require running the backend in every possible environment, so resolve
+                    // the returned requirements universally and evaluate their markers on replay.
                     {
                         let build_dispatch = BuildDispatch::new(
                             &client,
@@ -1167,7 +1177,7 @@ async fn do_lock(
                         .with_universal_build_resolution(
                             requires_python.clone(),
                             SupportedEnvironments::default(),
-                            SupportedEnvironments::default(),
+                            executor_artifact_environments.clone(),
                         );
                         let build_database = DistributionDatabase::new(
                             &client,
@@ -1185,8 +1195,6 @@ async fn do_lock(
                             None,
                             None,
                             &match_runtime_packages,
-                            interpreter.markers(),
-                            &interpreter.python_minor_version(),
                         )
                         .await
                         .map_err(ProjectError::from)?;
@@ -1241,7 +1249,7 @@ async fn do_lock(
                             .with_universal_build_resolution(
                                 requires_python.clone(),
                                 SupportedEnvironments::default(),
-                                SupportedEnvironments::default(),
+                                executor_artifact_environments.clone(),
                             );
                             let build_database = DistributionDatabase::new(
                                 &client,
@@ -1259,8 +1267,6 @@ async fn do_lock(
                                 runtime_marker,
                                 Some(&included_root_packages),
                                 &no_excluded_packages,
-                                interpreter.markers(),
-                                &interpreter.python_minor_version(),
                             )
                             .await
                             .map_err(ProjectError::from)?;
@@ -1276,14 +1282,11 @@ async fn do_lock(
                         &build_metadata_dispatch,
                         concurrency.downloads_semaphore.clone(),
                     );
-                    let executor_python = interpreter.python_minor_version();
                     lock = lock
                         .with_build_resolutions(
                             &build_resolutions,
                             &extra_build_requires,
                             &build_markers,
-                            interpreter.markers(),
-                            &executor_python,
                             target.install_path(),
                             &build_metadata_database,
                             &build_hasher,
@@ -1366,8 +1369,6 @@ async fn resolve_all_possible_builds(
     runtime_marker: Option<UniversalMarker>,
     included_root_packages: Option<&BTreeSet<PackageName>>,
     excluded_packages: &BTreeSet<PackageName>,
-    executor_markers: &MarkerEnvironment,
-    executor_python: &Version,
 ) -> anyhow::Result<()> {
     struct BuildResolutionRequest {
         key: BuildPackageKey,
@@ -1492,8 +1493,6 @@ async fn resolve_all_possible_builds(
                 operation,
                 BuildResolutionStage::Bootstrap,
                 build_markers,
-                executor_markers,
-                executor_python,
                 workspace_root,
             )?
         } else {
@@ -1502,8 +1501,6 @@ async fn resolve_all_possible_builds(
                 operation,
                 BuildResolutionStage::Bootstrap,
                 target_marker,
-                executor_markers,
-                executor_python,
                 workspace_root,
             )?
         };
@@ -1513,8 +1510,6 @@ async fn resolve_all_possible_builds(
                 operation,
                 BuildResolutionStage::Build,
                 build_markers,
-                executor_markers,
-                executor_python,
                 workspace_root,
             )?
         } else {
@@ -1523,8 +1518,6 @@ async fn resolve_all_possible_builds(
                 operation,
                 BuildResolutionStage::Build,
                 target_marker,
-                executor_markers,
-                executor_python,
                 workspace_root,
             )?
         };
@@ -1705,6 +1698,27 @@ fn source_python_marker(marker: MarkerTree) -> MarkerTree {
         python_marker.or(python_clause);
     }
     python_marker
+}
+
+/// Return the marker environment used to require artifact coverage for dependencies installed into
+/// the build environment.
+///
+/// Build requirement markers are resolved universally, but an artifact selected during capture
+/// must be installable by the executor performing the build.
+fn executor_artifact_environments(markers: &MarkerEnvironment) -> SupportedEnvironments {
+    let mut marker = MarkerTree::expression(MarkerExpression::String {
+        key: MarkerValueString::SysPlatform,
+        operator: MarkerOperator::Equal,
+        value: markers.sys_platform().into(),
+    });
+    if !markers.platform_machine().is_empty() {
+        marker.and(MarkerTree::expression(MarkerExpression::String {
+            key: MarkerValueString::PlatformMachine,
+            operator: MarkerOperator::Equal,
+            value: markers.platform_machine().into(),
+        }));
+    }
+    SupportedEnvironments::from_markers(vec![marker])
 }
 
 #[derive(Debug)]

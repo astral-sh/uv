@@ -356,14 +356,12 @@ fn build_resolution_context_id_for_package(
     operation: BuildResolutionOperation,
     stage: BuildResolutionStage,
     target: Option<&TargetSelector>,
-    executor: Option<&ExecutorSelector>,
 ) -> String {
     build_resolution_context_id_with_context(
         &build_key_from_package_id(&package.id),
         operation,
         stage,
         target,
-        executor,
     )
 }
 
@@ -373,7 +371,6 @@ fn build_resolution_context_id(package: &BuildPackageKey) -> String {
         BuildResolutionOperation::Wheel,
         BuildResolutionStage::Build,
         None,
-        None,
     )
 }
 
@@ -382,10 +379,9 @@ fn build_resolution_context_id_with_context(
     operation: BuildResolutionOperation,
     stage: BuildResolutionStage,
     target: Option<&TargetSelector>,
-    executor: Option<&ExecutorSelector>,
 ) -> String {
     let digest = hash_digest(&build_resolution_context_identity(
-        package, operation, stage, target, executor,
+        package, operation, stage, target,
     ));
     format!(
         "build:{}:{}:{}:{digest}",
@@ -400,7 +396,6 @@ fn build_resolution_context_identity(
     operation: BuildResolutionOperation,
     stage: BuildResolutionStage,
     target: Option<&TargetSelector>,
-    executor: Option<&ExecutorSelector>,
 ) -> String {
     let mut identity = format!("operation={};name={}", operation.as_str(), package.name);
     identity.push_str(";stage=");
@@ -420,10 +415,6 @@ fn build_resolution_context_identity(
         identity.push_str(";target=");
         identity.push_str(&target.to_toml().to_string());
     }
-    if let Some(executor) = executor {
-        identity.push_str(";executor=");
-        identity.push_str(&executor.to_toml().to_string());
-    }
     identity
 }
 
@@ -441,17 +432,6 @@ fn build_package_source_identity(source: &BuildPackageSource) -> (&'static str, 
 
 fn runtime_resolution_context_id(index: usize) -> String {
     format!("runtime:{index}")
-}
-
-fn marker_environment_marker(markers: &MarkerEnvironment) -> String {
-    let sys_platform = markers.sys_platform();
-    let platform_machine = markers.platform_machine();
-
-    if platform_machine.is_empty() {
-        format!("sys_platform == '{sys_platform}'")
-    } else {
-        format!("sys_platform == '{sys_platform}' and platform_machine == '{platform_machine}'")
-    }
 }
 
 fn package_id_from_resolved_dist(
@@ -1085,15 +1065,8 @@ impl Lock {
         operation: BuildResolutionOperation,
         stage: BuildResolutionStage,
         build_markers: &BTreeMap<BuildPackageKey, UniversalMarker>,
-        executor_markers: &MarkerEnvironment,
-        executor_python: &Version,
         root: &Path,
     ) -> Result<String, LockError> {
-        let executor = ExecutorSelector::from_marker_environment(
-            executor_markers,
-            executor_python.clone(),
-            &self.requires_python,
-        )?;
         let package = self
             .packages
             .iter()
@@ -1102,23 +1075,9 @@ impl Lock {
             build_resolution_target(build_markers, package, root, &self.requires_python)
         });
         Ok(package.map_or_else(
-            || {
-                build_resolution_context_id_with_context(
-                    key,
-                    operation,
-                    stage,
-                    target.as_ref(),
-                    Some(&executor),
-                )
-            },
+            || build_resolution_context_id_with_context(key, operation, stage, target.as_ref()),
             |package| {
-                build_resolution_context_id_for_package(
-                    package,
-                    operation,
-                    stage,
-                    target.as_ref(),
-                    Some(&executor),
-                )
+                build_resolution_context_id_for_package(package, operation, stage, target.as_ref())
             },
         ))
     }
@@ -1130,15 +1089,8 @@ impl Lock {
         operation: BuildResolutionOperation,
         stage: BuildResolutionStage,
         target_marker: Option<MarkerTree>,
-        executor_markers: &MarkerEnvironment,
-        executor_python: &Version,
         root: &Path,
     ) -> Result<String, LockError> {
-        let executor = ExecutorSelector::from_marker_environment(
-            executor_markers,
-            executor_python.clone(),
-            &self.requires_python,
-        )?;
         let package = self
             .packages
             .iter()
@@ -1150,23 +1102,9 @@ impl Lock {
             .and_then(|marker| TargetSelector::from_universal_marker(marker, &self.requires_python))
             .filter(|target| !target.is_empty());
         Ok(package.map_or_else(
-            || {
-                build_resolution_context_id_with_context(
-                    key,
-                    operation,
-                    stage,
-                    target.as_ref(),
-                    Some(&executor),
-                )
-            },
+            || build_resolution_context_id_with_context(key, operation, stage, target.as_ref()),
             |package| {
-                build_resolution_context_id_for_package(
-                    package,
-                    operation,
-                    stage,
-                    target.as_ref(),
-                    Some(&executor),
-                )
+                build_resolution_context_id_for_package(package, operation, stage, target.as_ref())
             },
         ))
     }
@@ -1183,8 +1121,6 @@ impl Lock {
         build_resolutions: &BuildResolutionGraphMap,
         extra_build_requires: &ExtraBuildRequires,
         build_markers: &BTreeMap<BuildPackageKey, UniversalMarker>,
-        executor_markers: &MarkerEnvironment,
-        executor_python: &Version,
         root: &Path,
         database: &DistributionDatabase<'_, Context>,
         build_hasher: &HashStrategy,
@@ -1229,11 +1165,6 @@ impl Lock {
             })
             .collect_vec();
 
-        let executor = ExecutorSelector::from_marker_environment(
-            executor_markers,
-            executor_python.clone(),
-            &self.requires_python,
-        )?;
         let mut build_resolution_contexts = BTreeMap::new();
         let mut context_counts = BTreeMap::new();
         for &(graph_key, _) in &build_resolution_graphs {
@@ -1268,7 +1199,6 @@ impl Lock {
                             operation,
                             stage,
                             target.as_ref(),
-                            Some(&executor),
                         )
                     },
                     |package| {
@@ -1277,7 +1207,6 @@ impl Lock {
                             operation,
                             stage,
                             target.as_ref(),
-                            Some(&executor),
                         )
                     },
                 );
@@ -1472,11 +1401,6 @@ impl Lock {
             BuildResolutionGraphKey,
             BTreeMap<PackageId, BuildDependencyEdges>,
         > = BTreeMap::new();
-        let executor = ExecutorSelector::from_marker_environment(
-            executor_markers,
-            executor_python.clone(),
-            &self.requires_python,
-        )?;
         let mut build_resolution_contexts = BTreeMap::new();
         let mut context_counts = BTreeMap::new();
         for &(graph_key, _) in &build_resolution_graphs {
@@ -1511,7 +1435,6 @@ impl Lock {
                             operation,
                             stage,
                             target.as_ref(),
-                            Some(&executor),
                         )
                     },
                     |package| {
@@ -1520,7 +1443,6 @@ impl Lock {
                             operation,
                             stage,
                             target.as_ref(),
-                            Some(&executor),
                         )
                     },
                 );
@@ -1856,7 +1778,6 @@ impl Lock {
                     stage: graph_key.stage.or(Some(BuildResolutionStage::Build)),
                     package_id: Some(package_id),
                     target,
-                    executor: Some(executor.clone()),
                     dependencies,
                 })
             })() else {
@@ -1992,15 +1913,15 @@ impl Lock {
         package: &Package,
         operation: BuildResolutionOperation,
         target_markers: &MarkerEnvironment,
-        executor_markers: &MarkerEnvironment,
-        executor_python: &Version,
         runtime_package_ids: &FxHashSet<PackageId>,
         stage: BuildResolutionStage,
     ) -> Result<Option<&ResolutionRecord>, LockError> {
-        let mut executor_target = None;
-        let mut executor_fallback = None;
-        let mut legacy_target = None;
-        let mut legacy_fallback = None;
+        // Build records can vary by runtime target for `match-runtime`, but not by executor.
+        // Executor-dependent branches representable by PEP 508 environment markers remain on the
+        // locked roots and edges, where replay evaluates them against the current build
+        // interpreter.
+        let mut target_candidate = None;
+        let mut fallback_candidate = None;
         let mut has_records = false;
         let package_id = package.id.unscoped();
         for resolution in self.resolutions.iter().filter(|resolution| {
@@ -2010,12 +1931,6 @@ impl Lock {
         }) {
             has_records = true;
             if resolution.operation.unwrap_or(ResolutionOperation::Wheel) != operation.into() {
-                continue;
-            }
-            let has_executor = resolution.executor.is_some();
-            if !resolution.executor.as_ref().is_none_or(|executor| {
-                executor.matches(executor_markers, executor_python, &self.requires_python)
-            }) {
                 continue;
             }
             if resolution.dependencies.iter().any(|dependency| {
@@ -2042,11 +1957,10 @@ impl Lock {
                 .iter()
                 .filter(|dependency| dependency.match_runtime())
                 .count();
-            let candidate = match (has_executor, resolution.target.is_some()) {
-                (true, true) => &mut executor_target,
-                (true, false) => &mut executor_fallback,
-                (false, true) => &mut legacy_target,
-                (false, false) => &mut legacy_fallback,
+            let candidate = if resolution.target.is_some() {
+                &mut target_candidate
+            } else {
+                &mut fallback_candidate
             };
             if candidate
                 .as_ref()
@@ -2056,10 +1970,8 @@ impl Lock {
             }
         }
 
-        if let Some(resolution) = executor_target
-            .or(executor_fallback)
-            .or(legacy_target)
-            .or(legacy_fallback)
+        if let Some(resolution) = target_candidate
+            .or(fallback_candidate)
             .map(|(_, resolution)| resolution)
         {
             Ok(Some(resolution))
@@ -2255,8 +2167,9 @@ impl Lock {
     ///
     /// Walks the dependency graph (BFS) from each package's `build-dependencies`
     /// through the `dependencies` of each transitive build dep, evaluating markers
-    /// at each edge. This is consistent with how `to_resolution()` handles regular
-    /// dependencies.
+    /// at each edge. Executor tags and markers choose compatible artifacts and
+    /// evaluate locked branches; they do not select a different build record. This
+    /// is consistent with how `to_resolution()` handles regular dependencies.
     pub fn all_build_resolutions(
         &self,
         resolution: &Resolution,
@@ -2265,7 +2178,6 @@ impl Lock {
         build_options: &BuildOptions,
         target_markers: &MarkerEnvironment,
         executor_markers: &MarkerEnvironment,
-        executor_python: &Version,
     ) -> Result<BTreeMap<BuildPackageKey, LockedBuildResolution>, LockError> {
         let package_by_id = self.package_by_id();
         let package_for_resolved_dist = |resolved_dist: &ResolvedDist| {
@@ -2308,8 +2220,6 @@ impl Lock {
                 package,
                 build_operation_for_key(&key),
                 target_markers,
-                executor_markers,
-                executor_python,
                 &runtime_package_ids,
                 BuildResolutionStage::Build,
             )?;
@@ -2364,8 +2274,6 @@ impl Lock {
                 package,
                 operation,
                 target_markers,
-                executor_markers,
-                executor_python,
                 &runtime_package_ids,
                 BuildResolutionStage::Build,
             )?;
@@ -2496,8 +2404,6 @@ impl Lock {
                 package,
                 operation,
                 target_markers,
-                executor_markers,
-                executor_python,
                 &runtime_package_ids,
                 BuildResolutionStage::Bootstrap,
             )?;
@@ -4829,13 +4735,6 @@ impl TryFrom<LockWire> for Lock {
                     }
                     .into());
                 }
-                if resolution.executor.is_some() {
-                    return Err(LockErrorKind::InvalidResolutionRecord {
-                        id: resolution.id.clone(),
-                        message: "runtime resolution cannot declare an executor",
-                    }
-                    .into());
-                }
                 if resolution.name.is_some()
                     || resolution.version.is_some()
                     || resolution.source.is_some()
@@ -4942,9 +4841,6 @@ impl TryFrom<LockWire> for Lock {
                     message: "build resolution is missing a replay mode",
                 }
                 .into());
-            }
-            if let Some(executor) = resolution.executor.as_ref() {
-                executor.validate(&resolution.id)?;
             }
             let Some(package_id) = resolution.package_id.as_ref() else {
                 return Err(LockErrorKind::InvalidResolutionRecord {
@@ -5233,7 +5129,6 @@ struct ResolutionRecord {
     stage: Option<BuildResolutionStage>,
     package_id: Option<PackageId>,
     target: Option<TargetSelector>,
-    executor: Option<ExecutorSelector>,
     dependencies: Vec<BuildDependency>,
 }
 
@@ -5247,7 +5142,6 @@ impl ResolutionRecord {
             stage: None,
             package_id: None,
             target: Some(target),
-            executor: None,
             dependencies: Vec::new(),
         }
     }
@@ -5271,10 +5165,6 @@ impl ResolutionRecord {
         if let Some(target) = self.target.as_ref() {
             table.insert("target", value(target.to_toml()));
         }
-        if let Some(executor) = self.executor.as_ref() {
-            table.insert("executor", value(executor.to_toml()));
-        }
-
         if !self.dependencies.is_empty() {
             let dependencies = each_element_on_its_line_array(
                 self.dependencies
@@ -5872,74 +5762,6 @@ impl PackageSelectorWire {
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-struct ExecutorSelector {
-    #[serde(default)]
-    marker: Option<SimplifiedMarkerTree>,
-    #[serde(default)]
-    python: Option<Version>,
-}
-
-impl ExecutorSelector {
-    fn from_marker_environment(
-        markers: &MarkerEnvironment,
-        python: Version,
-        requires_python: &RequiresPython,
-    ) -> Result<Self, LockError> {
-        let marker = marker_environment_marker(markers);
-        let marker = marker
-            .parse::<MarkerTree>()
-            .map_err(|err| LockErrorKind::InvalidMarker { marker, err })?;
-        Ok(Self {
-            marker: Some(SimplifiedMarkerTree::new(requires_python, marker)),
-            python: Some(python),
-        })
-    }
-
-    fn validate(&self, resolution_id: &str) -> Result<(), LockError> {
-        if self.marker.is_none() && self.python.is_none() {
-            Err(LockErrorKind::InvalidResolutionRecord {
-                id: resolution_id.to_string(),
-                message: "executor selector must declare marker or python",
-            }
-            .into())
-        } else {
-            Ok(())
-        }
-    }
-
-    fn matches(
-        &self,
-        markers: &MarkerEnvironment,
-        python: &Version,
-        requires_python: &RequiresPython,
-    ) -> bool {
-        self.python
-            .as_ref()
-            .is_none_or(|expected| expected == python)
-            && self.marker.is_none_or(|marker| {
-                UniversalMarker::from_combined(marker.into_marker(requires_python))
-                    .evaluate_no_extras(markers)
-            })
-    }
-
-    fn to_toml(&self) -> InlineTable {
-        let mut table = InlineTable::new();
-        if let Some(marker) = self
-            .marker
-            .clone()
-            .and_then(SimplifiedMarkerTree::try_to_string)
-        {
-            table.insert("marker", Value::from(marker));
-        }
-        if let Some(python) = &self.python {
-            table.insert("python", Value::from(python.to_string()));
-        }
-        table
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct DependencySelectorWire {
     #[serde(default)]
     resolution: Option<String>,
@@ -5996,8 +5818,6 @@ struct ResolutionRecordWire {
     source: Option<Source>,
     #[serde(default)]
     target: Option<TargetSelector>,
-    #[serde(default)]
-    executor: Option<ExecutorSelector>,
     #[serde(default, rename = "roots")]
     dependencies: Vec<BuildDependencyWire>,
 }
@@ -6046,7 +5866,6 @@ impl ResolutionRecordWire {
             },
             package_id,
             target: self.target,
-            executor: self.executor,
             dependencies: self
                 .dependencies
                 .into_iter()
@@ -10194,9 +10013,8 @@ enum LockErrorKind {
         /// The parse error.
         message: &'static str,
     },
-    /// An error that occurs when no captured build resolution matches the requested target and
-    /// executor.
-    #[error("The lockfile does not contain a build resolution for `{id}` compatible with the current target and build executor", id = id.cyan())]
+    /// An error that occurs when no captured build resolution matches the requested target.
+    #[error("The lockfile does not contain a build resolution for `{id}` compatible with the current target", id = id.cyan())]
     MissingBuildResolution {
         /// The package missing a compatible build resolution.
         id: PackageId,
@@ -11529,7 +11347,7 @@ target = { marker = "sys_platform == 'darwin'" }
     }
 
     #[test]
-    fn build_resolution_context_ids_include_target_and_executor_identity() {
+    fn build_resolution_context_ids_include_target_identity() {
         let requires_python = RequiresPython::greater_than_equal_version(&Version::new([3, 12]));
         let package = BuildPackageKey::with_source(
             PackageName::from_str("dep").unwrap(),
@@ -11554,72 +11372,31 @@ target = { marker = "sys_platform == 'darwin'" }
             inactive: Vec::new(),
             any_of: None,
         };
-        let linux_executor = ExecutorSelector {
-            marker: Some(SimplifiedMarkerTree::new(
-                &requires_python,
-                "sys_platform == 'linux'".parse::<MarkerTree>().unwrap(),
-            )),
-            python: Some(Version::new([3, 12])),
-        };
-        let darwin_executor = ExecutorSelector {
-            marker: Some(SimplifiedMarkerTree::new(
-                &requires_python,
-                "sys_platform == 'darwin'".parse::<MarkerTree>().unwrap(),
-            )),
-            python: Some(Version::new([3, 12])),
-        };
-        let python_313_executor = ExecutorSelector {
-            marker: Some(SimplifiedMarkerTree::new(
-                &requires_python,
-                "sys_platform == 'linux'".parse::<MarkerTree>().unwrap(),
-            )),
-            python: Some(Version::new([3, 13])),
-        };
-
         let source_only_id = build_resolution_context_id(&package);
-        let linux_linux_id = build_resolution_context_id_with_context(
+        let linux_id = build_resolution_context_id_with_context(
             &package,
             BuildResolutionOperation::Wheel,
             BuildResolutionStage::Build,
             Some(&linux_target),
-            Some(&linux_executor),
         );
-        let darwin_linux_id = build_resolution_context_id_with_context(
+        let darwin_id = build_resolution_context_id_with_context(
             &package,
             BuildResolutionOperation::Wheel,
             BuildResolutionStage::Build,
             Some(&darwin_target),
-            Some(&linux_executor),
-        );
-        let linux_darwin_id = build_resolution_context_id_with_context(
-            &package,
-            BuildResolutionOperation::Wheel,
-            BuildResolutionStage::Build,
-            Some(&linux_target),
-            Some(&darwin_executor),
-        );
-        let linux_python_313_id = build_resolution_context_id_with_context(
-            &package,
-            BuildResolutionOperation::Wheel,
-            BuildResolutionStage::Build,
-            Some(&linux_target),
-            Some(&python_313_executor),
         );
         let editable_linux_id = build_resolution_context_id_with_context(
             &package,
             BuildResolutionOperation::Editable,
             BuildResolutionStage::Build,
             Some(&linux_target),
-            Some(&linux_executor),
         );
 
-        assert!(linux_linux_id.starts_with("build:dep:wheel:"));
+        assert!(linux_id.starts_with("build:dep:wheel:"));
         assert!(editable_linux_id.starts_with("build:dep:editable:"));
-        assert_ne!(source_only_id, linux_linux_id);
-        assert_ne!(linux_linux_id, darwin_linux_id);
-        assert_ne!(linux_linux_id, linux_darwin_id);
-        assert_ne!(linux_linux_id, linux_python_313_id);
-        assert_ne!(linux_linux_id, editable_linux_id);
+        assert_ne!(source_only_id, linux_id);
+        assert_ne!(linux_id, darwin_id);
+        assert_ne!(linux_id, editable_linux_id);
     }
 
     #[test]
@@ -11858,25 +11635,6 @@ target = { marker = "sys_platform == 'linux'" }
     }
 
     #[test]
-    fn runtime_resolution_rejects_executor() {
-        let data = r#"
-version = 2
-requires-python = ">=3.12"
-
-[[resolution]]
-id = "runtime:0"
-kind = "runtime"
-executor = { marker = "sys_platform == 'linux'", python = "3.12" }
-target = { marker = "sys_platform == 'linux'" }
-"#;
-        let result = toml::from_str::<Lock>(data).unwrap_err();
-        assert_stripped_snapshot!(
-            result,
-            @"Invalid resolution record `runtime:0`: runtime resolution cannot declare an executor"
-        );
-    }
-
-    #[test]
     fn runtime_resolution_rejects_source_package() {
         let data = r#"
 version = 2
@@ -11985,80 +11743,6 @@ mode = "isolated"
             result,
             @"Invalid resolution record `build:a:wheel`: build resolution is missing a source package"
         );
-    }
-
-    #[test]
-    fn build_resolution_rejects_empty_executor() {
-        let data = r#"
-version = 2
-requires-python = ">=3.12"
-
-[[resolution]]
-id = "build:a:wheel"
-kind = "build"
-operation = "wheel"
-mode = "isolated"
-name = "a"
-version = "1.0.0"
-source = { registry = "https://pypi.org/simple" }
-executor = {}
-
-[[package]]
-name = "a"
-version = "1.0.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-"#;
-        let result = toml::from_str::<Lock>(data).unwrap_err();
-        assert_stripped_snapshot!(
-            result,
-            @"Invalid resolution record `build:a:wheel`: executor selector must declare marker or python"
-        );
-    }
-
-    #[test]
-    fn build_resolution_preserves_executor() {
-        let data = r#"
-version = 2
-revision = 4
-requires-python = ">=3.12"
-
-[[resolution]]
-id = "build:a:wheel"
-kind = "build"
-operation = "wheel"
-mode = "isolated"
-name = "a"
-version = "1.0.0"
-source = { registry = "https://pypi.org/simple" }
-executor = { marker = "sys_platform == 'linux'", python = "3.12" }
-roots = [{ name = "b" }]
-
-[[package]]
-name = "a"
-version = "1.0.0"
-source = { registry = "https://pypi.org/simple" }
-build-dependencies = [
-    { name = "b" },
-]
-sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "b"
-version = "1.0.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-"#;
-        let lock = toml::from_str::<Lock>(data).unwrap();
-        let serialized = lock.to_toml().unwrap();
-        assert!(
-            serialized
-                .contains(r#"executor = { marker = "sys_platform == 'linux'", python = "3.12" }"#),
-            "{serialized}"
-        );
-
-        let reparsed = toml::from_str::<Lock>(&serialized).unwrap();
-        assert_eq!(reparsed, lock);
     }
 
     #[test]
