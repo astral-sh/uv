@@ -2070,7 +2070,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         Ok(Dependencies::Available(dependencies))
     }
 
-    /// Extend conditional source variants to extras that recursively activate them.
+    /// Extend conditional source variants to extras that recursively activate them, and record
+    /// extras unconditionally activated by selecting groups.
     fn source_variants_with_recursive_extras(
         &self,
         dependencies: &[Requirement],
@@ -2082,6 +2083,25 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         python_requirement: &PythonRequirement,
     ) -> Vec<SourceVariant> {
         let mut variants = source_variants.to_vec();
+        for variant in &mut variants {
+            let Some(group) = variant.group.as_ref() else {
+                continue;
+            };
+            variant.constraint_extras.extend(
+                dev_dependencies
+                    .get(group)
+                    .into_iter()
+                    .flatten()
+                    .filter(|requirement| {
+                        &requirement.name == project_name
+                            && variant
+                                .requirement
+                                .marker
+                                .is_disjoint(requirement.marker.negate())
+                    })
+                    .flat_map(|requirement| requirement.extras.iter().cloned()),
+            );
+        }
         for extra in extras {
             for requirement in self.flatten_requirements(
                 dependencies,
@@ -2114,12 +2134,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     requirement: requirement.into_owned(),
                     extra: Some(extra.clone()),
                     group: None,
-                    recursive_extra: Some(source_extra.clone()),
+                    constraint_extras: BTreeSet::from([source_extra.clone()]),
                 };
                 if !variants.iter().any(|existing| {
                     existing.extra == variant.extra
                         && existing.group == variant.group
-                        && existing.recursive_extra == variant.recursive_extra
+                        && existing.constraint_extras == variant.constraint_extras
                         && existing.requirement == variant.requirement
                 }) {
                     variants.push(variant);
@@ -2230,11 +2250,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         variant.extra.as_ref(),
                         variant.group.as_ref(),
                     );
-                    if let Some(recursive_extra) = variant.recursive_extra.as_ref() {
+                    for constraint_extra in &variant.constraint_extras {
                         marker.and(UniversalMarker::from_source_scope(
                             MarkerTree::TRUE,
                             project_name,
-                            Some(recursive_extra),
+                            Some(constraint_extra),
                             None,
                         ));
                     }

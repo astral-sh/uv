@@ -45,8 +45,8 @@ pub struct SourceVariant {
     pub requirement: Requirement,
     pub extra: Option<ExtraName>,
     pub group: Option<GroupName>,
-    /// The nested extra that selected this source during recursive expansion.
-    pub recursive_extra: Option<ExtraName>,
+    /// Extras known to be active when applying constraints to this source.
+    pub constraint_extras: BTreeSet<ExtraName>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -770,7 +770,7 @@ impl LoweredSourceRequirement {
             requirement: self.requirement,
             extra: self.source_extra,
             group: self.source_group,
-            recursive_extra: None,
+            constraint_extras: BTreeSet::new(),
         }
     }
 }

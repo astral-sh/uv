@@ -328,7 +328,7 @@ impl RequiresDist {
                     requirement,
                     extra: variant.extra.clone(),
                     group: selected_group.cloned().or_else(|| variant.group.clone()),
-                    recursive_extra: variant.recursive_extra.clone(),
+                    constraint_extras: variant.constraint_extras.clone(),
                 });
             }
         }
