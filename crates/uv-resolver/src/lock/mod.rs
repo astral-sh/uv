@@ -3405,6 +3405,10 @@ impl Package {
     ) -> Vec<(GroupName, Dependency)> {
         let mut dependencies = Vec::new();
         for (group, requirements) in &self.metadata.dependency_groups {
+            let group_marker = UniversalMarker::new(
+                MarkerTree::TRUE,
+                ConflictMarker::group(&self.id.name, group),
+            );
             let source_variant_names = requirements
                 .iter()
                 .filter(|requirement| match &requirement.source {
@@ -3419,7 +3423,8 @@ impl Package {
                 .iter()
                 .filter(|requirement| source_variant_names.contains(&requirement.name))
             {
-                let marker = UniversalMarker::from_combined(requirement.marker);
+                let mut marker = UniversalMarker::from_combined(requirement.marker);
+                marker.and(group_marker);
                 let extras = requirement.extras.iter().cloned().collect::<BTreeSet<_>>();
                 dependencies.extend(
                     self.dependencies
