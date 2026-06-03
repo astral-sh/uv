@@ -1383,13 +1383,10 @@ impl Lock {
                         }
                     }
                 }
-                if !match_runtime && !root_dep.marker.evaluate(executor_markers, &[]) {
-                    continue;
-                }
                 let marker = if match_runtime {
                     match_runtime_marker
                 } else {
-                    MarkerTree::TRUE
+                    root_dep.marker
                 };
                 let simplified = SimplifiedMarkerTree::new(&self.requires_python, marker);
                 let marker_opt = simplified
@@ -1552,9 +1549,6 @@ impl Lock {
                     .entry(key)
                     .or_default();
                 for dep_edge in &entry.dependencies {
-                    if !dep_edge.marker.evaluate(executor_markers, &[]) {
-                        continue;
-                    }
                     let Ok(dep_id) = package_id_from_resolved_dist(&dep_edge.dist, root) else {
                         continue;
                     };
@@ -1562,7 +1556,7 @@ impl Lock {
                         continue;
                     }
                     let simplified =
-                        SimplifiedMarkerTree::new(&self.requires_python, MarkerTree::TRUE);
+                        SimplifiedMarkerTree::new(&self.requires_python, dep_edge.marker);
                     let complexified = simplified.into_marker(&self.requires_python);
                     scoped_edges.dependencies.push(Dependency {
                         package_id: dep_id,
@@ -1579,9 +1573,6 @@ impl Lock {
                         .entry(extra.clone())
                         .or_default();
                     for dep_edge in dependencies {
-                        if !dep_edge.marker.evaluate(executor_markers, &[]) {
-                            continue;
-                        }
                         let Ok(dep_id) = package_id_from_resolved_dist(&dep_edge.dist, root) else {
                             continue;
                         };
@@ -1589,7 +1580,7 @@ impl Lock {
                             continue;
                         }
                         let simplified =
-                            SimplifiedMarkerTree::new(&self.requires_python, MarkerTree::TRUE);
+                            SimplifiedMarkerTree::new(&self.requires_python, dep_edge.marker);
                         let complexified = simplified.into_marker(&self.requires_python);
                         scoped_deps.push(Dependency {
                             package_id: dep_id,

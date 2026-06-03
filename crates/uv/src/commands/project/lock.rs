@@ -28,10 +28,7 @@ use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{
-    MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
-    MarkerValueVersion,
-};
+use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -1139,7 +1136,6 @@ async fn do_lock(
                     general_extra_build_requires
                         .retain(|name, _| !match_runtime_packages.contains(name));
                     let mut build_resolutions = BuildResolutionGraphMap::new();
-                    let executor_environments = executor_environments(interpreter.markers());
 
                     {
                         let build_dispatch = BuildDispatch::new(
@@ -1170,8 +1166,8 @@ async fn do_lock(
                         .with_build_preferences(build_preferences.clone())
                         .with_universal_build_resolution(
                             requires_python.clone(),
-                            executor_environments.clone(),
-                            executor_environments.clone(),
+                            SupportedEnvironments::default(),
+                            SupportedEnvironments::default(),
                         );
                         let build_database = DistributionDatabase::new(
                             &client,
@@ -1244,8 +1240,8 @@ async fn do_lock(
                             .with_build_preferences(build_preferences.clone())
                             .with_universal_build_resolution(
                                 requires_python.clone(),
-                                executor_environments.clone(),
-                                executor_environments.clone(),
+                                SupportedEnvironments::default(),
+                                SupportedEnvironments::default(),
                             );
                             let build_database = DistributionDatabase::new(
                                 &client,
@@ -1709,24 +1705,6 @@ fn source_python_marker(marker: MarkerTree) -> MarkerTree {
         python_marker.or(python_clause);
     }
     python_marker
-}
-
-/// Return the marker environment used to resolve dependencies that execute on
-/// the build host.
-fn executor_environments(markers: &MarkerEnvironment) -> SupportedEnvironments {
-    let mut marker = MarkerTree::expression(MarkerExpression::String {
-        key: MarkerValueString::SysPlatform,
-        operator: MarkerOperator::Equal,
-        value: markers.sys_platform().into(),
-    });
-    if !markers.platform_machine().is_empty() {
-        marker.and(MarkerTree::expression(MarkerExpression::String {
-            key: MarkerValueString::PlatformMachine,
-            operator: MarkerOperator::Equal,
-            value: markers.platform_machine().into(),
-        }));
-    }
-    SupportedEnvironments::from_markers(vec![marker])
 }
 
 #[derive(Debug)]
