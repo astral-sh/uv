@@ -1105,6 +1105,34 @@ impl Lock {
                 .collect()
         }
 
+        fn requirement_activation_contexts(
+            package: Option<&PackageName>,
+            requirement: &Requirement,
+            activated_contexts: &BTreeSet<ConflictItem>,
+        ) -> Option<Vec<ConflictItem>> {
+            let mut package_extras = activated_contexts
+                .iter()
+                .filter_map(|context| {
+                    package
+                        .is_some_and(|package| context.package() == package)
+                        .then(|| context.extra().cloned())
+                        .flatten()
+                })
+                .collect::<Vec<_>>();
+            if package.is_some_and(|package| requirement.name == *package) {
+                package_extras.extend(requirement.extras.iter().cloned());
+            }
+            requirement
+                .evaluate_markers(None, &package_extras)
+                .then(|| {
+                    requirement
+                        .extras
+                        .iter()
+                        .map(|extra| ConflictItem::from((requirement.name.clone(), extra.clone())))
+                        .collect()
+                })
+        }
+
         fn source_edge_is_active(
             dep: &Dependency,
             source_activation_contexts: &BTreeSet<ConflictItem>,
@@ -1137,6 +1165,7 @@ impl Lock {
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
         let mut seen: FxHashSet<(&PackageId, Option<&ExtraName>)> = FxHashSet::default();
         let mut root_activated_contexts = BTreeSet::new();
+        let mut group_requirements = Vec::new();
 
         // Seed from workspace members. Always queue with `None` so that we can traverse
         // their dependency groups; only queue extras when prod mode is active.
@@ -1172,12 +1201,7 @@ impl Lock {
                 .filter(|(group, _)| groups.contains(group))
                 .flat_map(|(_, requirements)| requirements)
             {
-                for extra in &*requirement.extras {
-                    root_activated_contexts.insert(ConflictItem::from((
-                        requirement.name.clone(),
-                        extra.clone(),
-                    )));
-                }
+                group_requirements.push((Some(&package.id.name), requirement));
             }
         }
 
@@ -1218,9 +1242,8 @@ impl Lock {
                     if seen.insert((&package.id, None)) {
                         queue.push_back((package, None));
                     }
+                    group_requirements.push((None, requirement));
                     for extra in &*requirement.extras {
-                        root_activated_contexts
-                            .insert(ConflictItem::from((package.id.name.clone(), extra.clone())));
                         if seen.insert((&package.id, Some(extra))) {
                             queue.push_back((package, Some(extra)));
                         }
@@ -1246,6 +1269,13 @@ impl Lock {
             }
 
             let mut next_activated_contexts = root_activated_contexts.clone();
+            for (package, requirement) in &group_requirements {
+                if let Some(additional_activated_contexts) =
+                    requirement_activation_contexts(*package, requirement, &activated_contexts)
+                {
+                    next_activated_contexts.extend(additional_activated_contexts);
+                }
+            }
             walk_dependencies(
                 self,
                 &workspace_member_ids,
