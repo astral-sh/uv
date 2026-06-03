@@ -450,7 +450,25 @@ impl<'a> BuildDispatch<'a> {
         {
             let dependency = direct_dependencies
                 .iter()
-                .find(|dependency| locked_dependency_satisfies(requirement, dependency))?;
+                .find(|dependency| locked_dependency_satisfies(requirement, dependency))
+                .or_else(|| {
+                    // Match-runtime requirements are source-matched when replay begins, while
+                    // ordinary direct paths are source-matched in the stored initial requirements.
+                    // Prefer the current requirement, then use its lowered stored counterpart.
+                    resolution
+                        .initial_requirements()?
+                        .iter()
+                        .filter(|initial_requirement| {
+                            initial_requirement.name == requirement.name
+                                && initial_requirement.extras == requirement.extras
+                                && initial_requirement.evaluate_markers(Some(&markers), &[])
+                        })
+                        .find_map(|initial_requirement| {
+                            direct_dependencies.iter().find(|dependency| {
+                                locked_dependency_satisfies(initial_requirement, dependency)
+                            })
+                        })
+                })?;
             selected.extend(dependency.resolution());
         }
         Some(selected)
