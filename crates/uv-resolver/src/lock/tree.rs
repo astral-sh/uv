@@ -358,15 +358,17 @@ impl<'env> TreeDisplay<'env> {
                     .or_insert_with(|| graph.add_node(Node::Package(&dep.package_id)));
 
                 // Add an edge from the workspace package.
-                graph.add_edge(
-                    index,
-                    dep_index,
-                    if let Some(extra) = extra {
-                        Edge::Optional(extra, Some(&dep.extra))
-                    } else {
-                        Edge::Prod(Some(&dep.extra))
-                    },
-                );
+                let edge = if let Some(extra) = extra {
+                    Edge::Optional(extra, Some(&dep.extra))
+                } else {
+                    Edge::Prod(Some(&dep.extra))
+                };
+                if !graph
+                    .edges_connecting(index, dep_index)
+                    .any(|existing| existing.weight() == &edge)
+                {
+                    graph.add_edge(index, dep_index, edge);
+                }
 
                 // Push its dependencies on the queue.
                 if seen.insert((&dep.package_id, None)) {
