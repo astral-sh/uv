@@ -237,7 +237,9 @@ impl PubGrubDependency {
                     source,
                 },
                 PubGrubPackageInner::Extra { name, .. } => {
-                    if group_name.is_none() {
+                    if group_name.is_none()
+                        && parent_package.is_none_or(|package| package.extra().is_none())
+                    {
                         debug_assert!(
                             parent_name.is_none_or(|parent_name| parent_name != name),
                             "extras not flattened for {name}"

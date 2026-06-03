@@ -25,8 +25,8 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
     IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
+    RequirementSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -2031,6 +2031,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         python_requirement: &'a PythonRequirement,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> {
         let python_marker = python_requirement.to_marker_tree();
+        let preserve_recursive_extras = env.marker_environment().is_none()
+            && dependencies
+                .iter()
+                .chain(dev_dependencies.values().flatten())
+                .any(Self::is_extra_scoped_source_requirement);
 
         if let Some(dev) = dev {
             // Dependency groups can include the project itself, so no need to flatten recursive
@@ -2139,12 +2144,34 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
 
-            // Drop all the self-requirements now that we flattened them out.
-            requirements.retain(|req| name != Some(&req.name) || req.extras.is_empty());
+            // Preserve recursive self-extra requirements when lock consumers need the activation
+            // relationship to evaluate source-selection markers.
+            if !preserve_recursive_extras {
+                requirements.retain(|req| name != Some(&req.name) || req.extras.is_empty());
+            }
             requirements.extend(self_constraints.into_iter().map(Cow::Owned));
 
             Either::Right(requirements.into_iter())
         }
+    }
+
+    /// Returns whether a requirement selects an explicit source using an extra predicate.
+    fn is_extra_scoped_source_requirement(requirement: &Requirement) -> bool {
+        let has_explicit_source = match &requirement.source {
+            RequirementSource::Registry { index, .. } => index.is_some(),
+            RequirementSource::Url { .. }
+            | RequirementSource::GitDirectory { .. }
+            | RequirementSource::GitPath { .. }
+            | RequirementSource::Path { .. }
+            | RequirementSource::Directory { .. } => true,
+        };
+        if !has_explicit_source {
+            return false;
+        }
+
+        let mut has_extra = false;
+        requirement.marker.visit_extras(|_, _| has_extra = true);
+        has_extra
     }
 
     /// The set of the regular and dev dependencies, filtered by Python version,
@@ -3397,7 +3424,7 @@ impl ForkState {
                         extra: ref dependency_extra,
                         marker: ref dependency_marker,
                     } => {
-                        if self_group.is_none() {
+                        if self_extra.is_none() && self_group.is_none() {
                             debug_assert!(
                                 self_name != Some(dependency_name),
                                 "Extras should be flattened"
