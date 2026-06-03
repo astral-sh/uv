@@ -686,6 +686,18 @@ impl Lock {
     /// that version-1 readers do not support.
     fn update_version_for_activation_markers(&mut self) {
         let mut has_activation_markers = false;
+        let metadata_only_groups = self
+            .packages
+            .iter()
+            .flat_map(|package| {
+                package
+                    .metadata
+                    .dependency_groups
+                    .keys()
+                    .filter(|group| !package.dependency_groups.contains_key(*group))
+                    .map(|group| (&package.id.name, group))
+            })
+            .collect::<FxHashSet<_>>();
         let has_group_activated_extras = self
             .packages
             .iter()
@@ -713,7 +725,18 @@ impl Lock {
 
             // Version-1 readers only evaluate encoded conflict markers, never raw PEP 508 extra
             // markers.
-            if conflict_marker.filter_rules().is_err() {
+            let Ok((include, exclude)) = conflict_marker.filter_rules() else {
+                self.version = ACTIVATION_MARKER_VERSION;
+                return;
+            };
+
+            // Version-1 readers only activate groups represented by resolved dependency-group
+            // edges, not groups present solely in package metadata.
+            if include.iter().chain(&exclude).any(|item| {
+                item.kind()
+                    .group()
+                    .is_some_and(|group| metadata_only_groups.contains(&(item.package(), group)))
+            }) {
                 self.version = ACTIVATION_MARKER_VERSION;
                 return;
             }
