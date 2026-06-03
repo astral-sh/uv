@@ -61,7 +61,7 @@ fn activate_dependency<'lock>(
 }
 
 fn activate_requirement<'lock>(
-    package: &'lock PackageName,
+    package: Option<&'lock PackageName>,
     requirement: &'lock Requirement,
     markers: &ResolverMarkerEnvironment,
     activated_extras: &BTreeSet<(&'lock PackageName, &'lock ExtraName)>,
@@ -69,9 +69,13 @@ fn activate_requirement<'lock>(
 ) {
     let mut package_extras = activated_extras
         .iter()
-        .filter_map(|(candidate, extra)| (*candidate == package).then_some((*extra).clone()))
+        .filter_map(|(candidate, extra)| {
+            package
+                .is_some_and(|package| *candidate == package)
+                .then_some((*extra).clone())
+        })
         .collect::<Vec<_>>();
-    if requirement.name == *package {
+    if package.is_some_and(|package| requirement.name == *package) {
         package_extras.extend(requirement.extras.iter().cloned());
     }
     if requirement.evaluate_markers(Some(markers), &package_extras) {
@@ -132,10 +136,18 @@ fn activated_extras<'lock>(
                 .flat_map(|(_, requirements)| {
                     requirements
                         .iter()
-                        .map(|requirement| (&id.name, requirement))
+                        .map(|requirement| (Some(&id.name), requirement))
                 }),
         );
     }
+    group_requirements.extend(
+        lock.dependency_groups()
+            .iter()
+            .filter(|(group, _)| groups.contains(group))
+            .flat_map(|(_, requirements)| {
+                requirements.iter().map(|requirement| (None, requirement))
+            }),
+    );
 
     for requirement in lock.requirements() {
         for package in lock
@@ -181,7 +193,7 @@ fn activated_extras<'lock>(
         let mut seen = root_seen.clone();
         for (package, requirement) in &group_requirements {
             activate_requirement(
-                package,
+                *package,
                 requirement,
                 markers,
                 &activated_extras,
