@@ -2268,12 +2268,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 let requirement = requirement.requirement;
-                let source = DependencySource::from_source(&requirement.source);
                 if !source_variants.iter().any(|variant| {
-                    variant.extra.as_ref() == Some(source_extra)
-                        && variant.group.is_none()
-                        && variant.requirement.name == requirement.name
-                        && DependencySource::from_source(&variant.requirement.source) == source
+                    Self::source_variant_matches(
+                        variant,
+                        &requirement,
+                        Some(source_extra),
+                        Some(extra),
+                        None,
+                    )
                 }) {
                     continue;
                 }
@@ -2571,6 +2573,39 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         )
     }
 
+    /// Return whether a lowered requirement selects a conditional source variant.
+    fn source_variant_matches(
+        variant: &SourceVariant,
+        requirement: &Requirement,
+        source_extra: Option<&ExtraName>,
+        extra: Option<&ExtraName>,
+        group: Option<&GroupName>,
+    ) -> bool {
+        if variant.requirement.name != requirement.name
+            || DependencySource::from_source(&variant.requirement.source)
+                != DependencySource::from_source(&requirement.source)
+        {
+            return false;
+        }
+        if variant.extra.is_some() || variant.group.is_some() {
+            return variant.extra.as_ref() == source_extra && variant.group.as_ref() == group;
+        }
+        if variant.requirement.marker == requirement.marker {
+            return true;
+        }
+        let Some(source_extra) = source_extra else {
+            return false;
+        };
+        let source_marker = variant
+            .requirement
+            .marker
+            .simplify_extras_with(|extra| extra == source_extra);
+        let requirement_marker = requirement
+            .marker
+            .simplify_extras_with(|candidate| extra == Some(candidate));
+        !source_marker.is_disjoint(requirement_marker)
+    }
+
     /// Scope source-bearing and source-activation dependencies to the context that introduced them.
     ///
     /// Source identity is stateful during resolution. Keeping these edges scoped prevents a URL or
@@ -2593,14 +2628,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let source = DependencySource::from_source(&requirement.source);
             let source_variant = source_variants.is_some_and(|source_variants| {
                 source_variants.variants.iter().any(|variant| {
-                    variant.requirement.name == requirement.name
-                        && DependencySource::from_source(&variant.requirement.source) == source
-                        && if variant.extra.is_some() || variant.group.is_some() {
-                            variant.extra.as_ref() == source_extra
-                                && variant.group.as_ref() == group
-                        } else {
-                            variant.requirement.marker == requirement.marker
-                        }
+                    Self::source_variant_matches(variant, &requirement, source_extra, extra, group)
                 })
             });
             if !source_variant || source == DependencySource::Unspecified {
