@@ -3930,6 +3930,8 @@ fn add_group_source_fallback_dependencies(
                             .copied()
                             .unwrap_or_default(),
                         dependency,
+                        extra.as_ref(),
+                        marker,
                         group_dependency,
                     ) {
                         return Err(LockErrorKind::IncompatibleGroupSourceFallback {
@@ -4016,14 +4018,20 @@ fn add_group_source_fallback_dependencies(
 fn incompatible_group_dependency_requirement<'a>(
     requirements: &'a [Requirement],
     dependency: &Dependency,
+    extra: Option<&ExtraName>,
+    marker: UniversalMarker,
     group_dependency: &Dependency,
 ) -> Option<&'a Requirement> {
-    let marker = dependency.complexified_marker.pep508();
+    let extras = extra.map(std::slice::from_ref).unwrap_or_default();
     requirements
         .iter()
         .filter(|requirement| {
             requirement.name == dependency.package_id.name
-                && !requirement.marker.is_disjoint(marker)
+                && requirement.evaluate_markers(None, extras)
+                && !requirement
+                    .marker
+                    .without_extras()
+                    .is_disjoint(marker.pep508())
         })
         .find(|requirement| {
             !requirement

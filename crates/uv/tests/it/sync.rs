@@ -11938,6 +11938,88 @@ fn sync_multiple_sources_only_group_conflicting_prod_fallback_rejects_transitive
     Ok(())
 }
 
+/// An inactive optional dependency must not constrain a source-agnostic group
+/// fallback.
+#[test]
+fn sync_multiple_sources_only_group_fallback_ignores_inactive_optional_constraint() -> Result<()> {
+    let default_index = uv_test::packse::PackseServer::new(
+        "extras/extra-incompatible-with-extra-not-requested.toml",
+    );
+    let group_index = uv_test::packse::PackseServer::new(
+        "extras/extra-incompatible-with-extra-not-requested.toml",
+    );
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1.0.0"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["a==1.0.0", "b==2.0.0"]
+
+        [tool.uv]
+        conflicts = [[
+            {{ package = "project" }},
+            {{ group = "use" }},
+        ]]
+        dependency-metadata = [
+            {{
+                name = "a",
+                version = "1.0.0",
+                requires-dist = [
+                    "b>=1",
+                    "b<2 ; extra == 'foo'",
+                ],
+            }},
+        ]
+
+        [tool.uv.sources]
+        a = [
+            {{ index = "group", group = "use", marker = "extra == 'foo'" }},
+        ]
+
+        [[tool.uv.index]]
+        name = "group"
+        url = "{group_index}"
+        explicit = true
+
+        [[tool.uv.index]]
+        name = "default"
+        url = "{default_index}"
+        default = true
+        "#,
+        default_index = default_index.index_url(),
+        group_index = group_index.index_url(),
+    })?;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--only-group")
+        .arg("use"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==1.0.0
+     + b==2.0.0
+    ");
+
+    Ok(())
+}
+
 /// Extra predicates on a group-scoped URL source must remain active alongside
 /// the group's source-selection marker.
 #[test]
