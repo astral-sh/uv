@@ -25646,6 +25646,72 @@ fn lock_multiple_sources_explicit_default_index_needs_no_activation_context() ->
     Ok(())
 }
 
+/// A group-scoped explicit index that points at the default index should use
+/// an unmarked group edge that version-1 readers can install.
+#[test]
+fn lock_multiple_sources_group_explicit_default_index_needs_no_activation_context() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [dependency-groups]
+        use = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = { index = "pypi-explicit", group = "use" }
+
+        [[tool.uv.index]]
+        name = "pypi-explicit"
+        url = "https://pypi.org/simple"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .lock()
+            .arg("--default-index")
+            .arg("https://pypi.org/simple"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let conflicts = lock
+        .get("conflicts")
+        .map(ToString::to_string)
+        .unwrap_or_default();
+    assert_snapshot!(conflicts.trim(), @"");
+    let project = lock["package"]
+        .as_array_of_tables()
+        .expect("lock packages")
+        .iter()
+        .find(|package| package["name"].as_str() == Some("project"))
+        .expect("project package");
+    let dependency = project["dev-dependencies"]["use"]
+        .as_array()
+        .expect("group dependencies")
+        .iter()
+        .next()
+        .expect("group dependency");
+    assert_snapshot!(dependency.to_string(), @"{ name = \"iniconfig\" }");
+
+    Ok(())
+}
+
 /// A stale lock must be updated when a group-scoped source requires a
 /// materialized production fallback, even if both branches use the default
 /// index.

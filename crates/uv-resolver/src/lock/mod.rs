@@ -3423,8 +3423,17 @@ impl Package {
                 .iter()
                 .filter(|requirement| source_variant_names.contains(&requirement.name))
             {
+                let mut branches = self
+                    .dependencies
+                    .iter()
+                    .filter(|dependency| dependency.package_name() == &requirement.name);
+                let narrow_to_group = branches.next().is_some_and(|first| {
+                    branches.any(|dependency| dependency.package_id != first.package_id)
+                });
                 let mut marker = UniversalMarker::from_combined(requirement.marker);
-                marker.and(group_marker);
+                if narrow_to_group {
+                    marker.and(group_marker);
+                }
                 let extras = requirement.extras.iter().cloned().collect::<BTreeSet<_>>();
                 dependencies.extend(
                     self.dependencies
