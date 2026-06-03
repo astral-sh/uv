@@ -432,8 +432,20 @@
       ]
     },
     "preview": {
-      "description": "Whether to enable experimental, preview features.",
-      "type": ["boolean", "null"]
+      "description": "Whether to enable all experimental, preview features.\n\nUse `preview-features` instead.",
+      "type": ["boolean", "null"],
+      "deprecated": true
+    },
+    "preview-features": {
+      "description": "Whether to enable specific or all experimental preview features.\n\nUnknown feature names are ignored with a warning.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PreviewFeaturesOption"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "publish-url": {
       "description": "The URL for publishing packages to the Python package index (by default:\n<https://upload.pypi.org/legacy/>).",
@@ -581,6 +593,9 @@
     }
   },
   "additionalProperties": false,
+  "not": {
+    "required": ["preview", "preview-features"]
+  },
   "definitions": {
     "AddBoundsKind": {
       "description": "The default version specifier when adding a dependency.",
@@ -1616,6 +1631,67 @@
           "description": "Allow pre-release versions if all versions of a package are pre-release, or if the package\nhas an explicit pre-release marker in its version requirements.",
           "type": "string",
           "const": "if-necessary-or-explicit"
+        }
+      ]
+    },
+    "PreviewFeature": {
+      "type": "string",
+      "anyOf": [
+        {
+          "enum": [
+            "python-install-default",
+            "python-upgrade",
+            "json-output",
+            "pylock",
+            "add-bounds",
+            "package-conflicts",
+            "extra-build-dependencies",
+            "detect-module-conflicts",
+            "format-command",
+            "native-auth",
+            "s3-endpoint",
+            "cache-size",
+            "init-project-flag",
+            "workspace-metadata",
+            "workspace-dir",
+            "workspace-list",
+            "sbom-export",
+            "auth-helper",
+            "direct-publish",
+            "target-workspace-discovery",
+            "metadata-json",
+            "gcs-endpoint",
+            "adjust-ulimit",
+            "special-conda-env-names",
+            "relocatable-envs-default",
+            "publish-require-normalized",
+            "audit-command",
+            "project-directory-must-exist",
+            "index-exclude-newer",
+            "azure-endpoint",
+            "toml-backwards-compatibility",
+            "malware-check",
+            "venv-safe-clear",
+            "check-command",
+            "packaged-init"
+          ]
+        },
+        {
+          "pattern": "\\S"
+        }
+      ]
+    },
+    "PreviewFeaturesOption": {
+      "description": "Represents the `preview-features` configuration option.",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PreviewFeature"
+          }
         }
       ]
     },

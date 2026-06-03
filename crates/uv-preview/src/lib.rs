@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::{Mutex, OnceLock};
 use std::{
     fmt::{Debug, Display, Formatter},
@@ -384,6 +385,43 @@ impl FromStr for MaybePreviewFeature {
     }
 }
 
+impl<'de> serde::Deserialize<'de> for MaybePreviewFeature {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let name: Cow<'de, str> = serde::Deserialize::deserialize(deserializer)?;
+        Self::from_str(&name).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for MaybePreviewFeature {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("PreviewFeature")
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        // Advertise canonical names for editor completions, while accepting any nonempty name to
+        // match the forwards-compatible runtime parsing behavior.
+        let choices: Vec<&str> = BitFlags::<PreviewFeature>::all()
+            .iter()
+            .map(PreviewFeature::as_str)
+            .collect();
+        schemars::json_schema!({
+            "type": "string",
+            "anyOf": [
+                {
+                    "enum": choices,
+                },
+                {
+                    "pattern": "\\S",
+                },
+            ],
+        })
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub struct Preview {
     flags: BitFlags<PreviewFeature>,
@@ -409,23 +447,6 @@ impl Preview {
         }
     }
 
-    /// Resolve preview arguments, warning and ignoring unknown feature names.
-    pub fn from_args(
-        preview: bool,
-        no_preview: bool,
-        preview_features: &[MaybePreviewFeature],
-    ) -> Self {
-        if no_preview {
-            return Self::default();
-        }
-
-        if preview {
-            return Self::all();
-        }
-
-        Self::from_feature_names(preview_features)
-    }
-
     /// Check if a single feature is enabled.
     pub fn is_enabled(&self, flag: PreviewFeature) -> bool {
         self.flags.contains(flag)
@@ -441,7 +462,8 @@ impl Preview {
         !self.flags.is_empty()
     }
 
-    fn from_feature_names<'a>(
+    /// Resolve preview feature names, warning and ignoring unknown names.
+    pub fn from_feature_names<'a>(
         feature_names: impl IntoIterator<Item = &'a MaybePreviewFeature>,
     ) -> Self {
         let mut flags = BitFlags::empty();
@@ -545,34 +567,6 @@ mod tests {
         // Test multiple features
         let preview = Preview::new(&[PreviewFeature::PythonUpgrade, PreviewFeature::Pylock]);
         assert_eq!(preview.to_string(), "python-upgrade,pylock");
-    }
-
-    #[test]
-    fn test_preview_from_args() {
-        // Test no preview and no no_preview, and no features
-        let preview = Preview::from_args(false, false, &[]);
-        assert_eq!(preview.to_string(), "disabled");
-
-        // Test no_preview
-        let preview = Preview::from_args(true, true, &[]);
-        assert_eq!(preview.to_string(), "disabled");
-
-        // Test preview (all features)
-        let preview = Preview::from_args(true, false, &[]);
-        assert_eq!(preview.to_string(), "enabled");
-
-        // Test specific features
-        let features = ["python-upgrade", "json-output"].map(|name| name.parse().unwrap());
-        let preview = Preview::from_args(false, false, &features);
-        assert!(preview.is_enabled(PreviewFeature::PythonUpgrade));
-        assert!(preview.is_enabled(PreviewFeature::JsonOutput));
-        assert!(!preview.is_enabled(PreviewFeature::Pylock));
-
-        // Test unknown features
-        let features = ["unknown-feature", "pylock"].map(|name| name.parse().unwrap());
-        let preview = Preview::from_args(false, false, &features);
-        assert!(preview.is_enabled(PreviewFeature::Pylock));
-        assert_eq!(preview.flags.bits().count_ones(), 1);
     }
 
     #[test]

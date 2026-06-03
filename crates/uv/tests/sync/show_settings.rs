@@ -2119,6 +2119,95 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Read preview settings from both a `uv.toml` and `pyproject.toml` file in the current directory.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn resolve_both_preview() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let uv_config = context.temp_dir.child("uv.toml");
+    let pyproject = context.temp_dir.child("pyproject.toml");
+
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.version()).arg("--show-settings")
+    );
+
+    pyproject.write_str(indoc::indoc! {r"
+        [tool.uv]
+        preview = true
+    "})?;
+    uv_config.write_str(r#"preview-features = ["pylock"]"#)?;
+
+    // The warning should name the ignored `preview` setting.
+    // Compare against the baseline.
+    let preview_masked = diff_uv_snapshot!(
+        context.filters(),
+        &baseline,
+        add_shared_args(context.version()).arg("--show-settings"),
+        @"
+    ...
+         },
+         show_settings: true,
+         preview: Preview {
+    -        flags: [],
+    +        flags: [
+    +            Pylock,
+    +        ],
+         },
+         python_preference: Managed,
+         python_downloads: Automatic,
+    ...
+     }
+
+     ----- stderr -----
+    +warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The following fields from `[tool.uv]` will be ignored in favor of the `uv.toml` file:
+    +- preview
+    ...
+    "
+    );
+
+    pyproject.write_str(indoc::indoc! {r#"
+        [tool.uv]
+        preview-features = ["unknown-preview-feature"]
+    "#})?;
+    uv_config.write_str("preview = false")?;
+
+    // The warning should name the ignored `preview-features` setting without warning about its
+    // unknown feature name.
+    // Compare against the inverse spelling combination.
+    diff_uv_snapshot!(
+        context.filters(),
+        &preview_masked,
+        add_shared_args(context.version()).arg("--show-settings"),
+        @"
+    ...
+         },
+         show_settings: true,
+         preview: Preview {
+    -        flags: [
+    -            Pylock,
+    -        ],
+    +        flags: [],
+         },
+         python_preference: Managed,
+         python_downloads: Automatic,
+    ...
+
+     ----- stderr -----
+     warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The following fields from `[tool.uv]` will be ignored in favor of the `uv.toml` file:
+    -- preview
+    +- preview-features
+    ...
+    "
+    );
+
+    Ok(())
+}
+
 /// Tests that errors when parsing `conflicts` are reported.
 #[test]
 fn invalid_conflicts() -> anyhow::Result<()> {
@@ -2404,7 +2493,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -3097,17 +3186,15 @@ fn preview_features() {
 fn preview_precedence() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let disabled = capture_uv_snapshot!(
-        context.filters(),
-        add_shared_args(context.version()).arg("--show-settings")
-    );
+    let show_settings = || {
+        let mut cmd = context.version();
+        cmd.arg("--show-settings");
+        add_shared_args(cmd)
+    };
 
-    let enabled = capture_uv_snapshot!(
-        context.filters(),
-        add_shared_args(context.version())
-            .arg("--show-settings")
-            .arg("--preview")
-    );
+    let disabled = capture_uv_snapshot!(context.filters(), show_settings());
+
+    let enabled = capture_uv_snapshot!(context.filters(), show_settings().arg("--preview"));
 
     let user_config_dir = context.user_config_dir.child("uv");
     user_config_dir.create_dir_all()?;
@@ -3118,7 +3205,7 @@ fn preview_precedence() -> anyhow::Result<()> {
     diff_uv_snapshot!(
         context.filters(),
         &enabled,
-        add_shared_args(context.version()).arg("--show-settings"),
+        show_settings(),
         @""
     );
 
@@ -3132,7 +3219,7 @@ fn preview_precedence() -> anyhow::Result<()> {
     diff_uv_snapshot!(
         context.filters(),
         &disabled,
-        add_shared_args(context.version()).arg("--show-settings"),
+        show_settings(),
         @""
     );
 
@@ -3140,14 +3227,9 @@ fn preview_precedence() -> anyhow::Result<()> {
     diff_uv_snapshot!(
         context.filters(),
         &disabled,
-        add_shared_args(context.version())
-            .arg("--show-settings")
-            .arg("--preview-features")
-            .arg("pylock"),
+        show_settings().arg("--preview-features").arg("pylock"),
         @"
-    --- old
-    +++ new
-    @@ -25,7 +25,9 @@
+    ...
          },
          show_settings: true,
          preview: Preview {
@@ -3158,6 +3240,7 @@ fn preview_precedence() -> anyhow::Result<()> {
          },
          python_preference: Managed,
          python_downloads: Automatic,
+    ...
     "
     );
 
@@ -3172,10 +3255,7 @@ fn preview_precedence() -> anyhow::Result<()> {
     diff_uv_snapshot!(
         context.filters(),
         &enabled,
-        add_shared_args(context.version())
-            .arg("--show-settings")
-            .arg("--preview-features")
-            .arg("pylock"),
+        show_settings().arg("--preview-features").arg("pylock"),
         @""
     );
 
@@ -3184,9 +3264,7 @@ fn preview_precedence() -> anyhow::Result<()> {
     diff_uv_snapshot!(
         context.filters(),
         &enabled,
-        add_shared_args(context.version())
-            .arg("--show-settings")
-            .env(EnvVars::UV_PREVIEW, "0"),
+        show_settings().env(EnvVars::UV_PREVIEW, "0"),
         @""
     );
 
@@ -3197,8 +3275,7 @@ fn preview_precedence() -> anyhow::Result<()> {
     diff_uv_snapshot!(
         context.filters(),
         &enabled,
-        add_shared_args(context.version())
-            .arg("--show-settings")
+        show_settings()
             .arg("--preview-features")
             .arg("pylock")
             .env(EnvVars::UV_PREVIEW, "1"),
@@ -3209,12 +3286,614 @@ fn preview_precedence() -> anyhow::Result<()> {
     diff_uv_snapshot!(
         context.filters(),
         &disabled,
-        add_shared_args(context.version())
-            .arg("--show-settings")
+        show_settings()
             .arg("--no-preview")
             .env(EnvVars::UV_PREVIEW, "1"),
         @""
     );
+
+    user_config.write_str("preview = true")?;
+    project_config.write_str(indoc::indoc! {r#"
+        [tool.uv]
+        preview-features = ["format-command"]
+    "#})?;
+
+    // The project setting atomically overrides the differently-spelled user setting.
+    // Compare against the disabled baseline.
+    let project = diff_uv_snapshot!(
+        context.filters(),
+        &disabled,
+        show_settings(),
+        @"
+    ...
+         },
+         show_settings: true,
+         preview: Preview {
+    -        flags: [],
+    +        flags: [
+    +            Format,
+    +        ],
+         },
+         python_preference: Managed,
+         python_downloads: Automatic,
+    ...
+    "
+    );
+
+    user_config.write_str(r#"preview-features = ["unknown-preview-feature"]"#)?;
+
+    // An unknown lower-priority setting is masked without warning.
+    // Compare against the recognized project setting.
+    diff_uv_snapshot!(
+        context.filters(),
+        &project,
+        show_settings(),
+        @""
+    );
+
+    user_config.write_str("preview = true")?;
+    project_config.write_str(indoc::indoc! {r"
+        [tool.uv]
+        preview-features = false
+    "})?;
+
+    // An explicit disabled project setting atomically overrides the enabled user setting.
+    // Compare against the disabled baseline.
+    diff_uv_snapshot!(
+        context.filters(),
+        &disabled,
+        show_settings(),
+        @""
+    );
+
+    project_config.write_str(indoc::indoc! {r#"
+        [tool.uv]
+        preview-features = ["format-command"]
+    "#})?;
+
+    // An explicit CLI feature list should override the project feature list.
+    // Compare against the project feature list.
+    let cli_features = diff_uv_snapshot!(
+        context.filters(),
+        &project,
+        show_settings().arg("--preview-features").arg("pylock"),
+        @"
+    ...
+         show_settings: true,
+         preview: Preview {
+             flags: [
+    -            Format,
+    +            Pylock,
+             ],
+         },
+         python_preference: Managed,
+    ...
+    "
+    );
+
+    project_config.write_str(indoc::indoc! {r"
+        [tool.uv]
+        preview-features = false
+    "})?;
+
+    // An explicit CLI feature list should override the disabled project setting.
+    // Compare against the explicit CLI feature list.
+    diff_uv_snapshot!(
+        context.filters(),
+        &cli_features,
+        show_settings().arg("--preview-features").arg("pylock"),
+        @""
+    );
+
+    project_config.write_str(indoc::indoc! {r#"
+        [tool.uv]
+        preview-features = ["unknown-preview-feature"]
+    "#})?;
+
+    // An unknown-only project setting atomically overrides the enabled user setting.
+    // Compare against the disabled baseline.
+    diff_uv_snapshot!(
+        context.filters(),
+        &disabled,
+        show_settings(),
+        @"
+    ...
+     }
+
+     ----- stderr -----
+    +warning: Unknown preview feature: `unknown-preview-feature`
+    ...
+    "
+    );
+
+    // An explicit CLI setting masks the unknown project setting without warning.
+    // Compare against the explicit CLI feature list.
+    diff_uv_snapshot!(
+        context.filters(),
+        &cli_features,
+        show_settings().arg("--preview-features").arg("pylock"),
+        @""
+    );
+
+    // `--preview` masks the unknown project setting without warning.
+    // Compare against `--preview`.
+    diff_uv_snapshot!(
+        context.filters(),
+        &enabled,
+        show_settings().arg("--preview"),
+        @""
+    );
+
+    project_config.write_str(indoc::indoc! {r"
+        [tool.uv]
+        preview-features = true
+    "})?;
+
+    // Both enable-all spellings have the same precedence.
+    // Compare against `--preview`.
+    diff_uv_snapshot!(
+        context.filters(),
+        &enabled,
+        show_settings().arg("--preview-features").arg("pylock"),
+        @""
+    );
+
+    Ok(())
+}
+
+/// Test `preview` and `preview-features` parsing in `uv.toml`.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn preview_features_uv_toml() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let config = context.temp_dir.child("uv.toml");
+
+    let enabled = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.version())
+            .arg("--show-settings")
+            .arg("--preview")
+    );
+
+    let disabled = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.version()).arg("--show-settings")
+    );
+
+    config.write_str(r#"preview-features = ["format-command"]"#)?;
+
+    // A feature list should enable only the named preview features.
+    // Compare against the disabled baseline.
+    diff_uv_snapshot!(
+        context.filters(),
+        &disabled,
+        add_shared_args(context.version()).arg("--show-settings"),
+        @"
+    ...
+         },
+         show_settings: true,
+         preview: Preview {
+    -        flags: [],
+    +        flags: [
+    +            Format,
+    +        ],
+         },
+         python_preference: Managed,
+         python_downloads: Automatic,
+    ...
+    "
+    );
+
+    config.write_str("preview-features = true")?;
+
+    // `preview-features = true` should enable all preview features.
+    // Compare against `--preview`.
+    diff_uv_snapshot!(
+        context.filters(),
+        &enabled,
+        add_shared_args(context.version()).arg("--show-settings"),
+        @""
+    );
+
+    config.write_str("preview-features = false")?;
+
+    // `preview-features = false` should be equivalent to `preview = false`.
+    // Compare against the disabled baseline.
+    diff_uv_snapshot!(
+        context.filters(),
+        &disabled,
+        add_shared_args(context.version()).arg("--show-settings"),
+        @""
+    );
+
+    config.write_str("preview-features = []")?;
+
+    // An empty feature list should not enable any preview features.
+    // Compare against the disabled baseline.
+    diff_uv_snapshot!(
+        context.filters(),
+        &disabled,
+        add_shared_args(context.version()).arg("--show-settings"),
+        @""
+    );
+
+    config.write_str(indoc::indoc! {r#"
+        preview = true
+        preview-features = ["format-command"]
+    "#})?;
+
+    // The two settings should be rejected when used together.
+    uv_snapshot!(context.filters(), add_shared_args(context.version()).arg("--show-settings"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `uv.toml`
+      Caused by: cannot specify both `preview` and `preview-features`
+    ");
+
+    config.write_str(r#"preview-features = ["unknown-preview-feature"]"#)?;
+
+    // Unknown names should warn without enabling any recognized preview features.
+    // Compare against the disabled baseline.
+    diff_uv_snapshot!(
+        context.filters(),
+        &disabled,
+        add_shared_args(context.version()).arg("--show-settings"),
+        @"
+    ...
+     }
+
+     ----- stderr -----
+    +warning: Unknown preview feature: `unknown-preview-feature`
+    ...
+    "
+    );
+
+    config.write_str(r#"preview-features = ["  "]"#)?;
+
+    // Empty preview feature names should be rejected.
+    uv_snapshot!(context.filters(), add_shared_args(context.version()).arg("--show-settings"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `uv.toml`
+      Caused by: TOML parse error at line 1, column 20
+      |
+    1 | preview-features = [\"  \"]
+      |                    ^^^^^^
+    preview feature name cannot be empty
+    ");
+
+    config.write_str("preview-features = 123")?;
+
+    // Invalid preview feature types should be rejected.
+    uv_snapshot!(context.filters(), add_shared_args(context.version()).arg("--show-settings"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `uv.toml`
+      Caused by: TOML parse error at line 1, column 20
+      |
+    1 | preview-features = 123
+      |                    ^^^
+    invalid type: integer `123`, expected a boolean or a list of preview feature names
+    ");
+
+    Ok(())
+}
+
+/// Test preview setting discovery and diagnostics in `pyproject.toml`.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn preview_features_pyproject_toml() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject = context.temp_dir.child("pyproject.toml");
+
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.version()).arg("--show-settings")
+    );
+
+    pyproject.write_str(indoc::indoc! {r#"
+        [tool.uv]
+        preview-features = ["format-command"]
+    "#})?;
+
+    // A feature list should enable only the named preview features.
+    // Compare against the baseline.
+    diff_uv_snapshot!(
+        context.filters(),
+        &baseline,
+        add_shared_args(context.version()).arg("--show-settings"),
+        @"
+    ...
+         },
+         show_settings: true,
+         preview: Preview {
+    -        flags: [],
+    +        flags: [
+    +            Format,
+    +        ],
+         },
+         python_preference: Managed,
+         python_downloads: Automatic,
+    ...
+    "
+    );
+
+    pyproject.write_str(indoc::indoc! {r#"
+        [tool.uv]
+        preview = true
+        preview-features = ["format-command"]
+    "#})?;
+
+    // Conflicting preview settings should be ignored during settings discovery with a warning.
+    // Compare against the baseline.
+    diff_uv_snapshot!(
+        context.filters(),
+        &baseline,
+        add_shared_args(context.version()).arg("--show-settings"),
+        @"
+    ...
+     }
+
+     ----- stderr -----
+    +warning: Failed to parse `pyproject.toml` during settings discovery:
+    +  TOML parse error at line 1, column 1
+    +    |
+    +  1 | [tool.uv]
+    +    | ^^^^^^^^^
+    +  cannot specify both `preview` and `preview-features`
+    +
+    ...
+    "
+    );
+
+    pyproject.write_str(indoc::indoc! {r"
+        [tool.uv]
+        preview-features = 123
+    "})?;
+
+    // Invalid preview feature types should be ignored during settings discovery with a warning.
+    // Compare against the baseline.
+    diff_uv_snapshot!(
+        context.filters(),
+        &baseline,
+        add_shared_args(context.version()).arg("--show-settings"),
+        @"
+    ...
+     }
+
+     ----- stderr -----
+    +warning: Failed to parse `pyproject.toml` during settings discovery:
+    +  TOML parse error at line 2, column 20
+    +    |
+    +  2 | preview-features = 123
+    +    |                    ^^^
+    +  invalid type: integer `123`, expected a boolean or a list of preview feature names
+    +
+    ...
+    "
+    );
+
+    Ok(())
+}
+
+/// Test PEP 723-specific preview parsing, precedence, and diagnostics.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn run_pep723_script_preview_features() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let show_settings = || {
+        let mut cmd = context.run();
+        cmd.arg("--show-settings").arg("main.py");
+        cmd
+    };
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc::indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = []
+        # ///
+
+        print("hello")
+       "#
+    })?;
+
+    let baseline = capture_uv_snapshot!(context.filters(), show_settings());
+
+    let enabled = capture_uv_snapshot!(
+        context.filters(),
+        context
+            .run()
+            .arg("--show-settings")
+            .arg("--preview")
+            .arg("main.py")
+    );
+
+    test_script.write_str(indoc::indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = []
+        #
+        # [tool.uv]
+        # preview-features = ["format-command"]
+        # ///
+
+        print("hello")
+       "#
+    })?;
+
+    let preview_features = diff_uv_snapshot!(
+        context.filters(),
+        &baseline,
+        show_settings(),
+        @"
+    ...
+         },
+         show_settings: true,
+         preview: Preview {
+    -        flags: [],
+    +        flags: [
+    +            Format,
+    +        ],
+         },
+         python_preference: Managed,
+         python_downloads: Never,
+    ...
+    "
+    );
+
+    test_script.write_str(indoc::indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = []
+        #
+        # [tool.uv]
+        # preview-features = ["format-command", "unknown-preview-feature"]
+        # ///
+
+        print("hello")
+       "#
+    })?;
+
+    // Unknown names should warn without changing the recognized feature set.
+    // Compare against the recognized feature list to isolate the warning.
+    diff_uv_snapshot!(
+        context.filters(),
+        &preview_features,
+        show_settings(),
+        @"
+    ...
+     }
+
+     ----- stderr -----
+    +warning: Unknown preview feature: `unknown-preview-feature`
+    ...
+    "
+    );
+
+    test_script.write_str(indoc::indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = []
+        #
+        # [tool.uv]
+        # preview = true
+        # ///
+
+        print("hello")
+       "#
+    })?;
+
+    // The legacy `preview = true` setting should enable all preview features.
+    // Compare against `--preview`.
+    diff_uv_snapshot!(
+        context.filters(),
+        &enabled,
+        show_settings(),
+        @""
+    );
+
+    test_script.write_str(indoc::indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = []
+        #
+        # [tool.uv]
+        # preview-features = [123]
+        # ///
+
+        print("hello")
+       "#
+    })?;
+
+    // The diagnostic should reject a non-string preview feature name.
+    uv_snapshot!(context.filters(), show_settings(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: TOML parse error at line 4, column 1
+      |
+    4 | [tool.uv]
+      | ^^^^^^^^^
+    invalid type: integer `123`, expected a string
+    ");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc::indoc! {r"
+            [tool.uv]
+            preview = true
+        "})?;
+    test_script.write_str(indoc::indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = []
+        #
+        # [tool.uv]
+        # preview-features = false
+        # ///
+
+        print("hello")
+       "#
+    })?;
+
+    // The script setting should atomically override the project setting.
+    assert_eq!(
+        baseline,
+        capture_uv_snapshot!(context.filters(), show_settings())
+    );
+
+    test_script.write_str(indoc::indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = []
+        #
+        # [tool.uv]
+        # preview = true
+        # preview-features = ["format-command"]
+        # ///
+
+        print("hello")
+       "#
+    })?;
+
+    // The two settings should be rejected when used together.
+    uv_snapshot!(context.filters(), show_settings(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: TOML parse error at line 4, column 1
+      |
+    4 | [tool.uv]
+      | ^^^^^^^^^
+    cannot specify both `preview` and `preview-features`
+    ");
 
     Ok(())
 }

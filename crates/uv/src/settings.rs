@@ -57,8 +57,8 @@ use uv_resolver::{
 };
 use uv_settings::{
     Combine, EnvironmentOptions, FilesystemOptions, MalwareCheckSettings, Options, PipOptions,
-    PublishOptions, PythonInstallMirrors, ResolverInstallerOptions, ResolverInstallerSchema,
-    ResolverOptions,
+    PreviewFeaturesOption, PreviewOption, PublishOptions, PythonInstallMirrors,
+    ResolverInstallerOptions, ResolverInstallerSchema, ResolverOptions,
 };
 use uv_static::EnvVars;
 use uv_torch::{AmdGpuArchitecture, TorchMode};
@@ -129,11 +129,7 @@ impl GlobalSettings {
                     .unwrap_or_else(Concurrency::threads),
             ),
             show_settings: args.show_settings,
-            preview: Preview::from_args(
-                resolve_preview(args, workspace, environment),
-                args.no_preview,
-                &args.preview_features,
-            ),
+            preview: resolve_preview(args, workspace, environment),
             python_preference,
             python_downloads: flag(
                 args.allow_python_downloads,
@@ -228,22 +224,41 @@ pub(crate) fn resolve_preview(
     args: &GlobalArgs,
     workspace: Option<&FilesystemOptions>,
     environment: &EnvironmentOptions,
-) -> bool {
-    // CLI takes precedence
-    match flag(args.preview, args.no_preview, "preview") {
-        Some(value) => value,
-        None => {
-            // Check environment variable
-            if environment.preview.value == Some(true) {
-                true
-            } else {
-                // Fall back to workspace config
-                workspace
-                    .and_then(|workspace| workspace.globals.preview)
-                    .unwrap_or(false)
-            }
-        }
+) -> Preview {
+    // Explicit `--preview` and `--no-preview` flags take priority.
+    if let Some(enabled) = flag(args.preview, args.no_preview, "preview") {
+        return if enabled {
+            Preview::all()
+        } else {
+            Preview::default()
+        };
     }
+
+    // `UV_PREVIEW=true` enables all preview features.
+    if environment.preview.value == Some(true) {
+        return Preview::all();
+    }
+
+    let configured = workspace.and_then(|workspace| workspace.globals.preview.as_ref());
+
+    // Boolean enable-all configuration takes priority.
+    if matches!(
+        configured,
+        Some(
+            PreviewOption::Preview(true)
+                | PreviewOption::PreviewFeatures(PreviewFeaturesOption::Toggle(true))
+        )
+    ) {
+        return Preview::all();
+    }
+
+    // Explicit preview feature names take priority over configured feature names.
+    if !args.preview_features.is_empty() {
+        return Preview::from_feature_names(&args.preview_features);
+    }
+
+    // Fall back to workspace configuration.
+    configured.map(PreviewOption::resolve).unwrap_or_default()
 }
 
 /// The resolved network settings to use for any invocation of the CLI.

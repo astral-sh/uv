@@ -1,3 +1,5 @@
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::{fmt::Debug, num::NonZeroUsize, path::Path, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -15,6 +17,7 @@ use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
+use uv_preview::{MaybePreviewFeature, Preview};
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
@@ -69,9 +72,9 @@ pub(crate) struct UvRequiredVersionToml {
 /// A `[tool.uv]` section.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
-#[serde(from = "OptionsWire", rename_all = "kebab-case")]
+#[serde(try_from = "OptionsWire", rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[cfg_attr(feature = "schemars", schemars(!from))]
+#[cfg_attr(feature = "schemars", schemars(!try_from))]
 pub struct Options {
     #[serde(flatten)]
     pub globals: GlobalOptions,
@@ -246,8 +249,9 @@ impl Options {
 
 /// Global settings, relevant to all invocations.
 #[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
-#[serde(rename_all = "kebab-case")]
+#[serde(try_from = "GlobalOptionsWire", rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(!try_from))]
 pub struct GlobalOptions {
     /// Enforce a requirement on the version of uv.
     ///
@@ -324,15 +328,11 @@ pub struct GlobalOptions {
         "#
     )]
     pub cache_dir: Option<PathBuf>,
-    /// Whether to enable experimental, preview features.
-    #[option(
-        default = "false",
-        value_type = "bool",
-        example = r#"
-            preview = true
-        "#
-    )]
-    pub preview: Option<bool>,
+
+    /// The user's preview configuration.
+    #[serde(flatten)]
+    pub preview: Option<PreviewOption>,
+
     /// Whether to prefer using Python installations that are already present on the system, or
     /// those that are downloaded and installed by uv.
     #[option(
@@ -433,6 +433,78 @@ pub struct GlobalOptions {
         "#
     )]
     pub allow_insecure_host: Option<Vec<TrustedHost>>,
+}
+
+/// Like [`GlobalOptions`], but with any `#[serde(flatten)]` fields inlined.
+/// This improves line/column information in error messages.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct GlobalOptionsWire {
+    required_version: Option<RequiredVersion>,
+    system_certs: Option<bool>,
+    native_tls: Option<bool>,
+    offline: Option<bool>,
+    no_cache: Option<bool>,
+    cache_dir: Option<PathBuf>,
+
+    preview: Option<bool>,
+    preview_features: Option<PreviewFeaturesOption>,
+
+    python_preference: Option<PythonPreference>,
+    python_downloads: Option<PythonDownloads>,
+    concurrent_downloads: Option<NonZeroUsize>,
+    concurrent_builds: Option<NonZeroUsize>,
+    concurrent_installs: Option<NonZeroUsize>,
+    http_proxy: Option<ProxyUrl>,
+    https_proxy: Option<ProxyUrl>,
+    no_proxy: Option<Vec<String>>,
+    allow_insecure_host: Option<Vec<TrustedHost>>,
+}
+
+impl TryFrom<GlobalOptionsWire> for GlobalOptions {
+    type Error = &'static str;
+
+    #[allow(deprecated)]
+    fn try_from(value: GlobalOptionsWire) -> Result<Self, Self::Error> {
+        let GlobalOptionsWire {
+            required_version,
+            system_certs,
+            native_tls,
+            offline,
+            no_cache,
+            cache_dir,
+            preview,
+            preview_features,
+            python_preference,
+            python_downloads,
+            concurrent_downloads,
+            concurrent_builds,
+            concurrent_installs,
+            http_proxy,
+            https_proxy,
+            no_proxy,
+            allow_insecure_host,
+        } = value;
+
+        Ok(Self {
+            required_version,
+            system_certs,
+            native_tls,
+            offline,
+            no_cache,
+            cache_dir,
+            preview: PreviewOption::try_from(preview, preview_features)?,
+            python_preference,
+            python_downloads,
+            concurrent_downloads,
+            concurrent_builds,
+            concurrent_installs,
+            http_proxy,
+            https_proxy,
+            no_proxy,
+            allow_insecure_host,
+        })
+    }
 }
 
 /// Settings relevant to all installer operations.
@@ -2381,6 +2453,7 @@ struct OptionsWire {
     no_cache: Option<bool>,
     cache_dir: Option<PathBuf>,
     preview: Option<bool>,
+    preview_features: Option<PreviewFeaturesOption>,
     python_preference: Option<PythonPreference>,
     python_downloads: Option<PythonDownloads>,
     concurrent_downloads: Option<NonZeroUsize>,
@@ -2472,9 +2545,11 @@ struct OptionsWire {
     build_backend: Option<serde::de::IgnoredAny>,
 }
 
-impl From<OptionsWire> for Options {
+impl TryFrom<OptionsWire> for Options {
+    type Error = &'static str;
+
     #[allow(deprecated)]
-    fn from(value: OptionsWire) -> Self {
+    fn try_from(value: OptionsWire) -> Result<Self, Self::Error> {
         let OptionsWire {
             required_version,
             system_certs,
@@ -2483,6 +2558,7 @@ impl From<OptionsWire> for Options {
             no_cache,
             cache_dir,
             preview,
+            preview_features,
             python_preference,
             python_downloads,
             python_install_mirror,
@@ -2552,7 +2628,7 @@ impl From<OptionsWire> for Options {
             build_backend,
         } = value;
 
-        Self {
+        Ok(Self {
             globals: GlobalOptions {
                 required_version,
                 system_certs,
@@ -2560,7 +2636,7 @@ impl From<OptionsWire> for Options {
                 offline,
                 no_cache,
                 cache_dir,
-                preview,
+                preview: PreviewOption::try_from(preview, preview_features)?,
                 python_preference,
                 python_downloads,
                 concurrent_downloads,
@@ -2635,7 +2711,7 @@ impl From<OptionsWire> for Options {
             dependency_groups,
             managed,
             package,
-        }
+        })
     }
 }
 
@@ -2762,6 +2838,119 @@ impl From<&crate::EnvironmentOptions> for MalwareCheckSettings {
         Self {
             enabled: options.malware_check.value == Some(true),
             malware_check_url: options.malware_check_url.clone(),
+        }
+    }
+}
+
+/// Represents the `preview-features` configuration option.
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(untagged))]
+pub enum PreviewFeaturesOption {
+    Toggle(bool),
+    Features(Vec<MaybePreviewFeature>),
+}
+
+// A derived `#[serde(untagged)]` implementation collapses detailed type and element errors into
+// "data did not match any variant", so use a type-directed visitor to preserve useful diagnostics.
+impl<'de> Deserialize<'de> for PreviewFeaturesOption {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        serde_untagged::UntaggedEnumVisitor::new()
+            .expecting("a boolean or a list of preview feature names")
+            .bool(|value| Ok(Self::Toggle(value)))
+            .seq(|sequence| sequence.deserialize().map(Self::Features))
+            .deserialize(deserializer)
+    }
+}
+
+#[expect(
+    dead_code,
+    reason = "Fields are only used by the OptionsMetadata and JsonSchema derives"
+)]
+#[derive(OptionsMetadata)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(rename_all = "kebab-case"))]
+struct PreviewOptionsDefinition {
+    // This legacy setting remains supported and included in the JSON schema, but is omitted from
+    // option metadata so the generated settings reference documents only `preview-features`.
+    /// Whether to enable all experimental, preview features.
+    ///
+    /// Use `preview-features` instead.
+    #[deprecated(note = "use `preview-features` instead")]
+    preview: Option<bool>,
+    /// Whether to enable specific or all experimental preview features.
+    ///
+    /// Unknown feature names are ignored with a warning.
+    #[option(
+        default = "false",
+        value_type = "bool | list[str]",
+        example = r#"
+            preview-features = true
+            # or
+            preview-features = ["python-upgrade"]
+        "#
+    )]
+    preview_features: Option<PreviewFeaturesOption>,
+}
+
+/// Represents the user's preview configuration from either `preview` or `preview-features`.
+#[derive(Debug, Clone)]
+pub enum PreviewOption {
+    /// Whether to enable all experimental, preview features.
+    Preview(bool),
+    /// Whether to enable specific or all experimental preview features.
+    PreviewFeatures(PreviewFeaturesOption),
+}
+
+impl uv_options_metadata::OptionsMetadata for PreviewOption {
+    fn record(visit: &mut dyn uv_options_metadata::Visit) {
+        <PreviewOptionsDefinition as uv_options_metadata::OptionsMetadata>::record(visit);
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for PreviewOption {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("PreviewOption")
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        let mut schema = <PreviewOptionsDefinition as schemars::JsonSchema>::json_schema(generator);
+        schema.insert(
+            "not".to_string(),
+            schemars::json_schema!({
+                "required": ["preview", "preview-features"],
+            })
+            .into(),
+        );
+        schema
+    }
+}
+
+impl PreviewOption {
+    fn try_from(
+        preview: Option<bool>,
+        preview_features: Option<PreviewFeaturesOption>,
+    ) -> Result<Option<Self>, &'static str> {
+        match (preview, preview_features) {
+            (Some(_), Some(_)) => Err("cannot specify both `preview` and `preview-features`"),
+            (Some(b), None) => Ok(Some(Self::Preview(b))),
+            (None, Some(features)) => Ok(Some(Self::PreviewFeatures(features))),
+            (None, None) => Ok(None),
+        }
+    }
+
+    /// Resolve the preview configuration, warning and ignoring unknown feature names.
+    pub fn resolve(&self) -> Preview {
+        use PreviewFeaturesOption::{Features, Toggle};
+
+        match self {
+            Self::Preview(false) | Self::PreviewFeatures(Toggle(false)) => Preview::default(),
+            Self::Preview(true) | Self::PreviewFeatures(Toggle(true)) => Preview::all(),
+            Self::PreviewFeatures(Features(features)) => Preview::from_feature_names(features),
         }
     }
 }

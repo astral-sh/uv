@@ -39,7 +39,7 @@ use uv_fs::{CWD, Simplified, normalize_path};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::PythonRequest;
 use uv_requirements::{GroupsSpecification, RequirementsSource};
@@ -127,11 +127,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     let environment = EnvironmentOptions::new()?;
 
     // Resolve preview flags before config discovery for decisions that affect the discovery root.
-    let early_preview = Preview::from_args(
-        settings::resolve_preview(&cli.top_level.global_args, None, &environment),
-        cli.top_level.global_args.no_preview,
-        &cli.top_level.global_args.preview_features,
-    );
+    let early_preview = settings::resolve_preview(&cli.top_level.global_args, None, &environment);
 
     // Make the early preview flags globally available.
     uv_preview::set(early_preview)?;
