@@ -63,6 +63,15 @@ impl ForkScope {
         }
     }
 
+    /// Derives the fork scope for a marker with multiple package-relative extras.
+    pub(super) fn from_package_marker(marker: MarkerTree, project_name: &PackageName) -> Self {
+        Self {
+            marker: encode_package_extras(marker, project_name),
+            fork_marker: marker,
+            conflict: None,
+        }
+    }
+
     /// Derives the fork scope for a dependency-group requirement.
     pub(super) fn from_group(
         marker: MarkerTree,

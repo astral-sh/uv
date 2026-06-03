@@ -425,7 +425,11 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             return scope;
         };
         let Some(extra) = Self::single_positive_extra(requirement.marker) else {
-            return scope;
+            return if Self::has_positive_extra(requirement.marker) {
+                ForkScope::from_package_marker(requirement.marker, project_name)
+            } else {
+                scope
+            };
         };
         ForkScope::from_extra(requirement.marker, project_name, &extra)
     }
@@ -523,6 +527,19 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         }
 
         extra
+    }
+
+    /// Returns whether `marker` references at least one positive extra.
+    fn has_positive_extra(marker: MarkerTree) -> bool {
+        let mut has_positive_extra = false;
+
+        marker.visit_extras(|operator, _| {
+            if operator == MarkerOperator::Equal {
+                has_positive_extra = true;
+            }
+        });
+
+        has_positive_extra
     }
 
     /// Returns the marker split for a complementary dependency.

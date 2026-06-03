@@ -10500,6 +10500,53 @@ fn sync_multiple_sources_extra_url_installs_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// Dependencies of a URL source selected by multiple extras must not inherit
+/// the declaring project's raw extra markers.
+#[test]
+fn sync_multiple_sources_extra_url_multiple_extras_installs_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["requests>=2"]
+
+        [project.optional-dependencies]
+        alt = ["requests"]
+        foo = []
+
+        [tool.uv.sources]
+        requests = [
+            { url = "https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl", extra = "alt", marker = "extra == 'foo'" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("alt").arg("--extra").arg("foo"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0 (from https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl)
+     + urllib3==2.2.1
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn sync_multiple_sources_group_url_without_conflicts() -> Result<()> {
     let context = uv_test::test_context!("3.12");
