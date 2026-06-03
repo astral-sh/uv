@@ -152,6 +152,11 @@ pub(crate) enum ProjectError {
     LockWorkspaceMismatch(PackageName),
 
     #[error(
+        "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Lock version v{1} cannot represent the required dependency semantics (requires v{0}). To update the lockfile, run `uv lock`."
+    )]
+    FrozenLockVersionMismatch(u32, u32),
+
+    #[error(
         "The lockfile at `uv.lock` uses an unsupported schema version (v{0}, but only v1, v2, and v3 are supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
     )]
     UnsupportedLockVersion(u32),

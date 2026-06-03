@@ -808,6 +808,14 @@ impl Lock {
         })
     }
 
+    /// Returns the required and actual lockfile versions if the lockfile cannot represent its
+    /// dependency semantics.
+    pub fn mismatched_semantic_version(&self) -> Option<(u32, u32)> {
+        (self.version < GROUP_SOURCE_FALLBACK_VERSION
+            && self.requires_group_source_fallback_semantics())
+        .then_some((GROUP_SOURCE_FALLBACK_VERSION, self.version))
+    }
+
     /// Record the required platforms that were used to generate this lock.
     #[must_use]
     pub fn with_required_environments(mut self, required_environments: Vec<MarkerTree>) -> Self {
@@ -1633,13 +1641,8 @@ impl Lock {
         let mut queue: VecDeque<&Package> = VecDeque::new();
         let mut seen = FxHashSet::default();
 
-        if self.version < GROUP_SOURCE_FALLBACK_VERSION
-            && self.requires_group_source_fallback_semantics()
-        {
-            return Ok(SatisfiesResult::MismatchedLockVersion(
-                GROUP_SOURCE_FALLBACK_VERSION,
-                self.version,
-            ));
+        if let Some((expected, actual)) = self.mismatched_semantic_version() {
+            return Ok(SatisfiesResult::MismatchedLockVersion(expected, actual));
         }
 
         // Validate that the lockfile was generated with the same root members.

@@ -25717,6 +25717,23 @@ fn lock_multiple_sources_group_fallback_uses_incompatible_version() -> Result<()
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group")
+        .arg("use")
+        .arg("--dry-run"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Would use project environment at: .venv
+    error: The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Lock version v2 cannot represent the required dependency semantics (requires v3). To update the lockfile, run `uv lock`.
+    ");
+
     Ok(())
 }
 
