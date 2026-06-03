@@ -894,9 +894,10 @@ impl Lock {
     /// The traversal is seeded from workspace members, lock-level requirements
     /// (e.g. PEP 723 scripts), and lock-level dependency groups, then follows
     /// each reachable dependency exactly once per `(package, extra)` pair,
-    /// respecting the provided extras and dependency-group filters. The same
-    /// package may be visited more than once if it is reached through multiple
-    /// extras — callers should deduplicate as appropriate.
+    /// respecting the provided extras, dependency-group filters, and
+    /// source-selection contexts. The same package may be visited more than once
+    /// if it is reached through multiple extras — callers should deduplicate as
+    /// appropriate.
     fn walk_auditable<'lock, F>(
         &'lock self,
         extras: &'lock ExtrasSpecificationWithDefaults,
@@ -921,6 +922,74 @@ impl Lock {
             }
         }
 
+        fn walk_dependencies<'lock>(
+            lock: &'lock Lock,
+            workspace_member_ids: &FxHashSet<&'lock PackageId>,
+            groups: &'lock DependencyGroupsWithDefaults,
+            mut queue: VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
+            mut seen: FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
+            mut dependency_filter: impl FnMut(&'lock Dependency) -> bool,
+            mut visit: impl FnMut(&'lock Package, Option<&'lock ExtraName>),
+        ) {
+            while let Some((package, extra)) = queue.pop_front() {
+                let is_member = workspace_member_ids.contains(&package.id);
+                visit(package, extra);
+
+                if is_member && extra.is_none() {
+                    for dep in package
+                        .dependency_groups
+                        .iter()
+                        .filter(|(group, _)| groups.contains(group))
+                        .flat_map(|(_, deps)| deps)
+                        .filter(|dep| dependency_filter(dep))
+                    {
+                        enqueue_dep(lock, &mut seen, &mut queue, dep);
+                    }
+                }
+
+                let dependencies: &[Dependency] = match extra {
+                    Some(extra) => package
+                        .optional_dependencies
+                        .get(extra)
+                        .map(Vec::as_slice)
+                        .unwrap_or_default(),
+                    None if is_member && !groups.prod() => &[],
+                    None => &package.dependencies,
+                };
+
+                for dep in dependencies.iter().filter(|dep| dependency_filter(dep)) {
+                    enqueue_dep(lock, &mut seen, &mut queue, dep);
+                }
+            }
+        }
+
+        fn dependency_activation_contexts(dep: &Dependency) -> Vec<ConflictItem> {
+            std::iter::once(ConflictItem::from(dep.package_id.name.clone()))
+                .chain(
+                    dep.extra.iter().map(|extra| {
+                        ConflictItem::from((dep.package_id.name.clone(), extra.clone()))
+                    }),
+                )
+                .collect()
+        }
+
+        fn source_edge_is_active(
+            dep: &Dependency,
+            source_activation_contexts: &BTreeSet<ConflictItem>,
+            activated_contexts: &BTreeSet<ConflictItem>,
+            additional_contexts: &[ConflictItem],
+        ) -> bool {
+            let mut marker = dep.complexified_marker;
+            for context in source_activation_contexts {
+                if activated_contexts.contains(context) || additional_contexts.contains(context) {
+                    marker.assume_conflict_item(context);
+                } else {
+                    marker.assume_not_conflict_item(context);
+                }
+            }
+            !marker.conflict().is_false()
+        }
+
         // Identify workspace members (the implicit root counts for single-member workspaces).
         let workspace_member_ids: FxHashSet<&PackageId> = if self.members().is_empty() {
             self.root().into_iter().map(|package| &package.id).collect()
@@ -935,6 +1004,7 @@ impl Lock {
         // Lockfile traversal state: (package, optional extra to activate on that package).
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
         let mut seen: FxHashSet<(&PackageId, Option<&ExtraName>)> = FxHashSet::default();
+        let mut root_activated_contexts = BTreeSet::new();
 
         // Seed from workspace members. Always queue with `None` so that we can traverse
         // their dependency groups; only queue extras when prod mode is active.
@@ -947,11 +1017,22 @@ impl Lock {
                 queue.push_back((package, None));
             }
             if groups.prod() {
+                root_activated_contexts.insert(ConflictItem::from(package.id.name.clone()));
                 for extra in extras.extra_names(package.optional_dependencies.keys()) {
+                    root_activated_contexts
+                        .insert(ConflictItem::from((package.id.name.clone(), extra.clone())));
                     if seen.insert((&package.id, Some(extra))) {
                         queue.push_back((package, Some(extra)));
                     }
                 }
+            }
+            for group in package
+                .dependency_groups
+                .keys()
+                .filter(|group| groups.contains(group))
+            {
+                root_activated_contexts
+                    .insert(ConflictItem::from((package.id.name.clone(), group.clone())));
             }
         }
 
@@ -962,10 +1043,13 @@ impl Lock {
                 .iter()
                 .filter(|p| p.id.name == requirement.name)
             {
+                root_activated_contexts.insert(ConflictItem::from(package.id.name.clone()));
                 if seen.insert((&package.id, None)) {
                     queue.push_back((package, None));
                 }
                 for extra in &*requirement.extras {
+                    root_activated_contexts
+                        .insert(ConflictItem::from((package.id.name.clone(), extra.clone())));
                     if seen.insert((&package.id, Some(extra))) {
                         queue.push_back((package, Some(extra)));
                     }
@@ -985,10 +1069,13 @@ impl Lock {
                     .iter()
                     .filter(|p| p.id.name == requirement.name)
                 {
+                    root_activated_contexts.insert(ConflictItem::from(package.id.name.clone()));
                     if seen.insert((&package.id, None)) {
                         queue.push_back((package, None));
                     }
                     for extra in &*requirement.extras {
+                        root_activated_contexts
+                            .insert(ConflictItem::from((package.id.name.clone(), extra.clone())));
                         if seen.insert((&package.id, Some(extra))) {
                             queue.push_back((package, Some(extra)));
                         }
@@ -997,12 +1084,74 @@ impl Lock {
             }
         }
 
-        while let Some((package, extra)) = queue.pop_front() {
-            let is_member = workspace_member_ids.contains(&package.id);
+        // Stabilize the activated source contexts before filtering source-selection edges. Audit
+        // traversal intentionally spans every marker environment, so only source contexts from the
+        // conflict portion of each edge marker participate in selection.
+        let mut activated_contexts = root_activated_contexts.clone();
+        let mut seen_activation_contexts = FxHashSet::default();
+        loop {
+            if !seen_activation_contexts.insert(activated_contexts.clone()) {
+                // An unstable activation graph has no single selected source context. Audit every
+                // context observed in the cycle rather than silently omitting a potentially
+                // affected package.
+                for activation_context in seen_activation_contexts {
+                    activated_contexts.extend(activation_context);
+                }
+                break;
+            }
 
-            // Collect non-workspace packages that have version information
-            // and pass the caller's filter.
-            if !is_member && collect_filter(package) {
+            let mut next_activated_contexts = root_activated_contexts.clone();
+            walk_dependencies(
+                self,
+                &workspace_member_ids,
+                groups,
+                queue.clone(),
+                seen.clone(),
+                |dep| {
+                    let additional_activated_contexts = dependency_activation_contexts(dep)
+                        .into_iter()
+                        .filter(|context| !next_activated_contexts.contains(context))
+                        .collect::<Vec<_>>();
+                    if !source_edge_is_active(
+                        dep,
+                        &self.source_activation_contexts,
+                        &activated_contexts,
+                        &additional_activated_contexts,
+                    ) {
+                        return false;
+                    }
+                    next_activated_contexts.extend(additional_activated_contexts);
+                    true
+                },
+                |_, _| {},
+            );
+
+            if next_activated_contexts == activated_contexts {
+                break;
+            }
+            activated_contexts = next_activated_contexts;
+        }
+
+        walk_dependencies(
+            self,
+            &workspace_member_ids,
+            groups,
+            queue,
+            seen,
+            |dep| {
+                source_edge_is_active(
+                    dep,
+                    &self.source_activation_contexts,
+                    &activated_contexts,
+                    &[],
+                )
+            },
+            |package, _| {
+                // Collect non-workspace packages that have version information and pass the
+                // caller's filter.
+                if workspace_member_ids.contains(&package.id) || !collect_filter(package) {
+                    return;
+                }
                 if let Some(version) = package.version() {
                     visit(package, version);
                 } else {
@@ -1011,36 +1160,8 @@ impl Lock {
                         package.name()
                     );
                 }
-            }
-
-            // Follow allowed dependency groups.
-            if is_member && extra.is_none() {
-                for dep in package
-                    .dependency_groups
-                    .iter()
-                    .filter(|(group, _)| groups.contains(group))
-                    .flat_map(|(_, deps)| deps)
-                {
-                    enqueue_dep(self, &mut seen, &mut queue, dep);
-                }
-            }
-
-            // Follow the regular/extra dependencies for this (package, extra) pair.
-            // For workspace members in only-group mode, skip regular dependencies.
-            let dependencies: &[Dependency] = match extra {
-                Some(extra) => package
-                    .optional_dependencies
-                    .get(extra)
-                    .map(Vec::as_slice)
-                    .unwrap_or_default(),
-                None if is_member && !groups.prod() => &[],
-                None => &package.dependencies,
-            };
-
-            for dep in dependencies {
-                enqueue_dep(self, &mut seen, &mut queue, dep);
-            }
-        }
+            },
+        );
     }
 
     /// Return the workspace root used to generate this lock.
