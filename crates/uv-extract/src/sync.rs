@@ -2,9 +2,7 @@ use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock, mpsc};
 
-use crate::hash::{
-    DirectoryDigest, DirectoryDigestFile, directory_digest, empty_directory_digest_entries,
-};
+use crate::hash::{DirectoryDigest, DirectoryDigestFile, directory_digest, empty_directory_paths};
 use crate::vendor::CloneableSeekableReader;
 use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
 use async_zip::StoredZipEntry;
@@ -64,26 +62,12 @@ pub fn unzip_and_hash(
     let archive = block_on(ZipFileReader::new(AllowStdIo::new(
         CloneableSeekableReader::new(reader),
     )))?;
-    unzip_archive(&archive, &filename, target)
-}
-
-fn unzip_archive<R>(
-    archive: &ZipFileReader<AllowStdIo<R>>,
-    filename: &Path,
-    target: &Path,
-) -> Result<(Vec<(PathBuf, u64)>, DirectoryDigest), Error>
-where
-    R: std::io::BufRead + std::io::Seek + Clone + Send + Sync + Unpin,
-    AllowStdIo<R>: Clone,
-{
     validate_unique_output_paths(archive.file().entries())?;
 
     let directories = Mutex::new(FxHashSet::default());
     let skip_validation = insecure_no_validate();
-    let filename_display = filename.display().to_string();
     // Initialize the threadpool with the user settings.
     initialize_rayon_once();
-    let archive = (*archive).clone();
     let extracted = (0..archive.file().entries().len())
         .into_par_iter()
         .map(|file_number| {
@@ -94,7 +78,7 @@ where
                 target,
                 &directories,
                 skip_validation,
-                &filename_display,
+                &filename,
             )
         })
         // Filter out skipped dangerous paths, then collect files and directory candidates.
@@ -115,7 +99,7 @@ where
             }
         }
     }
-    let hash_directories = empty_directory_digest_entries(
+    let hash_directories = empty_directory_paths(
         digest_directories.iter().map(PathBuf::as_path),
         files.iter().map(|(path, _)| path.as_path()),
     );
@@ -145,7 +129,7 @@ fn extract_entry<R>(
     target: &Path,
     directories: &Mutex<FxHashSet<PathBuf>>,
     skip_validation: bool,
-    filename_display: &str,
+    filename: &Path,
 ) -> Result<Option<ExtractedEntry>, Error>
 where
     R: std::io::BufRead + std::io::Seek + Clone + Send + Sync + Unpin,
@@ -154,7 +138,7 @@ where
     let entry = archive.file().entries()[file_number].clone();
     let file_name = entry_file_name(&entry, file_number)?;
     let compression = CompressionMethod::from(entry.compression());
-    warn_on_unsupported_compression(filename_display, &compression);
+    warn_on_unsupported_compression(filename, &compression);
 
     if let Err(err) = validate_archive_member_name(file_name) {
         if !skip_validation {
@@ -202,13 +186,14 @@ fn entry_file_name(entry: &StoredZipEntry, file_number: usize) -> Result<&str, E
 }
 
 /// Warn for compression methods that uv still accepts but does not recommend.
-fn warn_on_unsupported_compression(filename: &str, compression: &CompressionMethod) {
+fn warn_on_unsupported_compression(filename: &Path, compression: &CompressionMethod) {
     if compression.is_well_known() {
         return;
     }
 
     warn_user_once!(
         "One or more file entries in '{filename}' use the '{compression}' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the '{stored}', '{deflate}', or '{zstd}' compression methods.",
+        filename = filename.display(),
         stored = CompressionMethod::Stored,
         deflate = CompressionMethod::Deflated,
         zstd = CompressionMethod::Zstd,
@@ -737,6 +722,7 @@ mod tests {
     use std::path::Path;
 
     use super::unzip_and_hash;
+    use crate::hash::DirectoryDigest;
 
     struct ZipEntry<'a> {
         path: &'a str,
@@ -806,17 +792,11 @@ mod tests {
 
         let stream_extract = temp_dir.path().join("stream");
         fs_err::create_dir_all(&stream_extract)?;
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
-        let (stream_files, stream_digest) = runtime.block_on(async {
-            let file = fs_err::tokio::File::open(&first_archive_path).await?;
-            let result = crate::stream::unzip_and_hash("first.whl", file, &stream_extract).await?;
-            Ok::<_, Box<dyn std::error::Error>>(result)
-        })?;
+        let (stream_file_count, stream_digest) =
+            stream_unzip_and_hash(&first_archive_path, &stream_extract)?;
 
         assert_eq!(first_digest, stream_digest);
-        assert_eq!(stream_files.len(), 2);
+        assert_eq!(stream_file_count, 2);
         assert_eq!(
             fs_err::read(stream_extract.join("example/__init__.py"))?,
             b"VALUE = 1\n"
@@ -867,16 +847,10 @@ mod tests {
 
         let stream_extract = temp_dir.path().join("stream-parent");
         fs_err::create_dir_all(&stream_extract)?;
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
-        let (stream_files, stream_digest) = runtime.block_on(async {
-            let file = fs_err::tokio::File::open(&parent_archive_path).await?;
-            let result = crate::stream::unzip_and_hash("parent.whl", file, &stream_extract).await?;
-            Ok::<_, Box<dyn std::error::Error>>(result)
-        })?;
+        let (stream_file_count, stream_digest) =
+            stream_unzip_and_hash(&parent_archive_path, &stream_extract)?;
 
-        assert!(stream_files.is_empty());
+        assert_eq!(stream_file_count, 0);
         assert_eq!(parent_digest, stream_digest);
         assert!(!stream_extract.join("a").exists());
         assert!(!stream_extract.join("b").exists());
@@ -1061,18 +1035,11 @@ mod tests {
 
         let stream_extract = temp_dir.path().join("stream-empty-directory");
         fs_err::create_dir_all(&stream_extract)?;
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
-        let (stream_files, stream_digest) = runtime.block_on(async {
-            let file = fs_err::tokio::File::open(&empty_directory_archive_path).await?;
-            let result =
-                crate::stream::unzip_and_hash("empty-directory.whl", file, &stream_extract).await?;
-            Ok::<_, Box<dyn std::error::Error>>(result)
-        })?;
+        let (stream_file_count, stream_digest) =
+            stream_unzip_and_hash(&empty_directory_archive_path, &stream_extract)?;
 
         assert_eq!(empty_directory_digest, stream_digest);
-        assert_eq!(stream_files.len(), 2);
+        assert_eq!(stream_file_count, 2);
         assert!(stream_extract.join("example/empty-data").is_dir());
 
         Ok(())
@@ -1186,6 +1153,21 @@ mod tests {
         ));
 
         Ok(())
+    }
+
+    fn stream_unzip_and_hash(
+        archive: &Path,
+        target: &Path,
+    ) -> Result<(usize, DirectoryDigest), Box<dyn std::error::Error>> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        runtime.block_on(async {
+            let file = fs_err::tokio::File::open(archive).await?;
+            let (files, digest) =
+                crate::stream::unzip_and_hash(archive.display(), file, target).await?;
+            Ok::<_, Box<dyn std::error::Error>>((files.len(), digest))
+        })
     }
 
     fn zip_archive(entries: &[ZipEntry<'_>], comment: &[u8]) -> Vec<u8> {

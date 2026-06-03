@@ -73,20 +73,9 @@ impl From<Hasher> for HashDigest {
 pub struct DirectoryDigest(String);
 
 impl DirectoryDigest {
-    /// Create a new [`DirectoryDigest`] from a hex-encoded string.
-    pub(crate) fn new(hex: String) -> Self {
-        Self(hex)
-    }
-
     /// Return the hex-encoded digest string.
     pub fn as_str(&self) -> &str {
         &self.0
-    }
-}
-
-impl std::fmt::Display for DirectoryDigest {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
     }
 }
 
@@ -108,16 +97,11 @@ impl DirectoryDigestFile {
     }
 }
 
-/// An empty directory entry included in an extracted directory digest.
-pub(crate) struct DirectoryDigestDirectory {
-    path: String,
-}
-
-/// Return digest entries for explicit directories that are empty in the extracted tree.
-pub(crate) fn empty_directory_digest_entries<'a>(
+/// Return canonical paths for explicit directories that are empty in the extracted tree.
+pub(crate) fn empty_directory_paths<'a>(
     directories: impl IntoIterator<Item = &'a Path>,
     files: impl IntoIterator<Item = &'a Path>,
-) -> Vec<DirectoryDigestDirectory> {
+) -> Vec<String> {
     let mut candidates = FxHashSet::default();
     let mut non_empty = FxHashSet::default();
 
@@ -142,19 +126,18 @@ pub(crate) fn empty_directory_digest_entries<'a>(
     candidates
         .into_iter()
         .filter(|path| !non_empty.contains(path))
-        .map(|path| DirectoryDigestDirectory { path })
         .collect()
 }
 
 /// Compute a deterministic digest for extracted file and empty-directory entries.
 pub(crate) fn directory_digest(
     mut files: Vec<DirectoryDigestFile>,
-    mut directories: Vec<DirectoryDigestDirectory>,
+    mut directories: Vec<String>,
 ) -> DirectoryDigest {
     // This digest describes uv's extracted archive tree. It is inspired by Go's
     // dirhash shape, but intentionally includes uv-specific extraction semantics:
     // file sizes, executable bits, and empty leaf directories.
-    directories.sort_unstable_by(|left, right| left.path.cmp(&right.path));
+    directories.sort_unstable();
     files.sort_unstable_by(|left, right| {
         left.path
             .cmp(&right.path)
@@ -167,7 +150,7 @@ pub(crate) fn directory_digest(
     hasher.update(b"uv-extract-directory-digest-v2\0");
     for directory in directories {
         hasher.update(b"dir\0");
-        update_bytes(&mut hasher, directory.path.as_bytes());
+        update_bytes(&mut hasher, directory.as_bytes());
     }
     for file in files {
         hasher.update(b"file\0");
@@ -176,7 +159,7 @@ pub(crate) fn directory_digest(
         hasher.update(&[u8::from(file.executable)]);
         hasher.update(file.digest.as_bytes());
     }
-    DirectoryDigest::new(hasher.finalize().to_hex().to_string())
+    DirectoryDigest(hasher.finalize().to_hex().to_string())
 }
 
 /// Mark all canonical parent directories of a slash-separated path as non-empty.

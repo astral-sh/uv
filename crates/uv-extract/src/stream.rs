@@ -12,9 +12,7 @@ use tracing::{debug, warn};
 use uv_distribution_filename::SourceDistExtension;
 use uv_warnings::warn_user_once;
 
-use crate::hash::{
-    DirectoryDigest, DirectoryDigestFile, directory_digest, empty_directory_digest_entries,
-};
+use crate::hash::{DirectoryDigest, DirectoryDigestFile, directory_digest, empty_directory_paths};
 use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
@@ -640,7 +638,7 @@ pub async fn unzip_and_hash<D: Display, R: tokio::io::AsyncRead + Unpin>(
         }
     }
 
-    let hash_directories = empty_directory_digest_entries(
+    let hash_directories = empty_directory_paths(
         digest_directories.iter().map(PathBuf::as_path),
         files.iter().map(|(path, _)| path.as_path()),
     );
