@@ -537,7 +537,8 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         if matches!(
             requirement.source,
             RequirementSource::Registry { index: Some(_), .. }
-        ) {
+        ) || self.state.urls.any_url(&requirement.name)
+        {
             return true;
         }
 

@@ -10854,6 +10854,96 @@ fn sync_multiple_sources_path_disjunctive_extra_marker() -> Result<()> {
     Ok(())
 }
 
+/// A disjunctive source marker on a path dependency must preserve the
+/// source-agnostic fallback when another extra disables the source.
+#[test]
+fn sync_multiple_sources_path_dependency_disjunctive_extra_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let default_index = context.temp_dir.child("default");
+    fs_err::create_dir_all(&default_index)?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        default_index.join("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        context.temp_dir.child("ok-2.0.0-py3-none-any.whl"),
+    )?;
+
+    let pkg_a = context.temp_dir.child("pkg_a");
+    fs_err::create_dir_all(&pkg_a)?;
+    pkg_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [project.optional-dependencies]
+        alt = ["ok"]
+        other = []
+
+        [tool.uv.sources]
+        ok = [
+            { path = "../ok-2.0.0-py3-none-any.whl", marker = "extra == 'alt' or extra != 'other'" },
+        ]
+        "#,
+    )?;
+
+    let pkg_b = context.temp_dir.child("pkg_b");
+    fs_err::create_dir_all(&pkg_b)?;
+    pkg_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [dependency-groups]
+        other = ["pkg-a[other]"]
+
+        [tool.uv.sources]
+        pkg-a = { path = "../pkg_a" }
+
+        [[tool.uv.index]]
+        name = "default"
+        url = "../default"
+        format = "flat"
+        default = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .current_dir(&pkg_b)
+        .arg("--group")
+        .arg("other")
+        .arg("--no-install-project")
+        .arg("--no-install-package")
+        .arg("pkg-a"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn sync_multiple_sources_extra_url_without_conflicts() -> Result<()> {
     let context = uv_test::test_context!("3.12");
