@@ -2750,6 +2750,7 @@ pub(crate) struct CheckSettings {
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
     pub(crate) no_sync: bool,
+    pub(crate) isolated: bool,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
@@ -2782,6 +2783,7 @@ impl CheckSettings {
             locked,
             frozen,
             no_sync,
+            isolated,
             python,
             ty_version,
             no_project,
@@ -2798,6 +2800,7 @@ impl CheckSettings {
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
+        let isolated = resolve_flag(isolated, "isolated", environment.isolated).is_enabled();
         check_conflicts(locked, frozen);
 
         let (dev, no_dev) = resolve_flag_pair(
@@ -2840,6 +2843,7 @@ impl CheckSettings {
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
             no_sync: no_sync.is_enabled(),
+            isolated,
             python: python.and_then(Maybe::into_option),
             install_mirrors: environment
                 .install_mirrors

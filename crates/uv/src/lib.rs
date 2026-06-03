@@ -230,7 +230,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             }) => false,
 
             // Supports `--isolated` as its own argument, so we can't warn either way.
-            Commands::Project(command) if matches!(**command, ProjectCommand::Run(_)) => false,
+            Commands::Project(command)
+                if matches!(**command, ProjectCommand::Run(_) | ProjectCommand::Check(_)) =>
+            {
+                false
+            }
 
             // `--isolated` moved to `--no-workspace`.
             Commands::Project(command) if matches!(**command, ProjectCommand::Init(_)) => {
@@ -2698,6 +2702,7 @@ async fn run_project(
                 args.lock_check,
                 args.frozen,
                 args.no_sync,
+                args.isolated,
                 args.extras,
                 args.groups,
                 args.python,

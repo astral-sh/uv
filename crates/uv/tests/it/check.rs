@@ -1,4 +1,5 @@
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 
@@ -219,6 +220,88 @@ fn check_no_project() -> Result<()> {
 }
 
 #[test]
+fn check_isolated_no_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=4.0"
+        dependencies = []
+    "#})?;
+
+    fs_err::write(context.site_packages().join("active_only.py"), "")?;
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        import active_only
+    "})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-project")
+            .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "
+    );
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(
+            r"info:   4\. \[CACHE_DIR\]/builds-v0/\[TMP\]/site-packages \(site-packages\)\n",
+            "",
+        )])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(
+        filters,
+        context
+            .command()
+            .arg("--isolated")
+            .arg("check")
+            .arg("--no-project")
+            .env(EnvVars::UV_EXCLUDE_NEWER, "2026-02-15T00:00:00Z")
+            .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()),
+        @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    error[unresolved-import]: Cannot resolve imported module `active_only`
+     --> main.py:1:8
+      |
+    1 | import active_only
+      |        ^^^^^^^^^^^
+      |
+    info: Searched in the following paths during module resolution:
+    info:   1. [TEMP_DIR]/ (first-party code)
+    info:   2. vendored://stdlib (stdlib typeshed stubs vendored by ty)
+    info:   3. [CACHE_DIR]/builds-v0/[TMP]/site-packages (site-packages)
+    info: make sure your Python environment is properly configured: https://docs.astral.sh/ty/modules/#python-environment
+    info: rule `unresolved-import` is enabled by default
+
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#
+    );
+
+    Ok(())
+}
+
+#[test]
 fn check_type_error() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
 
@@ -288,6 +371,72 @@ fn check_with_declared_dependency() -> Result<()> {
             "from importlib.metadata import distribution; assert distribution('iniconfig').read_text('INSTALLER') == 'uv'",
         )
         .success();
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_isolated() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+    "#})?;
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        import iniconfig
+    "})?;
+
+    let environment_sentinel = context.venv.child("sentinel");
+    environment_sentinel.write_str("present")?;
+
+    uv_snapshot!(context.filters(), context.check().arg("--isolated"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    ");
+
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.site_packages().join("iniconfig").exists());
+    assert!(environment_sentinel.exists());
+
+    // An existing lockfile should not be updated.
+    context.lock().assert().success();
+    let existing_lock = context.read("uv.lock");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig", "typing-extensions"]
+    "#})?;
+    main_py.write_str(indoc! {r"
+        import iniconfig
+        import typing_extensions
+    "})?;
+
+    context.check().arg("--isolated").assert().success();
+    assert_eq!(existing_lock, context.read("uv.lock"));
+    assert!(!context.site_packages().join("iniconfig").exists());
+    assert!(
+        !context
+            .site_packages()
+            .join("typing_extensions.py")
+            .exists()
+    );
+    assert!(environment_sentinel.exists());
 
     Ok(())
 }

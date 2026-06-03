@@ -5329,6 +5329,14 @@ pub struct CheckArgs {
     #[arg(long)]
     pub no_sync: bool,
 
+    /// Run checks without mutating project state [env: UV_ISOLATED=]
+    ///
+    /// Uses a temporary virtual environment and leaves existing environments and the project
+    /// lockfile unchanged. Declared project requirements are resolved and installed into the
+    /// temporary environment.
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
+    pub isolated: bool,
+
     /// The Python interpreter to use for the project environment.
     ///
     /// By default, the first interpreter that meets the project's
