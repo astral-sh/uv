@@ -25,6 +25,75 @@ fn add_shared_args(mut command: Command) -> Command {
     command
 }
 
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn pip_compile_baseline() {
+    let context = uv_test::test_context!("3.12");
+
+    capture_uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+        .arg("--show-settings")
+        .arg("requirements.in"), @r#"
+    "#);
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn pip_install_baseline() {
+    let context = uv_test::test_context!("3.12");
+
+    capture_uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
+        .arg("--show-settings")
+        .arg("-r")
+        .arg("requirements.in"), @r#"
+    "#);
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn lock_baseline() {
+    let context = uv_test::test_context!("3.12");
+
+    capture_uv_snapshot!(context.filters(), add_shared_args(context.lock())
+        .arg("--show-settings"), @r#"
+    "#);
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn version_baseline() {
+    let context = uv_test::test_context!("3.12");
+
+    capture_uv_snapshot!(context.filters(), add_shared_args(context.version())
+        .arg("--show-settings"), @r#"
+    "#);
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn tool_install_baseline() {
+    let context = uv_test::test_context!("3.12");
+
+    capture_uv_snapshot!(context.filters(), add_shared_args(context.tool_install())
+        .arg("--show-settings")
+        .arg("anyio"), @r#"
+    "#);
+}
+
 /// Read from a `uv.toml` file in the current directory.
 #[test]
 #[cfg_attr(
