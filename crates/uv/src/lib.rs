@@ -554,7 +554,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             current_dir.user_display(),
             cache_dir.user_display()
         );
-    };
+    }
 
     let workspace_cache = WorkspaceCache::default();
 
