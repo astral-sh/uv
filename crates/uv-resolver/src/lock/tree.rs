@@ -76,8 +76,15 @@ fn activated_extras<'lock>(
     let mut group_dependencies = vec![];
     for id in members {
         let package = lock.find_by_id(id);
-        if groups.prod() && root_seen.insert((*id, None)) {
-            root_queue.push_back((*id, None));
+        if groups.prod() {
+            if root_seen.insert((*id, None)) {
+                root_queue.push_back((*id, None));
+            }
+            for extra in package.optional_dependencies.keys() {
+                if root_seen.insert((*id, Some(extra))) {
+                    root_queue.push_back((*id, Some(extra)));
+                }
+            }
         }
         group_dependencies.extend(
             package
