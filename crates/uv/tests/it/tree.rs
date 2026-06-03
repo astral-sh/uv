@@ -231,6 +231,68 @@ fn source_selection_group_fallback_deduplicates_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// `--only-group` must not reactivate production-only dependency edges when
+/// displaying a synthesized group fallback.
+#[test]
+fn source_selection_only_group_excludes_production_fallback_edges() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["requests==2.31.0"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = [
+            "requests ; sys_platform == 'win32'",
+            "urllib3==2.0.7 ; sys_platform == 'win32'",
+        ]
+
+        [tool.uv]
+        conflicts = [[
+            { package = "project" },
+            { group = "use" },
+        ]]
+
+        [tool.uv.sources]
+        requests = [
+            { url = "https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .tree()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--universal")
+        .arg("--only-group")
+        .arg("use"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── requests v2.31.0 (group: use)
+    │   ├── certifi v2024.2.2
+    │   ├── charset-normalizer v3.3.2
+    │   ├── idna v3.6
+    │   └── urllib3 v2.0.7
+    └── urllib3 v2.0.7 (group: use)
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn nested_platform_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");

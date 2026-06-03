@@ -921,6 +921,103 @@ async fn audit_group_sibling_activates_extra() {
     ");
 }
 
+/// `--only-group` must not audit production-only dependency edges from a
+/// synthesized group fallback.
+#[tokio::test]
+async fn audit_only_group_excludes_production_fallback_edges() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["requests==2.31.0"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = [
+            "requests ; sys_platform == 'win32'",
+            "urllib3==2.0.7 ; sys_platform == 'win32'",
+        ]
+
+        [tool.uv]
+        conflicts = [[
+            { package = "project" },
+            { group = "use" },
+        ]]
+
+        [tool.uv.sources]
+        requests = [
+            { url = "https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+    "#})
+        .unwrap();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({
+            "queries": [
+                {
+                    "package": { "name": "certifi", "ecosystem": "PyPI" },
+                    "version": "2024.2.2",
+                },
+                {
+                    "package": { "name": "charset-normalizer", "ecosystem": "PyPI" },
+                    "version": "3.3.2",
+                },
+                {
+                    "package": { "name": "idna", "ecosystem": "PyPI" },
+                    "version": "3.6",
+                },
+                {
+                    "package": { "name": "requests", "ecosystem": "PyPI" },
+                    "version": "2.31.0",
+                },
+                {
+                    "package": { "name": "urllib3", "ecosystem": "PyPI" },
+                    "version": "2.0.7",
+                },
+            ]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [
+                {"vulns": []},
+                {"vulns": []},
+                {"vulns": []},
+                {"vulns": []},
+                {"vulns": []},
+            ]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--only-group")
+        .arg("use")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 5 packages
+    ");
+}
+
 /// Non-default dependency groups are included when explicitly requested.
 #[tokio::test]
 async fn audit_dependency_groups() {
