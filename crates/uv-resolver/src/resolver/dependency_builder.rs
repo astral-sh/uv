@@ -228,6 +228,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                     &raw_requirement,
                     requirement.marker,
                     python_marker,
+                    None,
                 );
 
                 if self.apply_complementary_source_requirement(
@@ -257,15 +258,20 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         }
 
         for (group, requirements) in dependency_groups {
-            for requirement in self.state.overrides.apply(requirements.iter()) {
-                let raw_requirement = requirement.into_owned();
-                if !self.can_synthesize_non_root_complementary_source(&raw_requirement) {
+            let requirements = self
+                .state
+                .overrides
+                .apply(requirements.iter())
+                .map(Cow::into_owned)
+                .collect::<Vec<_>>();
+            for raw_requirement in &requirements {
+                if !self.can_synthesize_non_root_complementary_source(raw_requirement) {
                     continue;
                 }
                 let scope = ForkScope::from_group(raw_requirement.marker, parent_name, group);
 
                 let complementary_requirements = self.complementary_source_requirements(
-                    &raw_requirement,
+                    raw_requirement,
                     &scope,
                     false,
                     python_marker,
@@ -273,9 +279,10 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
 
                 for requirement in complementary_requirements {
                     let constraints = self.constraints_for_complementary_extra_source(
-                        &raw_requirement,
+                        raw_requirement,
                         requirement.marker,
                         python_marker,
+                        Some(&requirements),
                     );
 
                     if self.apply_complementary_source_requirement(
@@ -678,6 +685,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         raw_requirement: &Requirement,
         marker: MarkerTree,
         python_marker: MarkerTree,
+        group_requirements: Option<&[Requirement]>,
     ) -> Vec<Requirement> {
         let Some(constraints) = self.state.constraints.get(&raw_requirement.name) else {
             return Vec::new();
@@ -689,6 +697,13 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             .filter_map(|constraint| {
                 let mut raw_marker = constraint.marker;
                 raw_marker.and(raw_requirement.marker);
+                if let (Some(package), Some(group_requirements)) = (package, group_requirements) {
+                    raw_marker = Self::simplify_group_activated_extras(
+                        raw_marker,
+                        package,
+                        group_requirements,
+                    );
+                }
                 if raw_marker.is_false() {
                     return None;
                 }
@@ -708,6 +723,43 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                 Some(Self::requirement_with_marker(constraint, scoped_marker))
             })
             .collect()
+    }
+
+    /// Simplifies `marker` using extras guaranteed to be activated by dependency-group edges.
+    fn simplify_group_activated_extras(
+        mut marker: MarkerTree,
+        package: &PackageName,
+        requirements: &[Requirement],
+    ) -> MarkerTree {
+        let mut activated_extras = Vec::new();
+
+        loop {
+            let mut changed = false;
+            for requirement in requirements {
+                if requirement.name != *package {
+                    continue;
+                }
+
+                let requirement_marker = requirement.marker.simplify_extras(&activated_extras);
+                let mut implication = marker;
+                implication.implies(requirement_marker);
+                if !implication.is_true() {
+                    continue;
+                }
+
+                for extra in &requirement.extras {
+                    if !activated_extras.contains(extra) {
+                        activated_extras.push(extra.clone());
+                        changed = true;
+                    }
+                }
+            }
+
+            if !changed {
+                return marker;
+            }
+            marker = marker.simplify_extras(&activated_extras);
+        }
     }
 
     /// Returns a source-agnostic dependency that covers the complement of a sourced edge.
