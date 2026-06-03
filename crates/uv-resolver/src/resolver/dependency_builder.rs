@@ -87,6 +87,26 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             }));
     }
 
+    /// Flattens synthesized requirements whose encoded activation marker must be preserved.
+    fn extend_marker_preserving_requirements<'req>(
+        &mut self,
+        requirements: impl IntoIterator<Item = Cow<'req, Requirement>>,
+    ) where
+        'a: 'req,
+    {
+        self.deps
+            .extend(requirements.into_iter().flat_map(|requirement| {
+                let marker = requirement.marker;
+                PubGrubDependency::from_requirement(
+                    &self.state.conflicts,
+                    requirement,
+                    None,
+                    Some(self.package),
+                    Some(marker),
+                )
+            }));
+    }
+
     /// Flattens dependency-group requirements while preserving markers for source-specific edges
     /// that have a complementary unsourced base requirement.
     pub(super) fn extend_group_requirements<'req>(
@@ -222,7 +242,9 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                     {
                         self.deps.push(dependency);
                     }
-                    self.extend_requirements(constraints.into_iter().map(Cow::Owned));
+                    self.extend_marker_preserving_requirements(
+                        constraints.into_iter().map(Cow::Owned),
+                    );
                 }
             }
         }
@@ -264,7 +286,9 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                         &requirement,
                         ComplementarySourceAction::AddDependency,
                     ) {
-                        self.extend_requirements(constraints.into_iter().map(Cow::Owned));
+                        self.extend_marker_preserving_requirements(
+                            constraints.into_iter().map(Cow::Owned),
+                        );
                     }
                 }
             }
