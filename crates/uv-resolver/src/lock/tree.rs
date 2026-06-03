@@ -72,6 +72,7 @@ fn activated_extras<'lock>(
 
     let mut root_queue = VecDeque::new();
     let mut root_seen = FxHashSet::default();
+    let mut root_activated_extras = BTreeSet::default();
     let mut group_dependencies = vec![];
     for id in members {
         let package = lock.find_by_id(id);
@@ -87,14 +88,46 @@ fn activated_extras<'lock>(
         );
     }
 
-    let mut activated_extras = BTreeSet::default();
+    for requirement in lock.requirements() {
+        for package in lock
+            .packages()
+            .iter()
+            .filter(|package| package.id.name == requirement.name)
+        {
+            let marker = if package.fork_markers.is_empty() {
+                requirement.marker
+            } else {
+                let mut combined = MarkerTree::FALSE;
+                for fork_marker in &package.fork_markers {
+                    combined.or(fork_marker.pep508());
+                }
+                combined.and(requirement.marker);
+                combined
+            };
+            if marker.is_false() || !marker.evaluate(markers, &[]) {
+                continue;
+            }
+
+            if root_seen.insert((&package.id, None)) {
+                root_queue.push_back((&package.id, None));
+            }
+            for extra in &requirement.extras {
+                root_activated_extras.insert((&package.id.name, extra));
+                if root_seen.insert((&package.id, Some(extra))) {
+                    root_queue.push_back((&package.id, Some(extra)));
+                }
+            }
+        }
+    }
+
+    let mut activated_extras = root_activated_extras.clone();
     let mut seen_activation_contexts = FxHashSet::default();
     loop {
         if !seen_activation_contexts.insert(activated_extras.clone()) {
             break;
         }
 
-        let mut next_activated_extras = BTreeSet::default();
+        let mut next_activated_extras = root_activated_extras.clone();
         let mut queue = root_queue.clone();
         let mut seen = root_seen.clone();
         for dependency in &group_dependencies {

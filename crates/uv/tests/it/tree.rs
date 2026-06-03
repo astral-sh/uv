@@ -1361,6 +1361,67 @@ fn transitive_extra_scoped_source() -> Result<()> {
 }
 
 #[test]
+fn script_manifest_extra_scoped_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig==1.1.1"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "alt" },
+        ]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    child.child("src/child/__init__.py").touch()?;
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child[alt]"]
+        #
+        # [tool.uv.sources]
+        # child = { path = "child" }
+        # ///
+    "#})?;
+
+    context
+        .lock()
+        .arg("--script")
+        .arg("script.py")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tree().arg("--script").arg("script.py").arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    child v0.1.0
+    └── iniconfig v1.1.1
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn cycle() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
