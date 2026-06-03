@@ -96,6 +96,8 @@ pub(super) async fn run(
     let mut command = Command::new(&ty_path);
     command.current_dir(target_dir);
     command.arg("check");
+    // Opt into ty querying uv for project metadata.
+    command.env("TY_UV", "1");
 
     if let Some(venv_path) = venv_path {
         command.env("VIRTUAL_ENV", venv_path);
