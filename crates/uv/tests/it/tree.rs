@@ -174,6 +174,91 @@ fn source_selection_group_sibling_activates_extra() -> Result<()> {
     Ok(())
 }
 
+/// Pruned dependencies must not activate extras that change the source of
+/// retained packages.
+#[test]
+fn source_selection_prune_excludes_extra_activation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let default_index = context.temp_dir.child("default");
+    fs_err::create_dir_all(&default_index)?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        default_index.join("ok-2.0.0-py3-none-any.whl"),
+    )?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        context.temp_dir.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    context
+        .temp_dir
+        .child("pkg_a")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [project.optional-dependencies]
+        foo = ["ok"]
+
+        [tool.uv.sources]
+        ok = [
+            { path = "../ok-1.0.0-py3-none-any.whl", extra = "foo" },
+        ]
+        "#,
+        )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [dependency-groups]
+        use = ["pkg-a[foo]"]
+
+        [tool.uv.sources]
+        pkg-a = { path = "./pkg_a" }
+
+        [[tool.uv.index]]
+        name = "default"
+        url = "./default"
+        format = "flat"
+        default = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .tree()
+        .arg("--group")
+        .arg("use")
+        .arg("--prune")
+        .arg("pkg-a")
+        .arg("--universal"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── ok v2.0.0
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// A synthesized dependency-group fallback must not duplicate the selected
 /// package's runtime dependency edges.
 #[test]

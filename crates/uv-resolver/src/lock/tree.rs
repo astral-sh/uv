@@ -94,7 +94,7 @@ impl<'env> TreeDisplay<'env> {
         let install_options = InstallOptions::default();
         let export::ExportableRequirements(reachable) = export::ExportableRequirements::from_lock(
             target,
-            &[],
+            prune,
             &extras,
             &reachability_groups,
             false,
