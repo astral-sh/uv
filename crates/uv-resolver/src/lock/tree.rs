@@ -225,19 +225,39 @@ fn activated_extras<'lock>(
             );
         }
         for dependency in &group_dependencies {
-            activate_dependency(
-                dependency,
+            if !dependency.complexified_marker.evaluate(
                 markers,
-                &activated_extras,
-                activated_groups,
-                &mut next_activated_extras,
-                &mut queue,
-                &mut seen,
-            );
+                std::iter::empty::<&PackageName>(),
+                activated_extras.iter().copied(),
+                activated_groups.iter().copied(),
+            ) {
+                continue;
+            }
+            if seen.insert((&dependency.package_id, None)) {
+                queue.push_back((&dependency.package_id, None));
+            }
+            for extra in &dependency.extra {
+                if seen.insert((&dependency.package_id, Some(extra))) {
+                    queue.push_back((&dependency.package_id, Some(extra)));
+                }
+            }
         }
 
         while let Some((id, extra)) = queue.pop_front() {
             let package = lock.find_by_id(id);
+            for requirement in package
+                .requires_dist()
+                .iter()
+                .filter(|requirement| requirement.name == package.id.name)
+            {
+                activate_requirement(
+                    Some(&package.id.name),
+                    requirement,
+                    markers,
+                    &activated_extras,
+                    &mut next_activated_extras,
+                );
+            }
             let dependencies = if let Some(extra) = extra {
                 Either::Left(
                     package

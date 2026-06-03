@@ -1043,33 +1043,77 @@ impl Lock {
     ) where
         F: FnMut(&'lock Package, &'lock Version),
     {
-        // Enqueue a dependency for auditability checks: base package (no extra) first, then each activated extra.
-        fn enqueue_dep<'lock>(
-            lock: &'lock Lock,
-            seen: &mut FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
-            queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
-            dep: &'lock Dependency,
-        ) {
-            let dep_pkg = lock.find_by_id(&dep.package_id);
-            for maybe_extra in std::iter::once(None).chain(dep.extra.iter().map(Some)) {
-                if seen.insert((&dep.package_id, maybe_extra)) {
-                    queue.push_back((dep_pkg, maybe_extra));
-                }
+        #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+        enum ActivationStatus {
+            Inactive,
+            Conditional,
+            Active,
+        }
+
+        impl ActivationStatus {
+            fn and(self, other: Self) -> Self {
+                self.min(other)
             }
         }
 
-        fn walk_dependencies<'lock>(
+        struct NextActivationContexts<'a> {
+            activated: &'a mut BTreeSet<ConflictItem>,
+            possible: &'a mut BTreeSet<ConflictItem>,
+        }
+
+        fn enqueue_package<'lock>(
+            seen: &mut FxHashMap<(&'lock PackageId, Option<&'lock ExtraName>), ActivationStatus>,
+            queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>, ActivationStatus)>,
+            package: &'lock Package,
+            extra: Option<&'lock ExtraName>,
+            status: ActivationStatus,
+        ) {
+            if status == ActivationStatus::Inactive {
+                return;
+            }
+            let key = (&package.id, extra);
+            if seen.get(&key).is_none_or(|previous| status > *previous) {
+                seen.insert(key, status);
+                queue.push_back((package, extra, status));
+            }
+        }
+
+        // Enqueue a dependency for auditability checks: base package (no extra) first, then each activated extra.
+        fn enqueue_dep<'lock>(
+            lock: &'lock Lock,
+            seen: &mut FxHashMap<(&'lock PackageId, Option<&'lock ExtraName>), ActivationStatus>,
+            queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>, ActivationStatus)>,
+            dep: &'lock Dependency,
+            status: ActivationStatus,
+        ) {
+            let dep_pkg = lock.find_by_id(&dep.package_id);
+            for maybe_extra in std::iter::once(None).chain(dep.extra.iter().map(Some)) {
+                enqueue_package(seen, queue, dep_pkg, maybe_extra, status);
+            }
+        }
+
+        fn walk_dependencies<'lock, State>(
             lock: &'lock Lock,
             workspace_member_ids: &FxHashSet<&'lock PackageId>,
             groups: &'lock DependencyGroupsWithDefaults,
-            mut queue: VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
-            mut seen: FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
-            mut dependency_filter: impl FnMut(&'lock Dependency) -> bool,
-            mut visit: impl FnMut(&'lock Package, Option<&'lock ExtraName>),
+            mut queue: VecDeque<(&'lock Package, Option<&'lock ExtraName>, ActivationStatus)>,
+            mut seen: FxHashMap<(&'lock PackageId, Option<&'lock ExtraName>), ActivationStatus>,
+            state: &mut State,
+            mut dependency_status: impl FnMut(
+                &mut State,
+                &'lock Dependency,
+                ActivationStatus,
+            ) -> ActivationStatus,
+            mut visit: impl FnMut(
+                &mut State,
+                &'lock Package,
+                Option<&'lock ExtraName>,
+                ActivationStatus,
+            ),
         ) {
-            while let Some((package, extra)) = queue.pop_front() {
+            while let Some((package, extra, package_status)) = queue.pop_front() {
                 let is_member = workspace_member_ids.contains(&package.id);
-                visit(package, extra);
+                visit(state, package, extra, package_status);
 
                 if is_member && extra.is_none() {
                     for dep in package
@@ -1077,9 +1121,9 @@ impl Lock {
                         .iter()
                         .filter(|(group, _)| groups.contains(group))
                         .flat_map(|(_, deps)| deps)
-                        .filter(|dep| dependency_filter(dep))
                     {
-                        enqueue_dep(lock, &mut seen, &mut queue, dep);
+                        let status = dependency_status(state, dep, package_status);
+                        enqueue_dep(lock, &mut seen, &mut queue, dep, status);
                     }
                 }
 
@@ -1093,8 +1137,9 @@ impl Lock {
                     None => &package.dependencies,
                 };
 
-                for dep in dependencies.iter().filter(|dep| dependency_filter(dep)) {
-                    enqueue_dep(lock, &mut seen, &mut queue, dep);
+                for dep in dependencies {
+                    let status = dependency_status(state, dep, package_status);
+                    enqueue_dep(lock, &mut seen, &mut queue, dep, status);
                 }
             }
         }
@@ -1107,13 +1152,6 @@ impl Lock {
                     }),
                 )
                 .collect()
-        }
-
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        enum ActivationStatus {
-            Inactive,
-            Conditional,
-            Active,
         }
 
         fn extend_activation_contexts(
@@ -1179,22 +1217,27 @@ impl Lock {
 
         fn source_edge_activation_status(
             dep: &Dependency,
+            requires_python: &RequiresPython,
             source_activation_contexts: &BTreeSet<ConflictItem>,
             activated_contexts: &BTreeSet<ConflictItem>,
             possible_contexts: &BTreeSet<ConflictItem>,
             additional_contexts: &[ConflictItem],
         ) -> ActivationStatus {
             let mut marker = dep.complexified_marker;
+            for context in additional_contexts {
+                marker.assume_conflict_item(context);
+            }
             for context in source_activation_contexts {
-                if activated_contexts.contains(context) || additional_contexts.contains(context) {
+                if activated_contexts.contains(context) {
                     marker.assume_conflict_item(context);
                 } else if !possible_contexts.contains(context) {
                     marker.assume_not_conflict_item(context);
                 }
             }
-            if marker.pep508().is_false() || marker.conflict().is_false() {
+            let pep508 = requires_python.simplify_markers(marker.pep508());
+            if pep508.is_false() || marker.conflict().is_false() {
                 ActivationStatus::Inactive
-            } else if marker.pep508().is_true() && marker.conflict().is_true() {
+            } else if pep508.is_true() && marker.conflict().is_true() {
                 ActivationStatus::Active
             } else {
                 ActivationStatus::Conditional
@@ -1213,8 +1256,9 @@ impl Lock {
         };
 
         // Lockfile traversal state: (package, optional extra to activate on that package).
-        let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
-        let mut seen: FxHashSet<(&PackageId, Option<&ExtraName>)> = FxHashSet::default();
+        let mut queue: VecDeque<(&Package, Option<&ExtraName>, ActivationStatus)> = VecDeque::new();
+        let mut seen: FxHashMap<(&PackageId, Option<&ExtraName>), ActivationStatus> =
+            FxHashMap::default();
         let mut root_activated_contexts = BTreeSet::new();
         let mut root_possible_contexts = BTreeSet::new();
         let mut group_requirements = Vec::new();
@@ -1226,25 +1270,26 @@ impl Lock {
             .iter()
             .filter(|p| workspace_member_ids.contains(&p.id))
         {
-            if seen.insert((&package.id, None)) {
-                queue.push_back((package, None));
-            }
+            enqueue_package(
+                &mut seen,
+                &mut queue,
+                package,
+                None,
+                ActivationStatus::Active,
+            );
             if groups.prod() {
                 root_activated_contexts.insert(ConflictItem::from(package.id.name.clone()));
                 for extra in extras.extra_names(package.provides_extras().iter()) {
                     root_activated_contexts
                         .insert(ConflictItem::from((package.id.name.clone(), extra.clone())));
-                    if seen.insert((&package.id, Some(extra))) {
-                        queue.push_back((package, Some(extra)));
-                    }
+                    enqueue_package(
+                        &mut seen,
+                        &mut queue,
+                        package,
+                        Some(extra),
+                        ActivationStatus::Active,
+                    );
                 }
-                group_requirements.extend(
-                    package
-                        .requires_dist()
-                        .iter()
-                        .filter(|requirement| requirement.name == package.id.name)
-                        .map(|requirement| (Some(&package.id.name), requirement)),
-                );
             }
             for group in package
                 .dependency_groups()
@@ -1287,9 +1332,7 @@ impl Lock {
                     &mut root_activated_contexts,
                     &mut root_possible_contexts,
                 );
-                if seen.insert((&package.id, None)) {
-                    queue.push_back((package, None));
-                }
+                enqueue_package(&mut seen, &mut queue, package, None, status);
                 for extra in &*requirement.extras {
                     let context = ConflictItem::from((package.id.name.clone(), extra.clone()));
                     extend_activation_contexts(
@@ -1298,9 +1341,7 @@ impl Lock {
                         &mut root_activated_contexts,
                         &mut root_possible_contexts,
                     );
-                    if seen.insert((&package.id, Some(extra))) {
-                        queue.push_back((package, Some(extra)));
-                    }
+                    enqueue_package(&mut seen, &mut queue, package, Some(extra), status);
                 }
             }
         }
@@ -1333,14 +1374,10 @@ impl Lock {
                         &mut root_activated_contexts,
                         &mut root_possible_contexts,
                     );
-                    if seen.insert((&package.id, None)) {
-                        queue.push_back((package, None));
-                    }
+                    enqueue_package(&mut seen, &mut queue, package, None, status);
                     group_requirements.push((None, requirement));
                     for extra in &*requirement.extras {
-                        if seen.insert((&package.id, Some(extra))) {
-                            queue.push_back((package, Some(extra)));
-                        }
+                        enqueue_package(&mut seen, &mut queue, package, Some(extra), status);
                     }
                 }
             }
@@ -1381,33 +1418,62 @@ impl Lock {
                     &mut next_possible_contexts,
                 );
             }
+            let mut next_contexts = NextActivationContexts {
+                activated: &mut next_activated_contexts,
+                possible: &mut next_possible_contexts,
+            };
             walk_dependencies(
                 self,
                 &workspace_member_ids,
                 groups,
                 queue.clone(),
                 seen.clone(),
-                |dep| {
+                &mut next_contexts,
+                |next_contexts, dep, package_status| {
                     let additional_contexts = dependency_activation_contexts(dep);
-                    let status = source_edge_activation_status(
+                    let edge_status = source_edge_activation_status(
                         dep,
+                        &self.requires_python,
                         &self.source_activation_contexts,
                         &activated_contexts,
                         &possible_contexts,
                         &additional_contexts,
                     );
-                    if status == ActivationStatus::Inactive {
-                        return false;
-                    }
+                    let status = package_status.and(edge_status);
                     extend_activation_contexts(
                         status,
                         additional_contexts,
-                        &mut next_activated_contexts,
-                        &mut next_possible_contexts,
+                        next_contexts.activated,
+                        next_contexts.possible,
                     );
-                    true
+                    status
                 },
-                |_, _| {},
+                |next_contexts, package, extra, package_status| {
+                    if extra.is_none()
+                        && workspace_member_ids.contains(&package.id)
+                        && !groups.prod()
+                    {
+                        return;
+                    }
+                    for requirement in package
+                        .requires_dist()
+                        .iter()
+                        .filter(|requirement| requirement.name == package.id.name)
+                    {
+                        let (status, additional_contexts) = requirement_activation_contexts(
+                            Some(&package.id.name),
+                            requirement,
+                            &activated_contexts,
+                            &possible_contexts,
+                        );
+                        extend_activation_contexts(
+                            package_status.and(status),
+                            additional_contexts,
+                            next_contexts.activated,
+                            next_contexts.possible,
+                        );
+                    }
+                },
             );
             next_possible_contexts.retain(|context| !next_activated_contexts.contains(context));
 
@@ -1427,16 +1493,18 @@ impl Lock {
                 groups,
                 queue.clone(),
                 seen.clone(),
-                |dep| {
-                    source_edge_activation_status(
+                &mut (),
+                |(), dep, package_status| {
+                    package_status.and(source_edge_activation_status(
                         dep,
+                        &self.requires_python,
                         &self.source_activation_contexts,
                         &activated_contexts,
                         &possible_contexts,
                         &[],
-                    ) != ActivationStatus::Inactive
+                    ))
                 },
-                |package, _| {
+                |(), package, _, _| {
                     // Collect non-workspace packages that have version information and pass the
                     // caller's filter.
                     if workspace_member_ids.contains(&package.id) || !collect_filter(package) {
