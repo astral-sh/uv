@@ -30705,6 +30705,52 @@ fn lock_recursive_extra() -> Result<()> {
     Ok(())
 }
 
+/// Production self-extras must still be flattened when recursive extras are
+/// preserved for source activation.
+#[test]
+fn lock_multiple_sources_production_recursive_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        context.temp_dir.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["project[foo]"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["ok"]
+
+        [tool.uv.sources]
+        ok = [
+            { path = "./ok-1.0.0-py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Don't show an unpinned lower bound warning if the package was provided both by name and by URL,
 /// or if the package was part of a constraints files.
 ///

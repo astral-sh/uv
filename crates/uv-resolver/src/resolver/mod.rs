@@ -2146,7 +2146,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
             // Preserve recursive self-extra requirements when lock consumers need the activation
             // relationship to evaluate source-selection markers.
-            if !preserve_recursive_extras {
+            if !preserve_recursive_extras || extra.is_none() {
                 requirements.retain(|req| name != Some(&req.name) || req.extras.is_empty());
             }
             requirements.extend(self_constraints.into_iter().map(Cow::Owned));
