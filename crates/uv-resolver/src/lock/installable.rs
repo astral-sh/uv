@@ -40,17 +40,20 @@ fn activate_dependency_group_items<'lock>(
     activated_extras: &mut Vec<(&'lock PackageName, &'lock ExtraName)>,
     activated_groups: &[(&'lock PackageName, &'lock GroupName)],
 ) {
+    let mut dependencies = dependencies.to_vec();
+    let mut seen_dependencies = dependencies.iter().copied().collect::<BTreeSet<_>>();
+
     loop {
+        let mut changed = false;
         let mut newly_activated_projects = Vec::new();
         let mut newly_activated_extra_items = Vec::new();
-        for dependency in dependencies {
+        let mut index = 0;
+        while let Some(dependency) = dependencies.get(index).copied() {
+            index += 1;
             let additional_activated_project = (lock.is_workspace_package(&dependency.package_id)
                 && !activated_projects.contains(&&dependency.package_id.name))
             .then_some(&dependency.package_id.name);
             let additional_activated_extras = newly_activated_extras(dependency, activated_extras);
-            if additional_activated_project.is_none() && additional_activated_extras.is_empty() {
-                continue;
-            }
             if !dependency.complexified_marker.evaluate(
                 marker_env,
                 activated_projects
@@ -75,8 +78,24 @@ fn activate_dependency_group_items<'lock>(
                     newly_activated_extra_items.push(extra);
                 }
             }
+
+            let package = lock.find_by_id(&dependency.package_id);
+            for extra in &dependency.extra {
+                for recursive_dependency in package
+                    .optional_dependencies
+                    .get(extra)
+                    .into_iter()
+                    .flatten()
+                {
+                    if seen_dependencies.insert(recursive_dependency) {
+                        dependencies.push(recursive_dependency);
+                        changed = true;
+                    }
+                }
+            }
         }
-        if newly_activated_projects.is_empty() && newly_activated_extra_items.is_empty() {
+        if newly_activated_projects.is_empty() && newly_activated_extra_items.is_empty() && !changed
+        {
             break;
         }
         activated_projects.extend(newly_activated_projects);

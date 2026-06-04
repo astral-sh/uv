@@ -398,9 +398,16 @@ fn activate_dependency_group_items(
     dependencies: &[(&PackageName, &Dependency)],
     activated_items: &mut FxHashMap<ConflictItem, MarkerTree>,
 ) {
+    let mut dependencies = dependencies
+        .iter()
+        .map(|(parent, dependency)| (*parent, *dependency, MarkerTree::TRUE))
+        .collect::<Vec<_>>();
+
     loop {
         let mut changed = false;
-        for (parent, dependency) in dependencies {
+        let mut index = 0;
+        while let Some((parent, dependency, parent_marker)) = dependencies.get(index).copied() {
+            index += 1;
             let activates_project = lock.is_workspace_package(&dependency.package_id);
             if dependency.extra.is_empty() && !activates_project {
                 continue;
@@ -427,6 +434,8 @@ fn activate_dependency_group_items(
                 Some(parent),
                 &prospective_items,
             ));
+            let mut marker = marker;
+            marker.and(parent_marker);
             if marker.is_false() {
                 continue;
             }
@@ -444,6 +453,32 @@ fn activate_dependency_group_items(
                 let previous = *activated_marker;
                 activated_marker.or(marker);
                 changed |= *activated_marker != previous;
+            }
+
+            let package = lock.find_by_id(&dependency.package_id);
+            for extra in &dependency.extra {
+                for recursive_dependency in package
+                    .optional_dependencies
+                    .get(extra)
+                    .into_iter()
+                    .flatten()
+                {
+                    if let Some((_, _, existing_marker)) =
+                        dependencies
+                            .iter_mut()
+                            .find(|(candidate_parent, candidate, _)| {
+                                *candidate_parent == package.name()
+                                    && *candidate == recursive_dependency
+                            })
+                    {
+                        let previous = *existing_marker;
+                        existing_marker.or(marker);
+                        changed |= *existing_marker != previous;
+                    } else {
+                        dependencies.push((package.name(), recursive_dependency, marker));
+                        changed = true;
+                    }
+                }
             }
         }
         if !changed {

@@ -168,6 +168,75 @@ fn source_selection_group_sibling_activates_extra() -> Result<()> {
     (*) Package tree already displayed
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Conditionally activated recursive extras exclude inactive sibling source
+/// variants from the dependency tree.
+#[test]
+fn source_selection_group_recursive_extra_activates_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let default_index = context.temp_dir.child("default");
+    fs_err::create_dir_all(&default_index)?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        default_index.join("ok-2.0.0-py3-none-any.whl"),
+    )?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        context.temp_dir.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [project.optional-dependencies]
+        foo = []
+        all = ["project[foo]"]
+
+        [dependency-groups]
+        use = ["project[all] ; python_version == '3.12'", "ok"]
+
+        [tool.uv.sources]
+        ok = [
+            { path = "./ok-1.0.0-py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+
+        [[tool.uv.index]]
+        name = "default"
+        url = "./default"
+        format = "flat"
+        default = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--only-group").arg("use"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── ok v1.0.0
+    ├── project[foo] v0.1.0 (extra: all)
+    │   ├── ok v1.0.0
+    │   └── project[all] v0.1.0 (group: use) (*)
+    └── project[all] v0.1.0 (group: use) (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
 

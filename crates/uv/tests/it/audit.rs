@@ -916,7 +916,7 @@ async fn audit_group_sibling_activates_extra() {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
