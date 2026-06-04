@@ -1,7 +1,9 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use assert_fs::prelude::*;
 use insta::allow_duplicates;
+use url::Url;
 
+use uv_static::EnvVars;
 use uv_test::{TestContext, uv_snapshot};
 
 fn assert_project_unchanged(context: &TestContext, expected: &str) -> Result<()> {
@@ -73,6 +75,228 @@ fn upgrade_help() {
     ----- stderr -----
     "#
     );
+}
+
+#[test]
+fn upgrade_selects_normalized_production_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["AnyIO>=2,<3,!=2.1 ; python_version >= '3.12'"]
+
+        [tool.uv]
+        exclude-newer = "2024-03-25T00:00:00Z"
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.upgrade().arg("anyio"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add anyio v4.3.0
+    "
+    );
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_resolves_selected_dependency_without_mutation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let initial_pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio<=2", "idna"]
+
+        [tool.uv]
+        exclude-newer = "2021-01-01T00:00:00Z"
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(initial_pyproject_toml)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    let pyproject_toml =
+        initial_pyproject_toml.replace("2021-01-01T00:00:00Z", "2024-03-25T00:00:00Z");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    let pyproject = fs_err::read(context.temp_dir.child("pyproject.toml"))?;
+    let lock = fs_err::read(context.temp_dir.child("uv.lock"))?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .upgrade()
+            .arg("anyio")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolving despite existing lockfile due to change of exclude newer timestamp from `2021-01-01T00:00:00Z` to `2024-03-25T00:00:00Z`
+    Resolved 4 packages in [TIME]
+    Update anyio v2.0.0 -> v4.3.0
+    ");
+
+    assert_eq!(
+        fs_err::read(context.temp_dir.child("pyproject.toml"))?,
+        pyproject
+    );
+    assert_eq!(fs_err::read(context.temp_dir.child("uv.lock"))?, lock);
+    let lock_contents = context.read("uv.lock");
+    assert!(
+        lock_contents.contains("name = \"idna\"\nversion = \"2.10\""),
+        "{lock_contents}"
+    );
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_reports_no_solution_without_mutation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio<=2", "idna==9999"]
+
+        [tool.uv]
+        exclude-newer = "2024-03-25T00:00:00Z"
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of idna==9999 and your project depends on idna==9999, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_reports_no_version_change_without_mutation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+
+        [tool.uv]
+        exclude-newer = "2024-03-25T00:00:00Z"
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    fs_err::remove_dir_all(&context.venv)?;
+
+    let pyproject = fs_err::read(context.temp_dir.child("pyproject.toml"))?;
+    let lock = fs_err::read(context.temp_dir.child("uv.lock"))?;
+
+    uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    No version change for anyio
+    ");
+
+    assert_eq!(
+        fs_err::read(context.temp_dir.child("pyproject.toml"))?,
+        pyproject
+    );
+    assert_eq!(fs_err::read(context.temp_dir.child("uv.lock"))?, lock);
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_rejects_dynamic_project_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["anyio<=2"]
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `uv upgrade` does not support projects with dynamic versions yet
+    ");
+
+    assert_project_unchanged(&context, pyproject_toml)
 }
 
 #[test]
@@ -190,6 +414,32 @@ fn upgrade_rejects_direct_url_requirement() -> Result<()> {
 }
 
 #[test]
+fn upgrade_rejects_self_dependency() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = ["project[foo]>=0.1"]
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    uv_snapshot!(context.filters(), context.upgrade().arg("project"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Dependency `project` refers to the current project and cannot be upgraded
+    ");
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
 fn upgrade_rejects_non_registry_sources() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
 
@@ -272,6 +522,102 @@ fn upgrade_rejects_non_registry_source_for_top_level_extra() -> Result<()> {
 }
 
 #[test]
+fn upgrade_allows_registry_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let empty_index = context.temp_dir.child("empty-index");
+    empty_index.create_dir_all()?;
+    let empty_index = Url::from_directory_path(empty_index.path())
+        .map_err(|()| anyhow!("Failed to create empty index URL"))?;
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna>=2,<3"]
+
+        [tool.uv]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [tool.uv.sources]
+        idna = {{ index = "pypi" }}
+
+        [[tool.uv.index]]
+        name = "pypi"
+        url = "https://pypi.org/simple"
+        explicit = true
+
+        [[tool.uv.index]]
+        name = "empty"
+        url = "{empty_index}"
+        default = true
+    "#
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.upgrade().arg("idna"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    Add idna v3.6
+    "
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)
+}
+
+#[test]
+fn upgrade_ignores_inapplicable_non_registry_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio>=2,<3 ; python_version >= '3.12'"]
+
+        [tool.uv]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [tool.uv.sources]
+        anyio = { git = "https://github.com/agronholm/anyio", marker = "python_version < '3.12'" }
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.upgrade().arg("anyio"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add anyio v4.3.0
+    "
+    );
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
 fn upgrade_rejects_workspace_root_non_registry_source() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let workspace_pyproject_toml = r#"
@@ -324,6 +670,65 @@ fn upgrade_rejects_workspace_root_non_registry_source() -> Result<()> {
     );
     assert!(!context.temp_dir.child("uv.lock").exists());
     assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_resolves_nested_workspace_member_without_mutation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let workspace_pyproject_toml = r#"
+        [tool.uv.workspace]
+        members = ["project"]
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(workspace_pyproject_toml)?;
+
+    let project = context.temp_dir.child("project");
+    project.create_dir_all()?;
+    let project_pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio<=2"]
+
+        [tool.uv]
+        exclude-newer = "2024-03-25T00:00:00Z"
+    "#;
+    project
+        .child("pyproject.toml")
+        .write_str(project_pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.upgrade().current_dir(&project).arg("anyio"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add anyio v4.3.0
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        workspace_pyproject_toml
+    );
+    assert_eq!(
+        fs_err::read_to_string(project.child("pyproject.toml"))?,
+        project_pyproject_toml
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    assert!(!project.child("uv.lock").exists());
+    assert!(!project.child(".venv").exists());
     Ok(())
 }
 
