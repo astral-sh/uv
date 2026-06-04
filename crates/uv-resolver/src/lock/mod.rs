@@ -713,9 +713,13 @@ impl Lock {
     /// Selects an incompatible lock version when dependency selection requires behavior that older
     /// readers do not support.
     fn update_version_for_activation_markers(&mut self) {
+        self.version = self.required_semantic_version();
+    }
+
+    /// Returns the minimum lock version required to represent this lock's dependency semantics.
+    fn required_semantic_version(&self) -> u32 {
         if self.requires_group_source_fallback_semantics() {
-            self.version = GROUP_SOURCE_FALLBACK_VERSION;
-            return;
+            return GROUP_SOURCE_FALLBACK_VERSION;
         }
 
         let mut has_activation_markers = false;
@@ -789,8 +793,7 @@ impl Lock {
             // Version-1 readers only evaluate encoded conflict markers, never raw PEP 508 extra
             // markers.
             let Ok((include, exclude)) = conflict_marker.filter_rules() else {
-                self.version = ACTIVATION_MARKER_VERSION;
-                return;
+                return ACTIVATION_MARKER_VERSION;
             };
 
             // Version-1 readers only activate extras and groups represented by resolved
@@ -808,20 +811,17 @@ impl Lock {
                     ConflictKind::Project => group_activated_projects.contains(item.package()),
                 })
             {
-                self.version = ACTIVATION_MARKER_VERSION;
-                return;
+                return ACTIVATION_MARKER_VERSION;
             }
         }
 
         // Version-1 readers only collect the activation context when declared conflicts are
         // present, and do not record extras activated by dependency-group edges.
-        self.version = if has_activation_markers
-            && (self.conflicts.is_empty() || has_group_activated_extras)
-        {
+        if has_activation_markers && (self.conflicts.is_empty() || has_group_activated_extras) {
             ACTIVATION_MARKER_VERSION
         } else {
             VERSION
-        };
+        }
     }
 
     /// Returns `true` if dependency selection requires synthesized production fallbacks for
@@ -840,9 +840,8 @@ impl Lock {
     /// Returns the required and actual lockfile versions if the lockfile cannot represent its
     /// dependency semantics.
     pub fn mismatched_semantic_version(&self) -> Option<(u32, u32)> {
-        (self.version < GROUP_SOURCE_FALLBACK_VERSION
-            && self.requires_group_source_fallback_semantics())
-        .then_some((GROUP_SOURCE_FALLBACK_VERSION, self.version))
+        let required = self.required_semantic_version();
+        (self.version < required).then_some((required, self.version))
     }
 
     /// Record the required platforms that were used to generate this lock.

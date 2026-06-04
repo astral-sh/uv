@@ -25145,6 +25145,38 @@ fn lock_multiple_sources_extra_source_split_uses_incompatible_version() -> Resul
     };
     assert_snapshot!(version, @"version = 2");
 
+    let mut lock = lock.parse::<toml_edit::DocumentMut>()?;
+    lock["version"] = toml_edit::value(1);
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.to_string())?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--frozen")
+        .arg("--extra")
+        .arg("alt")
+        .arg("--dry-run"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Would use project environment at: .venv
+    error: The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Lock version v1 cannot represent the required dependency semantics (requires v2). To update the lockfile, run `uv lock`.
+    ");
+
     Ok(())
 }
 
