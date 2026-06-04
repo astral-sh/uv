@@ -6,6 +6,7 @@ use std::sync::{LazyLock, Mutex, OnceLock};
 use tracing::trace;
 
 use uv_fs::write_atomic_sync;
+use uv_pypi_types::Identifier;
 use uv_warnings::warn_user;
 
 use crate::wheel::read_record;
@@ -237,7 +238,7 @@ fn is_valid_top_level_entry(entry: &str, distribution: impl Display) -> bool {
 }
 
 fn is_safe_top_level_entry(entry: &str) -> bool {
-    !entry.is_empty() && entry != "." && entry != ".." && !entry.contains(['/', '\\'])
+    entry.parse::<Identifier>().is_ok()
 }
 
 /// Uninstall the egg represented by the `.egg-info` directory.
@@ -466,13 +467,20 @@ mod tests {
     #[test]
     fn test_top_level_entry_safe_name() {
         assert!(is_safe_top_level_entry("package"));
+        assert!(is_safe_top_level_entry("_package2"));
 
         assert!(!is_safe_top_level_entry(""));
         assert!(!is_safe_top_level_entry("."));
         assert!(!is_safe_top_level_entry(".."));
+        assert!(!is_safe_top_level_entry("1package"));
+        assert!(!is_safe_top_level_entry("package-name"));
+        assert!(!is_safe_top_level_entry("package.name"));
         assert!(!is_safe_top_level_entry("../package"));
         assert!(!is_safe_top_level_entry("package/name"));
         assert!(!is_safe_top_level_entry(r"package\name"));
+        assert!(!is_safe_top_level_entry("C:target"));
+        assert!(!is_safe_top_level_entry("C:."));
+        assert!(!is_safe_top_level_entry("C:.."));
     }
 
     /// Uninstall must not remove files outside the install scheme.
