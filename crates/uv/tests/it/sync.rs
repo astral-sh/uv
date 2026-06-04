@@ -10513,7 +10513,7 @@ fn sync_multiple_sources_index_marker_only_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + jinja2==3.1.4
