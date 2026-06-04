@@ -174,9 +174,20 @@ pub(crate) async fn audit(
     // Initialize any shared state.
     let state = UniversalState::default();
 
-    // Audits only need the runtime dependency graph. Avoid enabling
-    // build-dependency locking as a side effect of `--preview`.
-    let lock_preview = preview.without(PreviewFeature::LockBuildDependencies);
+    // Audits only inspect the runtime graph, but a write-mode relock must preserve build locks
+    // that the user requested explicitly or that are already present. Avoid enabling build
+    // dependency locking solely as a side effect of `--preview`.
+    let lock_build_dependencies = (preview.is_enabled(PreviewFeature::LockBuildDependencies)
+        && !preview.all_enabled())
+        || target
+            .read()
+            .await?
+            .is_some_and(|lock| lock.supports_build_dependencies());
+    let lock_preview = if lock_build_dependencies {
+        preview.with(PreviewFeature::LockBuildDependencies)
+    } else {
+        preview.without(PreviewFeature::LockBuildDependencies)
+    };
 
     // Update the lockfile, if necessary.
     let lock = match Box::pin(

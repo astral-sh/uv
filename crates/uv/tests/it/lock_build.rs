@@ -6044,6 +6044,79 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     Ok(())
 }
 
+/// Verify that an audit relock preserves explicitly requested and existing build locks.
+#[tokio::test]
+async fn lock_build_dependencies_audit_preserves_build_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("builder-0.1.0-py3-none-any.whl"),
+        "builder",
+        "0.1.0",
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let write_project = |version: &str| -> Result<()> {
+        pyproject_toml.write_str(&format!(
+            r#"
+            [project]
+            name = "project"
+            version = "{version}"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["builder"]
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#
+        ))?;
+        Ok(())
+    };
+    write_project("0.1.0")?;
+    context.temp_dir.child("build_backend.py").write_str("")?;
+
+    let server = MockServer::start().await;
+
+    context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit,lock-build-dependencies")
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--service-url")
+        .arg(server.uri())
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains("revision = 4"), "{lock}");
+    assert!(lock.contains("[[resolution]]"), "{lock}");
+    assert!(lock.contains("name = \"builder\""), "{lock}");
+
+    write_project("0.2.0")?;
+    context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--service-url")
+        .arg(server.uri())
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains("revision = 4"), "{lock}");
+    assert!(lock.contains("[[resolution]]"), "{lock}");
+    assert!(lock.contains("name = \"builder\""), "{lock}");
+
+    Ok(())
+}
+
 /// Verify that changing only a static dependency's lowered build source
 /// invalidates its locked build environment.
 #[test]

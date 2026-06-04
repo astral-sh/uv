@@ -434,6 +434,14 @@ impl Preview {
         self.flags.contains(flag)
     }
 
+    /// Return a preview configuration with a single feature enabled.
+    #[must_use]
+    pub fn with(self, flag: PreviewFeature) -> Self {
+        let mut flags = self.flags;
+        flags.insert(flag);
+        Self { flags }
+    }
+
     /// Return a preview configuration with a single feature disabled.
     #[must_use]
     pub fn without(self, flag: PreviewFeature) -> Self {
