@@ -23403,7 +23403,7 @@ fn lock_unsupported_version() -> Result<()> {
     // Validate schema, invalid version.
     context.temp_dir.child("uv.lock").write_str(
         r#"
-        version = 1
+        version = 3
         requires-python = ">=3.12"
 
         [options]
@@ -23437,13 +23437,13 @@ fn lock_unsupported_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The lockfile at `uv.lock` uses an unsupported schema version (v1, but only v2 is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
+    error: The lockfile at `uv.lock` uses an unsupported schema version (v3, but the maximum supported version is v2). Upgrade uv, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
     ");
 
     // Invalid schema (`iniconfig` is referenced, but missing), invalid version.
     context.temp_dir.child("uv.lock").write_str(
         r#"
-        version = 1
+        version = 3
         requires-python = ">=3.12"
 
         [options]
@@ -23468,7 +23468,7 @@ fn lock_unsupported_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `uv.lock`, which uses an unsupported schema version (v1, but only v2 is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
+    error: Failed to parse `uv.lock`, which uses an unsupported schema version (v3, but the maximum supported version is v2). Upgrade uv, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
       Caused by: Dependency `iniconfig` has missing `source` field but has more than one matching package
     ");
 
