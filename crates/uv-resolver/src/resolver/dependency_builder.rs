@@ -476,8 +476,13 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                 marker,
                 version: Self::version_for_requirement(requirement),
                 attached_source: DependencySource::from_source(&requirement.source),
+                // Required-extra and explicit-index requirements retain their raw marker during
+                // flattening. URL-like disjunctions are flattened with extras enabled.
                 flattened_marker: if !Self::required_extras(requirement.marker).is_empty()
-                    || requirement.marker.simplify_extras_with(|_| true).is_true()
+                    || (matches!(
+                        requirement.source,
+                        RequirementSource::Registry { index: Some(_), .. }
+                    ) && requirement.marker.simplify_extras_with(|_| true).is_true())
                 {
                     requirement.marker
                 } else {
