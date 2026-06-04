@@ -50,6 +50,7 @@ impl From<SystemDependency> for PubGrubDependency {
             version: Ranges::singleton(value.version),
             parent: None,
             source: DependencySource::Unspecified,
+            fork_source_on_marker: false,
         }
     }
 }

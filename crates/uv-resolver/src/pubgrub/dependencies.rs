@@ -146,6 +146,10 @@ pub(crate) struct PubGrubDependency {
     /// or source-scoped explicit indexes. Manifest-wide URL and index constraints are still applied
     /// separately via `Urls` and `Indexes`.
     pub(crate) source: DependencySource,
+
+    /// Whether an environment marker on this source-selection edge must fork before the source is
+    /// recorded in the resolver fork.
+    pub(crate) fork_source_on_marker: bool,
 }
 
 impl PubGrubDependency {
@@ -160,6 +164,21 @@ impl PubGrubDependency {
         let is_normal_parent = parent_package
             .map(|pp| pp.extra().is_none() && pp.group().is_none())
             .unwrap_or(false);
+        let mut has_extra_marker = false;
+        requirement
+            .marker
+            .visit_extras(|_, _| has_extra_marker = true);
+        let fork_source_on_marker = group_name.is_some()
+            || parent_package
+                .is_some_and(|package| package.extra().is_some() || package.group().is_some())
+            || has_extra_marker
+            || matches!(
+                &requirement.source,
+                RequirementSource::Registry {
+                    conflict: Some(_),
+                    ..
+                }
+            );
         let iter = if !requirement.extras.is_empty() {
             // This is crazy subtle, but if any of the extras in the
             // requirement are part of a declared conflict, then we
@@ -225,6 +244,7 @@ impl PubGrubDependency {
                         None
                     },
                     source,
+                    fork_source_on_marker,
                 },
                 PubGrubPackageInner::Marker { .. } => Self {
                     package,
@@ -235,6 +255,7 @@ impl PubGrubDependency {
                         None
                     },
                     source,
+                    fork_source_on_marker,
                 },
                 PubGrubPackageInner::Extra { name, .. } => {
                     if group_name.is_none()
@@ -250,6 +271,7 @@ impl PubGrubDependency {
                         version,
                         parent: None,
                         source,
+                        fork_source_on_marker,
                     }
                 }
                 PubGrubPackageInner::Group { name, .. } => {
@@ -264,6 +286,7 @@ impl PubGrubDependency {
                         version,
                         parent: None,
                         source,
+                        fork_source_on_marker,
                     }
                 }
                 PubGrubPackageInner::Root(_) => unreachable!("Root package in dependencies"),

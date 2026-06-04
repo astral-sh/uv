@@ -956,6 +956,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 version: _,
                 parent: _,
                 source: _,
+                fork_source_on_marker: _,
             } = dependency;
             let url = package.name().and_then(|name| state.fork_urls.get(name));
             let index = package.name().and_then(|name| state.fork_indexes.get(name));
@@ -1955,6 +1956,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             version: Range::singleton(version.clone()),
                             parent: None,
                             source: DependencySource::Unspecified,
+                            fork_source_on_marker: false,
                         })
                         .collect(),
                 ));
@@ -1983,6 +1985,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     version: Range::singleton(version.clone()),
                                     parent: None,
                                     source: DependencySource::Unspecified,
+                                    fork_source_on_marker: false,
                                 })
                         })
                         .collect(),
@@ -2009,6 +2012,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             version: Range::singleton(version.clone()),
                             parent: None,
                             source: DependencySource::Unspecified,
+                            fork_source_on_marker: false,
                         })
                         .collect(),
                 ));
@@ -3033,6 +3037,7 @@ impl ForkState {
                 version,
                 parent: _,
                 source,
+                fork_source_on_marker: _,
             } = dependency;
 
             let mut has_url = false;
@@ -3130,6 +3135,7 @@ impl ForkState {
                 version,
                 parent: _,
                 source: _,
+                fork_source_on_marker: _,
             } = dependency;
 
             let Some(base_package) = package.base_package() else {
@@ -3151,6 +3157,7 @@ impl ForkState {
                     version,
                     parent: _,
                     source: _,
+                    fork_source_on_marker: _,
                 } = dependency;
                 (package, version)
             }),
@@ -3819,12 +3826,14 @@ impl Forks {
                 // For example, given `requires-python = ">=3.7"` and `uv ; python_version >= "3.8"`,
                 // where uv itself only supports Python 3.8 and later, we need to fork to ensure
                 // that the resolution can find a solution.
-                // Source-specific edges with environment markers must also fork before recording
-                // their source, so the source does not leak into a later environment fork where
-                // the dependency marker is false.
-                let source_marker = dep.package.marker().without_extras();
-                if (dep.source.is_unspecified() || source_marker.is_true())
-                    && marker::requires_python(dep.package.marker())
+                // Conditional source-selection edges must also fork before recording their source,
+                // so the source does not leak into an environment where its marker is false.
+                let marker = dep.package.marker();
+                let source_environment_marker = marker.without_extras();
+                if (dep.source.is_unspecified()
+                    || !dep.fork_source_on_marker
+                    || source_environment_marker.is_true())
+                    && marker::requires_python(marker)
                         .is_none_or(|bound| !python_requirement.raises(&bound))
                 {
                     let dep = deps.pop().unwrap();

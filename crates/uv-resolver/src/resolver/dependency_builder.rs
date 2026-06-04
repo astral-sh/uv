@@ -377,6 +377,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                 version: requirement.version.clone(),
                 parent,
                 source: requirement.attached_source.clone(),
+                fork_source_on_marker: true,
             });
         }
 
@@ -440,6 +441,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             version: base_version,
             parent,
             source: DependencySource::Unspecified,
+            fork_source_on_marker: false,
         });
 
         true
@@ -822,6 +824,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             version,
             parent: self.package.name_no_root().cloned(),
             source: DependencySource::Unspecified,
+            fork_source_on_marker: false,
         })
     }
 
