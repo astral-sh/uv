@@ -6,6 +6,7 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 
+
 [[package]]
 name = "babel"
 version = "2.18.0"
