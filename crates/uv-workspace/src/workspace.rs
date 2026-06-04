@@ -30,6 +30,32 @@ use crate::pyproject::{
     Project, PyProjectToml, PyprojectTomlError, Source, Sources, ToolUvSources, ToolUvWorkspace,
 };
 
+/// The workspace project environment selected by configuration and command-line options.
+#[derive(Debug)]
+pub enum ProjectEnvironmentSelection {
+    /// Use the workspace's default project environment.
+    Default,
+    /// A path selected by `UV_PROJECT_ENVIRONMENT`.
+    Override(PathBuf),
+    /// The active virtual environment selected by `VIRTUAL_ENV` and `--active`.
+    Active(PathBuf),
+}
+
+impl ProjectEnvironmentSelection {
+    /// Returns `true` if the workspace's default project environment was selected.
+    pub fn is_default(&self) -> bool {
+        matches!(self, Self::Default)
+    }
+
+    /// Returns the explicitly selected environment path, if any.
+    pub fn explicit_path(&self) -> Option<&Path> {
+        match self {
+            Self::Default => None,
+            Self::Override(path) | Self::Active(path) => Some(path),
+        }
+    }
+}
+
 type WorkspaceMembers = Arc<BTreeMap<PackageName, WorkspaceMember>>;
 type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 type CachedWorkspaceResult = Result<Arc<Workspace>, WorkspaceError>;
@@ -845,7 +871,7 @@ impl Workspace {
         &self.install_path
     }
 
-    /// The path to the workspace virtual environment.
+    /// The workspace project environment selection.
     ///
     /// Uses `.venv` in the install path directory by default.
     ///
@@ -855,7 +881,7 @@ impl Workspace {
     /// If `active` is `true`, the `VIRTUAL_ENV` variable will be preferred. If it is `false`, any
     /// warnings about mismatch between the active environment and the project environment will be
     /// silenced.
-    pub fn venv(&self, active: Option<bool>) -> PathBuf {
+    pub fn environment_selection(&self, active: Option<bool>) -> ProjectEnvironmentSelection {
         /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
         fn from_project_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
             let value = std::env::var_os(EnvVars::UV_PROJECT_ENVIRONMENT)?;
@@ -891,32 +917,38 @@ impl Workspace {
             Some(CWD.join(path))
         }
 
-        // Determine the default value
-        let project_env = from_project_environment_variable(self)
-            .unwrap_or_else(|| self.install_path.join(".venv"));
+        let selection = from_project_environment_variable(self)
+            .map(ProjectEnvironmentSelection::Override)
+            .unwrap_or(ProjectEnvironmentSelection::Default);
+        let project_environment_path = selection
+            .explicit_path()
+            .map_or_else(|| self.install_path.join(".venv"), Path::to_path_buf);
 
         // Warn if it conflicts with `VIRTUAL_ENV`
         if let Some(from_virtual_env) = from_virtual_env_variable() {
-            if !uv_fs::is_same_file_allow_missing(&from_virtual_env, &project_env).unwrap_or(false)
-            {
-                match active {
-                    Some(true) => {
+            let matches_project =
+                uv_fs::is_same_file_allow_missing(&from_virtual_env, &project_environment_path)
+                    .unwrap_or(false);
+            match active {
+                Some(true) => {
+                    if !matches_project {
                         debug!(
                             "Using active virtual environment `{}` instead of project environment `{}`",
                             from_virtual_env.user_display(),
-                            project_env.user_display()
-                        );
-                        return from_virtual_env;
-                    }
-                    Some(false) => {}
-                    None => {
-                        warn_user_once!(
-                            "`VIRTUAL_ENV={}` does not match the project environment path `{}` and will be ignored; use `--active` to target the active environment instead",
-                            from_virtual_env.user_display(),
-                            project_env.user_display()
+                            project_environment_path.user_display()
                         );
                     }
+                    return ProjectEnvironmentSelection::Active(from_virtual_env);
                 }
+                Some(false) => {}
+                None if !matches_project => {
+                    warn_user_once!(
+                        "`VIRTUAL_ENV={}` does not match the project environment path `{}` and will be ignored; use `--active` to target the active environment instead",
+                        from_virtual_env.user_display(),
+                        project_environment_path.user_display()
+                    );
+                }
+                None => {}
             }
         } else {
             if active.unwrap_or_default() {
@@ -926,7 +958,14 @@ impl Workspace {
             }
         }
 
-        project_env
+        selection
+    }
+
+    /// The path to the workspace virtual environment.
+    pub fn venv(&self, active: Option<bool>) -> PathBuf {
+        self.environment_selection(active)
+            .explicit_path()
+            .map_or_else(|| self.install_path.join(".venv"), Path::to_path_buf)
     }
 
     /// The members of the workspace.
