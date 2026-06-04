@@ -770,7 +770,9 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                     continue;
                 }
 
-                let requirement_marker = requirement.marker.simplify_extras(&activated_extras);
+                let requirement_marker = requirement.marker.simplify_extras_with(|extra| {
+                    activated_extras.contains(extra) || requirement.extras.contains(extra)
+                });
                 let mut implication = marker;
                 implication.implies(requirement_marker);
                 if !implication.is_true() {
