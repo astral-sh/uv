@@ -25,8 +25,9 @@ use uv_cli::{
     AuthorFrom, BuildArgs, CheckArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
     ResolverInstallerArgs, ToolUpgradeArgs,
     options::{
-        Flag, FlagSource, check_conflicts, flag, resolve_flag, resolve_flag_pair,
-        resolver_installer_options, resolver_options,
+        Flag, FlagSource, check_conflicts, flag, indexes_from_args, resolve_flag,
+        resolve_flag_pair, resolver_installer_options, resolver_installer_options_with_indexes,
+        resolver_options,
     },
 };
 use uv_client::Connectivity;
@@ -2101,23 +2102,11 @@ impl AddSettings {
         };
 
         // Track the `--index` and `--default-index` arguments from the command-line.
-        let indexes = installer
-            .index_args
-            .default_index
-            .clone()
-            .and_then(Maybe::into_option)
-            .into_iter()
-            .chain(
-                installer
-                    .index_args
-                    .index
-                    .clone()
-                    .into_iter()
-                    .flat_map(|v| v.clone())
-                    .flatten()
-                    .filter_map(Maybe::into_option),
-            )
-            .collect::<Vec<_>>();
+        let index = indexes_from_args(
+            installer.index_args.default_index.as_ref(),
+            installer.index_args.index.as_deref(),
+        );
+        let indexes = index.clone().unwrap_or_default();
 
         // Warn user if an ambiguous relative path was passed as a value for
         // `--index` or `--default-index`.
@@ -2220,7 +2209,7 @@ impl AddSettings {
             refresh: Refresh::from(refresh),
             indexes,
             settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(installer, build),
+                resolver_installer_options_with_indexes(installer, build, index),
                 filesystem,
                 &environment,
             ),
