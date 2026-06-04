@@ -117,17 +117,22 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
     ) where
         'a: 'req,
     {
-        let dependencies = requirements
+        let requirements = requirements
             .into_iter()
+            .map(Cow::into_owned)
+            .collect::<Vec<_>>();
+        let dependencies = requirements
+            .iter()
             .flat_map(|requirement| {
                 let marker = self.complementary_group_source_marker(
-                    requirement.as_ref(),
+                    requirement,
                     group,
                     base_requirements,
+                    &requirements,
                 );
                 PubGrubDependency::from_requirement(
                     &self.state.conflicts,
-                    requirement,
+                    Cow::Borrowed(requirement),
                     Some(group),
                     Some(self.package),
                     marker,
@@ -266,6 +271,15 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                 .collect::<Vec<_>>();
             for raw_requirement in &requirements {
                 if !self.can_synthesize_non_root_complementary_source(raw_requirement) {
+                    continue;
+                }
+                if Self::simplify_group_activated_extras(
+                    raw_requirement.marker,
+                    parent_name,
+                    &requirements,
+                )
+                .is_false()
+                {
                     continue;
                 }
                 let scope = ForkScope::from_group(raw_requirement.marker, parent_name, group);
@@ -533,6 +547,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         requirement: &Requirement,
         group: &GroupName,
         base_requirements: &[Requirement],
+        group_requirements: &[Requirement],
     ) -> Option<MarkerTree> {
         if !self.has_unsourced_base_requirement(base_requirements, &requirement.name) {
             return None;
@@ -542,7 +557,12 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         }
 
         let parent_name = self.package.name_no_root()?;
-        Some(ForkScope::from_group(requirement.marker, parent_name, group).marker())
+        let marker = Self::simplify_group_activated_extras(
+            requirement.marker,
+            parent_name,
+            group_requirements,
+        );
+        Some(ForkScope::from_group(marker, parent_name, group).marker())
     }
 
     /// Returns the version range implied by a complementary requirement.
