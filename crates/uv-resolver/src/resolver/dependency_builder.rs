@@ -277,6 +277,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                     raw_requirement.marker,
                     parent_name,
                     &requirements,
+                    base_requirements,
                 )
                 .is_false()
                 {
@@ -296,7 +297,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                         raw_requirement,
                         requirement.marker,
                         python_marker,
-                        Some(&requirements),
+                        Some((&requirements, base_requirements)),
                     );
 
                     if self.apply_complementary_source_requirement(
@@ -561,6 +562,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             requirement.marker,
             parent_name,
             group_requirements,
+            base_requirements,
         );
         Some(ForkScope::from_group(marker, parent_name, group).marker())
     }
@@ -705,7 +707,7 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
         raw_requirement: &Requirement,
         marker: MarkerTree,
         python_marker: MarkerTree,
-        group_requirements: Option<&[Requirement]>,
+        group_activation_requirements: Option<(&[Requirement], &[Requirement])>,
     ) -> Vec<Requirement> {
         let Some(constraints) = self.state.constraints.get(&raw_requirement.name) else {
             return Vec::new();
@@ -717,11 +719,14 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
             .filter_map(|constraint| {
                 let mut raw_marker = constraint.marker;
                 raw_marker.and(raw_requirement.marker);
-                if let (Some(package), Some(group_requirements)) = (package, group_requirements) {
+                if let (Some(package), Some((group_requirements, recursive_requirements))) =
+                    (package, group_activation_requirements)
+                {
                     raw_marker = Self::simplify_group_activated_extras(
                         raw_marker,
                         package,
                         group_requirements,
+                        recursive_requirements,
                     );
                 }
                 if raw_marker.is_false() {
@@ -749,13 +754,18 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
     fn simplify_group_activated_extras(
         mut marker: MarkerTree,
         package: &PackageName,
-        requirements: &[Requirement],
+        group_requirements: &[Requirement],
+        recursive_requirements: &[Requirement],
     ) -> MarkerTree {
         let mut activated_extras = Vec::new();
 
         loop {
             let mut changed = false;
-            for requirement in requirements {
+            for requirement in group_requirements.iter().chain(
+                recursive_requirements
+                    .iter()
+                    .filter(|requirement| Self::has_extra(requirement.marker)),
+            ) {
                 if requirement.name != *package {
                     continue;
                 }

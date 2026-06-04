@@ -37137,6 +37137,70 @@ fn lock_group_source_constraint_respects_activated_extra() -> Result<()> {
     Ok(())
 }
 
+/// Test that recursively activated extras disable complementary constraints in
+/// the same group fork.
+#[test]
+fn lock_group_source_constraint_respects_recursively_activated_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let default_index = context.temp_dir.child("default");
+    fs_err::create_dir_all(&default_index)?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        default_index.join("ok-2.0.0-py3-none-any.whl"),
+    )?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        context.temp_dir.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [project.optional-dependencies]
+        foo = []
+        all = ["project[foo]"]
+
+        [dependency-groups]
+        use = ["project[all]", "ok==1"]
+
+        [tool.uv]
+        constraint-dependencies = ["ok>=2 ; extra != 'foo'"]
+
+        [tool.uv.sources]
+        ok = [
+            { path = "./ok-1.0.0-py3-none-any.whl", group = "use" },
+        ]
+
+        [[tool.uv.index]]
+        name = "default"
+        url = "./default"
+        format = "flat"
+        default = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Test that a source is ignored when its dependency group guarantees that
 /// the source marker is false.
 #[test]
