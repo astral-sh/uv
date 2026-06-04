@@ -8985,7 +8985,9 @@ fn inactive_platform_url_does_not_allow_transitive_url() -> Result<()> {
     let pyproject_toml = allowpkg.child("pyproject.toml");
     pyproject_toml.write_str(&fs_err::read_to_string(&pyproject_toml)?.replace(
         "dependencies = []",
-        &format!(r#"dependencies = ["iniconfig @ {iniconfig_url} ; sys_platform == 'win32'"]"#),
+        &format!(
+            r#"dependencies = ["iniconfig @ {iniconfig_url} ; sys_platform == 'unsupported'"]"#
+        ),
     ))?;
     context
         .build()

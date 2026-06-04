@@ -11179,7 +11179,7 @@ fn sync_multiple_sources_index_path_dependency_disjunctive_extra_platform_marker
 
         [tool.uv.sources]
         ok = [
-            { index = "explicit", marker = "extra == 'alt' or sys_platform == 'win32'" },
+            { index = "explicit", marker = "extra == 'alt' or sys_platform == 'unsupported'" },
         ]
 
         [[tool.uv.index]]
