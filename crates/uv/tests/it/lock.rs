@@ -36815,12 +36815,7 @@ fn lock_path_dependency_explicit_index_optional_extra_source_constraint() -> Res
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies for split (markers: extra == 'extra-5-pkg-a-cu118'):
-      ╰─▶ Because only the following versions of jinja2{extra == 'extra-5-pkg-a-cu118'} are available:
-              jinja2{extra == 'extra-5-pkg-a-cu118'}==3.1.2
-              jinja2{extra == 'extra-5-pkg-a-cu118'}==3.1.3
-              jinja2{extra == 'extra-5-pkg-a-cu118'}==3.1.4
-          and pkg-a==0.1.0 depends on jinja2{extra == 'extra-5-pkg-a-cu118'}, we can conclude that pkg-a==0.1.0 depends on jinja2.
-          And because pkg-a==0.1.0 depends on jinja2>3.1.4, we can conclude that pkg-a==0.1.0 cannot be used.
+      ╰─▶ Because only jinja2{extra == 'extra-5-pkg-a-cu118'}<=3.1.4 is available and pkg-a==0.1.0 depends on jinja2{extra == 'extra-5-pkg-a-cu118'}>3.1.4, we can conclude that pkg-a==0.1.0 cannot be used.
           And because only pkg-a==0.1.0 is available and your project depends on pkg-a, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
