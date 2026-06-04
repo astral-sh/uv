@@ -3088,6 +3088,137 @@ fn preview_features() {
     );
 }
 
+/// Test preview precedence across configuration, environment, and CLI settings.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn preview_precedence() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let disabled = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.version()).arg("--show-settings")
+    );
+
+    let enabled = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.version())
+            .arg("--show-settings")
+            .arg("--preview")
+    );
+
+    let user_config_dir = context.user_config_dir.child("uv");
+    user_config_dir.create_dir_all()?;
+    let user_config = user_config_dir.child("uv.toml");
+    user_config.write_str("preview = true")?;
+
+    // `preview = true` in user `uv.toml` should be the same as passing `--preview`.
+    diff_uv_snapshot!(
+        context.filters(),
+        &enabled,
+        add_shared_args(context.version()).arg("--show-settings"),
+        @""
+    );
+
+    let project_config = context.temp_dir.child("pyproject.toml");
+    project_config.write_str(indoc::indoc! {r"
+        [tool.uv]
+        preview = false
+    "})?;
+
+    // `preview = false` in `pyproject.toml` should mask user `uv.toml`.
+    diff_uv_snapshot!(
+        context.filters(),
+        &disabled,
+        add_shared_args(context.version()).arg("--show-settings"),
+        @""
+    );
+
+    // `--preview-features` should mask `preview = false` in a config file.
+    diff_uv_snapshot!(
+        context.filters(),
+        &disabled,
+        add_shared_args(context.version())
+            .arg("--show-settings")
+            .arg("--preview-features")
+            .arg("pylock"),
+        @"
+    --- old
+    +++ new
+    @@ -25,7 +25,9 @@
+         },
+         show_settings: true,
+         preview: Preview {
+    -        flags: [],
+    +        flags: [
+    +            Pylock,
+    +        ],
+         },
+         python_preference: Managed,
+         python_downloads: Automatic,
+    "
+    );
+
+    user_config.write_str("preview = false")?;
+
+    project_config.write_str(indoc::indoc! {r"
+        [tool.uv]
+        preview = true
+    "})?;
+
+    // `preview = true` in a config file should mask `--preview-features`.
+    diff_uv_snapshot!(
+        context.filters(),
+        &enabled,
+        add_shared_args(context.version())
+            .arg("--show-settings")
+            .arg("--preview-features")
+            .arg("pylock"),
+        @""
+    );
+
+    // `UV_PREVIEW=false` should fall through to configuration.
+    // Compare against `--preview`.
+    diff_uv_snapshot!(
+        context.filters(),
+        &enabled,
+        add_shared_args(context.version())
+            .arg("--show-settings")
+            .env(EnvVars::UV_PREVIEW, "0"),
+        @""
+    );
+
+    project_config.write_str("")?;
+    user_config.write_str("")?;
+
+    // `UV_PREVIEW=true` should override any explicit CLI feature list.
+    diff_uv_snapshot!(
+        context.filters(),
+        &enabled,
+        add_shared_args(context.version())
+            .arg("--show-settings")
+            .arg("--preview-features")
+            .arg("pylock")
+            .env(EnvVars::UV_PREVIEW, "1"),
+        @""
+    );
+
+    // `--no-preview` should override `UV_PREVIEW=true`.
+    diff_uv_snapshot!(
+        context.filters(),
+        &disabled,
+        add_shared_args(context.version())
+            .arg("--show-settings")
+            .arg("--no-preview")
+            .env(EnvVars::UV_PREVIEW, "1"),
+        @""
+    );
+
+    Ok(())
+}
+
 #[test]
 #[cfg_attr(
     windows,
