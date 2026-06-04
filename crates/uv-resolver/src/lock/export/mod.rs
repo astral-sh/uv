@@ -252,6 +252,7 @@ impl<'lock> ExportableRequirements<'lock> {
             target.lock(),
             &selected_group_dependencies,
             &mut activated_items,
+            prune,
         );
 
         // Index the lockfile by package name, to avoid making multiple passes over the lockfile.
@@ -435,6 +436,7 @@ fn activate_dependency_group_items(
     lock: &Lock,
     dependencies: &[(&PackageName, &Dependency, MarkerTree)],
     activated_items: &mut FxHashMap<ConflictItem, MarkerTree>,
+    prune: &[PackageName],
 ) {
     let mut dependencies = dependencies.to_vec();
 
@@ -443,6 +445,9 @@ fn activate_dependency_group_items(
         let mut index = 0;
         while let Some((parent, dependency, parent_marker)) = dependencies.get(index).copied() {
             index += 1;
+            if prune.contains(&dependency.package_id.name) {
+                continue;
+            }
             let activates_project = lock.is_workspace_package(&dependency.package_id);
 
             // An edge can activate the same items that its marker depends on, so include them
