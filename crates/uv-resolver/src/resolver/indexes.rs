@@ -35,7 +35,9 @@ impl Indexes {
 
         for requirement in manifest.requirements(env, dependencies) {
             let RequirementSource::Registry {
-                index: Some(index), ..
+                index: Some(index),
+                conflict,
+                ..
             } = &requirement.source
             else {
                 continue;
@@ -44,9 +46,14 @@ impl Indexes {
             requirement.marker.visit_extras(|_, _| has_extra = true);
             // Transitive package metadata does not retain its declaring project in `origin`.
             // During universal resolution, complementary source edges preserve these extra-scoped
-            // indexes directly. Specific resolution evaluates the active extra immediately, so it
-            // must retain the index mapping here.
-            if env.marker_environment().is_none() && requirement.origin.is_none() && has_extra {
+            // indexes directly, unless a declared conflict already supplies the project scope.
+            // Specific resolution evaluates the active extra immediately, so it must retain the
+            // index mapping here.
+            if env.marker_environment().is_none()
+                && requirement.origin.is_none()
+                && conflict.is_none()
+                && has_extra
+            {
                 continue;
             }
             indexes.add_with_project(requirement.as_ref(), index.clone(), project);
