@@ -6,11 +6,11 @@ use rustc_hash::FxHashMap;
 use version_ranges::Ranges;
 
 use uv_distribution_types::{
-    DerivationChain, DerivationStep, Dist, DistErrorKind, Name, RequestedDist,
+    DerivationChain, DerivationStep, Dist, DistErrorKind, File, Name, RequestedDist,
 };
 use uv_errors::{Hint, Hints};
 use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifiers};
 use uv_resolver::SentinelRange;
 
 use crate::commands::pip;
@@ -47,6 +47,8 @@ pub(crate) struct OperationDiagnostic {
     system_certs: bool,
     /// The context to display to the user upon resolution failure.
     context: Option<&'static str>,
+    /// Target interpreter version, used to detect `requires-python` mismatches.
+    python_version: Option<Version>,
 }
 
 impl OperationDiagnostic {
@@ -75,6 +77,16 @@ impl OperationDiagnostic {
         }
     }
 
+    /// Set the Python version of the target interpreter, used to detect
+    /// `requires-python` mismatches on failing distributions.
+    #[must_use]
+    pub(crate) fn with_python_version(self, python_version: Version) -> Self {
+        Self {
+            python_version: Some(python_version),
+            ..self
+        }
+    }
+
     /// Attempt to report an error with rich diagnostic context.
     ///
     /// Returns `Some` if the error was not handled.
@@ -90,7 +102,7 @@ impl OperationDiagnostic {
                 chain,
                 err,
             )) => {
-                requested_dist_error(kind, dist, &chain, err);
+                requested_dist_error(kind, dist, &chain, self.python_version.as_ref(), err);
                 None
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Dependencies(
@@ -103,7 +115,13 @@ impl OperationDiagnostic {
                 None
             }
             pip::operations::Error::Requirements(uv_requirements::Error::Dist(kind, dist, err)) => {
-                dist_error(kind, dist, &DerivationChain::default(), Arc::new(*err));
+                dist_error(
+                    kind,
+                    dist,
+                    &DerivationChain::default(),
+                    self.python_version.as_ref(),
+                    Arc::new(*err),
+                );
                 None
             }
             pip::operations::Error::Prepare(uv_installer::PrepareError::Dist(
@@ -112,7 +130,13 @@ impl OperationDiagnostic {
                 chain,
                 err,
             )) => {
-                dist_error(kind, dist, &chain, Arc::new(*err));
+                dist_error(
+                    kind,
+                    dist,
+                    &chain,
+                    self.python_version.as_ref(),
+                    Arc::new(*err),
+                );
                 None
             }
             pip::operations::Error::Requirements(err) => {
@@ -155,6 +179,7 @@ fn dist_error(
     kind: DistErrorKind,
     dist: Box<Dist>,
     chain: &DerivationChain,
+    python_version: Option<&Version>,
     cause: Arc<uv_distribution::Error>,
 ) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
@@ -167,7 +192,10 @@ fn dist_error(
         cause: Arc<uv_distribution::Error>,
     }
 
-    let hints = dist_hints(dist.name(), dist.version(), chain, cause.hints());
+    let mut hints = dist_hints(dist.name(), dist.version(), chain, cause.hints());
+    if let Some(hint) = requires_python_hint(dist.name(), dist.file(), python_version) {
+        hints.prepend(hint);
+    }
     let report = miette::Report::new(Diagnostic { kind, dist, cause });
     anstream::eprint!("{report:?}");
     anstream::eprint!("{hints}");
@@ -180,6 +208,7 @@ fn requested_dist_error(
     kind: DistErrorKind,
     dist: Box<RequestedDist>,
     chain: &DerivationChain,
+    python_version: Option<&Version>,
     cause: Arc<uv_distribution::Error>,
 ) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
@@ -192,10 +221,35 @@ fn requested_dist_error(
         cause: Arc<uv_distribution::Error>,
     }
 
-    let hints = dist_hints(dist.name(), dist.version(), chain, cause.hints());
+    let mut hints = dist_hints(dist.name(), dist.version(), chain, cause.hints());
+    if let Some(hint) = requires_python_hint(dist.name(), dist.file(), python_version) {
+        hints.prepend(hint);
+    }
     let report = miette::Report::new(Diagnostic { kind, dist, cause });
     anstream::eprint!("{report:?}");
     anstream::eprint!("{hints}");
+}
+
+/// Format a hint when a build failure is caused by a `requires-python` mismatch.
+fn requires_python_hint(
+    name: &PackageName,
+    file: Option<&File>,
+    python_version: Option<&Version>,
+) -> Option<String> {
+    let python_version = python_version?;
+    let requires_python: &VersionSpecifiers = file?.requires_python.as_ref()?;
+    if requires_python.contains(python_version) {
+        return None;
+    }
+    Some(format!(
+        "`{}` declares `requires-python = \"{}\"`, but you are using Python {}. \
+         This is the most likely cause of the build failure; try a newer version of `{}` \
+         that supports your Python.",
+        name.cyan(),
+        requires_python,
+        python_version,
+        name.cyan(),
+    ))
 }
 
 /// Render an error in fetching a package's dependencies.
