@@ -1,3 +1,6 @@
+#[cfg(windows)]
+use std::path::{Component, Prefix};
+
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
@@ -629,6 +632,59 @@ fn uninstall_egg_info_top_level_path_traversal() -> Result<()> {
     ");
 
     assert!(target_dir.exists());
+    assert!(target_file.exists());
+    assert!(!init_py.exists());
+    assert!(!egg_info.exists());
+
+    Ok(())
+}
+
+/// Windows drive-relative paths are not valid `top_level.txt` entries.
+#[cfg(windows)]
+#[test]
+fn uninstall_egg_info_top_level_drive_relative() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"[A-Za-z]:traversal_target", "[DRIVE]:traversal_target"));
+    let site_packages = ChildPath::new(context.site_packages());
+
+    let egg_info = site_packages.child("evilpkg-0.1.0.egg-info");
+    egg_info.create_dir_all()?;
+
+    let drive = match context.temp_dir.path().components().next() {
+        Some(Component::Prefix(prefix)) => match prefix.kind() {
+            Prefix::Disk(drive) | Prefix::VerbatimDisk(drive) => drive,
+            prefix => anyhow::bail!("expected a disk path, found {prefix:?}"),
+        },
+        component => anyhow::bail!("expected a Windows path prefix, found {component:?}"),
+    };
+    let traversal_entry = format!("{}:traversal_target", char::from(drive));
+
+    // Commands run from `context.temp_dir`, so this drive-relative path resolves there rather than
+    // below `site-packages`.
+    let target_file = context
+        .temp_dir
+        .child("traversal_target")
+        .child("secret.txt");
+    target_file.write_str("I should not be deleted")?;
+    egg_info
+        .child("top_level.txt")
+        .write_str(&format!("evilpkg\n{traversal_entry}\n"))?;
+
+    let init_py = site_packages.child("evilpkg").child("__init__.py");
+    init_py.touch()?;
+
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("evilpkg"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Invalid `top_level.txt` entry in evilpkg==0.1.0 that is not a top-level module or package, skipping: [DRIVE]:traversal_target
+    Uninstalled 1 package in [TIME]
+     - evilpkg==0.1.0
+    ");
+
     assert!(target_file.exists());
     assert!(!init_py.exists());
     assert!(!egg_info.exists());
