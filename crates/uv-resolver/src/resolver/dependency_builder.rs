@@ -292,7 +292,12 @@ impl<'a, InstalledPackages: InstalledPackagesProvider> DependencyBuilder<'a, Ins
                     python_marker,
                 );
 
-                for requirement in complementary_requirements {
+                for mut requirement in complementary_requirements {
+                    // Group requirements are absent from the base package's normal flattening
+                    // path, so an explicit index cannot already exist as an unspecified edge.
+                    requirement
+                        .flattened_source
+                        .clone_from(&requirement.attached_source);
                     let constraints = self.constraints_for_complementary_extra_source(
                         raw_requirement,
                         requirement.marker,

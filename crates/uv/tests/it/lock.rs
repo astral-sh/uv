@@ -26164,8 +26164,7 @@ async fn lock_multiple_sources_index_group_conflicting_specifiers() -> Result<()
 
     ----- stderr -----
       × No solution found when resolving dependencies for split (markers: extra == 'group-7-project-alt'):
-      ╰─▶ Because your project depends on iniconfig{extra == 'group-7-project-alt'}>=2 and project:alt depends on iniconfig{extra == 'group-7-project-alt'}<2, we can conclude that your project and project:alt are incompatible.
-          And because your project requires your project and project:alt, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because your project depends on iniconfig{extra == 'group-7-project-alt'}>=2 and iniconfig{extra == 'group-7-project-alt'}<2, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     ");
