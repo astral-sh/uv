@@ -832,7 +832,10 @@ impl InitProjectKind {
 
         // Include additional project configuration for packaged applications
         if package {
-            // Since it'll be packaged, we can add a `[project.scripts]` entry
+            // Since it'll be packaged, we can add a `[project.scripts]` entry.
+            //
+            // PEP 561 stub packages are type-only distributions, so they
+            // should not declare a console script for a runtime module.
             if !bare && stubs_package_module_dir(name).is_none() {
                 pyproject.push('\n');
                 pyproject.push_str(&pyproject_project_scripts(name, name.as_str(), "main"));
