@@ -529,12 +529,8 @@ fn build_resolution_target(
 pub struct Lock {
     /// The (major) version of the lockfile format.
     ///
-    /// Changes to the major version indicate backwards- and forwards-incompatible changes to the
-    /// lockfile format. A given uv version only supports a single major version of the lockfile
-    /// format.
-    ///
-    /// In other words, a version of uv that supports version 2 of the lockfile format will not be
-    /// able to read lockfiles generated under version 1 or 3.
+    /// Changes to the major version fence older readers from lockfile features they cannot safely
+    /// ignore. Newer readers may continue to support earlier schema versions.
     version: u32,
     /// The revision of the lockfile format.
     ///
