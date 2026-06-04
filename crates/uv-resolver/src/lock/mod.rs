@@ -1236,8 +1236,11 @@ impl Lock {
                 let generated_hashes;
                 let hashes = if entry.hashes.is_empty()
                     && let ResolvedDist::Installable { dist, .. } = resolved_dist
-                    && matches!(dist.as_ref(), Dist::Built(BuiltDist::Path(_)))
-                {
+                    && matches!(
+                        dist.as_ref(),
+                        Dist::Built(BuiltDist::Path(_))
+                            | Dist::Source(uv_distribution_types::SourceDist::DirectUrl(_))
+                    ) {
                     generated_hashes = database
                         .get_or_build_wheel_metadata(
                             dist,
@@ -1254,10 +1257,7 @@ impl Lock {
                     entry.hashes.as_slice()
                 };
 
-                let Ok(mut package) = Package::from_resolved_dist(resolved_dist, hashes, root)
-                else {
-                    continue;
-                };
+                let mut package = Package::from_resolved_dist(resolved_dist, hashes, root)?;
 
                 if !existing_packages.insert(package_id.clone()) {
                     if let Some(existing_package) = self

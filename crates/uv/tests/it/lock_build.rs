@@ -5926,6 +5926,124 @@ fn lock_build_dependencies_static_directory_lowers_build_sources() -> Result<()>
     Ok(())
 }
 
+/// Verify that direct URL source distributions used as build requirements are
+/// serialized with a generated hash.
+#[tokio::test]
+async fn lock_build_dependencies_hashes_direct_url_source_build_requirements() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let source_dist = context.temp_dir.child("builder-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("builder-0.1.0/pyproject.toml".into(), Compression::Stored);
+    zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "builder"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )
+    .await?;
+    let entry = ZipEntryBuilder::new("builder-0.1.0/build_backend.py".into(), Compression::Stored);
+    zip.write_entry_whole(
+        entry,
+        br#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "builder-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("builder/__init__.py", "")
+        wheel.writestr(
+            "builder-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: builder\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "builder-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("builder-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )
+    .await?;
+    fs_err::write(source_dist.path(), zip.close().await?)?;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/builder-0.1.0.zip"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(source_dist.path())?))
+        .mount(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["builder @ {}/builder-0.1.0.zip"]
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#,
+            server.uri()
+        ))?;
+    context.temp_dir.child("build_backend.py").write_str("")?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let mut filters = context.filters();
+    filters.push((r"sha256:[0-9a-f]{64}", "sha256:[HASH]"));
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(package_section(&lock, "builder"), @r#"
+        [[package]]
+        name = "builder"
+        version = "0.1.0"
+        source = { url = "http://[LOCALHOST]/builder-0.1.0.zip" }
+        build-only = true
+        build-dependencies = []
+        sdist = { hash = "sha256:[HASH]" }
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index")
+        .arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Verify that changing only a static dependency's lowered build source
 /// invalidates its locked build environment.
 #[test]
