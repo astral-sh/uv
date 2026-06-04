@@ -581,6 +581,73 @@ fn source_selection_root_group_activates_dependency_project() -> Result<()> {
     Ok(())
 }
 
+/// A dependency group on a non-project workspace root must preserve requested
+/// extras when rendering a workspace project's optional dependencies.
+#[test]
+fn source_selection_root_group_preserves_dependency_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        context.temp_dir.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [dependency-groups]
+        use = ["pkg-a[alt]"]
+
+        [tool.uv.workspace]
+        members = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = { workspace = true }
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("pkg-a")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        alt = ["ok"]
+
+        [tool.uv.sources]
+        ok = [
+            { path = "../ok-1.0.0-py3-none-any.whl", extra = "alt" },
+        ]
+        "#,
+        )?;
+
+    uv_snapshot!(context.filters(), context
+        .tree()
+        .arg("--universal")
+        .arg("--only-group")
+        .arg("use"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pkg-a[alt] v0.1.0 (group: use)
+    └── ok v1.0.0 (extra: alt)
+    pkg-a v0.1.0 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn nested_platform_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
