@@ -491,6 +491,61 @@ fn init_package() -> Result<()> {
 }
 
 #[test]
+fn init_package_stubs() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.init().arg("--package").arg("foo-stubs"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo-stubs` at `[TEMP_DIR]/foo-stubs`
+    ");
+
+    let child = context.temp_dir.child("foo-stubs");
+    let pyproject = fs_err::read_to_string(child.join("pyproject.toml"))?;
+    let _ = fs_err::read_to_string(child.join("src/foo-stubs/__init__.pyi"))?;
+    child
+        .child("src/foo_stubs/__init__.py")
+        .assert(predicate::path::missing());
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "foo-stubs"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
+        "#
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.build().current_dir(&child), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/foo_stubs-0.1.0.tar.gz
+    Successfully built dist/foo_stubs-0.1.0-py3-none-any.whl
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn init_bare_lib() {
     let context = uv_test::test_context!("3.12");
 

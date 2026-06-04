@@ -833,7 +833,7 @@ impl InitProjectKind {
         // Include additional project configuration for packaged applications
         if package {
             // Since it'll be packaged, we can add a `[project.scripts]` entry
-            if !bare {
+            if !bare && stubs_package_module_dir(name).is_none() {
                 pyproject.push('\n');
                 pyproject.push_str(&pyproject_project_scripts(name, name.as_str(), "main"));
             }
@@ -1142,8 +1142,18 @@ fn generate_package_scripts(
     let module_name = package.as_dist_info_name();
 
     let src_dir = path.join("src");
-    let pkg_dir = src_dir.join(&*module_name);
+    let stubs_module_dir = stubs_package_module_dir(package);
+    let pkg_dir = src_dir.join(stubs_module_dir.as_deref().unwrap_or(module_name.as_ref()));
     fs_err::create_dir_all(&pkg_dir)?;
+
+    if stubs_module_dir.is_some() && build_backend == ProjectBuildBackend::Uv {
+        let init_pyi = pkg_dir.join("__init__.pyi");
+        if !init_pyi.try_exists()? {
+            fs_err::write(init_pyi, "")?;
+        }
+
+        return Ok(());
+    }
 
     // Python script for pure-python packaged apps or libs
     let pure_python_script = if is_lib {
@@ -1264,6 +1274,13 @@ fn generate_package_scripts(
     }
 
     Ok(())
+}
+
+fn stubs_package_module_dir(package: &PackageName) -> Option<String> {
+    package
+        .as_dist_info_name()
+        .strip_suffix("_stubs")
+        .map(|stem| format!("{stem}-stubs"))
 }
 
 #[derive(Debug, Clone)]
