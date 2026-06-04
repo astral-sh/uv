@@ -149,6 +149,8 @@ mod tool_upgrade;
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod tree;
 
+mod upgrade;
+
 #[cfg(feature = "test-python")]
 mod venv;
 

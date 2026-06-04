@@ -2331,6 +2331,7 @@ async fn run_project(
             ))
             .await
         }
+        ProjectCommand::Upgrade(_) => bail!("`uv upgrade` is not implemented yet"),
         ProjectCommand::Add(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let mut args = settings::AddSettings::resolve(args, filesystem, environment);
