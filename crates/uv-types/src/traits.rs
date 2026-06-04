@@ -7,12 +7,14 @@ use anyhow::Result;
 use rustc_hash::FxHashSet;
 
 use uv_cache::Cache;
-use uv_configuration::{BuildKind, BuildOptions, BuildOutput, NoSources};
+use uv_configuration::{
+    BuildKind, BuildOptions, BuildOutput, DependencyGroupsWithDefaults, NoSources,
+};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, DistributionId, ExtraBuildRequires,
     ExtraBuildVariables, IndexCapabilities, IndexLocations, InstalledDist, IsBuildBackendError,
-    PackageConfigSettings, Requirement, SourceDist,
+    PackageCacheKeys, PackageConfigSettings, Requirement, SourceDist,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -125,6 +127,14 @@ pub trait BuildContext {
 
     /// The [`ConfigSettings`] used to build a specific package.
     fn config_settings_package(&self) -> &PackageConfigSettings;
+
+    /// The cache-key overrides used to invalidate builds of specific packages, set by the
+    /// consuming project via `tool.uv.cache-keys-package`.
+    fn cache_keys_package(&self) -> &PackageCacheKeys;
+
+    /// The dependency groups enabled for the current invocation, used to filter group-scoped
+    /// `cache-keys` entries. Empty for commands without a project group context.
+    fn dependency_groups(&self) -> &DependencyGroupsWithDefaults;
 
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
     fn sources(&self) -> &NoSources;

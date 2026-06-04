@@ -17440,3 +17440,126 @@ fn sync_frozen_workspace_member_git_credentials() -> Result<()> {
 
     Ok(())
 }
+
+/// A `cache-keys` entry scoped to a dependency group (`{ ..., group = "k8s" }`) only invalidates
+/// the build when that group is enabled for the invocation (e.g. `uv sync --group k8s`). The same
+/// edit that triggers a rebuild under `--group k8s` is a no-op without it.
+///
+/// The group-scoped key is paired with `{ default = true }` (the built-in default keys); a package
+/// whose keys all filter out would produce an empty cache info, which uv treats as "always
+/// rebuild". `{ default = true }` keeps the normal invalidation behavior when `k8s` is inactive.
+#[test]
+fn sync_group_conditional_cache_keys() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // A child package that keeps the default keys plus a `k8s`-scoped key (`trigger.txt`).
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        cache-keys = [{ default = true }, { file = "trigger.txt", group = "k8s" }]
+    "#})?;
+    context
+        .temp_dir
+        .child("child")
+        .child("src/child/__init__.py")
+        .touch()?;
+    let trigger = context.temp_dir.child("child").child("trigger.txt");
+    trigger.write_str("1")?;
+
+    // A project that depends on the child, with a `k8s` dependency group.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [dependency-groups]
+        k8s = []
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // Build the child with the `k8s` group active.
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("k8s"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Idempotent under `--group k8s`.
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("k8s"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked 1 package in [TIME]
+    ");
+
+    // With `k8s` active, editing the group-scoped key's file rebuilds the child.
+    trigger.write_str("2")?;
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("k8s"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Switching to a default sync drops the `k8s`-scoped key (transition rebuild).
+    uv_snapshot!(context.filters(), context.sync(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Without `k8s`, the group-scoped key is inactive: editing its file is a no-op.
+    trigger.write_str("3")?;
+    uv_snapshot!(context.filters(), context.sync(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked 1 package in [TIME]
+    ");
+
+    Ok(())
+}

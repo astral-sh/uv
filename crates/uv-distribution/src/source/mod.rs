@@ -23,7 +23,7 @@ use url::Url;
 
 use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
-use uv_cache_info::CacheInfo;
+use uv_cache_info::{CacheInfo, CacheKey};
 use uv_client::{
     BaseClientBuilder, CacheControl, CachedClientError, Connectivity, DataWithCachePolicy,
     RegistryClient,
@@ -588,6 +588,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         Ok(metadata)
+    }
+
+    /// Determine the cache-key override for the given package name, if the consuming project set
+    /// one via `tool.uv.cache-keys-package`.
+    fn cache_keys_for(&self, name: Option<&PackageName>) -> Option<&[CacheKey]> {
+        name.and_then(|name| self.build_context.cache_keys_package().get(name))
     }
 
     /// Determine the [`ConfigSettings`] for the given package name.
@@ -1667,8 +1673,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::NotFound(resource.url.clone()));
         }
 
-        // Determine the last-modified time of the source distribution.
-        let cache_info = CacheInfo::from_directory(resource.install_path)?;
+        // Determine the last-modified time of the source distribution. If the consuming project
+        // overrode the cache keys for this package (via `tool.uv.cache-keys-package`), those
+        // replace the package's own `tool.uv.cache-keys` for this build. Group-scoped cache keys
+        // are filtered by the dependency groups enabled for the current invocation.
+        let groups = self.build_context.dependency_groups();
+        let cache_info = CacheInfo::from_directory_filtered(
+            resource.install_path,
+            self.cache_keys_for(source.name()),
+            &|group| groups.contains(group),
+        )?;
 
         // Read the existing metadata from the cache.
         let entry = cache_shard.entry(LOCAL_REVISION);

@@ -6,6 +6,7 @@ use serde::Deserialize;
 use tracing::{debug, info_span, warn};
 
 use uv_fs::Simplified;
+use uv_normalize::GroupName;
 
 use crate::git_info::{Commit, Tags};
 use crate::glob::cluster_globs;
@@ -62,46 +63,101 @@ impl CacheInfo {
 
     /// Compute the cache info for a given directory.
     pub fn from_directory(directory: &Path) -> Result<Self, CacheInfoError> {
+        Self::from_directory_impl(directory, None, &|_| false)
+    }
+
+    /// Like [`CacheInfo::from_directory`], but filters group-scoped cache keys by the given
+    /// predicate, and optionally applies a consumer-provided override.
+    ///
+    /// A cache key tagged with `group = "..."` is only incorporated when `is_group_active` returns
+    /// `true` for that group; untagged keys always apply. Callers that know the active dependency
+    /// groups (e.g. the project commands) pass `|group| dependency_groups.contains(group)`. Callers
+    /// with no group context use [`CacheInfo::from_directory`], which excludes all group-scoped keys.
+    pub fn from_directory_filtered(
+        directory: &Path,
+        overrides: Option<&[CacheKey]>,
+        is_group_active: &dyn Fn(&GroupName) -> bool,
+    ) -> Result<Self, CacheInfoError> {
+        Self::from_directory_impl(directory, overrides, is_group_active)
+    }
+
+    /// Like [`CacheInfo::from_directory`], but uses the provided `cache_keys` rather than reading
+    /// them from the package's own `pyproject.toml`.
+    ///
+    /// This allows a consuming project to override a dependency's cache keys for its own build
+    /// (via `tool.uv.cache-keys-package`), without modifying the dependency itself — mirroring
+    /// `tool.uv.config-settings-package`. The dependency's own behavior (e.g., for developers
+    /// working within its directory) is unaffected, since the override lives only in the
+    /// consumer's settings.
+    pub fn from_directory_with_keys(
+        directory: &Path,
+        cache_keys: &[CacheKey],
+    ) -> Result<Self, CacheInfoError> {
+        Self::from_directory_impl(directory, Some(cache_keys), &|_| false)
+    }
+
+    fn from_directory_impl(
+        directory: &Path,
+        overrides: Option<&[CacheKey]>,
+        is_group_active: &dyn Fn(&GroupName) -> bool,
+    ) -> Result<Self, CacheInfoError> {
         let mut commit = None;
         let mut tags = None;
         let mut last_changed: Option<(PathBuf, Timestamp)> = None;
         let mut directories = BTreeMap::new();
         let mut env = BTreeMap::new();
 
-        // Read the cache keys.
-        let pyproject_path = directory.join("pyproject.toml");
-        let cache_keys = if let Ok(contents) = fs_err::read_to_string(&pyproject_path) {
-            let result = info_span!("toml::from_str cache keys", path = %pyproject_path.display())
-                .in_scope(|| toml::from_str::<PyProjectToml>(&contents));
-            if let Ok(pyproject_toml) = result {
-                pyproject_toml
-                    .tool
-                    .and_then(|tool| tool.uv)
-                    .and_then(|tool_uv| tool_uv.cache_keys)
+        // Resolve the cache keys: a consumer-provided override takes precedence over the
+        // package's own `pyproject.toml`, which in turn falls back to the defaults.
+        let cache_keys = if let Some(overrides) = overrides {
+            overrides.to_vec()
+        } else {
+            // Read the cache keys.
+            let pyproject_path = directory.join("pyproject.toml");
+            let cache_keys = if let Ok(contents) = fs_err::read_to_string(&pyproject_path) {
+                let result =
+                    info_span!("toml::from_str cache keys", path = %pyproject_path.display())
+                        .in_scope(|| toml::from_str::<PyProjectToml>(&contents));
+                if let Ok(pyproject_toml) = result {
+                    pyproject_toml
+                        .tool
+                        .and_then(|tool| tool.uv)
+                        .and_then(|tool_uv| tool_uv.cache_keys)
+                } else {
+                    None
+                }
             } else {
                 None
-            }
-        } else {
-            None
+            };
+
+            // If no cache keys were defined, use the defaults.
+            cache_keys.unwrap_or_else(CacheKey::defaults)
         };
 
-        // If no cache keys were defined, use the defaults.
-        let cache_keys = cache_keys.unwrap_or_else(|| {
-            vec![
-                CacheKey::Path(Cow::Borrowed("pyproject.toml")),
-                CacheKey::Path(Cow::Borrowed("setup.py")),
-                CacheKey::Path(Cow::Borrowed("setup.cfg")),
-                CacheKey::Directory {
-                    dir: Cow::Borrowed("src"),
-                },
-            ]
-        });
+        // Filter out keys scoped to inactive dependency groups, and expand any `{ default = true }`
+        // entries to the built-in default cache keys.
+        let cache_keys = cache_keys
+            .into_iter()
+            .filter(|cache_key| cache_key.group().is_none_or(is_group_active))
+            .flat_map(|cache_key| match cache_key {
+                CacheKey::Default { default, .. } => {
+                    if default {
+                        CacheKey::defaults()
+                    } else {
+                        Vec::new()
+                    }
+                }
+                cache_key => vec![cache_key],
+            })
+            .collect::<Vec<_>>();
 
         // Incorporate timestamps from any direct filepaths.
         let mut globs = vec![];
         for cache_key in cache_keys {
             match cache_key {
-                CacheKey::Path(file) | CacheKey::File { file } => {
+                // Group filtering and `{ default = true }` expansion happened above.
+                CacheKey::Default { .. } => {}
+                CacheKey::Path(file) | CacheKey::File { file, .. } => {
                     if file
                         .as_ref()
                         .chars()
@@ -138,7 +194,7 @@ impl CacheInfo {
                         last_changed = Some((path, timestamp));
                     }
                 }
-                CacheKey::Directory { dir } => {
+                CacheKey::Directory { dir, .. } => {
                     // Treat the path as a directory.
                     let path = directory.join(dir.as_ref());
                     let metadata = match path.metadata() {
@@ -185,6 +241,7 @@ impl CacheInfo {
                 }
                 CacheKey::Git {
                     git: GitPattern::Bool(true),
+                    ..
                 } => match Commit::from_repository(directory) {
                     Ok(commit_info) => commit = Some(commit_info),
                     Err(err) => {
@@ -193,6 +250,7 @@ impl CacheInfo {
                 },
                 CacheKey::Git {
                     git: GitPattern::Set(set),
+                    ..
                 } => {
                     if set.commit.unwrap_or(false) {
                         match Commit::from_repository(directory) {
@@ -213,8 +271,9 @@ impl CacheInfo {
                 }
                 CacheKey::Git {
                     git: GitPattern::Bool(false),
+                    ..
                 } => {}
-                CacheKey::Environment { env: var } => {
+                CacheKey::Environment { env: var, .. } => {
                     let value = std::env::var(&var).ok();
                     env.insert(var, value);
                 }
@@ -335,23 +394,82 @@ struct ToolUv {
     cache_keys: Option<Vec<CacheKey>>,
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(untagged, rename_all = "kebab-case", deny_unknown_fields)]
 pub enum CacheKey {
     /// Ex) `"Cargo.lock"` or `"**/*.toml"`
     Path(Cow<'static, str>),
-    /// Ex) `{ file = "Cargo.lock" }` or `{ file = "**/*.toml" }`
-    File { file: Cow<'static, str> },
+    /// Ex) `{ file = "Cargo.lock" }` or `{ file = "**/*.toml", group = "k8s" }`
+    File {
+        file: Cow<'static, str>,
+        /// If set, this key only applies when the named dependency group is enabled.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<GroupName>,
+    },
     /// Ex) `{ dir = "src" }`
-    Directory { dir: Cow<'static, str> },
+    Directory {
+        dir: Cow<'static, str>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<GroupName>,
+    },
     /// Ex) `{ git = true }` or `{ git = { commit = true, tags = false } }`
-    Git { git: GitPattern },
+    Git {
+        git: GitPattern,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<GroupName>,
+    },
     /// Ex) `{ env = "UV_CACHE_INFO" }`
-    Environment { env: String },
+    Environment {
+        env: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<GroupName>,
+    },
+    /// Ex) `{ default = true }` — expands to uv's built-in default cache keys (`pyproject.toml`,
+    /// `setup.py`, `setup.cfg`, and the `src` directory).
+    ///
+    /// This is useful alongside group-scoped keys: `cache-keys = [{ default = true }, { git = {
+    /// commit = true }, group = "k8s" }]` keeps the default invalidation behavior in general, and
+    /// adds Git-commit invalidation only when the `k8s` group is enabled.
+    Default {
+        default: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<GroupName>,
+    },
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+impl CacheKey {
+    /// uv's built-in default cache keys, used when no `cache-keys` are configured and when a
+    /// `{ default = true }` entry is expanded.
+    fn defaults() -> Vec<Self> {
+        vec![
+            Self::Path(Cow::Borrowed("pyproject.toml")),
+            Self::Path(Cow::Borrowed("setup.py")),
+            Self::Path(Cow::Borrowed("setup.cfg")),
+            Self::Directory {
+                dir: Cow::Borrowed("src"),
+                group: None,
+            },
+        ]
+    }
+
+    /// The dependency group this cache key is scoped to, if any.
+    ///
+    /// A key with a group only applies when that group is enabled for the current project; a key
+    /// without a group always applies.
+    fn group(&self) -> Option<&GroupName> {
+        match self {
+            Self::Path(_) => None,
+            Self::File { group, .. }
+            | Self::Directory { group, .. }
+            | Self::Git { group, .. }
+            | Self::Environment { group, .. }
+            | Self::Default { group, .. } => group.as_ref(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(untagged, rename_all = "kebab-case", deny_unknown_fields)]
 pub enum GitPattern {
@@ -359,7 +477,7 @@ pub enum GitPattern {
     Set(GitSet),
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct GitSet {
@@ -438,6 +556,132 @@ mod tests_unix {
         // symlink pointing to a directory
         write_manifest("x/*b*")?;
         assert_eq!(cache_timestamp()?, None);
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::borrow::Cow;
+
+    use anyhow::Result;
+
+    use uv_normalize::GroupName;
+
+    use super::{CacheInfo, CacheKey};
+
+    /// A consumer-provided cache-key override (as supplied via `tool.uv.cache-keys-package`)
+    /// replaces the package's own `cache-keys`, without the package's `pyproject.toml` being
+    /// consulted for keys. This is what lets a consumer change a dependency's invalidation
+    /// behavior for its own build without affecting the dependency itself.
+    #[test]
+    fn override_replaces_package_cache_keys() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let dir = dir.path();
+
+        // The package declares a file-based cache key and the file exists, so the default
+        // (package-driven) computation produces a timestamp.
+        fs_err::write(
+            dir.join("pyproject.toml"),
+            "[tool.uv]\ncache-keys = [\"data.txt\"]\n",
+        )?;
+        fs_err::write(dir.join("data.txt"), "")?;
+
+        assert!(
+            CacheInfo::from_directory(dir)?.timestamp.is_some(),
+            "the package's own file cache key should fire"
+        );
+
+        // An empty override replaces the package's keys entirely: no keys are evaluated, so the
+        // result is empty even though `pyproject.toml` declares a file key for an existing file.
+        assert!(
+            CacheInfo::from_directory_with_keys(dir, &[])?.is_empty(),
+            "an empty override should replace the package's own cache keys"
+        );
+
+        // A non-empty override is honored in place of the package's keys.
+        let overridden =
+            CacheInfo::from_directory_with_keys(dir, &[CacheKey::Path(Cow::Borrowed("data.txt"))])?;
+        assert!(
+            overridden.timestamp.is_some(),
+            "the overriding file cache key should fire"
+        );
+
+        Ok(())
+    }
+
+    /// A cache key scoped to a dependency group (`{ file = "...", group = "k8s" }`) only applies
+    /// when that group is active for the current invocation. This is what lets a project set
+    /// group-conditional `cache-keys` for its own build (e.g. `uv sync --group k8s`).
+    #[test]
+    fn group_scoped_cache_keys_filtered_by_active_groups() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let dir = dir.path();
+        fs_err::write(dir.join("data.txt"), "")?;
+
+        let k8s = "k8s".parse::<GroupName>()?;
+        let keys = [CacheKey::File {
+            file: Cow::Borrowed("data.txt"),
+            group: Some(k8s.clone()),
+        }];
+
+        // Group inactive: the group-scoped key is excluded, so the result is empty.
+        assert!(
+            CacheInfo::from_directory_filtered(dir, Some(&keys), &|_| false)?.is_empty(),
+            "a group-scoped key should be excluded when its group is inactive"
+        );
+
+        // Group active: the key applies and produces a timestamp.
+        assert!(
+            CacheInfo::from_directory_filtered(dir, Some(&keys), &|group| *group == k8s)?
+                .timestamp
+                .is_some(),
+            "a group-scoped key should apply when its group is active"
+        );
+
+        Ok(())
+    }
+
+    /// A `{ default = true }` entry expands to uv's built-in default cache keys, and can itself be
+    /// scoped to a group. This lets a project keep default invalidation behavior while a group is
+    /// inactive, instead of producing an empty (always-rebuild) cache info.
+    #[test]
+    fn default_cache_key_expands_to_built_in_defaults() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let dir = dir.path();
+        // `pyproject.toml` is one of the built-in default keys.
+        fs_err::write(dir.join("pyproject.toml"), "")?;
+
+        let k8s = "k8s".parse::<GroupName>()?;
+
+        // An ungrouped `{ default = true }` always expands to the defaults.
+        let keys = [CacheKey::Default {
+            default: true,
+            group: None,
+        }];
+        assert!(
+            CacheInfo::from_directory_filtered(dir, Some(&keys), &|_| false)?
+                .timestamp
+                .is_some(),
+            "`{{ default = true }}` should expand to the built-in defaults"
+        );
+
+        // A group-scoped `{ default = true, group = "k8s" }` only expands when `k8s` is active.
+        let scoped = [CacheKey::Default {
+            default: true,
+            group: Some(k8s.clone()),
+        }];
+        assert!(
+            CacheInfo::from_directory_filtered(dir, Some(&scoped), &|_| false)?.is_empty(),
+            "a group-scoped default should be excluded when its group is inactive"
+        );
+        assert!(
+            CacheInfo::from_directory_filtered(dir, Some(&scoped), &|group| *group == k8s)?
+                .timestamp
+                .is_some(),
+            "a group-scoped default should expand when its group is active"
+        );
 
         Ok(())
     }

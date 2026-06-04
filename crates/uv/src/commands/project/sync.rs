@@ -661,6 +661,7 @@ pub(crate) async fn do_sync(
         dependency_metadata,
         config_setting,
         config_settings_package,
+        cache_keys_package,
         build_isolation,
         extra_build_dependencies,
         extra_build_variables,
@@ -692,6 +693,7 @@ pub(crate) async fn do_sync(
                 build_options: build_options.clone(),
                 config_setting: config_setting.clone(),
                 config_settings_package: config_settings_package.clone(),
+                cache_keys_package: cache_keys_package.clone(),
                 dependency_metadata: dependency_metadata.clone(),
                 exclude_newer: exclude_newer.clone(),
                 fork_strategy: ForkStrategy::default(),
@@ -842,6 +844,7 @@ pub(crate) async fn do_sync(
         index_strategy,
         config_setting,
         config_settings_package,
+        cache_keys_package,
         build_isolation,
         &extra_build_requires,
         extra_build_variables,
@@ -854,7 +857,8 @@ pub(crate) async fn do_sync(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_dependency_groups(groups.clone());
 
     // Run a malware check against OSV before installing.
     if malware_settings.enabled {

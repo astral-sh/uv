@@ -22,8 +22,8 @@ use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashGeneration, Index, IndexLocations,
-    NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, RequiresPython,
-    UnresolvedRequirementSpecification, Verbatim,
+    NameRequirementSpecification, Origin, PackageCacheKeys, PackageConfigSettings, Requirement,
+    RequiresPython, UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -101,6 +101,7 @@ pub(crate) async fn pip_compile(
     client_builder: &BaseClientBuilder<'_>,
     config_settings: ConfigSettings,
     config_settings_package: PackageConfigSettings,
+    cache_keys_package: PackageCacheKeys,
     build_isolation: BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
@@ -542,6 +543,7 @@ pub(crate) async fn pip_compile(
         index_strategy,
         &config_settings,
         &config_settings_package,
+        &cache_keys_package,
         types_build_isolation,
         &extra_build_requires,
         extra_build_variables,

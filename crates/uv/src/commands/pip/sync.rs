@@ -16,7 +16,7 @@ use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Origin,
-    PackageConfigSettings, Resolution,
+    PackageCacheKeys, PackageConfigSettings, Resolution,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
@@ -71,6 +71,7 @@ pub(crate) async fn pip_sync(
     installer_metadata: bool,
     config_settings: &ConfigSettings,
     config_settings_package: &PackageConfigSettings,
+    cache_keys_package: &PackageCacheKeys,
     build_isolation: BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
@@ -384,6 +385,7 @@ pub(crate) async fn pip_sync(
         index_strategy,
         config_settings,
         config_settings_package,
+        cache_keys_package,
         types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
@@ -506,6 +508,7 @@ pub(crate) async fn pip_sync(
         index_strategy,
         config_settings,
         config_settings_package,
+        cache_keys_package,
         types_build_isolation,
         &extra_build_requires,
         extra_build_variables,

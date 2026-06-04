@@ -386,7 +386,7 @@ mod resolver {
     use uv_distribution::DistributionDatabase;
     use uv_distribution_types::{
         ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
-        IndexLocations, PackageConfigSettings, RequiresPython,
+        IndexLocations, PackageCacheKeys, PackageConfigSettings, RequiresPython,
     };
     use uv_install_wheel::LinkMode;
     use uv_pep440::Version;
@@ -453,6 +453,7 @@ mod resolver {
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
         let config_settings_package = PackageConfigSettings::default();
+        let cache_keys_package = PackageCacheKeys::default();
         let exclude_newer = ExcludeNewer::global(
             jiff::civil::date(2024, 9, 1)
                 .to_zoned(jiff::tz::TimeZone::UTC)
@@ -496,6 +497,7 @@ mod resolver {
             IndexStrategy::default(),
             &config_settings,
             &config_settings_package,
+            &cache_keys_package,
             build_isolation,
             &extra_build_requires,
             &extra_build_variables,

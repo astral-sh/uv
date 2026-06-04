@@ -175,6 +175,9 @@ fn pip_compile_baseline() {
             config_settings_package: PackageConfigSettings(
                 {},
             ),
+            cache_keys_package: PackageCacheKeys(
+                {},
+            ),
             python_version: None,
             python_platform: None,
             universal: false,
@@ -358,6 +361,9 @@ fn pip_install_baseline() {
             config_settings_package: PackageConfigSettings(
                 {},
             ),
+            cache_keys_package: PackageCacheKeys(
+                {},
+            ),
             python_version: None,
             python_platform: None,
             universal: false,
@@ -470,6 +476,9 @@ fn lock_baseline() {
                 {},
             ),
             config_settings_package: PackageConfigSettings(
+                {},
+            ),
+            cache_keys_package: PackageCacheKeys(
                 {},
             ),
             dependency_metadata: DependencyMetadata(
@@ -597,6 +606,9 @@ fn version_baseline() {
                     {},
                 ),
                 config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                cache_keys_package: PackageCacheKeys(
                     {},
                 ),
                 dependency_metadata: DependencyMetadata(
@@ -733,6 +745,7 @@ fn tool_install_baseline() {
             dependency_metadata: None,
             config_settings: None,
             config_settings_package: None,
+            cache_keys_package: None,
             build_isolation: None,
             extra_build_dependencies: None,
             extra_build_variables: None,
@@ -762,6 +775,9 @@ fn tool_install_baseline() {
                     {},
                 ),
                 config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                cache_keys_package: PackageCacheKeys(
                     {},
                 ),
                 dependency_metadata: DependencyMetadata(
@@ -1111,7 +1127,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                          format: Simple,
                          publish_url: None,
                          authenticate: Auto,
-    @@ -176,7 +174,9 @@
+    @@ -179,7 +177,9 @@
                  {},
              ),
              python_version: None,
@@ -1792,7 +1808,7 @@ fn resolve_tool() -> anyhow::Result<()> {
              prerelease: None,
              fork_strategy: None,
              dependency_metadata: None,
-    @@ -131,7 +133,7 @@
+    @@ -135,7 +137,7 @@
                      {},
                  ),
                  prerelease: IfNecessaryOrExplicit,
@@ -1984,7 +2000,7 @@ fn resolve_both() -> anyhow::Result<()> {
              config_setting: ConfigSettings(
                  {},
              ),
-    @@ -168,3 +206,7 @@
+    @@ -171,3 +209,7 @@
      }
 
      ----- stderr -----
@@ -2116,7 +2132,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
              config_setting: ConfigSettings(
                  {},
              ),
-    @@ -168,3 +206,4 @@
+    @@ -171,3 +209,4 @@
      }
 
      ----- stderr -----
@@ -2360,7 +2376,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `cache-keys-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -2780,7 +2796,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             .arg("--show-settings"), @"
     --- old
     +++ new
-    @@ -154,9 +154,7 @@
+    @@ -157,9 +157,7 @@
              link_mode: Clone,
              compile_bytecode: false,
              sources: None,
@@ -2802,7 +2818,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             .arg("--show-settings"), @"
     --- old
     +++ new
-    @@ -155,7 +155,7 @@
+    @@ -158,7 +158,7 @@
              compile_bytecode: false,
              sources: None,
              hash_checking: Some(
@@ -2822,7 +2838,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             .arg("--show-settings"), @"
     --- old
     +++ new
-    @@ -154,9 +154,7 @@
+    @@ -157,9 +157,7 @@
              link_mode: Clone,
              compile_bytecode: false,
              sources: None,
@@ -2844,7 +2860,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             .arg("--show-settings"), @"
     --- old
     +++ new
-    @@ -154,9 +154,7 @@
+    @@ -157,9 +157,7 @@
              link_mode: Clone,
              compile_bytecode: false,
              sources: None,
@@ -3076,7 +3092,7 @@ fn system_certs_cli_aliases_override_env() {
         .env(EnvVars::UV_SYSTEM_CERTS, "1"), @"
     --- old
     +++ new
-    @@ -119,3 +119,4 @@
+    @@ -122,3 +122,4 @@
      }
 
      ----- stderr -----
@@ -3090,7 +3106,7 @@ fn system_certs_cli_aliases_override_env() {
         .env(EnvVars::UV_NATIVE_TLS, "1"), @"
     --- old
     +++ new
-    @@ -119,3 +119,4 @@
+    @@ -122,3 +122,4 @@
      }
 
      ----- stderr -----
@@ -3140,7 +3156,7 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
         .arg("--show-settings"), @"
     --- old
     +++ new
-    @@ -119,3 +119,4 @@
+    @@ -122,3 +122,4 @@
      }
 
      ----- stderr -----
@@ -3181,7 +3197,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         .arg("requirements.in"), @r#"
     --- old
     +++ new
-    @@ -160,7 +160,14 @@
+    @@ -163,7 +163,14 @@
                  Verify,
              ),
              upgrade: Upgrade {
@@ -3220,7 +3236,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         @r#"
     --- old
     +++ new
-    @@ -160,14 +160,7 @@
+    @@ -163,14 +163,7 @@
                  Verify,
              ),
              upgrade: Upgrade {
@@ -3255,7 +3271,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             .arg("requirements.in"), @r#"
     --- old
     +++ new
-    @@ -160,14 +160,7 @@
+    @@ -163,14 +163,7 @@
                  Verify,
              ),
              upgrade: Upgrade {
@@ -3288,7 +3304,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             .arg("requirements.in"), @r#"
     --- old
     +++ new
-    @@ -163,7 +163,7 @@
+    @@ -166,7 +166,7 @@
                  strategy: Some(
                      {
                          PackageName(
@@ -3308,7 +3324,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             .arg("requirements.in"), @r#"
     --- old
     +++ new
-    @@ -163,7 +163,7 @@
+    @@ -166,7 +166,7 @@
                  strategy: Some(
                      {
                          PackageName(
@@ -3329,7 +3345,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             .arg("requirements.in"), @r#"
     --- old
     +++ new
-    @@ -165,6 +165,9 @@
+    @@ -168,6 +168,9 @@
                          PackageName(
                              "sniffio",
                          ),
@@ -3377,7 +3393,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         .arg("--show-settings"), @r#"
     --- old
     +++ new
-    @@ -98,7 +98,14 @@
+    @@ -101,7 +101,14 @@
              sources: None,
              torch_backend: None,
              upgrade: Upgrade {
@@ -3419,7 +3435,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         @r#"
     --- old
     +++ new
-    @@ -98,14 +98,7 @@
+    @@ -101,14 +101,7 @@
              sources: None,
              torch_backend: None,
              upgrade: Upgrade {
@@ -3457,7 +3473,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--show-settings"), @r#"
     --- old
     +++ new
-    @@ -98,14 +98,7 @@
+    @@ -101,14 +101,7 @@
              sources: None,
              torch_backend: None,
              upgrade: Upgrade {
@@ -3493,7 +3509,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--show-settings"), @r#"
     --- old
     +++ new
-    @@ -101,7 +101,7 @@
+    @@ -104,7 +104,7 @@
                  strategy: Some(
                      {
                          PackageName(
@@ -3512,7 +3528,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--show-settings"), @r#"
     --- old
     +++ new
-    @@ -101,7 +101,7 @@
+    @@ -104,7 +104,7 @@
                  strategy: Some(
                      {
                          PackageName(
@@ -3532,7 +3548,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--show-settings"), @r#"
     --- old
     +++ new
-    @@ -103,6 +103,9 @@
+    @@ -106,6 +106,9 @@
                          PackageName(
                              "sniffio",
                          ),

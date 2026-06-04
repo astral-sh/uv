@@ -17,14 +17,15 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, Constraints, IndexStrategy, NoSources, Overrides, Reinstall,
+    BuildKind, BuildOptions, Constraints, DependencyGroupsWithDefaults, IndexStrategy, NoSources,
+    Overrides, Reinstall,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
-    Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
+    Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name, PackageCacheKeys,
     PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
@@ -123,6 +124,8 @@ pub struct BuildDispatch<'a> {
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
     config_settings_package: &'a PackageConfigSettings,
+    cache_keys_package: &'a PackageCacheKeys,
+    dependency_groups: DependencyGroupsWithDefaults,
     hasher: &'a HashStrategy,
     exclude_newer: ExcludeNewer,
     source_build_context: SourceBuildContext,
@@ -147,6 +150,7 @@ impl<'a> BuildDispatch<'a> {
         index_strategy: IndexStrategy,
         config_settings: &'a ConfigSettings,
         config_settings_package: &'a PackageConfigSettings,
+        cache_keys_package: &'a PackageCacheKeys,
         build_isolation: BuildIsolation<'a>,
         extra_build_requires: &'a ExtraBuildRequires,
         extra_build_variables: &'a ExtraBuildVariables,
@@ -172,6 +176,8 @@ impl<'a> BuildDispatch<'a> {
             index_strategy,
             config_settings,
             config_settings_package,
+            cache_keys_package,
+            dependency_groups: DependencyGroupsWithDefaults::none(),
             build_isolation,
             extra_build_requires,
             extra_build_variables,
@@ -201,6 +207,17 @@ impl<'a> BuildDispatch<'a> {
             .into_iter()
             .map(|(key, value)| (key.as_ref().to_owned(), value.as_ref().to_owned()))
             .collect();
+        self
+    }
+
+    /// Set the dependency groups enabled for the current invocation, used to filter group-scoped
+    /// `cache-keys` entries.
+    #[must_use]
+    pub fn with_dependency_groups(
+        mut self,
+        dependency_groups: DependencyGroupsWithDefaults,
+    ) -> Self {
+        self.dependency_groups = dependency_groups;
         self
     }
 }
@@ -247,6 +264,14 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn config_settings_package(&self) -> &PackageConfigSettings {
         self.config_settings_package
+    }
+
+    fn cache_keys_package(&self) -> &PackageCacheKeys {
+        self.cache_keys_package
+    }
+
+    fn dependency_groups(&self) -> &DependencyGroupsWithDefaults {
+        &self.dependency_groups
     }
 
     fn sources(&self) -> &NoSources {
@@ -397,6 +422,8 @@ impl BuildContext for BuildDispatch<'_> {
             self.index_locations,
             self.config_settings,
             self.config_settings_package,
+            self.cache_keys_package,
+            &self.dependency_groups,
             self.extra_build_requires(),
             self.extra_build_variables,
             self.cache(),
