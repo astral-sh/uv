@@ -5397,7 +5397,7 @@ fn sync_ignore_extras_check_when_no_provides_extras() -> Result<()> {
     // Write a lockfile that does not have `provides-extra`, simulating a version that predates when
     // the feature was added.
     context.temp_dir.child("uv.lock").write_str(indoc! {r#"
-        version = 2
+        version = 1
         requires-python = ">=3.12"
 
         [[package]]
