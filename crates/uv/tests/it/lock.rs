@@ -3764,7 +3764,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[

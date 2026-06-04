@@ -366,7 +366,7 @@ fn requirements_txt_simplifies_selected_root_extra_markers_from_lock() -> Result
     let lock = context.temp_dir.child("uv.lock");
     lock.write_str(
         r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
