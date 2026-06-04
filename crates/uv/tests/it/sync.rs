@@ -12761,6 +12761,88 @@ fn sync_multiple_sources_root_group_activates_dependency_extra() -> Result<()> {
     Ok(())
 }
 
+/// A dependency group on a non-project workspace root must recursively activate
+/// extras required by source-selection markers.
+#[test]
+fn sync_multiple_sources_root_group_recursively_activates_dependency_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let default_index = context.temp_dir.child("default");
+    fs_err::create_dir_all(&default_index)?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        default_index.join("ok-2.0.0-py3-none-any.whl"),
+    )?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        context.temp_dir.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [dependency-groups]
+        use = ["pkg-a[all]"]
+
+        [tool.uv.workspace]
+        members = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = { workspace = true }
+
+        [[tool.uv.index]]
+        name = "default"
+        url = "./default"
+        format = "flat"
+        default = true
+        "#,
+    )?;
+
+    let package = context.temp_dir.child("pkg-a");
+    package.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [project.optional-dependencies]
+        foo = []
+        all = ["pkg-a[foo]"]
+
+        [dependency-groups]
+        use = ["ok"]
+
+        [tool.uv.sources]
+        ok = [
+            { path = "../ok-1.0.0-py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--group")
+        .arg("use")
+        .arg("--no-install-package")
+        .arg("pkg-a"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0-py3-none-any.whl)
+    ");
+
+    Ok(())
+}
+
 /// A dependency group on a non-project workspace root must activate extras
 /// before evaluating a workspace member's selected group edges.
 #[test]

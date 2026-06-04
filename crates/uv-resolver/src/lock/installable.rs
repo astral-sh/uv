@@ -234,6 +234,12 @@ pub trait Installable<'lock> {
                 {
                     activated_projects.push(&dist.id.name);
                 }
+
+                selected_group_dependencies.extend(dist.dependencies.iter());
+                for extra in &dependency.extras {
+                    selected_group_dependencies
+                        .extend(dist.optional_dependencies.get(extra).into_iter().flatten());
+                }
             }
 
             // Make direct dependency-group activation order-independent before evaluating the

@@ -161,7 +161,7 @@ impl<'lock> ExportableRequirements<'lock> {
                     continue;
                 }
 
-                selected_group_dependencies.push((&dist.id.name, dep));
+                selected_group_dependencies.push((&dist.id.name, dep, MarkerTree::TRUE));
 
                 let dep_dist = target.lock().find_by_id(&dep.package_id);
 
@@ -207,6 +207,42 @@ impl<'lock> ExportableRequirements<'lock> {
                 let item = ConflictItem::from(requirement.name.clone());
                 let marker = activated_items.entry(item).or_insert(MarkerTree::FALSE);
                 marker.or(requirement.marker);
+            }
+
+            for dist in target
+                .lock()
+                .packages()
+                .iter()
+                .filter(|dist| dist.id.name == requirement.name)
+            {
+                let marker = if dist.fork_markers.is_empty() {
+                    requirement.marker
+                } else {
+                    let mut marker = MarkerTree::FALSE;
+                    for fork_marker in &dist.fork_markers {
+                        marker.or(fork_marker.pep508());
+                    }
+                    marker.and(requirement.marker);
+                    marker
+                };
+                if marker.is_false() {
+                    continue;
+                }
+
+                selected_group_dependencies.extend(
+                    dist.dependencies
+                        .iter()
+                        .map(|dependency| (dist.name(), dependency, marker)),
+                );
+                for extra in &requirement.extras {
+                    selected_group_dependencies.extend(
+                        dist.optional_dependencies
+                            .get(extra)
+                            .into_iter()
+                            .flatten()
+                            .map(|dependency| (dist.name(), dependency, marker)),
+                    );
+                }
             }
         }
 
@@ -395,13 +431,10 @@ impl<'lock> ExportableRequirements<'lock> {
 
 fn activate_dependency_group_items(
     lock: &Lock,
-    dependencies: &[(&PackageName, &Dependency)],
+    dependencies: &[(&PackageName, &Dependency, MarkerTree)],
     activated_items: &mut FxHashMap<ConflictItem, MarkerTree>,
 ) {
-    let mut dependencies = dependencies
-        .iter()
-        .map(|(parent, dependency)| (*parent, *dependency, MarkerTree::TRUE))
-        .collect::<Vec<_>>();
+    let mut dependencies = dependencies.to_vec();
 
     loop {
         let mut changed = false;
