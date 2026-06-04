@@ -1,6 +1,6 @@
 ---
 source: crates/uv-resolver/src/lock/mod.rs
-expression: result
+expression: expr
 ---
 Ok(
     Lock {
@@ -60,6 +60,7 @@ Ok(
                             ),
                         ),
                     ),
+                    resolution_id: None,
                 },
                 sdist: None,
                 wheels: [
@@ -95,12 +96,10 @@ Ok(
                 dependencies: [],
                 optional_dependencies: {},
                 dependency_groups: {},
-                build_dependencies: [],
                 metadata: PackageMetadata {
                     requires_dist: {},
                     provides_extra: [],
                     dependency_groups: {},
-                    build_requires: {},
                 },
             },
         ],
@@ -119,6 +118,7 @@ Ok(
                         ),
                     ),
                 ),
+                resolution_id: None,
             }: 0,
         },
         manifest: ResolverManifest {

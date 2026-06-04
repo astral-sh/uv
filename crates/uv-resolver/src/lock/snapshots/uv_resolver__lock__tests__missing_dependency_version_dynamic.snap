@@ -1,6 +1,6 @@
 ---
 source: crates/uv-resolver/src/lock/mod.rs
-expression: result
+expression: expr
 ---
 Ok(
     Lock {
@@ -62,12 +62,10 @@ Ok(
                 dependencies: [],
                 optional_dependencies: {},
                 dependency_groups: {},
-                build_dependencies: [],
                 metadata: PackageMetadata {
                     requires_dist: {},
                     provides_extra: [],
                     dependency_groups: {},
-                    build_requires: {},
                 },
             },
             Package {
@@ -113,12 +111,10 @@ Ok(
                 dependencies: [],
                 optional_dependencies: {},
                 dependency_groups: {},
-                build_dependencies: [],
                 metadata: PackageMetadata {
                     requires_dist: {},
                     provides_extra: [],
                     dependency_groups: {},
-                    build_requires: {},
                 },
             },
             Package {
@@ -182,12 +178,10 @@ Ok(
                 ],
                 optional_dependencies: {},
                 dependency_groups: {},
-                build_dependencies: [],
                 metadata: PackageMetadata {
                     requires_dist: {},
                     provides_extra: [],
                     dependency_groups: {},
-                    build_requires: {},
                 },
             },
         ],

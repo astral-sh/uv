@@ -10759,17 +10759,13 @@ source = { virtual = "." }
         let lock = toml::from_str::<Lock>(data).unwrap();
         let serialized = lock.to_toml().unwrap();
 
-        assert!(serialized.contains(r#"id = "runtime:0""#), "{serialized}");
-        assert!(serialized.contains(r#"kind = "runtime""#), "{serialized}");
+        assert!(!serialized.contains("[[resolution]]"), "{serialized}");
+        assert!(serialized.contains("target = { active = ["), "{serialized}");
         assert!(
             serialized.contains(r#"package = "project""#),
             "{serialized}"
         );
         assert!(serialized.contains(r#"extra = "foo""#), "{serialized}");
-        assert!(
-            serialized.contains(r#"target = "runtime:0""#),
-            "{serialized}"
-        );
         assert!(!serialized.contains("resolution-markers"), "{serialized}");
     }
 
