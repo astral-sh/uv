@@ -16396,7 +16396,6 @@ async fn sync_non_pep625_sdist_with_compatible_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    WARN Range requests not supported for basic_package-0.1.0-py3-none-any.whl; streaming wheel
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
