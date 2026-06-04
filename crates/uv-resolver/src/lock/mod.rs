@@ -4801,8 +4801,7 @@ impl TryFrom<LockWire> for Lock {
             .map(UniversalMarker::from_combined)
             .collect::<Vec<_>>();
         fork_markers.extend(runtime_markers_by_id.values().copied());
-        fork_markers.sort();
-        fork_markers.dedup();
+        let fork_markers = canonicalize_universal_markers(&fork_markers, &wire.requires_python);
         let mut options = wire.options;
         if options.exclude_newer.exclude_newer_span.is_some() {
             options.exclude_newer.exclude_newer = None;
