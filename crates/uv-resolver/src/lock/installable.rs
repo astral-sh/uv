@@ -80,17 +80,21 @@ fn activate_dependency_group_items<'lock>(
             }
 
             let package = lock.find_by_id(&dependency.package_id);
-            for extra in &dependency.extra {
-                for recursive_dependency in package
-                    .optional_dependencies
-                    .get(extra)
-                    .into_iter()
-                    .flatten()
-                {
-                    if seen_dependencies.insert(recursive_dependency) {
-                        dependencies.push(recursive_dependency);
-                        changed = true;
-                    }
+            for recursive_dependency in
+                package
+                    .dependencies
+                    .iter()
+                    .chain(dependency.extra.iter().flat_map(|extra| {
+                        package
+                            .optional_dependencies
+                            .get(extra)
+                            .into_iter()
+                            .flatten()
+                    }))
+            {
+                if seen_dependencies.insert(recursive_dependency) {
+                    dependencies.push(recursive_dependency);
+                    changed = true;
                 }
             }
         }

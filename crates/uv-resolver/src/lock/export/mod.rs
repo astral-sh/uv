@@ -409,9 +409,6 @@ fn activate_dependency_group_items(
         while let Some((parent, dependency, parent_marker)) = dependencies.get(index).copied() {
             index += 1;
             let activates_project = lock.is_workspace_package(&dependency.package_id);
-            if dependency.extra.is_empty() && !activates_project {
-                continue;
-            }
 
             // An edge can activate the same items that its marker depends on, so include them
             // while determining the conditions under which the edge applies.
@@ -456,28 +453,32 @@ fn activate_dependency_group_items(
             }
 
             let package = lock.find_by_id(&dependency.package_id);
-            for extra in &dependency.extra {
-                for recursive_dependency in package
-                    .optional_dependencies
-                    .get(extra)
-                    .into_iter()
-                    .flatten()
+            for recursive_dependency in
+                package
+                    .dependencies
+                    .iter()
+                    .chain(dependency.extra.iter().flat_map(|extra| {
+                        package
+                            .optional_dependencies
+                            .get(extra)
+                            .into_iter()
+                            .flatten()
+                    }))
+            {
+                if let Some((_, _, existing_marker)) =
+                    dependencies
+                        .iter_mut()
+                        .find(|(candidate_parent, candidate, _)| {
+                            *candidate_parent == package.name()
+                                && *candidate == recursive_dependency
+                        })
                 {
-                    if let Some((_, _, existing_marker)) =
-                        dependencies
-                            .iter_mut()
-                            .find(|(candidate_parent, candidate, _)| {
-                                *candidate_parent == package.name()
-                                    && *candidate == recursive_dependency
-                            })
-                    {
-                        let previous = *existing_marker;
-                        existing_marker.or(marker);
-                        changed |= *existing_marker != previous;
-                    } else {
-                        dependencies.push((package.name(), recursive_dependency, marker));
-                        changed = true;
-                    }
+                    let previous = *existing_marker;
+                    existing_marker.or(marker);
+                    changed |= *existing_marker != previous;
+                } else {
+                    dependencies.push((package.name(), recursive_dependency, marker));
+                    changed = true;
                 }
             }
         }
