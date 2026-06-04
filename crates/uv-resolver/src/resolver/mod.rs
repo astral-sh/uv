@@ -3803,6 +3803,11 @@ impl Forks {
         conflicts: &Conflicts,
     ) -> Self {
         let python_marker = python_requirement.to_marker_tree();
+        let source_marker_requires_fork = |dependency: &PubGrubDependency| {
+            dependency.fork_source_on_marker
+                && !dependency.source.is_unspecified()
+                && !dependency.package.marker().without_extras().is_true()
+        };
 
         let mut forks = vec![Fork::new(env.clone())];
         let mut diverging_packages = BTreeSet::new();
@@ -3829,10 +3834,7 @@ impl Forks {
                 // Conditional source-selection edges must also fork before recording their source,
                 // so the source does not leak into an environment where its marker is false.
                 let marker = dep.package.marker();
-                let source_environment_marker = marker.without_extras();
-                if (dep.source.is_unspecified()
-                    || !dep.fork_source_on_marker
-                    || source_environment_marker.is_true())
+                if !source_marker_requires_fork(dep)
                     && marker::requires_python(marker)
                         .is_none_or(|bound| !python_requirement.raises(&bound))
                 {
@@ -3851,10 +3853,11 @@ impl Forks {
                     let marker = dep.package.marker();
                     if deps.iter().all(|dep| marker == dep.package.marker()) {
                         // Unless that "same marker" is a Python requirement that is stricter than
-                        // the current Python requirement. In that case, we need to fork to respect
-                        // the stricter requirement.
-                        if marker::requires_python(marker)
-                            .is_none_or(|bound| !python_requirement.raises(&bound))
+                        // the current Python requirement, or a conditional source-selection edge.
+                        // In those cases, we need to fork before recording the dependency.
+                        if deps.iter().all(|dep| !source_marker_requires_fork(dep))
+                            && marker::requires_python(marker)
+                                .is_none_or(|bound| !python_requirement.raises(&bound))
                         {
                             for dep in deps {
                                 for fork in &mut forks {

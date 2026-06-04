@@ -11585,7 +11585,10 @@ fn sync_multiple_sources_included_group_does_not_override_direct_requirement() -
         requires-python = ">=3.12"
 
         [dependency-groups]
-        inner = ["ok ; sys_platform == 'never'"]
+        inner = [
+            "ok>=1 ; sys_platform == 'never'",
+            "ok<3 ; sys_platform == 'never'",
+        ]
         outer = [
             { include-group = "inner" },
             "ok ; sys_platform != 'never'",
