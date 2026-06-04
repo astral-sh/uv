@@ -292,8 +292,10 @@ impl<'lock> ExportableRequirements<'lock> {
                     }
 
                     if target.lock().is_workspace_package(&dist.id) {
-                        activated_items
-                            .insert(ConflictItem::from(dist.id.name.clone()), MarkerTree::TRUE);
+                        let item = ConflictItem::from(dist.id.name.clone());
+                        let activated_marker =
+                            activated_items.entry(item).or_insert(MarkerTree::FALSE);
+                        activated_marker.or(marker);
                     }
 
                     // Simplify the marker.
