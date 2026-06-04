@@ -225,6 +225,7 @@ fn lock_build_dependencies() -> Result<()> {
         source = { directory = "dep" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -289,7 +290,7 @@ fn lock_build_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     Ok(())
@@ -1195,6 +1196,7 @@ fn lock_build_dependencies_preference() -> Result<()> {
         source = { directory = "dep" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -1259,7 +1261,7 @@ fn lock_build_dependencies_preference() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     let lock_second = context.read("uv.lock");
@@ -1361,6 +1363,7 @@ fn lock_build_dependencies_preference() -> Result<()> {
         source = { directory = "dep" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -2006,6 +2009,7 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         source = { directory = "dep-a" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -2017,6 +2021,7 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         source = { directory = "dep-b" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -2085,7 +2090,7 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 6 packages in [TIME]
     ");
 
     Ok(())
@@ -2242,6 +2247,7 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         source = { directory = "dep" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -2485,6 +2491,7 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         source = { directory = "dep" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -2549,7 +2556,7 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     Ok(())
@@ -2596,7 +2603,7 @@ fn lock_build_dependencies_extra() -> Result<()> {
         dep = { path = "dep" }
 
         [tool.uv.extra-build-dependencies]
-        dep = ["wheel"]
+        dep = ["iniconfig"]
         "#,
     )?;
 
@@ -5089,8 +5096,16 @@ fn lock_build_dependencies_extra_build_dependencies_invalidate() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Added calver v2022.6.26
+    Added hatch-vcs v0.4.0
+    Added hatchling v1.22.4
     Added iniconfig v2.0.0
-    Removed wheel v0.43.0
+    Added packaging v24.0
+    Added pathspec v0.12.1
+    Added pluggy v1.4.0
+    Added setuptools-scm v8.0.4
+    Added trove-classifiers v2024.3.3
+    Added typing-extensions v4.10.0
     ");
 
     let lock = context.read("uv.lock");
@@ -5123,7 +5138,7 @@ fn lock_build_dependencies_extra_build_dependencies_invalidate_find_links() -> R
         requires-python = ">=3.12"
 
         [build-system]
-        requires = []
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     ))?;
@@ -5139,7 +5154,7 @@ fn lock_build_dependencies_extra_build_dependencies_invalidate_find_links() -> R
         dependencies = ["locked-extra-dep==0.1.0"]
 
         [tool.uv.extra-build-dependencies]
-        locked-extra-dep = ["setuptools>=42"]
+        locked-extra-dep = ["wheel"]
         "#,
     )?;
 
@@ -5244,17 +5259,17 @@ fn lock_build_dependencies_use_project_python_range() -> Result<()> {
         .arg("--preview-features")
         .arg("lock-build-dependencies"), @"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `dep @ file://[TEMP_DIR]/dep`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `setuptools>=42`, `builder @ file://[TEMP_DIR]/builder`
-      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.12 and builder==0.1.0 depends on Python>=3.12, we can conclude that builder==0.1.0 cannot be used.
-          And because only builder==0.1.0 is available and you require builder, we can conclude that your requirements are unsatisfiable.
+    Resolved 2 packages in [TIME]
+    error: Failed to resolve requirements from `build-system.requires`
+      Caused by: No solution found when resolving: `setuptools>=42`, `builder @ file://[TEMP_DIR]/builder`
+      Caused by: Because the requested Python version (>=3.8) does not satisfy Python>=3.12 and builder==0.1.0 depends on Python>=3.12, we can conclude that builder==0.1.0 cannot be used.
+    And because only builder==0.1.0 is available and you require builder, we can conclude that your requirements are unsatisfiable.
 
-          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., builder==0.1.0 only supports >=3.12). Consider using a more restrictive `requires-python` value (like >=3.12).
+    hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., builder==0.1.0 only supports >=3.12). Consider using a more restrictive `requires-python` value (like >=3.12).
     ");
 
     Ok(())
@@ -5570,6 +5585,7 @@ fn lock_build_dependencies_relocks_revision_3() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Added flit-core v3.9.0
     Added setuptools v69.2.0
     Added wheel v0.43.0
     ");
@@ -6840,6 +6856,7 @@ fn lock_build_dependencies_fork() -> Result<()> {
         source = { directory = "dep" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -6894,6 +6911,10 @@ fn lock_build_dependencies_fork() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
+        build-dependencies = [
+            { name = "hatch-vcs", version = "0.4.0" },
+            { name = "hatchling", version = "1.22.4" },
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
@@ -7039,7 +7060,7 @@ fn lock_build_dependencies_fork() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 15 packages in [TIME]
     ");
 
     Ok(())
@@ -7047,7 +7068,7 @@ fn lock_build_dependencies_fork() -> Result<()> {
 
 /// Verify that a package appearing in both the runtime dependency tree and the
 /// build dependency tree is not duplicated, and its existing `dependencies`
-/// from the main resolution are preserved.
+/// from the runtime resolution are preserved.
 #[test]
 fn lock_build_dependencies_shared_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -7517,6 +7538,10 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
+        build-dependencies = [
+            { name = "hatch-vcs", version = "0.4.0" },
+            { name = "hatchling", version = "1.22.4" },
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
@@ -7577,15 +7602,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         requires-dist = [
             { name = "dep", directory = "dep" },
             { name = "iniconfig" },
-        ]
-
-        [[package]]
-        name = "wheel"
-        version = "0.43.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
         ]
 
         [[package]]
@@ -7671,7 +7687,7 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 15 packages in [TIME]
     ");
 
     // Verify sync works (the shared package should be installed once).
@@ -7681,8 +7697,8 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
-    Prepared 2 packages in [TIME]
+    Resolved 15 packages in [TIME]
+    Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]
      + dep==0.1.0 (from file://[TEMP_DIR]/dep)
      + iniconfig==2.0.0
@@ -7706,6 +7722,9 @@ fn lock_build_dependencies_trivial_project() -> Result<()> {
         [build-system]
         requires = ["setuptools>=42", "wheel"]
         build-backend = "setuptools.build_meta"
+
+        [tool.setuptools]
+        packages = ["project"]
         "#,
     )?;
     context.temp_dir.child("project").create_dir_all()?;
@@ -7890,7 +7909,7 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    // `--locked` should pass.
+    // Verify `--locked` accepts the initial lock file.
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--preview-features")
@@ -7901,7 +7920,7 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     // Change build-system.requires to add `wheel`.
@@ -7921,7 +7940,7 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         "#,
     )?;
 
-    // --locked should now fail because build-system.requires changed.
+    // Verify `--locked` rejects the changed `build-system.requires`.
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--preview-features")
@@ -7949,7 +7968,7 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    // `--locked` should pass now.
+    // Verify `--locked` accepts the refreshed lock file.
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--preview-features")
@@ -7960,10 +7979,10 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
-    // The `build-requires` should be updated in the lock file.
+    // Verify the lock file records the updated `build-requires`.
     let lock = context.read("uv.lock");
 
     insta::with_settings!({
@@ -8120,15 +8139,6 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
-        ]
-
-        [[package]]
-        name = "setuptools"
-        version = "69.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
         ]
         "#
         );
@@ -8710,15 +8720,6 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         requires-dist = [{ name = "dep", directory = "dep" }]
 
         [[package]]
-        name = "wheel"
-        version = "0.43.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
-        ]
-
-        [[package]]
         name = "setuptools"
         version = "69.2.0"
         source = { registry = "https://pypi.org/simple" }
@@ -8755,7 +8756,7 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + dep==0.1.0 (from file://[TEMP_DIR]/dep)
@@ -8984,7 +8985,9 @@ fn lock_build_dependencies_no_build_relocks_without_no_build() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Added flit-core v3.9.0
     Added setuptools v69.2.0
+    Added wheel v0.43.0
     ");
 
     let lock = context.read("uv.lock");
@@ -9647,6 +9650,36 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         ]
         "#);
     });
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(dep.contains("build-dependencies = ["), "{dep}");
 
     Ok(())
 }
@@ -10722,7 +10755,7 @@ fn lock_build_dependencies_on_then_off_no_churn() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     let lock_without_feature = context.read("uv.lock");
@@ -10806,6 +10839,7 @@ fn lock_build_dependencies_on_then_off_forced_rewrite() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    Removed flit-core v3.9.0
     Added iniconfig v2.0.0
     Removed setuptools v69.2.0
     Removed wheel v0.43.0
