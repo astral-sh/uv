@@ -6289,10 +6289,7 @@ fn lock_build_dependencies_static_git() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["dep"]
-
-        [tool.uv.sources]
-        dep = {{ git = "{dep_url}" }}
+        dependencies = ["dep @ git+{dep_url}"]
         "#
         ))?;
 
@@ -6316,6 +6313,26 @@ fn lock_build_dependencies_static_git() -> Result<()> {
         dep.contains(r#"{ name = "private-builder", version = "0.1.0" }"#),
         "{dep}"
     );
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index")
+        .arg("--no-sources")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Failed to resolve requirements from `build-system.requires`
+      Caused by: No solution found when resolving: `private-builder`
+      Caused by: Because private-builder was not found in the provided package locations and you require private-builder, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
 
     Ok(())
 }

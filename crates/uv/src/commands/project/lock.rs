@@ -15,7 +15,7 @@ use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExtrasSpecification, NoBuild, Reinstall, Upgrade,
+    ExtrasSpecification, NoBuild, NoSources, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -824,13 +824,40 @@ async fn do_lock(
         || *config_settings_package != Default::default()
         || !extra_build_variables.is_empty()
         || !no_build_packages.is_empty();
-    let build_settings = if let Some(build_isolation_settings) = build_isolation_settings {
+    let source_settings = match sources {
+        NoSources::None => None,
+        NoSources::All => Some(("all", Vec::new())),
+        NoSources::Packages(packages) => Some((
+            "packages",
+            packages.iter().map(PackageName::as_ref).collect(),
+        )),
+    };
+    let build_settings = if let Some(build_isolation_settings) = build_isolation_settings.as_ref()
+        && let Some(source_settings) = &source_settings
+    {
         Some(cache_digest(&(
             config_setting,
             config_settings_package,
             extra_build_variables,
             &no_build_packages,
             build_isolation_settings,
+            source_settings,
+        )))
+    } else if let Some(build_isolation_settings) = build_isolation_settings.as_ref() {
+        Some(cache_digest(&(
+            config_setting,
+            config_settings_package,
+            extra_build_variables,
+            &no_build_packages,
+            build_isolation_settings,
+        )))
+    } else if let Some(source_settings) = &source_settings {
+        Some(cache_digest(&(
+            config_setting,
+            config_settings_package,
+            extra_build_variables,
+            &no_build_packages,
+            source_settings,
         )))
     } else if has_build_settings {
         Some(cache_digest(&(
