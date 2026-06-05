@@ -348,7 +348,7 @@ impl NoSolutionError {
     /// Given a [`DerivationTree`], collapse any [`External::FromDependencyOf`] incompatibilities
     /// wrap an [`PubGrubPackageInner::Extra`] package.
     pub(crate) fn collapse_proxies(derivation_tree: ErrorTree) -> ErrorTree {
-        fn collapse(derivation_tree: ErrorTree) -> Option<ErrorTree> {
+        fn collapse(derivation_tree: &ErrorTree) -> Option<ErrorTree> {
             with_growing_stack(|| match derivation_tree {
                 DerivationTree::Derived(derived) => {
                     match (&*derived.cause1, &*derived.cause2) {
@@ -359,20 +359,21 @@ impl NoSolutionError {
                         (
                             DerivationTree::External(External::FromDependencyOf(package, ..)),
                             cause,
-                        ) if package.is_proxy() => collapse(cause.clone()),
+                        ) if package.is_proxy() => collapse(cause),
                         (
                             cause,
                             DerivationTree::External(External::FromDependencyOf(package, ..)),
-                        ) if package.is_proxy() => collapse(cause.clone()),
+                        ) if package.is_proxy() => collapse(cause),
                         (cause1, cause2) => {
-                            let cause1 = collapse(cause1.clone());
-                            let cause2 = collapse(cause2.clone());
+                            let cause1 = collapse(cause1);
+                            let cause2 = collapse(cause2);
                             match (cause1, cause2) {
                                 (Some(cause1), Some(cause2)) => {
                                     Some(DerivationTree::Derived(Derived {
                                         cause1: Arc::new(cause1),
                                         cause2: Arc::new(cause2),
-                                        ..derived
+                                        terms: derived.terms.clone(),
+                                        shared_id: derived.shared_id,
                                     }))
                                 }
                                 (Some(cause), None) | (None, Some(cause)) => Some(cause),
@@ -381,11 +382,12 @@ impl NoSolutionError {
                         }
                     }
                 }
-                DerivationTree::External(_) => Some(derivation_tree),
+                DerivationTree::External(_) => Some(derivation_tree.clone()),
             })
         }
 
-        collapse(derivation_tree)
+        let derivation_tree = StackSafeErrorTree::new(derivation_tree);
+        collapse(&derivation_tree)
             .expect("derivation tree should contain at least one external term")
     }
 
@@ -395,17 +397,18 @@ impl NoSolutionError {
     /// implement PEP 440 semantics for local version equality. For example, `1.0.0+foo` needs to
     /// satisfy `==1.0.0`.
     pub(crate) fn collapse_local_version_segments(derivation_tree: ErrorTree) -> ErrorTree {
-        fn strip(derivation_tree: ErrorTree) -> Option<ErrorTree> {
+        fn strip(derivation_tree: &ErrorTree) -> Option<ErrorTree> {
             with_growing_stack(|| match derivation_tree {
-                DerivationTree::External(External::NotRoot(_, _)) => Some(derivation_tree),
+                DerivationTree::External(External::NotRoot(_, _)) => Some(derivation_tree.clone()),
                 DerivationTree::External(External::NoVersions(package, versions)) => {
-                    if SentinelRange::from(&versions).is_complement() {
+                    if SentinelRange::from(versions).is_complement() {
                         return None;
                     }
 
-                    let versions = SentinelRange::from(&versions).strip();
+                    let versions = SentinelRange::from(versions).strip();
                     Some(DerivationTree::External(External::NoVersions(
-                        package, versions,
+                        package.clone(),
+                        versions,
                     )))
                 }
                 DerivationTree::External(External::FromDependencyOf(
@@ -414,26 +417,33 @@ impl NoSolutionError {
                     package2,
                     versions2,
                 )) => {
-                    let versions1 = SentinelRange::from(&versions1).strip();
-                    let versions2 = SentinelRange::from(&versions2).strip();
+                    let versions1 = SentinelRange::from(versions1).strip();
+                    let versions2 = SentinelRange::from(versions2).strip();
                     Some(DerivationTree::External(External::FromDependencyOf(
-                        package1, versions1, package2, versions2,
+                        package1.clone(),
+                        versions1,
+                        package2.clone(),
+                        versions2,
                     )))
                 }
                 DerivationTree::External(External::Custom(package, versions, reason)) => {
-                    let versions = SentinelRange::from(&versions).strip();
+                    let versions = SentinelRange::from(versions).strip();
                     Some(DerivationTree::External(External::Custom(
-                        package, versions, reason,
+                        package.clone(),
+                        versions,
+                        reason.clone(),
                     )))
                 }
-                DerivationTree::Derived(mut derived) => {
-                    let cause1 = strip((*derived.cause1).clone());
-                    let cause2 = strip((*derived.cause2).clone());
+                DerivationTree::Derived(derived) => {
+                    let cause1 = strip(&derived.cause1);
+                    let cause2 = strip(&derived.cause2);
                     match (cause1, cause2) {
                         (Some(cause1), Some(cause2)) => Some(DerivationTree::Derived(Derived {
                             cause1: Arc::new(cause1),
                             cause2: Arc::new(cause2),
-                            terms: std::mem::take(&mut derived.terms)
+                            terms: derived
+                                .terms
+                                .clone()
                                 .into_iter()
                                 .map(|(pkg, term)| {
                                     let term = match term {
@@ -456,7 +466,8 @@ impl NoSolutionError {
             })
         }
 
-        strip(derivation_tree).expect("derivation tree should contain at least one term")
+        let derivation_tree = StackSafeErrorTree::new(derivation_tree);
+        strip(&derivation_tree).expect("derivation tree should contain at least one term")
     }
 
     /// Given a [`DerivationTree`], identify the largest required Python version that is missing.
@@ -1682,25 +1693,55 @@ fn simplify_range(
 mod tests {
     use super::*;
 
+    fn deep_derivation_tree() -> ErrorTree {
+        let package = PubGrubPackage::from(PubGrubPackageInner::Root(None));
+        let leaf = ErrorTree::External(External::NotRoot(package, Version::new([1_u64])));
+        let mut tree = leaf.clone();
+
+        for _ in 0..100_000 {
+            tree = ErrorTree::Derived(Derived {
+                terms: pubgrub::Map::default(),
+                shared_id: None,
+                cause1: Arc::new(tree),
+                cause2: Arc::new(leaf.clone()),
+            });
+        }
+
+        tree
+    }
+
     #[test]
     fn drops_transformed_derivation_tree_without_recursion() -> std::io::Result<()> {
         let thread = std::thread::Builder::new()
             .stack_size(256 * 1024)
             .spawn(|| {
-                let package = PubGrubPackage::from(PubGrubPackageInner::Root(None));
-                let leaf = ErrorTree::External(External::NotRoot(package, Version::new([1_u64])));
-                let mut tree = leaf.clone();
+                let _tree = StackSafeErrorTree::new(deep_derivation_tree());
+            })?;
 
-                for _ in 0..100_000 {
-                    tree = ErrorTree::Derived(Derived {
-                        terms: pubgrub::Map::default(),
-                        shared_id: None,
-                        cause1: Arc::new(tree),
-                        cause2: Arc::new(leaf.clone()),
-                    });
-                }
+        assert!(thread.join().is_ok());
+        Ok(())
+    }
 
-                let _tree = StackSafeErrorTree::new(tree);
+    #[test]
+    fn collapse_proxies_drops_source_tree_without_recursion() -> std::io::Result<()> {
+        let thread = std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let tree = NoSolutionError::collapse_proxies(deep_derivation_tree());
+                drop_derivation_tree(tree);
+            })?;
+
+        assert!(thread.join().is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn collapse_local_versions_drops_source_tree_without_recursion() -> std::io::Result<()> {
+        let thread = std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let tree = NoSolutionError::collapse_local_version_segments(deep_derivation_tree());
+                drop_derivation_tree(tree);
             })?;
 
         assert!(thread.join().is_ok());
