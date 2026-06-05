@@ -66,8 +66,5 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 toml = { workspace = true }
 
-[package.metadata.cargo-shear]
-ignored = ["uv-extract"]
-
 [features]
 static = ["uv-extract/static"]
