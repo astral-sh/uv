@@ -1055,8 +1055,12 @@ impl TestContext {
         ));
         // Filter script environment hashes
         filters.push((
-            r"environments-v(\d+)[\\/](\w+)-[a-z0-9]+".to_string(),
+            r"environments-v(\d+)[\\/]([\w.\[\]-]+)-[a-f0-9]{16}".to_string(),
             "environments-v$1/$2-[HASH]".to_string(),
+        ));
+        filters.push((
+            r"`([\w.\[\]-]+)-[a-f0-9]{16}`".to_string(),
+            "`$1-[HASH]`".to_string(),
         ));
         // Filter archive hashes
         filters.push((

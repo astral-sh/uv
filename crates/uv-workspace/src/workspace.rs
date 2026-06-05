@@ -861,7 +861,7 @@ impl Workspace {
     /// If `active` is `true`, the `VIRTUAL_ENV` variable will be preferred. If it is `false`, any
     /// warnings about mismatch between the active environment and the project environment will be
     /// silenced.
-    pub fn venv_path(&self, active: Option<bool>) -> ProjectEnvironmentTarget {
+    pub fn venv(&self, active: Option<bool>) -> ProjectEnvironmentTarget {
         /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
         fn from_project_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
             let value = std::env::var_os(EnvVars::UV_PROJECT_ENVIRONMENT)?;
@@ -933,13 +933,6 @@ impl Workspace {
         }
 
         project_env
-    }
-
-    /// The path to the workspace virtual environment.
-    pub fn venv(&self, active: Option<bool>) -> PathBuf {
-        self.venv_path(active)
-            .project_path(&self.install_path)
-            .into_owned()
     }
 
     /// The members of the workspace.

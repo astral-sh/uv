@@ -169,6 +169,62 @@ requires-python = ">=3.12"
     Ok(())
 }
 
+#[test]
+fn version_centralized_environment_no_cache_does_not_modify_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    fs_err::remove_dir_all(&context.venv)?;
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#};
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(pyproject)?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("0.2.0")
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("centralized-envs"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--no-cache` is unsupported with the `centralized-envs` feature enabled
+    "#);
+
+    assert_eq!(fs_err::read_to_string(&pyproject_toml)?, pyproject);
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("0.2.0")
+        .arg("--no-sync")
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("centralized-envs"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project 0.1.0 => 0.2.0
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    ");
+
+    assert!(!context.venv.exists());
+    assert_snapshot!(fs_err::read_to_string(pyproject_toml)?, @r#"
+    [project]
+    name = "project"
+    version = "0.2.0"
+    requires-python = ">=3.12"
+    dependencies = []
+    "#);
+    Ok(())
+}
+
 // Set the version (--short)
 #[test]
 fn version_set_value_short() -> Result<()> {

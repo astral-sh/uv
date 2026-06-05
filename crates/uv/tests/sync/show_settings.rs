@@ -2964,6 +2964,7 @@ fn preview_features() {
     +            VenvSafeClear,
     +            Check,
     +            PackagedInit,
+    +            CentralizedEnvs,
     +        ],
          },
          python_preference: Managed,

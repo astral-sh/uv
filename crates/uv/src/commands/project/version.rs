@@ -37,7 +37,7 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
     ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState, WorkspacePython,
-    default_dependency_groups,
+    default_dependency_groups, ensure_centralized_environment_uses_persistent_cache,
 };
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
@@ -338,6 +338,12 @@ pub(crate) async fn project_version(
     let status = if dry_run {
         ExitStatus::Success
     } else if let Some(new_version) = &new_version {
+        if frozen.is_none() && !no_sync {
+            ensure_centralized_environment_uses_persistent_cache(
+                &project.workspace().venv(active),
+                cache,
+            )?;
+        }
         let project = update_project(
             project,
             new_version,
@@ -653,6 +659,7 @@ async fn lock_and_sync(
             cache,
             DryRun::Disabled,
             printer,
+            true,
         )
         .await?
         .into_environment()?;
