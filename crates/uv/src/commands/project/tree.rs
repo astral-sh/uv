@@ -23,8 +23,8 @@ use crate::commands::pip::resolution_markers;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
-    default_dependency_groups,
+    InstallTarget, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    WorkspacePython, default_dependency_groups,
 };
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{ExitStatus, diagnostics};
@@ -291,8 +291,24 @@ pub(crate) async fn tree(
     };
 
     // Render the tree.
+    let install_target = match target {
+        LockTarget::Workspace(workspace) if workspace.is_non_project() => {
+            InstallTarget::NonProjectWorkspace {
+                workspace,
+                lock: &lock,
+            }
+        }
+        LockTarget::Workspace(workspace) => InstallTarget::Workspace {
+            workspace,
+            lock: &lock,
+        },
+        LockTarget::Script(script) => InstallTarget::Script {
+            script,
+            lock: &lock,
+        },
+    };
     let tree = TreeDisplay::new(
-        &lock,
+        &install_target,
         markers.as_ref(),
         &latest,
         depth.into(),
@@ -302,7 +318,7 @@ pub(crate) async fn tree(
         no_dedupe,
         invert,
         show_sizes,
-    );
+    )?;
 
     print!("{tree}");
 

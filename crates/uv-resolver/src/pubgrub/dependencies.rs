@@ -7,10 +7,10 @@ use pubgrub::Ranges;
 use uv_distribution_types::{IndexMetadata, Requirement, RequirementSource};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::RequirementOrigin;
+use uv_pep508::{MarkerTree, RequirementOrigin};
 use uv_pypi_types::{
-    ConflictItemRef, Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
-    ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
+    ConflictItem, ConflictItemRef, Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl,
+    ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
 };
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
@@ -18,7 +18,7 @@ use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 /// The source constraint carried by a single dependency edge.
 ///
 /// Most dependency edges are source-agnostic and use [`DependencySource::Unspecified`]. Direct
-/// URLs and group-scoped explicit indexes use a concrete source so fork construction can keep
+/// URLs and source-scoped explicit indexes use a concrete source so fork construction can keep
 /// that source information attached to the edge that introduced it.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) enum DependencySource {
@@ -28,7 +28,10 @@ pub(crate) enum DependencySource {
     /// The dependency was introduced by a direct URL-like requirement.
     Url(Box<VerbatimParsedUrl>),
     /// The dependency was introduced by a requirement pinned to an explicit index.
-    ExplicitIndex(IndexMetadata),
+    ExplicitIndex {
+        index: IndexMetadata,
+        conflict: Option<ConflictItem>,
+    },
 }
 
 impl DependencySource {
@@ -36,26 +39,47 @@ impl DependencySource {
     ///
     /// Registry requirements only carry a source here when they are tied to a group-scoped
     /// explicit index. Direct URL-like requirements always preserve their verbatim URL.
-    fn from_requirement(requirement: &Requirement) -> Self {
+    pub(crate) fn from_requirement(requirement: &Requirement) -> Self {
         match &requirement.source {
-            RequirementSource::Registry { index, .. }
+            RequirementSource::Registry { .. }
                 if matches!(
                     requirement.origin.as_ref(),
                     Some(RequirementOrigin::Group(_, Some(_), _))
                 ) =>
             {
-                index
-                    .clone()
-                    .map(Self::ExplicitIndex)
-                    .unwrap_or(Self::Unspecified)
+                Self::from_source(&requirement.source)
             }
             RequirementSource::Registry { .. } => Self::Unspecified,
             RequirementSource::Url { .. }
             | RequirementSource::GitDirectory { .. }
             | RequirementSource::GitPath { .. }
             | RequirementSource::Path { .. }
-            | RequirementSource::Directory { .. } => requirement
-                .source
+            | RequirementSource::Directory { .. } => Self::from_source(&requirement.source),
+        }
+    }
+
+    /// Derive the edge-local source constraint directly from a requirement source.
+    ///
+    /// This preserves every explicit source carried by `source`, including direct URLs and named
+    /// indexes. Use [`DependencySource::from_requirement`] for the normal dependency-lowering path,
+    /// where plain registry requirements remain source-agnostic unless their origin needs an
+    /// edge-local index.
+    pub(crate) fn from_source(source: &RequirementSource) -> Self {
+        match source {
+            RequirementSource::Registry {
+                index, conflict, ..
+            } => index
+                .clone()
+                .map(|index| Self::ExplicitIndex {
+                    index,
+                    conflict: conflict.clone(),
+                })
+                .unwrap_or(Self::Unspecified),
+            RequirementSource::Url { .. }
+            | RequirementSource::GitDirectory { .. }
+            | RequirementSource::GitPath { .. }
+            | RequirementSource::Path { .. }
+            | RequirementSource::Directory { .. } => source
                 .to_verbatim_parsed_url()
                 .map(Box::new)
                 .map(Self::Url)
@@ -67,15 +91,31 @@ impl DependencySource {
     pub(crate) fn verbatim_url(&self) -> Option<&VerbatimParsedUrl> {
         match self {
             Self::Url(url) => Some(url.as_ref()),
-            Self::Unspecified | Self::ExplicitIndex(_) => None,
+            Self::Unspecified | Self::ExplicitIndex { .. } => None,
         }
     }
 
     /// Return the explicit index attached to this source, if any.
     pub(crate) fn explicit_index(&self) -> Option<&IndexMetadata> {
         match self {
-            Self::ExplicitIndex(index) => Some(index),
+            Self::ExplicitIndex { index, .. } => Some(index),
             Self::Unspecified | Self::Url(_) => None,
+        }
+    }
+
+    /// Returns `true` if the dependency edge does not constrain the package source.
+    pub(crate) fn is_unspecified(&self) -> bool {
+        matches!(self, Self::Unspecified)
+    }
+
+    /// Return the conflict item attached to this source, if any.
+    fn conflicting_item(&self) -> Option<ConflictItemRef<'_>> {
+        match self {
+            Self::ExplicitIndex {
+                conflict: Some(conflict),
+                ..
+            } => Some(conflict.as_ref()),
+            Self::Unspecified | Self::Url(_) | Self::ExplicitIndex { conflict: None, .. } => None,
         }
     }
 }
@@ -103,9 +143,13 @@ pub(crate) struct PubGrubDependency {
     /// The direct source constraint attached to this dependency edge.
     ///
     /// This is only populated when the edge itself needs source identity, e.g. for direct URLs
-    /// or group-scoped explicit indexes. Manifest-wide URL and index constraints are still applied
+    /// or source-scoped explicit indexes. Manifest-wide URL and index constraints are still applied
     /// separately via `Urls` and `Indexes`.
     pub(crate) source: DependencySource,
+
+    /// Whether an environment marker on this source-selection edge must fork before the source is
+    /// recorded in the resolver fork.
+    pub(crate) fork_source_on_marker: bool,
 }
 
 impl PubGrubDependency {
@@ -114,11 +158,27 @@ impl PubGrubDependency {
         requirement: Cow<'a, Requirement>,
         group_name: Option<&'a GroupName>,
         parent_package: Option<&'a PubGrubPackage>,
+        marker: Option<MarkerTree>,
     ) -> impl Iterator<Item = Self> + 'a {
         let parent_name = parent_package.and_then(|package| package.name_no_root());
         let is_normal_parent = parent_package
             .map(|pp| pp.extra().is_none() && pp.group().is_none())
             .unwrap_or(false);
+        let mut has_extra_marker = false;
+        requirement
+            .marker
+            .visit_extras(|_, _| has_extra_marker = true);
+        let fork_source_on_marker = group_name.is_some()
+            || parent_package
+                .is_some_and(|package| package.extra().is_some() || package.group().is_some())
+            || has_extra_marker
+            || matches!(
+                &requirement.source,
+                RequirementSource::Registry {
+                    conflict: Some(_),
+                    ..
+                }
+            );
         let iter = if !requirement.extras.is_empty() {
             // This is crazy subtle, but if any of the extras in the
             // requirement are part of a declared conflict, then we
@@ -168,7 +228,7 @@ impl PubGrubDependency {
         // Add the package, plus any extra variants.
         iter.map(move |(extra, group)| {
             let pubgrub_requirement =
-                PubGrubRequirement::from_requirement(&requirement, extra, group);
+                PubGrubRequirement::from_requirement(&requirement, extra, group, marker);
             let PubGrubRequirement {
                 package,
                 version,
@@ -184,6 +244,7 @@ impl PubGrubDependency {
                         None
                     },
                     source,
+                    fork_source_on_marker,
                 },
                 PubGrubPackageInner::Marker { .. } => Self {
                     package,
@@ -194,9 +255,12 @@ impl PubGrubDependency {
                         None
                     },
                     source,
+                    fork_source_on_marker,
                 },
                 PubGrubPackageInner::Extra { name, .. } => {
-                    if group_name.is_none() {
+                    if group_name.is_none()
+                        && parent_package.is_none_or(|package| package.extra().is_none())
+                    {
                         debug_assert!(
                             parent_name.is_none_or(|parent_name| parent_name != name),
                             "extras not flattened for {name}"
@@ -207,6 +271,7 @@ impl PubGrubDependency {
                         version,
                         parent: None,
                         source,
+                        fork_source_on_marker,
                     }
                 }
                 PubGrubPackageInner::Group { name, .. } => {
@@ -221,6 +286,7 @@ impl PubGrubDependency {
                         version,
                         parent: None,
                         source,
+                        fork_source_on_marker,
                     }
                 }
                 PubGrubPackageInner::Root(_) => unreachable!("Root package in dependencies"),
@@ -237,7 +303,9 @@ impl PubGrubDependency {
     /// If this package can't possibly be classified as conflicting, then this
     /// returns `None`.
     pub(crate) fn conflicting_item(&self) -> Option<ConflictItemRef<'_>> {
-        self.package.conflicting_item()
+        self.source
+            .conflicting_item()
+            .or_else(|| self.package.conflicting_item())
     }
 }
 
@@ -250,24 +318,23 @@ struct PubGrubRequirement {
 }
 
 impl PubGrubRequirement {
-    fn package_for_requirement(
-        requirement: &Requirement,
-        extra: Option<ExtraName>,
-        group: Option<GroupName>,
-    ) -> PubGrubPackage {
-        PubGrubPackage::from_package(requirement.name.clone(), extra, group, requirement.marker)
-    }
-
     /// Convert a [`Requirement`] to a PubGrub-compatible package and range, while returning the URL
     /// on the [`Requirement`], if any.
     fn from_requirement(
         requirement: &Requirement,
         extra: Option<ExtraName>,
         group: Option<GroupName>,
+        marker: Option<MarkerTree>,
     ) -> Self {
         let (verbatim_url, parsed_url) = match &requirement.source {
             RequirementSource::Registry { specifier, .. } => {
-                return Self::from_registry_requirement(specifier, extra, group, requirement);
+                return Self::from_registry_requirement(
+                    specifier,
+                    extra,
+                    group,
+                    requirement,
+                    marker,
+                );
             }
             RequirementSource::Url {
                 subdirectory,
@@ -334,8 +401,10 @@ impl PubGrubRequirement {
             }
         };
 
+        let package = Self::package(requirement, extra, group, marker);
+
         Self {
-            package: Self::package_for_requirement(requirement, extra, group),
+            package,
             version: Ranges::full(),
             source: DependencySource::Url(Box::new(VerbatimParsedUrl {
                 parsed_url,
@@ -349,11 +418,35 @@ impl PubGrubRequirement {
         extra: Option<ExtraName>,
         group: Option<GroupName>,
         requirement: &Requirement,
+        marker: Option<MarkerTree>,
     ) -> Self {
+        let package = Self::package(requirement, extra, group, marker);
+
         Self {
-            package: Self::package_for_requirement(requirement, extra, group),
+            package,
             source: DependencySource::from_requirement(requirement),
             version: Ranges::from(specifier.clone()),
+        }
+    }
+
+    fn package(
+        requirement: &Requirement,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
+        marker: Option<MarkerTree>,
+    ) -> PubGrubPackage {
+        if extra.is_none()
+            && group.is_none()
+            && let Some(marker) = marker
+        {
+            PubGrubPackage::from_base_preserving_marker(requirement.name.clone(), marker)
+        } else {
+            PubGrubPackage::from_package(
+                requirement.name.clone(),
+                extra,
+                group,
+                marker.unwrap_or(requirement.marker),
+            )
         }
     }
 }

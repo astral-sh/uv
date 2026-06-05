@@ -144,9 +144,8 @@ impl RequiresDist {
             .into_iter()
             .map(|(name, flat_group)| {
                 let requirements = flat_group
-                    .requirements
-                    .into_iter()
-                    .flat_map(|requirement| {
+                    .into_requirements_with_includes()
+                    .flat_map(|(requirement, included_groups)| {
                         // Check if sources should be disabled for this specific package
                         if no_sources.for_package(&requirement.name) {
                             vec![Ok(Requirement::from(requirement))].into_iter()
@@ -163,6 +162,7 @@ impl RequiresDist {
                                 project_indexes,
                                 extra,
                                 Some(&group),
+                                Some(&included_groups),
                                 locations,
                                 project_workspace.workspace(),
                                 git_member,
@@ -206,6 +206,7 @@ impl RequiresDist {
                         project_indexes,
                         extra.as_deref(),
                         group,
+                        None,
                         locations,
                         project_workspace.workspace(),
                         git_member,

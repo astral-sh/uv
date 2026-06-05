@@ -43,7 +43,10 @@ impl Urls {
         let mut overrides = ForkMap::default();
 
         // Add all direct regular requirements and constraints URL.
-        for requirement in manifest.requirements_no_overrides(env, dependencies) {
+        for requirement in manifest
+            .requirements_no_overrides(env, dependencies)
+            .chain(manifest.potential_url_requirements_no_overrides(env, dependencies))
+        {
             let Some(url) = requirement.source.to_verbatim_parsed_url() else {
                 // Registry requirement
                 continue;
@@ -89,6 +92,11 @@ impl Urls {
         }
 
         Self { overrides, regular }
+    }
+
+    /// Returns `true` if there are no allowed URLs.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.overrides.is_empty() && self.regular.is_empty()
     }
 
     /// Return an iterator over the allowed URLs for the given package.

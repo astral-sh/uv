@@ -8810,6 +8810,127 @@ fn tool_uv_sources_is_in_preview() -> Result<()> {
     Ok(())
 }
 
+/// Installing a local package should not reintroduce unrequested dependency
+/// groups while resolving its sourced dependencies.
+#[test]
+fn tool_uv_sources_ignore_unrequested_dependency_groups_for_path_install() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+
+    let package = context.temp_dir.child("pkg");
+    package.create_dir_all()?;
+    let pyproject_toml = package.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "pkg"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["jinja2>=3.1.5"]
+
+        [dependency-groups]
+        cu118 = ["jinja2>=3.1.5"]
+
+        [tool.uv.sources]
+        jinja2 = [
+            { index = "torch-cu118", group = "cu118" },
+        ]
+
+        [[tool.uv.index]]
+        name = "torch-cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
+        explicit = true
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(package.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + jinja2==3.1.5
+     + markupsafe==3.0.2
+     + pkg==0.1.0 (from file://[TEMP_DIR]/pkg)
+    "
+    );
+
+    Ok(())
+}
+
+/// Extra-scoped explicit indexes must remain available during specific
+/// resolution.
+#[test]
+fn tool_uv_sources_extra_explicit_index_for_path_install() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let default_index = context.temp_dir.child("default");
+    default_index.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        default_index.join("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    let explicit_index = context.temp_dir.child("explicit");
+    explicit_index.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        explicit_index.join("ok-2.0.0-py3-none-any.whl"),
+    )?;
+
+    let package = context.temp_dir.child("pkg");
+    package.create_dir_all()?;
+    package.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "pkg"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        alt = ["ok"]
+
+        [tool.uv.sources]
+        ok = [
+            {{ index = "explicit", extra = "alt" }},
+        ]
+
+        [[tool.uv.index]]
+        name = "explicit"
+        url = "{}"
+        format = "flat"
+        explicit = true
+
+        [[tool.uv.index]]
+        name = "default"
+        url = "{}"
+        format = "flat"
+        default = true
+    "#,
+        explicit_index.portable_display(),
+        default_index.portable_display()
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("{}[alt]", package.path().display())), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + ok==2.0.0
+     + pkg==0.1.0 (from file://[TEMP_DIR]/pkg)
+    ");
+
+    Ok(())
+}
+
 /// Allow transitive URLs via recursive extras.
 #[test]
 fn recursive_extra_transitive_url() -> Result<()> {
@@ -8844,6 +8965,138 @@ fn recursive_extra_transitive_url() -> Result<()> {
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
      + project==0.0.0 (from file://[TEMP_DIR]/)
     ");
+
+    Ok(())
+}
+
+/// An inactive platform-gated URL must not allow the same URL as a transitive dependency.
+#[test]
+fn inactive_platform_url_does_not_allow_transitive_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let iniconfig_url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl";
+
+    context
+        .init()
+        .arg("--lib")
+        .arg("allowpkg")
+        .assert()
+        .success();
+    let allowpkg = context.temp_dir.child("allowpkg");
+    let pyproject_toml = allowpkg.child("pyproject.toml");
+    pyproject_toml.write_str(&fs_err::read_to_string(&pyproject_toml)?.replace(
+        "dependencies = []",
+        &format!(
+            r#"dependencies = ["iniconfig @ {iniconfig_url} ; sys_platform == 'unsupported'"]"#
+        ),
+    ))?;
+    context
+        .build()
+        .arg("--wheel")
+        .arg(allowpkg.path())
+        .assert()
+        .success();
+
+    context
+        .init()
+        .arg("--lib")
+        .arg("requester")
+        .assert()
+        .success();
+    let requester = context.temp_dir.child("requester");
+    let pyproject_toml = requester.child("pyproject.toml");
+    pyproject_toml.write_str(&fs_err::read_to_string(&pyproject_toml)?.replace(
+        "dependencies = []",
+        &format!(r#"dependencies = ["iniconfig @ {iniconfig_url}"]"#),
+    ))?;
+    context
+        .build()
+        .arg("--wheel")
+        .arg(requester.path())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(allowpkg.join("dist/allowpkg-0.1.0-py3-none-any.whl"))
+        .arg("requester")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(requester.join("dist")), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to resolve dependencies for `requester` (v0.1.0)
+      ╰─▶ Package `iniconfig` was included as a URL dependency. URL dependencies must be expressed as direct requirements or constraints. Consider adding `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl` to your dependencies or constraints file.
+    "#);
+
+    Ok(())
+}
+
+/// An inactive extra-gated URL must not allow the same URL as a transitive dependency.
+#[test]
+fn inactive_extra_url_does_not_allow_transitive_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let iniconfig_url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl";
+
+    context
+        .init()
+        .arg("--lib")
+        .arg("allowpkg")
+        .assert()
+        .success();
+    let allowpkg = context.temp_dir.child("allowpkg");
+    let pyproject_toml = allowpkg.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "allowpkg"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        foo = ["iniconfig @ {iniconfig_url}"]
+
+        [build-system]
+        requires = ["uv_build>=0.11.18,<0.12.0"]
+        build-backend = "uv_build"
+        "#
+    ))?;
+
+    context
+        .init()
+        .arg("--lib")
+        .arg("requester")
+        .assert()
+        .success();
+    let requester = context.temp_dir.child("requester");
+    let pyproject_toml = requester.child("pyproject.toml");
+    pyproject_toml.write_str(&fs_err::read_to_string(&pyproject_toml)?.replace(
+        "dependencies = []",
+        &format!(r#"dependencies = ["iniconfig @ {iniconfig_url}"]"#),
+    ))?;
+    context
+        .build()
+        .arg("--wheel")
+        .arg(requester.path())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(allowpkg.path())
+        .arg("requester")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(requester.join("dist")), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to resolve dependencies for `requester` (v0.1.0)
+      ╰─▶ Package `iniconfig` was included as a URL dependency. URL dependencies must be expressed as direct requirements or constraints. Consider adding `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl` to your dependencies or constraints file.
+    "#);
 
     Ok(())
 }

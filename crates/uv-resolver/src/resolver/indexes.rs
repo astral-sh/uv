@@ -27,18 +27,44 @@ impl Indexes {
         dependencies: DependencyMode,
     ) -> Self {
         let mut indexes = ForkMap::default();
+        let project = manifest.project.as_ref().or_else(|| {
+            let mut projects = manifest.workspace_members.iter();
+            let project = projects.next()?;
+            projects.next().is_none().then_some(project)
+        });
 
         for requirement in manifest.requirements(env, dependencies) {
             let RequirementSource::Registry {
-                index: Some(index), ..
+                index: Some(index),
+                conflict,
+                ..
             } = &requirement.source
             else {
                 continue;
             };
-            indexes.add(requirement.as_ref(), index.clone());
+            let mut has_extra = false;
+            requirement.marker.visit_extras(|_, _| has_extra = true);
+            // Transitive package metadata does not retain its declaring project in `origin`.
+            // During universal resolution, complementary source edges preserve these extra-scoped
+            // indexes directly, unless a declared conflict already supplies the project scope.
+            // Specific resolution evaluates the active extra immediately, so it must retain the
+            // index mapping here.
+            if env.marker_environment().is_none()
+                && requirement.origin.is_none()
+                && conflict.is_none()
+                && has_extra
+            {
+                continue;
+            }
+            indexes.add_with_project(requirement.as_ref(), index.clone(), project);
         }
 
         Self(indexes)
+    }
+
+    /// Returns `true` if there are no explicit indexes.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     /// Returns `true` if the map contains any indexes for a package.

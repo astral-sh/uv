@@ -367,6 +367,9 @@ impl<'env> LockOperation<'env> {
                     .read()
                     .await?
                     .ok_or(ProjectError::MissingLockfile(source, lock_filename))?;
+                if let Some((expected, actual)) = existing.mismatched_semantic_version() {
+                    return Err(ProjectError::FrozenLockVersionMismatch(expected, actual));
+                }
 
                 // Check if the discovered workspace members match the locked workspace members.
                 if let LockTarget::Workspace(workspace) = target {
@@ -1267,6 +1270,12 @@ impl ValidatedLock {
             SatisfiesResult::Satisfied => {
                 debug!("Existing `uv.lock` satisfies workspace requirements");
                 Ok(Self::Satisfies(lock))
+            }
+            SatisfiesResult::MismatchedLockVersion(expected, actual) => {
+                debug!(
+                    "Resolving despite existing lockfile due to incompatible lock version: expected `{expected}`, found `{actual}`"
+                );
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedMembers(expected, actual) => {
                 debug!(

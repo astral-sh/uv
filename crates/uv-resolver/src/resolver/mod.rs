@@ -25,8 +25,8 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
     IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
+    RequirementSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -62,6 +62,7 @@ pub(crate) use crate::resolver::availability::{
     UnavailableVersion,
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
+use crate::resolver::dependency_builder::DependencyBuilder;
 use crate::resolver::derivation::DerivationChainBuilder;
 pub use crate::resolver::environment::ResolverEnvironment;
 use crate::resolver::environment::{
@@ -84,6 +85,7 @@ pub(crate) use provider::MetadataUnavailable;
 
 mod availability;
 mod batch_prefetch;
+mod dependency_builder;
 mod derivation;
 mod environment;
 mod fork_map;
@@ -740,6 +742,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.git,
             &self.python_requirement,
             &self.conflicts,
+            self.project.as_ref(),
+            &self.workspace_members,
             self.selector.resolution_strategy(),
             self.options.clone(),
         )
@@ -952,6 +956,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 version: _,
                 parent: _,
                 source: _,
+                fork_source_on_marker: _,
             } = dependency;
             let url = package.name().and_then(|name| state.fork_urls.get(name));
             let index = package.name().and_then(|name| state.fork_indexes.get(name));
@@ -1790,16 +1795,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     python_requirement,
                 );
 
-                requirements
-                    .flat_map(move |requirement| {
-                        PubGrubDependency::from_requirement(
-                            &self.conflicts,
-                            requirement,
-                            None,
-                            Some(package),
-                        )
-                    })
-                    .collect()
+                let mut builder = DependencyBuilder::new(self, package, env, python_requirement);
+                builder.extend_requirements(requirements);
+                builder.rewrite_root_complementary_sources();
+                builder.finish()
             }
 
             PubGrubPackageInner::Package {
@@ -1918,18 +1917,24 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     python_requirement,
                 );
 
-                requirements
-                    .filter(|requirement| !self.excludes.contains(&requirement.name))
-                    .flat_map(|requirement| {
-                        PubGrubDependency::from_requirement(
-                            &self.conflicts,
-                            requirement,
-                            group.as_ref(),
-                            Some(package),
-                        )
-                    })
-                    .chain(system_dependencies)
-                    .collect()
+                let mut builder = DependencyBuilder::new(self, package, env, python_requirement);
+                let requirements =
+                    requirements.filter(|requirement| !self.excludes.contains(&requirement.name));
+                if let Some(group) = group.as_ref() {
+                    builder.extend_group_requirements(requirements, group, &metadata.requires_dist);
+                } else {
+                    builder.extend_requirements(requirements);
+                }
+                builder.extend_dependencies(system_dependencies);
+
+                if extra.is_none() && group.is_none() && env.marker_environment().is_none() {
+                    builder.add_complementary_source_dependencies(
+                        &metadata.requires_dist,
+                        &metadata.dependency_groups,
+                    );
+                }
+
+                builder.finish()
             }
 
             PubGrubPackageInner::Python(_) => return Ok(Dependencies::Unforkable(Vec::default())),
@@ -1951,6 +1956,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             version: Range::singleton(version.clone()),
                             parent: None,
                             source: DependencySource::Unspecified,
+                            fork_source_on_marker: false,
                         })
                         .collect(),
                 ));
@@ -1979,6 +1985,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     version: Range::singleton(version.clone()),
                                     parent: None,
                                     source: DependencySource::Unspecified,
+                                    fork_source_on_marker: false,
                                 })
                         })
                         .collect(),
@@ -2005,6 +2012,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             version: Range::singleton(version.clone()),
                             parent: None,
                             source: DependencySource::Unspecified,
+                            fork_source_on_marker: false,
                         })
                         .collect(),
                 ));
@@ -2022,11 +2030,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         dev_dependencies: &'a BTreeMap<GroupName, Box<[Requirement]>>,
         extra: Option<&'a ExtraName>,
         dev: Option<&'a GroupName>,
-        name: Option<&PackageName>,
+        name: Option<&'a PackageName>,
         env: &'a ResolverEnvironment,
         python_requirement: &'a PythonRequirement,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> {
         let python_marker = python_requirement.to_marker_tree();
+        let preserve_recursive_extras = env.marker_environment().is_none()
+            && dependencies
+                .iter()
+                .chain(dev_dependencies.values().flatten())
+                .any(Self::is_extra_scoped_source_requirement);
 
         if let Some(dev) = dev {
             // Dependency groups can include the project itself, so no need to flatten recursive
@@ -2034,6 +2047,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Either::Left(Either::Left(self.requirements_for_extra(
                 dev_dependencies.get(dev).into_iter().flatten(),
                 extra,
+                name,
                 env,
                 python_marker,
                 python_requirement,
@@ -2046,6 +2060,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Either::Left(Either::Right(self.requirements_for_extra(
                 dependencies.iter(),
                 extra,
+                name,
                 env,
                 python_marker,
                 python_requirement,
@@ -2055,6 +2070,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .requirements_for_extra(
                     dependencies.iter(),
                     extra,
+                    name,
                     env,
                     python_marker,
                     python_requirement,
@@ -2076,6 +2092,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 for requirement in self.requirements_for_extra(
                     dependencies,
                     Some(&extra),
+                    name,
                     env,
                     python_marker,
                     python_requirement,
@@ -2131,12 +2148,34 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
 
-            // Drop all the self-requirements now that we flattened them out.
-            requirements.retain(|req| name != Some(&req.name) || req.extras.is_empty());
+            // Preserve recursive self-extra requirements when lock consumers need the activation
+            // relationship to evaluate source-selection markers.
+            if !preserve_recursive_extras || extra.is_none() {
+                requirements.retain(|req| name != Some(&req.name) || req.extras.is_empty());
+            }
             requirements.extend(self_constraints.into_iter().map(Cow::Owned));
 
             Either::Right(requirements.into_iter())
         }
+    }
+
+    /// Returns whether a requirement selects an explicit source using an extra predicate.
+    fn is_extra_scoped_source_requirement(requirement: &Requirement) -> bool {
+        let has_explicit_source = match &requirement.source {
+            RequirementSource::Registry { index, .. } => index.is_some(),
+            RequirementSource::Url { .. }
+            | RequirementSource::GitDirectory { .. }
+            | RequirementSource::GitPath { .. }
+            | RequirementSource::Path { .. }
+            | RequirementSource::Directory { .. } => true,
+        };
+        if !has_explicit_source {
+            return false;
+        }
+
+        let mut has_extra = false;
+        requirement.marker.visit_extras(|_, _| has_extra = true);
+        has_extra
     }
 
     /// The set of the regular and dev dependencies, filtered by Python version,
@@ -2145,6 +2184,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &'data self,
         dependencies: impl IntoIterator<Item = &'data Requirement> + 'parameters,
         extra: Option<&'parameters ExtraName>,
+        package: Option<&'parameters PackageName>,
         env: &'parameters ResolverEnvironment,
         python_marker: MarkerTree,
         python_requirement: &'parameters PythonRequirement,
@@ -2158,6 +2198,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Self::is_requirement_applicable(
                     requirement,
                     extra,
+                    package,
                     env,
                     python_marker,
                     python_requirement,
@@ -2179,6 +2220,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn is_requirement_applicable(
         requirement: &Requirement,
         extra: Option<&ExtraName>,
+        package: Option<&PackageName>,
         env: &ResolverEnvironment,
         python_marker: MarkerTree,
         python_requirement: &PythonRequirement,
@@ -2219,7 +2261,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // If we're in a fork in universal mode, ignore any dependency that isn't part of
         // this fork (but will be part of another fork).
-        if !env.included_by_marker(requirement.marker) {
+        if package.map_or_else(
+            || !env.included_by_marker(requirement.marker),
+            |package| !env.included_by_package_marker(requirement.marker, package),
+        ) {
             trace!("Skipping {requirement} because of {env}");
             return false;
         }
@@ -2992,6 +3037,7 @@ impl ForkState {
                 version,
                 parent: _,
                 source,
+                fork_source_on_marker: _,
             } = dependency;
 
             let mut has_url = false;
@@ -3089,6 +3135,7 @@ impl ForkState {
                 version,
                 parent: _,
                 source: _,
+                fork_source_on_marker: _,
             } = dependency;
 
             let Some(base_package) = package.base_package() else {
@@ -3110,6 +3157,7 @@ impl ForkState {
                     version,
                     parent: _,
                     source: _,
+                    fork_source_on_marker: _,
                 } = dependency;
                 (package, version)
             }),
@@ -3383,7 +3431,7 @@ impl ForkState {
                         extra: ref dependency_extra,
                         marker: ref dependency_marker,
                     } => {
-                        if self_group.is_none() {
+                        if self_extra.is_none() && self_group.is_none() {
                             debug_assert!(
                                 self_name != Some(dependency_name),
                                 "Extras should be flattened"
@@ -3755,6 +3803,11 @@ impl Forks {
         conflicts: &Conflicts,
     ) -> Self {
         let python_marker = python_requirement.to_marker_tree();
+        let source_marker_requires_fork = |dependency: &PubGrubDependency| {
+            dependency.fork_source_on_marker
+                && !dependency.source.is_unspecified()
+                && !dependency.package.marker().without_extras().is_true()
+        };
 
         let mut forks = vec![Fork::new(env.clone())];
         let mut diverging_packages = BTreeSet::new();
@@ -3778,8 +3831,12 @@ impl Forks {
                 // For example, given `requires-python = ">=3.7"` and `uv ; python_version >= "3.8"`,
                 // where uv itself only supports Python 3.8 and later, we need to fork to ensure
                 // that the resolution can find a solution.
-                if marker::requires_python(dep.package.marker())
-                    .is_none_or(|bound| !python_requirement.raises(&bound))
+                // Conditional source-selection edges must also fork before recording their source,
+                // so the source does not leak into an environment where its marker is false.
+                let marker = dep.package.marker();
+                if !source_marker_requires_fork(dep)
+                    && marker::requires_python(marker)
+                        .is_none_or(|bound| !python_requirement.raises(&bound))
                 {
                     let dep = deps.pop().unwrap();
                     let marker = dep.package.marker();
@@ -3796,10 +3853,11 @@ impl Forks {
                     let marker = dep.package.marker();
                     if deps.iter().all(|dep| marker == dep.package.marker()) {
                         // Unless that "same marker" is a Python requirement that is stricter than
-                        // the current Python requirement. In that case, we need to fork to respect
-                        // the stricter requirement.
-                        if marker::requires_python(marker)
-                            .is_none_or(|bound| !python_requirement.raises(&bound))
+                        // the current Python requirement, or a conditional source-selection edge.
+                        // In those cases, we need to fork before recording the dependency.
+                        if deps.iter().all(|dep| !source_marker_requires_fork(dep))
+                            && marker::requires_python(marker)
+                                .is_none_or(|bound| !python_requirement.raises(&bound))
                         {
                             for dep in deps {
                                 for fork in &mut forks {

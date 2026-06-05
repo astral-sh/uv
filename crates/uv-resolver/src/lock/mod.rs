@@ -21,7 +21,7 @@ use url::Url;
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults,
-    InstallTarget,
+    InstallOptions, InstallTarget,
 };
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
 use uv_distribution_filename::{
@@ -49,8 +49,9 @@ use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_pypi_types::{
-    ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
-    ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ConflictItem, ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes,
+    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ResolverMarkerEnvironment,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
@@ -67,7 +68,7 @@ pub use crate::lock::installable::Installable;
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::TreeDisplay;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
-use crate::universal_marker::{ConflictMarker, UniversalMarker};
+use crate::universal_marker::{ConflictMarker, UniversalMarker, encode_package_extras};
 use crate::{
     ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage, ExcludeNewerSpan, ExcludeNewerValue,
     InMemoryIndex, MetadataResponse, PrereleaseMode, ResolutionMode, ResolverOutput,
@@ -78,11 +79,26 @@ mod installable;
 mod map;
 mod tree;
 
-/// The current version of the lockfile format.
+/// The lockfile version used when no incompatible activation-marker behavior is required.
 pub const VERSION: u32 = 1;
+
+/// The lockfile version used when dependency selection requires activation markers that version-1
+/// readers cannot evaluate.
+pub const ACTIVATION_MARKER_VERSION: u32 = 2;
+
+/// The lockfile version used when dependency groups contain synthesized production fallbacks.
+const GROUP_SOURCE_FALLBACK_VERSION: u32 = 3;
 
 /// The current revision of the lockfile format.
 const REVISION: u32 = 3;
+
+/// Returns whether this uv version can read the given lockfile version.
+pub fn supports_lock_version(version: u32) -> bool {
+    matches!(
+        version,
+        VERSION | ACTIVATION_MARKER_VERSION | GROUP_SOURCE_FALLBACK_VERSION
+    )
+}
 
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
@@ -260,11 +276,8 @@ pub struct Lock {
     /// The (major) version of the lockfile format.
     ///
     /// Changes to the major version indicate backwards- and forwards-incompatible changes to the
-    /// lockfile format. A given uv version only supports a single major version of the lockfile
-    /// format.
-    ///
-    /// In other words, a version of uv that supports version 2 of the lockfile format will not be
-    /// able to read lockfiles generated under version 1 or 3.
+    /// lockfile format. Newer uv versions may continue to read older lockfile versions, but older
+    /// uv versions must reject lockfiles generated under a newer version.
     version: u32,
     /// The revision of the lockfile format.
     ///
@@ -311,6 +324,7 @@ impl Lock {
         supported_environments: Vec<MarkerTree>,
     ) -> Result<Self, LockError> {
         let mut packages = BTreeMap::new();
+        let mut package_requirements = BTreeMap::new();
         let requires_python = resolution.requires_python.clone();
         let supported_environments = supported_environments
             .into_iter()
@@ -393,6 +407,13 @@ impl Lock {
             }
 
             let id = package.id.clone();
+            package_requirements.insert(
+                id.clone(),
+                dist.metadata
+                    .as_ref()
+                    .map(|metadata| metadata.requires_dist.as_ref())
+                    .unwrap_or_default(),
+            );
             if let Some(locked_dist) = packages.insert(id, package) {
                 return Err(LockErrorKind::DuplicatePackage {
                     id: locked_dist.id.clone(),
@@ -458,6 +479,18 @@ impl Lock {
             }
         }
 
+        let group_source_fallbacks = packages
+            .values_mut()
+            .filter(|package| resolution.projects.contains(&package.id.name))
+            .flat_map(|package| package.add_group_source_fallbacks(&requires_python))
+            .collect();
+        add_group_source_fallback_dependencies(
+            &mut packages,
+            &requires_python,
+            group_source_fallbacks,
+            &package_requirements,
+        )?;
+
         let packages = packages.into_values().collect();
 
         let options = ResolverOptions {
@@ -472,7 +505,7 @@ impl Lock {
         // that canonical form rather than the raw resolver output.
         let fork_markers =
             canonicalize_universal_markers(&resolution.fork_markers, &requires_python);
-        let lock = Self::new(
+        let mut lock = Self::new(
             VERSION,
             REVISION,
             packages,
@@ -484,6 +517,7 @@ impl Lock {
             vec![],
             fork_markers,
         )?;
+        lock.update_version_for_activation_markers();
         Ok(lock)
     }
 
@@ -558,10 +592,14 @@ impl Lock {
             }
         }
 
-        // Build up a map from ID to extras.
+        // Build up a map from ID to declared extras.
         let mut extras_by_id = FxHashMap::default();
         for dist in &packages {
-            for extra in dist.optional_dependencies.keys() {
+            for extra in dist
+                .optional_dependencies
+                .keys()
+                .chain(dist.provides_extras())
+            {
                 extras_by_id
                     .entry(dist.id.clone())
                     .or_insert_with(FxHashSet::default)
@@ -660,6 +698,7 @@ impl Lock {
     #[must_use]
     pub fn with_manifest(mut self, manifest: ResolverManifest) -> Self {
         self.manifest = manifest;
+        self.update_version_for_activation_markers();
         self
     }
 
@@ -667,7 +706,142 @@ impl Lock {
     #[must_use]
     pub fn with_conflicts(mut self, conflicts: Conflicts) -> Self {
         self.conflicts = conflicts;
+        self.update_version_for_activation_markers();
         self
+    }
+
+    /// Selects an incompatible lock version when dependency selection requires behavior that older
+    /// readers do not support.
+    fn update_version_for_activation_markers(&mut self) {
+        self.version = self.required_semantic_version();
+    }
+
+    /// Returns the minimum lock version required to represent this lock's dependency semantics.
+    fn required_semantic_version(&self) -> u32 {
+        if self.requires_group_source_fallback_semantics() {
+            return GROUP_SOURCE_FALLBACK_VERSION;
+        }
+
+        let mut has_activation_markers = false;
+        let metadata_only_groups = self
+            .packages
+            .iter()
+            .flat_map(|package| {
+                package
+                    .metadata
+                    .dependency_groups
+                    .keys()
+                    .filter(|group| !package.dependency_groups.contains_key(*group))
+                    .map(|group| (&package.id.name, group))
+            })
+            .collect::<FxHashSet<_>>();
+        let metadata_only_extras = self
+            .packages
+            .iter()
+            .flat_map(|package| {
+                package
+                    .provides_extras()
+                    .iter()
+                    .filter(|extra| !package.optional_dependencies.contains_key(*extra))
+                    .map(|extra| (&package.id.name, extra))
+            })
+            .collect::<FxHashSet<_>>();
+        let has_group_activated_extras = self
+            .packages
+            .iter()
+            .flat_map(|package| package.dependency_groups.values().flatten())
+            .any(|dependency| !dependency.extra.is_empty())
+            || self
+                .manifest
+                .dependency_groups
+                .values()
+                .flatten()
+                .any(|requirement| !requirement.extras.is_empty());
+        let workspace_projects = self
+            .members()
+            .iter()
+            .chain(self.root().map(|package| &package.id.name))
+            .collect::<FxHashSet<_>>();
+        let group_activated_projects = self
+            .packages
+            .iter()
+            .flat_map(|package| package.dependency_groups.values().flatten())
+            .map(|dependency| &dependency.package_id.name)
+            .chain(
+                self.manifest
+                    .dependency_groups
+                    .values()
+                    .flatten()
+                    .map(|requirement| &requirement.name),
+            )
+            .filter(|package| workspace_projects.contains(package))
+            .collect::<FxHashSet<_>>();
+
+        for dependency in self.packages.iter().flat_map(|package| {
+            package
+                .dependencies
+                .iter()
+                .chain(package.optional_dependencies.values().flatten())
+                .chain(package.dependency_groups.values().flatten())
+        }) {
+            let conflict_marker = dependency.complexified_marker.conflict();
+            if conflict_marker.is_true() {
+                continue;
+            }
+            has_activation_markers = true;
+
+            // Version-1 readers only evaluate encoded conflict markers, never raw PEP 508 extra
+            // markers.
+            let Ok((include, exclude)) = conflict_marker.filter_rules() else {
+                return ACTIVATION_MARKER_VERSION;
+            };
+
+            // Version-1 readers only activate extras and groups represented by resolved
+            // dependency edges, not activation items present solely in package metadata.
+            if include
+                .iter()
+                .chain(&exclude)
+                .any(|item| match item.kind() {
+                    ConflictKind::Extra(extra) => {
+                        metadata_only_extras.contains(&(item.package(), extra))
+                    }
+                    ConflictKind::Group(group) => {
+                        metadata_only_groups.contains(&(item.package(), group))
+                    }
+                    ConflictKind::Project => group_activated_projects.contains(item.package()),
+                })
+            {
+                return ACTIVATION_MARKER_VERSION;
+            }
+        }
+
+        // Version-1 readers only collect the activation context when declared conflicts are
+        // present, and do not record extras activated by dependency-group edges.
+        if has_activation_markers && (self.conflicts.is_empty() || has_group_activated_extras) {
+            ACTIVATION_MARKER_VERSION
+        } else {
+            VERSION
+        }
+    }
+
+    /// Returns `true` if dependency selection requires synthesized production fallbacks for
+    /// dependency groups.
+    fn requires_group_source_fallback_semantics(&self) -> bool {
+        self.packages
+            .iter()
+            .filter(|package| self.is_workspace_package(&package.id))
+            .any(|package| {
+                !package
+                    .add_group_source_fallbacks(&self.requires_python)
+                    .is_empty()
+            })
+    }
+
+    /// Returns the required and actual lockfile versions if the lockfile cannot represent its
+    /// dependency semantics.
+    pub fn mismatched_semantic_version(&self) -> Option<(u32, u32)> {
+        let required = self.required_semantic_version();
+        (self.version < required).then_some((required, self.version))
     }
 
     /// Record the required platforms that were used to generate this lock.
@@ -794,180 +968,54 @@ impl Lock {
     /// in an external audit source.
     pub fn auditable<'lock>(
         &'lock self,
+        target: &impl Installable<'lock>,
+        markers: Option<&ResolverMarkerEnvironment>,
         extras: &'lock ExtrasSpecificationWithDefaults,
         groups: &'lock DependencyGroupsWithDefaults,
         collect_filter: impl Fn(&Package) -> bool,
-    ) -> Auditable<'lock> {
+    ) -> Result<Auditable<'lock>, LockError> {
+        let install_options = InstallOptions::default();
+        let export::ExportableRequirements(packages) = export::ExportableRequirements::from_lock(
+            target,
+            &[],
+            extras,
+            groups,
+            false,
+            &install_options,
+        )?;
+
         // Dedupe and sort by `(name, version)` during the walk itself. Keep
         // the first `Package` reference we see for each key so that
         // downstream views (e.g. index lookup) have access to the lockfile
         // package.
         let mut by_name_version: BTreeMap<(&PackageName, &Version), &Package> = BTreeMap::default();
-        self.walk_auditable(extras, groups, collect_filter, |package, version| {
-            by_name_version
-                .entry((package.name(), version))
-                .or_insert(package);
-        });
+        for export::ExportableRequirement {
+            package, marker, ..
+        } in packages
+        {
+            if self.members().contains(package.name())
+                || self.root().is_some_and(|root| root.id == package.id)
+                || markers.is_some_and(|markers| !marker.evaluate(markers, &[]))
+                || !collect_filter(package)
+            {
+                continue;
+            }
+            if let Some(version) = package.version() {
+                by_name_version
+                    .entry((package.name(), version))
+                    .or_insert(package);
+            } else {
+                trace!(
+                    "Skipping audit for `{}` because it has no version information",
+                    package.name()
+                );
+            }
+        }
         let packages = by_name_version
             .into_iter()
             .map(|((_, version), package)| (package, version))
             .collect();
-        Auditable { packages }
-    }
-
-    /// Walk the auditable dependency graph, invoking `visit` once per
-    /// non-workspace package with version information.
-    ///
-    /// The traversal is seeded from workspace members, lock-level requirements
-    /// (e.g. PEP 723 scripts), and lock-level dependency groups, then follows
-    /// each reachable dependency exactly once per `(package, extra)` pair,
-    /// respecting the provided extras and dependency-group filters. The same
-    /// package may be visited more than once if it is reached through multiple
-    /// extras — callers should deduplicate as appropriate.
-    fn walk_auditable<'lock, F>(
-        &'lock self,
-        extras: &'lock ExtrasSpecificationWithDefaults,
-        groups: &'lock DependencyGroupsWithDefaults,
-        collect_filter: impl Fn(&Package) -> bool,
-        mut visit: F,
-    ) where
-        F: FnMut(&'lock Package, &'lock Version),
-    {
-        // Enqueue a dependency for auditability checks: base package (no extra) first, then each activated extra.
-        fn enqueue_dep<'lock>(
-            lock: &'lock Lock,
-            seen: &mut FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
-            queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
-            dep: &'lock Dependency,
-        ) {
-            let dep_pkg = lock.find_by_id(&dep.package_id);
-            for maybe_extra in std::iter::once(None).chain(dep.extra.iter().map(Some)) {
-                if seen.insert((&dep.package_id, maybe_extra)) {
-                    queue.push_back((dep_pkg, maybe_extra));
-                }
-            }
-        }
-
-        // Identify workspace members (the implicit root counts for single-member workspaces).
-        let workspace_member_ids: FxHashSet<&PackageId> = if self.members().is_empty() {
-            self.root().into_iter().map(|package| &package.id).collect()
-        } else {
-            self.packages
-                .iter()
-                .filter(|package| self.members().contains(&package.id.name))
-                .map(|package| &package.id)
-                .collect()
-        };
-
-        // Lockfile traversal state: (package, optional extra to activate on that package).
-        let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
-        let mut seen: FxHashSet<(&PackageId, Option<&ExtraName>)> = FxHashSet::default();
-
-        // Seed from workspace members. Always queue with `None` so that we can traverse
-        // their dependency groups; only queue extras when prod mode is active.
-        for package in self
-            .packages
-            .iter()
-            .filter(|p| workspace_member_ids.contains(&p.id))
-        {
-            if seen.insert((&package.id, None)) {
-                queue.push_back((package, None));
-            }
-            if groups.prod() {
-                for extra in extras.extra_names(package.optional_dependencies.keys()) {
-                    if seen.insert((&package.id, Some(extra))) {
-                        queue.push_back((package, Some(extra)));
-                    }
-                }
-            }
-        }
-
-        // Seed from requirements attached directly to the lock (e.g., PEP 723 scripts).
-        for requirement in self.requirements() {
-            for package in self
-                .packages
-                .iter()
-                .filter(|p| p.id.name == requirement.name)
-            {
-                if seen.insert((&package.id, None)) {
-                    queue.push_back((package, None));
-                }
-                for extra in &*requirement.extras {
-                    if seen.insert((&package.id, Some(extra))) {
-                        queue.push_back((package, Some(extra)));
-                    }
-                }
-            }
-        }
-
-        // Seed from dependency groups attached directly to the lock (e.g., project-less
-        // workspace roots).
-        for (group, requirements) in self.dependency_groups() {
-            if !groups.contains(group) {
-                continue;
-            }
-            for requirement in requirements {
-                for package in self
-                    .packages
-                    .iter()
-                    .filter(|p| p.id.name == requirement.name)
-                {
-                    if seen.insert((&package.id, None)) {
-                        queue.push_back((package, None));
-                    }
-                    for extra in &*requirement.extras {
-                        if seen.insert((&package.id, Some(extra))) {
-                            queue.push_back((package, Some(extra)));
-                        }
-                    }
-                }
-            }
-        }
-
-        while let Some((package, extra)) = queue.pop_front() {
-            let is_member = workspace_member_ids.contains(&package.id);
-
-            // Collect non-workspace packages that have version information
-            // and pass the caller's filter.
-            if !is_member && collect_filter(package) {
-                if let Some(version) = package.version() {
-                    visit(package, version);
-                } else {
-                    trace!(
-                        "Skipping audit for `{}` because it has no version information",
-                        package.name()
-                    );
-                }
-            }
-
-            // Follow allowed dependency groups.
-            if is_member && extra.is_none() {
-                for dep in package
-                    .dependency_groups
-                    .iter()
-                    .filter(|(group, _)| groups.contains(group))
-                    .flat_map(|(_, deps)| deps)
-                {
-                    enqueue_dep(self, &mut seen, &mut queue, dep);
-                }
-            }
-
-            // Follow the regular/extra dependencies for this (package, extra) pair.
-            // For workspace members in only-group mode, skip regular dependencies.
-            let dependencies: &[Dependency] = match extra {
-                Some(extra) => package
-                    .optional_dependencies
-                    .get(extra)
-                    .map(Vec::as_slice)
-                    .unwrap_or_default(),
-                None if is_member && !groups.prod() => &[],
-                None => &package.dependencies,
-            };
-
-            for dep in dependencies {
-                enqueue_dep(self, &mut seen, &mut queue, dep);
-            }
-        }
+        Ok(Auditable { packages })
     }
 
     /// Return the workspace root used to generate this lock.
@@ -978,6 +1026,11 @@ impl Lock {
             };
             path.as_ref() == Path::new("")
         })
+    }
+
+    /// Returns `true` if the package is a workspace project.
+    pub(crate) fn is_workspace_package(&self, id: &PackageId) -> bool {
+        self.members().contains(&id.name) || self.root().is_some_and(|root| root.id == *id)
     }
 
     /// Returns the supported environments that were used to generate this
@@ -1620,6 +1673,10 @@ impl Lock {
     ) -> Result<SatisfiesResult<'_>, LockError> {
         let mut queue: VecDeque<&Package> = VecDeque::new();
         let mut seen = FxHashSet::default();
+
+        if let Some((expected, actual)) = self.mismatched_semantic_version() {
+            return Ok(SatisfiesResult::MismatchedLockVersion(expected, actual));
+        }
 
         // Validate that the lockfile was generated with the same root members.
         {
@@ -2413,6 +2470,8 @@ impl<'tags> TagPolicy<'tags> {
 pub enum SatisfiesResult<'lock> {
     /// The lockfile satisfies the requirements.
     Satisfied,
+    /// The lockfile uses an incompatible version for its dependency graph.
+    MismatchedLockVersion(u32, u32),
     /// The lockfile uses a different set of workspace members.
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
     /// A workspace member switched from virtual to non-virtual or vice versa.
@@ -2933,6 +2992,119 @@ impl Package {
 
         deps.push(dep);
         Ok(())
+    }
+
+    /// Collect source-agnostic dependency-group fallbacks from the resolved production
+    /// dependencies.
+    fn add_group_source_fallbacks(
+        &self,
+        requires_python: &RequiresPython,
+    ) -> Vec<GroupSourceFallback> {
+        let mut fallbacks = Vec::new();
+
+        for (group, requirements) in &self.metadata.dependency_groups {
+            for requirement in requirements {
+                if !Self::is_unsourced_base_requirement(requirement)
+                    || !requirements.iter().any(|candidate| {
+                        candidate.name == requirement.name
+                            && Self::is_source_specific_base_requirement(candidate)
+                    })
+                    || !self.metadata.requires_dist.iter().any(|candidate| {
+                        candidate.name == requirement.name
+                            && Self::is_unsourced_base_requirement(candidate)
+                    })
+                {
+                    continue;
+                }
+
+                let group_marker = UniversalMarker::new(
+                    encode_package_extras(requirement.marker, &self.id.name),
+                    ConflictMarker::group(&self.id.name, group),
+                );
+                for dependency in &self.dependencies {
+                    if dependency.package_id.name != requirement.name {
+                        continue;
+                    }
+
+                    let mut marker = dependency.complexified_marker;
+                    marker.assume_conflict_item(&ConflictItem::from(self.id.name.clone()));
+                    marker.and(group_marker);
+                    if marker.is_false()
+                        || !Self::dependency_satisfies_group_requirements(
+                            dependency,
+                            requirements,
+                            marker,
+                            &self.id.name,
+                        )
+                    {
+                        continue;
+                    }
+
+                    fallbacks.push(GroupSourceFallback {
+                        group: group.clone(),
+                        project: self.id.clone(),
+                        dependency: Dependency::new(
+                            requires_python,
+                            dependency.package_id.clone(),
+                            dependency.extra.clone(),
+                            marker,
+                        ),
+                        group_dependencies: self
+                            .dependency_groups
+                            .get(group)
+                            .cloned()
+                            .unwrap_or_default(),
+                    });
+                }
+            }
+        }
+
+        fallbacks
+    }
+
+    /// Returns `true` if a resolved dependency satisfies every overlapping source-agnostic group
+    /// requirement.
+    fn dependency_satisfies_group_requirements(
+        dependency: &Dependency,
+        requirements: &BTreeSet<Requirement>,
+        marker: UniversalMarker,
+        project: &PackageName,
+    ) -> bool {
+        let Some(version) = dependency.package_id.version.as_ref() else {
+            return false;
+        };
+        requirements
+            .iter()
+            .filter(|requirement| {
+                requirement.name == dependency.package_id.name
+                    && Self::is_unsourced_base_requirement(requirement)
+                    && !encode_package_extras(requirement.marker, project)
+                        .is_disjoint(marker.pep508())
+            })
+            .all(|requirement| {
+                matches!(
+                    &requirement.source,
+                    RequirementSource::Registry { specifier, .. } if specifier.contains(version)
+                )
+            })
+    }
+
+    /// Returns `true` if `requirement` is an unsourced base requirement.
+    fn is_unsourced_base_requirement(requirement: &Requirement) -> bool {
+        matches!(
+            requirement.source,
+            RequirementSource::Registry { index: None, .. }
+        ) && requirement.extras.is_empty()
+            && requirement.groups.is_empty()
+    }
+
+    /// Returns `true` if `requirement` is a source-specific base requirement.
+    fn is_source_specific_base_requirement(requirement: &Requirement) -> bool {
+        !matches!(
+            requirement.source,
+            RequirementSource::Registry { index: None, .. }
+        ) && requirement.extras.is_empty()
+            && requirement.groups.is_empty()
     }
 
     /// Convert the [`Package`] to a [`Dist`] that can be used in installation, along with its hash.
@@ -3719,6 +3891,189 @@ impl Package {
             is_local: self.id.source.is_local(),
         }
     }
+}
+
+#[derive(Debug)]
+struct GroupSourceFallback {
+    group: GroupName,
+    project: PackageId,
+    dependency: Dependency,
+    group_dependencies: Vec<Dependency>,
+}
+
+/// Add the selected package's dependencies to a synthesized dependency-group fallback.
+fn add_group_source_fallback_dependencies(
+    packages: &mut BTreeMap<PackageId, Package>,
+    requires_python: &RequiresPython,
+    fallbacks: Vec<GroupSourceFallback>,
+    package_requirements: &BTreeMap<PackageId, &[Requirement]>,
+) -> Result<(), LockError> {
+    let mut additions = Vec::new();
+    let mut group_additions = Vec::new();
+
+    for fallback in fallbacks {
+        let project = ConflictItem::from(fallback.project.name.clone());
+        let fallback_marker = fallback.dependency.complexified_marker;
+        let mut queue = VecDeque::from([(fallback.dependency.package_id.clone(), None)]);
+        for extra in &fallback.dependency.extra {
+            queue.push_back((fallback.dependency.package_id.clone(), Some(extra.clone())));
+        }
+        let mut seen = FxHashSet::default();
+        let mut fallback_additions = Vec::new();
+
+        while let Some((package_id, extra)) = queue.pop_front() {
+            if !seen.insert((package_id.clone(), extra.clone())) {
+                continue;
+            }
+            let Some(package) = packages.get(&package_id) else {
+                continue;
+            };
+            let dependencies = if let Some(extra) = extra.as_ref() {
+                package
+                    .optional_dependencies
+                    .get(extra)
+                    .map(Vec::as_slice)
+                    .unwrap_or_default()
+            } else {
+                package.dependencies.as_slice()
+            };
+
+            for dependency in dependencies {
+                let mut remaining_marker = dependency.complexified_marker;
+                remaining_marker.assume_conflict_item(&project);
+                remaining_marker.and(fallback_marker);
+
+                for group_dependency in fallback
+                    .group_dependencies
+                    .iter()
+                    .filter(|candidate| candidate.package_id.name == dependency.package_id.name)
+                {
+                    let mut marker = UniversalMarker::new(
+                        dependency.complexified_marker.pep508(),
+                        ConflictMarker::TRUE,
+                    );
+                    marker.and(group_dependency.complexified_marker);
+                    marker.and(fallback_marker);
+                    if marker.is_false() {
+                        continue;
+                    }
+                    if let Some(requirement) = incompatible_group_dependency_requirement(
+                        package_requirements
+                            .get(&package_id)
+                            .copied()
+                            .unwrap_or_default(),
+                        dependency,
+                        extra.as_ref(),
+                        marker,
+                        group_dependency,
+                    ) {
+                        return Err(LockErrorKind::IncompatibleGroupSourceFallback {
+                            project: fallback.project.name.clone(),
+                            group: fallback.group.clone(),
+                            package: package_id,
+                            requirement: Box::new(requirement.clone()),
+                            dependency: group_dependency.clone(),
+                        }
+                        .into());
+                    }
+
+                    fallback_additions.push((
+                        package_id.clone(),
+                        extra.clone(),
+                        Dependency::new(
+                            requires_python,
+                            group_dependency.package_id.clone(),
+                            dependency.extra.clone(),
+                            marker,
+                        ),
+                    ));
+                    queue.push_back((group_dependency.package_id.clone(), None));
+                    for extra in &dependency.extra {
+                        queue.push_back((group_dependency.package_id.clone(), Some(extra.clone())));
+                    }
+
+                    remaining_marker
+                        .and(UniversalMarker::from_combined(marker.combined().negate()));
+                }
+                if remaining_marker.is_false() {
+                    continue;
+                }
+
+                fallback_additions.push((
+                    package_id.clone(),
+                    extra.clone(),
+                    Dependency::new(
+                        requires_python,
+                        dependency.package_id.clone(),
+                        dependency.extra.clone(),
+                        remaining_marker,
+                    ),
+                ));
+                queue.push_back((dependency.package_id.clone(), None));
+                for extra in &dependency.extra {
+                    queue.push_back((dependency.package_id.clone(), Some(extra.clone())));
+                }
+            }
+        }
+
+        group_additions.push((fallback.project, fallback.group, fallback.dependency));
+        additions.extend(fallback_additions);
+    }
+
+    for (project_id, group, dependency) in group_additions {
+        let Some(project) = packages.get_mut(&project_id) else {
+            continue;
+        };
+        let dependencies = project.dependency_groups.entry(group).or_default();
+        if !dependencies.contains(&dependency) {
+            dependencies.push(dependency);
+        }
+    }
+
+    for (package_id, extra, dependency) in additions {
+        let Some(package) = packages.get_mut(&package_id) else {
+            continue;
+        };
+        let dependencies = if let Some(extra) = extra {
+            package.optional_dependencies.entry(extra).or_default()
+        } else {
+            &mut package.dependencies
+        };
+        if !dependencies.contains(&dependency) {
+            dependencies.push(dependency);
+        }
+    }
+
+    Ok(())
+}
+
+/// Returns a package requirement that is incompatible with a dependency-group selection.
+fn incompatible_group_dependency_requirement<'a>(
+    requirements: &'a [Requirement],
+    dependency: &Dependency,
+    extra: Option<&ExtraName>,
+    marker: UniversalMarker,
+    group_dependency: &Dependency,
+) -> Option<&'a Requirement> {
+    let extras = extra.map(std::slice::from_ref).unwrap_or_default();
+    requirements
+        .iter()
+        .filter(|requirement| {
+            requirement.name == dependency.package_id.name
+                && requirement.evaluate_markers(None, extras)
+                && !requirement
+                    .marker
+                    .without_extras()
+                    .is_disjoint(marker.pep508())
+        })
+        .find(|requirement| match &requirement.source {
+            RequirementSource::Registry { specifier, .. } => !group_dependency
+                .package_id
+                .version
+                .as_ref()
+                .is_some_and(|version| specifier.contains(version)),
+            _ => group_dependency.package_id != dependency.package_id,
+        })
 }
 
 /// Attempts to construct a `VerbatimUrl` from the given normalized `Path`.
@@ -6346,6 +6701,23 @@ enum LockErrorKind {
         /// The name of the dev dependency group.
         group: GroupName,
         /// The ID of the conflicting dependency.
+        dependency: Dependency,
+    },
+    /// An error that occurs when a synthesized dependency-group fallback selects a dependency that
+    /// is incompatible with the selected package's requirements.
+    #[error(
+        "Dependency group `{project}:{group}` selects `{dependency}`, which does not satisfy `{package}`'s requirement `{requirement}`"
+    )]
+    IncompatibleGroupSourceFallback {
+        /// The project that defines the dependency group.
+        project: PackageName,
+        /// The dependency group that selects the incompatible dependency.
+        group: GroupName,
+        /// The selected package with the incompatible requirement.
+        package: PackageId,
+        /// The package requirement that is not satisfied.
+        requirement: Box<Requirement>,
+        /// The dependency selected by the dependency group.
         dependency: Dependency,
     },
     /// An error that occurs when the URL to a file for a wheel or

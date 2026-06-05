@@ -145,9 +145,8 @@ impl SourcedDependencyGroups {
             .into_iter()
             .map(|(name, group)| {
                 let requirements = group
-                    .requirements
-                    .into_iter()
-                    .flat_map(|requirement| {
+                    .into_requirements_with_includes()
+                    .flat_map(|(requirement, included_groups)| {
                         // Check if sources should be disabled for this specific package
                         if no_sources.for_package(&requirement.name) {
                             vec![Ok(Requirement::from(requirement))].into_iter()
@@ -164,6 +163,7 @@ impl SourcedDependencyGroups {
                                 project_indexes,
                                 extra,
                                 Some(&group),
+                                Some(&included_groups),
                                 locations,
                                 project.workspace(),
                                 git_member,

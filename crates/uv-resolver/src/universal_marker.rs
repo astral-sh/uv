@@ -6,7 +6,10 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::{ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree};
+use uv_pep508::{
+    ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree,
+    MarkerValueExtra,
+};
 use uv_pypi_types::{ConflictItem, ConflictKind, Conflicts, Inference};
 
 use crate::ResolveError;
@@ -456,7 +459,7 @@ impl ConflictMarker {
 
     /// Create a conflict marker that is true only when the given group for the
     /// given package is activated.
-    fn group(package: &PackageName, group: &GroupName) -> Self {
+    pub(crate) fn group(package: &PackageName, group: &GroupName) -> Self {
         let operator = uv_pep508::ExtraOperator::Equal;
         let name = uv_pep508::MarkerValueExtra::Extra(encode_package_group(package, group));
         let expr = uv_pep508::MarkerExpression::Extra { operator, name };
@@ -571,6 +574,42 @@ fn encode_project(package: &PackageName) -> ExtraName {
     // See `encode_package_extra`, the same considerations apply here.
     let package_len = package.as_str().len();
     ExtraName::from_owned(format!("project-{package_len}-{package}")).unwrap()
+}
+
+/// Encode unscoped package extra predicates in `marker` relative to `package`.
+///
+/// Raw PEP 508 extra predicates are evaluated relative to the package whose dependency edge
+/// carries them. Encoding them preserves the original package scope when a marker propagates onto
+/// another package's dependency edges.
+pub(crate) fn encode_package_extras(marker: MarkerTree, package: &PackageName) -> MarkerTree {
+    if marker.is_true() || marker.is_false() {
+        return marker;
+    }
+
+    let mut transformed = MarkerTree::FALSE;
+
+    // Convert the marker to DNF, then re-build it with scoped extra names.
+    for dnf in marker.to_dnf() {
+        let mut conjunction = MarkerTree::TRUE;
+
+        for expression in dnf {
+            let expression = match expression {
+                MarkerExpression::Extra {
+                    operator,
+                    name: MarkerValueExtra::Extra(extra),
+                } => MarkerExpression::Extra {
+                    operator,
+                    name: MarkerValueExtra::Extra(encode_package_extra(package, &extra)),
+                },
+                expression => expression,
+            };
+            conjunction.and(MarkerTree::expression(expression));
+        }
+
+        transformed.or(conjunction);
+    }
+
+    transformed
 }
 
 #[derive(Debug)]

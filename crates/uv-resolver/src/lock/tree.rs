@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeSet, VecDeque};
 use std::fmt::Write;
 
@@ -9,15 +10,18 @@ use petgraph::prelude::EdgeRef;
 use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::DependencyGroupsWithDefaults;
+use uv_configuration::{
+    DependencyGroups, DependencyGroupsWithDefaults, ExtrasSpecification, InstallOptions,
+};
 use uv_console::human_readable_bytes;
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ResolverMarkerEnvironment;
 
+use super::export;
 use crate::lock::{Package, PackageId};
-use crate::{Lock, PackageMap};
+use crate::{Installable, Lock, LockError, PackageMap};
 
 #[derive(Debug)]
 pub struct TreeDisplay<'env> {
@@ -42,7 +46,7 @@ pub struct TreeDisplay<'env> {
 impl<'env> TreeDisplay<'env> {
     /// Create a new [`DisplayDependencyGraph`] for the set of installed packages.
     pub fn new(
-        lock: &'env Lock,
+        target: &impl Installable<'env>,
         markers: Option<&'env ResolverMarkerEnvironment>,
         latest: &'env PackageMap<Version>,
         depth: usize,
@@ -52,7 +56,59 @@ impl<'env> TreeDisplay<'env> {
         no_dedupe: bool,
         invert: bool,
         show_sizes: bool,
-    ) -> Self {
+    ) -> Result<Self, LockError> {
+        let lock = target.lock();
+        let extras = ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::All);
+        let group_names = lock
+            .packages
+            .iter()
+            .flat_map(|package| package.dependency_groups.keys())
+            .filter(|group| groups.contains(group))
+            .chain(lock.dependency_groups().keys())
+            .cloned()
+            .unique()
+            .collect();
+        let reachability_groups = if groups.prod() {
+            DependencyGroups::from_args(
+                false,
+                false,
+                false,
+                group_names,
+                Vec::new(),
+                false,
+                Vec::new(),
+                false,
+            )
+        } else {
+            DependencyGroups::from_args(
+                false,
+                false,
+                false,
+                Vec::new(),
+                Vec::new(),
+                false,
+                group_names,
+                false,
+            )
+        }
+        .with_defaults(DefaultGroups::default());
+        let install_options = InstallOptions::default();
+        let export::ExportableRequirements(reachable) = export::ExportableRequirements::from_lock(
+            target,
+            prune,
+            &extras,
+            &reachability_groups,
+            false,
+            &install_options,
+        )?;
+        let reachable = reachable
+            .into_iter()
+            .filter(|requirement| {
+                markers.is_none_or(|markers| requirement.marker.evaluate(markers, &[]))
+            })
+            .map(|requirement| &requirement.package.id)
+            .collect::<FxHashSet<_>>();
+
         // Identify any workspace members.
         //
         // These include:
@@ -134,9 +190,16 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
-                {
+                if !reachable.contains(&dep.package_id) {
+                    continue;
+                }
+
+                if markers.is_some_and(|markers| {
+                    !dep.complexified_marker
+                        .combined()
+                        .without_extras()
+                        .evaluate(markers, &[])
+                }) {
                     continue;
                 }
 
@@ -146,7 +209,11 @@ impl<'env> TreeDisplay<'env> {
                     .or_insert_with(|| graph.add_node(Node::Package(&dep.package_id)));
 
                 // Add an edge from the workspace package.
-                graph.add_edge(index, dep_index, Edge::Dev(group, Some(&dep.extra)));
+                graph.add_edge(
+                    index,
+                    dep_index,
+                    Edge::Dev(group, Some(Cow::Borrowed(&dep.extra))),
+                );
 
                 // Push its dependencies on the queue.
                 if seen.insert((&dep.package_id, None)) {
@@ -207,11 +274,22 @@ impl<'env> TreeDisplay<'env> {
                         .or_insert_with(|| graph.add_node(Node::Package(&package.id)));
 
                     // Add an edge from the root.
-                    graph.add_edge(root, *index, Edge::Prod(None));
+                    graph.add_edge(
+                        root,
+                        *index,
+                        Edge::Prod(Some(Cow::Owned(
+                            requirement.extras.iter().cloned().collect(),
+                        ))),
+                    );
 
                     // Push its dependencies on the queue.
                     if seen.insert((&package.id, None)) {
                         queue.push_back((&package.id, None));
+                    }
+                    for extra in &requirement.extras {
+                        if seen.insert((&package.id, Some(extra))) {
+                            queue.push_back((&package.id, Some(extra)));
+                        }
                     }
                 }
             }
@@ -244,11 +322,23 @@ impl<'env> TreeDisplay<'env> {
                             .or_insert_with(|| graph.add_node(Node::Package(&package.id)));
 
                         // Add an edge from the root.
-                        graph.add_edge(root, *index, Edge::Dev(group, None));
+                        graph.add_edge(
+                            root,
+                            *index,
+                            Edge::Dev(
+                                group,
+                                Some(Cow::Owned(requirement.extras.iter().cloned().collect())),
+                            ),
+                        );
 
                         // Push its dependencies on the queue.
                         if seen.insert((&package.id, None)) {
                             queue.push_back((&package.id, None));
+                        }
+                        for extra in &requirement.extras {
+                            if seen.insert((&package.id, Some(extra))) {
+                                queue.push_back((&package.id, Some(extra)));
+                            }
                         }
                     }
                 }
@@ -277,9 +367,16 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
-                {
+                if !reachable.contains(&dep.package_id) {
+                    continue;
+                }
+
+                if markers.is_some_and(|markers| {
+                    !dep.complexified_marker
+                        .combined()
+                        .without_extras()
+                        .evaluate(markers, &[])
+                }) {
                     continue;
                 }
 
@@ -289,15 +386,17 @@ impl<'env> TreeDisplay<'env> {
                     .or_insert_with(|| graph.add_node(Node::Package(&dep.package_id)));
 
                 // Add an edge from the workspace package.
-                graph.add_edge(
-                    index,
-                    dep_index,
-                    if let Some(extra) = extra {
-                        Edge::Optional(extra, Some(&dep.extra))
-                    } else {
-                        Edge::Prod(Some(&dep.extra))
-                    },
-                );
+                let edge = if let Some(extra) = extra {
+                    Edge::Optional(extra, Some(Cow::Borrowed(&dep.extra)))
+                } else {
+                    Edge::Prod(Some(Cow::Borrowed(&dep.extra)))
+                };
+                if !graph
+                    .edges_connecting(index, dep_index)
+                    .any(|existing| existing.weight() == &edge)
+                {
+                    graph.add_edge(index, dep_index, edge);
+                }
 
                 // Push its dependencies on the queue.
                 if seen.insert((&dep.package_id, None)) {
@@ -406,7 +505,7 @@ impl<'env> TreeDisplay<'env> {
             }
         };
 
-        Self {
+        Ok(Self {
             graph,
             roots,
             latest,
@@ -415,7 +514,7 @@ impl<'env> TreeDisplay<'env> {
             invert,
             lock,
             show_sizes,
-        }
+        })
     }
 
     /// Perform a depth-first traversal of the given package and its dependencies.
@@ -625,11 +724,7 @@ impl<'env> TreeDisplay<'env> {
     }
 
     /// Return the extras that can change this package's rendered child list.
-    fn expanded_extras(
-        &self,
-        package: &'env Package,
-        edge: Option<&Edge<'env>>,
-    ) -> BTreeSet<&'env ExtraName> {
+    fn expanded_extras(&self, package: &Package, edge: Option<&Edge<'env>>) -> BTreeSet<ExtraName> {
         if self.invert {
             // In inverted mode, optional edges are reverse "required by extra" relationships.
             // They do not select this package's outgoing dependencies, so de-dupe stays
@@ -639,12 +734,13 @@ impl<'env> TreeDisplay<'env> {
 
         let Some(requested_extras) = edge.and_then(Edge::extras) else {
             // Roots are rendered with all optional dependency groups expanded.
-            return package.optional_dependencies.keys().collect();
+            return package.optional_dependencies.keys().cloned().collect();
         };
 
         requested_extras
             .iter()
             .filter(|extra| package.optional_dependencies.contains_key(*extra))
+            .cloned()
             .collect()
     }
 }
@@ -652,7 +748,7 @@ impl<'env> TreeDisplay<'env> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct VisitedNode<'env> {
     package_id: &'env PackageId,
-    expanded_extras: BTreeSet<&'env ExtraName>,
+    expanded_extras: BTreeSet<ExtraName>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
@@ -665,17 +761,17 @@ enum Node<'env> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 enum Edge<'env> {
-    Prod(Option<&'env BTreeSet<ExtraName>>),
-    Optional(&'env ExtraName, Option<&'env BTreeSet<ExtraName>>),
-    Dev(&'env GroupName, Option<&'env BTreeSet<ExtraName>>),
+    Prod(Option<Cow<'env, BTreeSet<ExtraName>>>),
+    Optional(&'env ExtraName, Option<Cow<'env, BTreeSet<ExtraName>>>),
+    Dev(&'env GroupName, Option<Cow<'env, BTreeSet<ExtraName>>>),
 }
 
 impl<'env> Edge<'env> {
-    fn extras(&self) -> Option<&'env BTreeSet<ExtraName>> {
+    fn extras(&self) -> Option<&BTreeSet<ExtraName>> {
         match self {
-            Self::Prod(extras) => *extras,
-            Self::Optional(_, extras) => *extras,
-            Self::Dev(_, extras) => *extras,
+            Self::Prod(extras) => extras.as_deref(),
+            Self::Optional(_, extras) => extras.as_deref(),
+            Self::Dev(_, extras) => extras.as_deref(),
         }
     }
 

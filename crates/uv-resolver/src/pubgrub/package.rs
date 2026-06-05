@@ -133,6 +133,23 @@ impl PubGrubPackage {
         }
     }
 
+    /// Create a base [`PubGrubPackage`] from a package name and marker,
+    /// preserving the marker expression as-is.
+    pub(crate) fn from_base_preserving_marker(name: PackageName, marker: MarkerTree) -> Self {
+        // Unlike `from_package`, preserve extra terms here because complementary
+        // source requirements encode group/extra conflict markers as extras.
+        if !marker.is_true() {
+            Self(Arc::new(PubGrubPackageInner::Marker { name, marker }))
+        } else {
+            Self(Arc::new(PubGrubPackageInner::Package {
+                name,
+                extra: None,
+                group: None,
+                marker,
+            }))
+        }
+    }
+
     /// If this package is a proxy package, return the base package it depends on.
     ///
     /// While dependency groups may be attached to a package, we don't consider them here as

@@ -139,6 +139,7 @@ impl BuildRequires {
                             project_indexes,
                             extra.as_deref(),
                             group,
+                            None,
                             locations,
                             project_workspace.workspace(),
                             None,
@@ -195,6 +196,7 @@ impl BuildRequires {
             .unwrap_or(&empty);
 
         // Lower the requirements.
+        let project_name = metadata.name.clone();
         let requires_dist = metadata.requires_dist.into_iter();
         let requires_dist = requires_dist
             .flat_map(|requirement| {
@@ -208,12 +210,13 @@ impl BuildRequires {
 
                     LoweredRequirement::from_requirement(
                         requirement,
-                        None,
+                        project_name.as_ref(),
                         workspace.install_path(),
                         project_sources,
                         project_indexes,
                         extra.as_deref(),
                         group,
+                        None,
                         locations,
                         workspace,
                         None,
@@ -303,6 +306,7 @@ impl LoweredExtraBuildDependencies {
                                     project_indexes,
                                     extra.as_deref(),
                                     group,
+                                    None,
                                     index_locations,
                                     workspace,
                                     None,
