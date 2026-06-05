@@ -444,7 +444,6 @@ fn compile_constraints_many_versions() -> Result<()> {
     constraints_txt.write_str("dependency>=2")?;
 
     let mut filters = context.filters();
-    filters.push((r"WARN Range requests not supported.*\n", ""));
     filters.push((
         r"(?s)  × No solution found when resolving dependencies:.*requirements are unsatisfiable\.",
         "  × No solution found when resolving dependencies: [LONG DERIVATION]",
