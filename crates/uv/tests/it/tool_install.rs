@@ -2116,6 +2116,27 @@ fn tool_install_rebuilds_explicit_local_with_requirement() -> Result<()> {
         .success()
         .stdout("0.2.0\n");
 
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!("{}\n", helper.path().display()))?;
+    helper.child("VERSION").write_str("0.3.0")?;
+
+    context
+        .tool_install()
+        .arg("--with-requirements")
+        .arg(requirements_txt.path())
+        .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    Command::new("local-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success()
+        .stdout("0.2.0\n");
+
     Ok(())
 }
 

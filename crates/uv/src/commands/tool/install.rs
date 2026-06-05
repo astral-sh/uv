@@ -380,7 +380,10 @@ pub(crate) async fn install(
     // including any requirements provided via `--with`.
     let explicit_local_packages = requirements
         .iter()
-        .filter(|requirement| matches!(requirement.source, RequirementSource::Directory { .. }))
+        .filter(|requirement| {
+            requirement.origin.is_none()
+                && matches!(requirement.source, RequirementSource::Directory { .. })
+        })
         .map(|requirement| requirement.name.clone())
         .collect::<Vec<_>>();
     let (settings, cache) = if explicit_local_packages.is_empty() {
