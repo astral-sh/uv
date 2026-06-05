@@ -7,7 +7,7 @@ use indexmap::IndexSet;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use pubgrub::{DerivationTree, Derived, External, Range, Ranges, Term};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::trace;
 
 use uv_configuration::min_stack_size;
@@ -181,19 +181,21 @@ pub(crate) fn with_growing_stack<R>(callback: impl FnOnce() -> R) -> R {
 pub(crate) fn derivation_tree_packages(
     derivation_tree: &ErrorTree,
 ) -> impl Iterator<Item = &PubGrubPackage> {
-    let mut packages = Vec::new();
+    let mut packages = FxHashSet::default();
     let mut trees = vec![derivation_tree];
 
     while let Some(tree) = trees.pop() {
         match tree {
             DerivationTree::External(external) => match external {
                 External::FromDependencyOf(package, _, dependency, _) => {
-                    packages.push(package);
-                    packages.push(dependency);
+                    packages.insert(package);
+                    packages.insert(dependency);
                 }
                 External::NoVersions(package, _)
                 | External::NotRoot(package, _)
-                | External::Custom(package, _, _) => packages.push(package),
+                | External::Custom(package, _, _) => {
+                    packages.insert(package);
+                }
             },
             DerivationTree::Derived(derived) => {
                 packages.extend(derived.terms.keys());
@@ -1757,6 +1759,12 @@ mod tests {
 
         assert!(thread.join().is_ok());
         Ok(())
+    }
+
+    #[test]
+    fn derivation_tree_packages_are_unique() {
+        let tree = StackSafeErrorTree::new(deep_derivation_tree());
+        assert_eq!(derivation_tree_packages(&tree).count(), 1);
     }
 
     #[test]
