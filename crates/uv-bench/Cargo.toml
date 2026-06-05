@@ -23,6 +23,17 @@ name = "uv"
 path = "benches/uv.rs"
 harness = false
 
+[[bench]]
+name = "synthetic_workspace"
+path = "benches/synthetic_workspace.rs"
+harness = false
+
+[dependencies]
+anyhow = { workspace = true }
+fs-err = { workspace = true }
+indoc = { workspace = true }
+tempfile = { workspace = true }
+
 [dev-dependencies]
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
@@ -43,15 +54,12 @@ uv-resolver = { workspace = true }
 uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
-anyhow = { workspace = true }
 async_zip = { workspace = true }
 astral-tokio-tar = { workspace = true }
 criterion = { version = "4.0.3", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
 flate2 = { workspace = true }
-fs-err = { workspace = true }
 futures = { workspace = true }
 jiff = { workspace = true }
-tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 
