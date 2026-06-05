@@ -873,8 +873,6 @@ impl Workspace {
 
     /// The workspace project environment selection.
     ///
-    /// Uses `.venv` in the install path directory by default.
-    ///
     /// If `UV_PROJECT_ENVIRONMENT` is set, it will take precedence. If a relative path is provided,
     /// it is resolved relative to the install path.
     ///
@@ -959,13 +957,6 @@ impl Workspace {
         }
 
         selection
-    }
-
-    /// The path to the workspace virtual environment.
-    pub fn venv(&self, active: Option<bool>) -> PathBuf {
-        self.environment_selection(active)
-            .explicit_path()
-            .map_or_else(|| self.install_path.join(".venv"), Path::to_path_buf)
     }
 
     /// The members of the workspace.

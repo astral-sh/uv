@@ -11,6 +11,7 @@ use uv_fs::Simplified;
 use uv_warnings::warn_user;
 
 use uv_cache::Cache;
+use uv_cache_key::{CacheKey, CacheKeyHasher};
 use uv_client::{BaseClient, BaseClientBuilder};
 use uv_pep440::{Prerelease, Version};
 use uv_platform::{Arch, Libc, Os, Platform};
@@ -715,6 +716,12 @@ impl fmt::Display for PythonInstallationKey {
     }
 }
 
+impl CacheKey for PythonInstallationKey {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.hash(state);
+    }
+}
+
 impl FromStr for PythonInstallationKey {
     type Err = PythonInstallationKeyError;
 
@@ -885,6 +892,12 @@ impl Hash for PythonInstallationMinorVersionKey {
         self.0.minor.hash(state);
         self.0.platform.hash(state);
         self.0.variant.hash(state);
+    }
+}
+
+impl CacheKey for PythonInstallationMinorVersionKey {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.hash(state);
     }
 }
 

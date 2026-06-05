@@ -425,6 +425,41 @@ fn workspace_metadata_script_dependency_edges() -> Result<()> {
 }
 
 #[test]
+fn workspace_metadata_sync_centralized_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--sync")
+        .arg("--preview-features")
+        .arg("workspace-metadata,centralized-project-envs")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let target = fs_err::read_link(context.temp_dir.child(".venv").path())?;
+
+    assert_eq!(
+        metadata["environment"]["root"].as_str().map(Path::new),
+        Some(target.as_path())
+    );
+    assert_eq!(
+        target.parent(),
+        Some(context.cache_dir.child("environments-v2").path())
+    );
+    Ok(())
+}
+
+#[test]
 fn workspace_metadata_module_owners_from_locked_wheels() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

@@ -1673,7 +1673,8 @@
             "malware-check",
             "venv-safe-clear",
             "check-command",
-            "packaged-init"
+            "packaged-init",
+            "centralized-project-envs"
           ]
         },
         {

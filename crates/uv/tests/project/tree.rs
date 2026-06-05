@@ -9,6 +9,40 @@ use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
 #[test]
+fn tree_centralized_environment_no_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    fs_err::remove_dir_all(&context.venv)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("centralized-project-envs"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+
+    ----- stderr -----
+    warning: The `centralized-project-envs` feature has no effect when `--no-cache` is enabled
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    ");
+
+    assert!(!context.venv.exists());
+    Ok(())
+}
+
+#[test]
 fn nested_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

@@ -581,7 +581,7 @@ impl Cache {
         Ok(summary)
     }
 
-    /// Run the garbage collector on the cache, removing any dangling entries.
+    /// Prune dangling cache entries and cached environments.
     pub fn prune(&self, ci: bool) -> Result<Removal, io::Error> {
         let mut summary = Removal::default();
 
@@ -614,14 +614,14 @@ impl Cache {
             }
         }
 
-        // Second, remove any cached environments. These are never referenced by symlinks, so we can
-        // remove them directly.
+        // Second, remove all cached environments. Centralized project environments can be
+        // referenced by `.venv` links, but are recreated when next needed.
         match fs_err::read_dir(self.bucket(CacheBucket::Environments)) {
             Ok(entries) => {
                 for entry in entries {
                     let entry = entry?;
                     let path = entry.path();
-                    debug!("Removing dangling cache environment: {}", path.display());
+                    debug!("Removing cached environment: {}", path.display());
                     summary += rm_rf(path)?;
                 }
             }
@@ -1177,7 +1177,7 @@ pub enum CacheBucket {
     Archive,
     /// Ephemeral virtual environments used to execute PEP 517 builds and other operations.
     Builds,
-    /// Reusable virtual environments used to invoke Python tools.
+    /// Reusable virtual environments for Python tools and projects.
     Environments,
     /// Cached Python downloads
     Python,

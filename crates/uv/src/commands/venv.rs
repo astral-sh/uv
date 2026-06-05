@@ -130,11 +130,18 @@ pub(crate) async fn venv(
         .map(VirtualProject::workspace)
         .filter(|workspace| path.is_none() && workspace.install_path() == project_dir);
 
+    let project_environment_selection =
+        project_environment.map(|workspace| workspace.environment_selection(Some(false)));
+
     // Determine the default path; either the virtual environment for the project or `.venv`.
     let path = path.unwrap_or_else(|| {
-        project_environment.map_or_else(
+        project_environment_selection.map_or_else(
             || PathBuf::from(".venv"),
-            |workspace| workspace.venv(Some(false)),
+            |selection| {
+                selection
+                    .explicit_path()
+                    .map_or_else(|| project_dir.join(".venv"), Path::to_path_buf)
+            },
         )
     });
 
