@@ -1994,11 +1994,15 @@ fn tool_install_explicit_local_directory_respects_global_python_change() -> Resu
         .assert()
         .success();
 
-    Command::new("local-tool")
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .success()
-        .stdout("3.12\n");
+    uv_snapshot!(context.filters(), Command::new("local-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    ");
 
     context
         .python_pin()
@@ -2016,11 +2020,15 @@ fn tool_install_explicit_local_directory_respects_global_python_change() -> Resu
         .assert()
         .success();
 
-    Command::new("local-tool")
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .success()
-        .stdout("3.13\n");
+    uv_snapshot!(context.filters(), Command::new("local-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.13
+
+    ----- stderr -----
+    ");
 
     Ok(())
 }
@@ -2097,11 +2105,15 @@ fn tool_install_rebuilds_explicit_local_with_requirement() -> Result<()> {
         .assert()
         .success();
 
-    Command::new("local-tool")
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .success()
-        .stdout("0.1.0\n");
+    uv_snapshot!(context.filters(), Command::new("local-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.1.0
+
+    ----- stderr -----
+    ");
 
     helper.child("VERSION").write_str("0.2.0")?;
 
@@ -2116,11 +2128,15 @@ fn tool_install_rebuilds_explicit_local_with_requirement() -> Result<()> {
         .assert()
         .success();
 
-    Command::new("local-tool")
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .success()
-        .stdout("0.2.0\n");
+    uv_snapshot!(context.filters(), Command::new("local-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.2.0
+
+    ----- stderr -----
+    ");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!("{}\n", helper.path().display()))?;
@@ -2137,11 +2153,15 @@ fn tool_install_rebuilds_explicit_local_with_requirement() -> Result<()> {
         .assert()
         .success();
 
-    Command::new("local-tool")
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .success()
-        .stdout("0.2.0\n");
+    uv_snapshot!(context.filters(), Command::new("local-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.2.0
+
+    ----- stderr -----
+    ");
 
     Ok(())
 }
