@@ -1,0 +1,18 @@
+name: Coverage
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    if: ${{ github.event.label.name == 'coverage' }}
+    uses: ./.github/workflows/test.yml
+    with:
+      save-rust-cache: "false"
