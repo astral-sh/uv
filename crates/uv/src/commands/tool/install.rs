@@ -318,11 +318,6 @@ pub(crate) async fn install(
 
     let package_name = &requirement.name;
 
-    let explicit_local_directory = match &requirement.source {
-        RequirementSource::Directory { install_path, .. } => Some(install_path.clone()),
-        _ => None,
-    };
-
     // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.
     let settings = if request.is_latest() {
         ResolverInstallerSettings {
@@ -344,22 +339,6 @@ pub(crate) async fn install(
         }
     } else {
         settings
-    };
-
-    let (settings, cache) = if let Some(install_path) = explicit_local_directory {
-        let reinstall = Reinstall::None
-            .with_path(install_path)
-            .combine(settings.reinstall);
-        let cache = cache.with_refresh_combined(Refresh::from(reinstall.clone()));
-        (
-            ResolverInstallerSettings {
-                reinstall,
-                ..settings
-            },
-            cache,
-        )
-    } else {
-        (settings, cache)
     };
 
     // Read the `--with` requirements.
@@ -394,6 +373,33 @@ pub(crate) async fn install(
             .await?,
         );
         requirements
+    };
+
+    // Explicit local directory requirements should always be rebuilt and reinstalled, matching
+    // `uv pip install`. At this point, all unnamed requirements have been resolved to package names,
+    // including any requirements provided via `--with`.
+    let explicit_local_packages = requirements
+        .iter()
+        .filter(|requirement| matches!(requirement.source, RequirementSource::Directory { .. }))
+        .map(|requirement| requirement.name.clone())
+        .collect::<Vec<_>>();
+    let (settings, cache) = if explicit_local_packages.is_empty() {
+        (settings, cache)
+    } else {
+        let reinstall = explicit_local_packages
+            .into_iter()
+            .fold(Reinstall::None, |reinstall, package_name| {
+                reinstall.with_package(package_name)
+            })
+            .combine(settings.reinstall);
+        let cache = cache.with_refresh_combined(Refresh::from(reinstall.clone()));
+        (
+            ResolverInstallerSettings {
+                reinstall,
+                ..settings
+            },
+            cache,
+        )
     };
 
     // Resolve the constraints.

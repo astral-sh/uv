@@ -1940,6 +1940,185 @@ fn tool_install_editable_rebuilds_explicit_local_directory() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn tool_install_explicit_local_directory_respects_global_python_change() -> Result<()> {
+    let context =
+        uv_test::test_context_with_versions!(&["3.12", "3.13"]).with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let project = context.temp_dir.child("project");
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [project]
+        name = "local-tool"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        local-tool = "local_tool:main"
+        "#
+    })?;
+    project
+        .child("src")
+        .child("local_tool")
+        .child("__init__.py")
+        .write_str(indoc! {r#"
+            import sys
+
+            def main():
+                print(f"{sys.version_info.major}.{sys.version_info.minor}")
+            "#
+        })?;
+
+    context
+        .python_pin()
+        .arg("3.12")
+        .arg("--global")
+        .assert()
+        .success();
+
+    context
+        .tool_install()
+        .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    Command::new("local-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success()
+        .stdout("3.12\n");
+
+    context
+        .python_pin()
+        .arg("3.13")
+        .arg("--global")
+        .assert()
+        .success();
+
+    context
+        .tool_install()
+        .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    Command::new("local-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success()
+        .stdout("3.13\n");
+
+    Ok(())
+}
+
+#[test]
+fn tool_install_rebuilds_explicit_local_with_requirement() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let project = context.temp_dir.child("project");
+    let helper = context.temp_dir.child("helper");
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [project]
+        name = "local-tool"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        local-tool = "local_tool:main"
+        "#
+    })?;
+    project
+        .child("src")
+        .child("local_tool")
+        .child("__init__.py")
+        .write_str(indoc! {r#"
+            from importlib.metadata import version
+
+            def main():
+                print(version("local-helper"))
+            "#
+        })?;
+
+    helper.child("pyproject.toml").write_str(indoc! {r#"
+        [build-system]
+        requires = ["setuptools>=61"]
+        build-backend = "setuptools.build_meta"
+
+        [project]
+        name = "local-helper"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        "#
+    })?;
+    helper.child("setup.py").write_str(indoc! {r#"
+        from pathlib import Path
+        from setuptools import setup
+
+        setup(version=(Path(__file__).parent / "VERSION").read_text().strip())
+        "#
+    })?;
+    helper.child("VERSION").write_str("0.1.0")?;
+    helper
+        .child("src")
+        .child("local_helper")
+        .child("__init__.py")
+        .touch()?;
+
+    context
+        .tool_install()
+        .arg("--with")
+        .arg(helper.path())
+        .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    Command::new("local-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success()
+        .stdout("0.1.0\n");
+
+    helper.child("VERSION").write_str("0.2.0")?;
+
+    context
+        .tool_install()
+        .arg("--with")
+        .arg(helper.path())
+        .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    Command::new("local-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success()
+        .stdout("0.2.0\n");
+
+    Ok(())
+}
+
 /// Ensure that we remove any existing entrypoints upon error.
 #[test]
 fn tool_install_remove_on_empty() -> Result<()> {
