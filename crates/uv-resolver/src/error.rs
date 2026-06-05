@@ -172,10 +172,10 @@ pub type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, UnavailableR
 
 const DERIVATION_TREE_RED_ZONE: usize = 64 * 1024;
 
-/// Run one recursive derivation-tree step with enough stack to reach the next growth point.
+/// Run a recursive derivation-tree function with enough stack to reach the next growth point.
 ///
-/// Recursive tree walkers should call this at every child edge so no individual stack segment
-/// needs to accommodate the full depth of the derivation tree.
+/// Recursive tree walkers should call this at every recursive descent so no individual stack
+/// segment needs to accommodate the full depth of the derivation tree.
 pub(crate) fn with_growing_stack<R>(callback: impl FnOnce() -> R) -> R {
     stacker::maybe_grow(DERIVATION_TREE_RED_ZONE, min_stack_size(), callback)
 }
@@ -237,6 +237,7 @@ fn drop_derivation_tree(derivation_tree: ErrorTree) {
 ///
 /// The `Option` allows [`Drop`] to take ownership of the tree and applies the same iterative
 /// teardown during normal returns and unwinding.
+#[derive(Clone)]
 struct StackSafeErrorTree(Option<ErrorTree>);
 
 impl StackSafeErrorTree {
@@ -268,6 +269,12 @@ impl Drop for StackSafeErrorTree {
         if let Some(derivation_tree) = self.0.take() {
             drop_derivation_tree(derivation_tree);
         }
+    }
+}
+
+impl Debug for StackSafeErrorTree {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        StackSafeDebugErrorTree(self).fmt(f)
     }
 }
 
@@ -310,7 +317,7 @@ impl Debug for StackSafeDebugDerived<'_> {
 
 /// A wrapper around [`pubgrub::error::NoSolutionError`] that displays a resolution failure report.
 pub struct NoSolutionError {
-    error: Option<pubgrub::NoSolutionError<UvDependencyProvider>>,
+    error: StackSafeErrorTree,
     index: InMemoryIndex,
     /// The versions that were available for each package after `exclude-newer` filtering.
     ///
@@ -365,7 +372,7 @@ impl NoSolutionError {
         options: Options,
     ) -> Self {
         Self {
-            error: Some(error),
+            error: StackSafeErrorTree::new(error),
             index,
             included_versions,
             available_versions,
@@ -385,12 +392,6 @@ impl NoSolutionError {
             options,
             cached: OnceLock::new(),
         }
-    }
-
-    fn error(&self) -> &ErrorTree {
-        self.error
-            .as_ref()
-            .expect("no-solution error is only taken during drop")
     }
 
     /// Get the cached report and hints, computing them on first access.
@@ -526,10 +527,14 @@ impl NoSolutionError {
     /// Given a [`DerivationTree`], identify the largest required Python version that is missing.
     pub fn find_requires_python(&self) -> LowerBound {
         fn find(derivation_tree: &ErrorTree, minimum: &mut LowerBound) {
+            with_growing_stack(|| find_inner(derivation_tree, minimum));
+        }
+
+        fn find_inner(derivation_tree: &ErrorTree, minimum: &mut LowerBound) {
             match derivation_tree {
                 DerivationTree::Derived(derived) => {
-                    with_growing_stack(|| find(derived.cause1.as_ref(), minimum));
-                    with_growing_stack(|| find(derived.cause2.as_ref(), minimum));
+                    find(derived.cause1.as_ref(), minimum);
+                    find(derived.cause2.as_ref(), minimum);
                 }
                 DerivationTree::External(External::FromDependencyOf(.., package, version)) => {
                     if let PubGrubPackageInner::Python(_) = &**package {
@@ -546,7 +551,7 @@ impl NoSolutionError {
         }
 
         let mut minimum = LowerBound::default();
-        find(self.error(), &mut minimum);
+        find(&self.error, &mut minimum);
         minimum
     }
 
@@ -557,7 +562,7 @@ impl NoSolutionError {
 
     /// Get the packages that are involved in this error.
     pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
-        derivation_tree_packages(self.error())
+        derivation_tree_packages(&self.error)
             .filter_map(|p| p.name())
             .unique()
     }
@@ -588,7 +593,7 @@ impl NoSolutionError {
         };
 
         // Transform the error tree for reporting
-        let mut tree = StackSafeErrorTree::new(self.error().clone());
+        let mut tree = self.error.clone();
         simplify_derivation_tree_markers(&self.python_requirement, &mut tree);
         let should_display_tree = std::env::var_os(EnvVars::UV_INTERNAL__SHOW_DERIVATION_TREE)
             .is_some()
@@ -679,14 +684,7 @@ impl std::fmt::Debug for NoSolutionError {
             cached: _,
         } = self;
         f.debug_struct("NoSolutionError")
-            .field(
-                "error",
-                &StackSafeDebugErrorTree(
-                    error
-                        .as_ref()
-                        .expect("no-solution error is only taken during drop"),
-                ),
-            )
+            .field("error", error)
             .field("included_versions", included_versions)
             .field("available_versions", available_versions)
             .field("available_indexes", available_indexes)
@@ -704,14 +702,6 @@ impl std::fmt::Debug for NoSolutionError {
             .field("workspace_members", workspace_members)
             .field("options", options)
             .finish()
-    }
-}
-
-impl Drop for NoSolutionError {
-    fn drop(&mut self) {
-        if let Some(error) = self.error.take() {
-            drop_derivation_tree(error);
-        }
     }
 }
 
@@ -761,11 +751,19 @@ fn display_tree_inner(
     lines: &mut Vec<String>,
     depth: usize,
 ) {
+    with_growing_stack(|| display_tree_inner_impl(error, lines, depth));
+}
+
+fn display_tree_inner_impl(
+    error: &DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    lines: &mut Vec<String>,
+    depth: usize,
+) {
     let prefix = "  ".repeat(depth);
     match error {
         DerivationTree::Derived(derived) => {
-            with_growing_stack(|| display_tree_inner(&derived.cause1, lines, depth + 1));
-            with_growing_stack(|| display_tree_inner(&derived.cause2, lines, depth + 1));
+            display_tree_inner(&derived.cause1, lines, depth + 1);
+            display_tree_inner(&derived.cause2, lines, depth + 1);
             for (package, term) in &derived.terms {
                 match term {
                     Term::Positive(versions) => {
@@ -804,6 +802,12 @@ fn display_tree_inner(
 fn collapse_redundant_no_versions(
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
 ) {
+    with_growing_stack(|| collapse_redundant_no_versions_inner(tree));
+}
+
+fn collapse_redundant_no_versions_inner(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+) {
     match tree {
         DerivationTree::External(_) => {}
         DerivationTree::Derived(derived) => {
@@ -821,7 +825,7 @@ fn collapse_redundant_no_versions(
                     DerivationTree::External(External::NoVersions(package, versions)),
                 ) => {
                     // First, always recursively visit the other side of the tree
-                    with_growing_stack(|| collapse_redundant_no_versions(other));
+                    collapse_redundant_no_versions(other);
 
                     // Retrieve the nearest terms, either alongside this node or from the parent.
                     let package_terms = if let DerivationTree::Derived(derived) = other {
@@ -853,12 +857,8 @@ fn collapse_redundant_no_versions(
                 }
                 // If not, just recurse
                 _ => {
-                    with_growing_stack(|| {
-                        collapse_redundant_no_versions(Arc::make_mut(&mut derived.cause1));
-                    });
-                    with_growing_stack(|| {
-                        collapse_redundant_no_versions(Arc::make_mut(&mut derived.cause2));
-                    });
+                    collapse_redundant_no_versions(Arc::make_mut(&mut derived.cause1));
+                    collapse_redundant_no_versions(Arc::make_mut(&mut derived.cause2));
                 }
             }
         }
@@ -902,6 +902,12 @@ fn collapse_redundant_no_versions(
 fn collapse_redundant_no_versions_tree(
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
 ) -> bool {
+    with_growing_stack(|| collapse_redundant_no_versions_tree_inner(tree))
+}
+
+fn collapse_redundant_no_versions_tree_inner(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+) -> bool {
     match tree {
         DerivationTree::External(_) => false,
         DerivationTree::Derived(derived) => {
@@ -932,11 +938,8 @@ fn collapse_redundant_no_versions_tree(
                 }
                 // If not, just recurse
                 _ => {
-                    with_growing_stack(|| {
-                        collapse_redundant_no_versions_tree(Arc::make_mut(&mut derived.cause1))
-                    }) || with_growing_stack(|| {
-                        collapse_redundant_no_versions_tree(Arc::make_mut(&mut derived.cause2))
-                    })
+                    collapse_redundant_no_versions_tree(Arc::make_mut(&mut derived.cause1))
+                        || collapse_redundant_no_versions_tree(Arc::make_mut(&mut derived.cause2))
                 }
             }
         }
@@ -946,6 +949,13 @@ fn collapse_redundant_no_versions_tree(
 /// Given a [`DerivationTree`], collapse any `NoVersion` incompatibilities for workspace members
 /// to avoid saying things like "only <workspace-member>==0.1.0 is available".
 fn collapse_no_versions_of_workspace_members(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    workspace_members: &BTreeSet<PackageName>,
+) {
+    with_growing_stack(|| collapse_no_versions_of_workspace_members_inner(tree, workspace_members));
+}
+
+fn collapse_no_versions_of_workspace_members_inner(
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
     workspace_members: &BTreeSet<PackageName>,
 ) {
@@ -960,9 +970,7 @@ fn collapse_no_versions_of_workspace_members(
                 (DerivationTree::External(External::NoVersions(package, _)), ref mut other)
                 | (ref mut other, DerivationTree::External(External::NoVersions(package, _))) => {
                     // First, always recursively visit the other side of the tree
-                    with_growing_stack(|| {
-                        collapse_no_versions_of_workspace_members(other, workspace_members);
-                    });
+                    collapse_no_versions_of_workspace_members(other, workspace_members);
 
                     // Then, if the package is a workspace member...
                     let (PubGrubPackageInner::Package { name, .. }
@@ -980,18 +988,14 @@ fn collapse_no_versions_of_workspace_members(
                 }
                 // If not, just recurse
                 _ => {
-                    with_growing_stack(|| {
-                        collapse_no_versions_of_workspace_members(
-                            Arc::make_mut(&mut derived.cause1),
-                            workspace_members,
-                        );
-                    });
-                    with_growing_stack(|| {
-                        collapse_no_versions_of_workspace_members(
-                            Arc::make_mut(&mut derived.cause2),
-                            workspace_members,
-                        );
-                    });
+                    collapse_no_versions_of_workspace_members(
+                        Arc::make_mut(&mut derived.cause1),
+                        workspace_members,
+                    );
+                    collapse_no_versions_of_workspace_members(
+                        Arc::make_mut(&mut derived.cause2),
+                        workspace_members,
+                    );
                 }
             }
         }
@@ -1022,6 +1026,12 @@ fn collapse_no_versions_of_workspace_members(
 fn collapse_redundant_depends_on_no_versions(
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
 ) {
+    with_growing_stack(|| collapse_redundant_depends_on_no_versions_impl(tree));
+}
+
+fn collapse_redundant_depends_on_no_versions_impl(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+) {
     match tree {
         DerivationTree::External(_) => {}
         DerivationTree::Derived(derived) => {
@@ -1043,16 +1053,8 @@ fn collapse_redundant_depends_on_no_versions(
                 }
                 // If not, just recurse
                 _ => {
-                    with_growing_stack(|| {
-                        collapse_redundant_depends_on_no_versions(Arc::make_mut(
-                            &mut derived.cause1,
-                        ));
-                    });
-                    with_growing_stack(|| {
-                        collapse_redundant_depends_on_no_versions(Arc::make_mut(
-                            &mut derived.cause2,
-                        ));
-                    });
+                    collapse_redundant_depends_on_no_versions(Arc::make_mut(&mut derived.cause1));
+                    collapse_redundant_depends_on_no_versions(Arc::make_mut(&mut derived.cause2));
                 }
             }
         }
@@ -1061,6 +1063,16 @@ fn collapse_redundant_depends_on_no_versions(
 
 /// Helper for [`collapse_redundant_depends_on_no_versions`].
 fn collapse_redundant_depends_on_no_versions_inner(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    package: &PubGrubPackage,
+    versions: &Range<Version>,
+) {
+    with_growing_stack(|| {
+        collapse_redundant_depends_on_no_versions_inner_impl(tree, package, versions);
+    });
+}
+
+fn collapse_redundant_depends_on_no_versions_inner_impl(
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
     package: &PubGrubPackage,
     versions: &Range<Version>,
@@ -1103,16 +1115,12 @@ fn collapse_redundant_depends_on_no_versions_inner(
                 }
                 // If not, just recurse
                 _ => {
-                    with_growing_stack(|| {
-                        collapse_redundant_depends_on_no_versions(Arc::make_mut(
-                            &mut derived.cause1,
-                        ));
-                    });
-                    with_growing_stack(|| {
-                        collapse_redundant_depends_on_no_versions(Arc::make_mut(
-                            &mut derived.cause2,
-                        ));
-                    });
+                    collapse_redundant_depends_on_no_versions(Arc::make_mut(
+                        &mut derived.cause1,
+                    ));
+                    collapse_redundant_depends_on_no_versions(Arc::make_mut(
+                        &mut derived.cause2,
+                    ));
                 }
             }
         }
@@ -1128,6 +1136,13 @@ fn collapse_redundant_depends_on_no_versions_inner(
 /// the `requires-python` setting. This simplifies error messages by reducing
 /// noise.
 fn simplify_derivation_tree_markers(
+    python_requirement: &PythonRequirement,
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+) {
+    with_growing_stack(|| simplify_derivation_tree_markers_inner(python_requirement, tree));
+}
+
+fn simplify_derivation_tree_markers_inner(
     python_requirement: &PythonRequirement,
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
 ) {
@@ -1153,18 +1168,14 @@ fn simplify_derivation_tree_markers(
                     (pkg, term)
                 })
                 .collect();
-            with_growing_stack(|| {
-                simplify_derivation_tree_markers(
-                    python_requirement,
-                    Arc::make_mut(&mut derived.cause1),
-                );
-            });
-            with_growing_stack(|| {
-                simplify_derivation_tree_markers(
-                    python_requirement,
-                    Arc::make_mut(&mut derived.cause2),
-                );
-            });
+            simplify_derivation_tree_markers(
+                python_requirement,
+                Arc::make_mut(&mut derived.cause1),
+            );
+            simplify_derivation_tree_markers(
+                python_requirement,
+                Arc::make_mut(&mut derived.cause2),
+            );
         }
     }
 }
@@ -1173,6 +1184,12 @@ fn simplify_derivation_tree_markers(
 /// unavailable for the same reason to avoid repeating the same message for every unavailable
 /// version.
 fn collapse_unavailable_versions(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+) {
+    with_growing_stack(|| collapse_unavailable_versions_inner(tree));
+}
+
+fn collapse_unavailable_versions_inner(
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
 ) {
     match tree {
@@ -1192,7 +1209,7 @@ fn collapse_unavailable_versions(
                     DerivationTree::External(External::Custom(package, versions, reason)),
                 ) => {
                     // First, recursively collapse the other side of the tree
-                    with_growing_stack(|| collapse_unavailable_versions(other));
+                    collapse_unavailable_versions(other);
 
                     // If it's not a derived tree, nothing to do.
                     let DerivationTree::Derived(Derived {
@@ -1264,12 +1281,8 @@ fn collapse_unavailable_versions(
                 }
                 // If not, just recurse
                 _ => {
-                    with_growing_stack(|| {
-                        collapse_unavailable_versions(Arc::make_mut(&mut derived.cause1));
-                    });
-                    with_growing_stack(|| {
-                        collapse_unavailable_versions(Arc::make_mut(&mut derived.cause2));
-                    });
+                    collapse_unavailable_versions(Arc::make_mut(&mut derived.cause1));
+                    collapse_unavailable_versions(Arc::make_mut(&mut derived.cause2));
                 }
             }
         }
@@ -1284,6 +1297,13 @@ fn collapse_unavailable_versions(
 /// requires your project, we can conclude that your project's requirements are
 /// unsatisfiable."
 fn drop_root_dependency_on_project(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    project: &PackageName,
+) {
+    with_growing_stack(|| drop_root_dependency_on_project_inner(tree, project));
+}
+
+fn drop_root_dependency_on_project_inner(
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
     project: &PackageName,
 ) {
@@ -1317,25 +1337,15 @@ fn drop_root_dependency_on_project(
                     }
 
                     // Recursively collapse the other side of the tree
-                    with_growing_stack(|| drop_root_dependency_on_project(other, project));
+                    drop_root_dependency_on_project(other, project);
 
                     // Then, replace this node with the other tree
                     *tree = other.clone();
                 }
                 // If not, just recurse
                 _ => {
-                    with_growing_stack(|| {
-                        drop_root_dependency_on_project(
-                            Arc::make_mut(&mut derived.cause1),
-                            project,
-                        );
-                    });
-                    with_growing_stack(|| {
-                        drop_root_dependency_on_project(
-                            Arc::make_mut(&mut derived.cause2),
-                            project,
-                        );
-                    });
+                    drop_root_dependency_on_project(Arc::make_mut(&mut derived.cause1), project);
+                    drop_root_dependency_on_project(Arc::make_mut(&mut derived.cause2), project);
                 }
             }
         }
@@ -1583,6 +1593,22 @@ fn simplify_derivation_tree_ranges(
     candidate_selector: &CandidateSelector,
     resolver_environment: &ResolverEnvironment,
 ) {
+    with_growing_stack(|| {
+        simplify_derivation_tree_ranges_inner(
+            tree,
+            included_versions,
+            candidate_selector,
+            resolver_environment,
+        );
+    });
+}
+
+fn simplify_derivation_tree_ranges_inner(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    included_versions: &FxHashMap<PackageName, BTreeSet<Version>>,
+    candidate_selector: &CandidateSelector,
+    resolver_environment: &ResolverEnvironment,
+) {
     match tree {
         DerivationTree::External(external) => match external {
             External::FromDependencyOf(package1, versions1, package2, versions2) => {
@@ -1631,22 +1657,18 @@ fn simplify_derivation_tree_ranges(
         },
         DerivationTree::Derived(derived) => {
             // Recursively simplify both sides of the tree
-            with_growing_stack(|| {
-                simplify_derivation_tree_ranges(
-                    Arc::make_mut(&mut derived.cause1),
-                    included_versions,
-                    candidate_selector,
-                    resolver_environment,
-                );
-            });
-            with_growing_stack(|| {
-                simplify_derivation_tree_ranges(
-                    Arc::make_mut(&mut derived.cause2),
-                    included_versions,
-                    candidate_selector,
-                    resolver_environment,
-                );
-            });
+            simplify_derivation_tree_ranges(
+                Arc::make_mut(&mut derived.cause1),
+                included_versions,
+                candidate_selector,
+                resolver_environment,
+            );
+            simplify_derivation_tree_ranges(
+                Arc::make_mut(&mut derived.cause2),
+                included_versions,
+                candidate_selector,
+                resolver_environment,
+            );
 
             // Simplify the terms
             derived.terms = std::mem::take(&mut derived.terms)
@@ -1815,7 +1837,7 @@ mod tests {
             .stack_size(256 * 1024)
             .spawn(|| {
                 let tree = StackSafeErrorTree::new(deep_derivation_tree());
-                let _formatted = format!("{:?}", StackSafeDebugErrorTree(&tree));
+                let _formatted = format!("{tree:?}");
             })?;
 
         assert!(thread.join().is_ok());
@@ -1826,16 +1848,13 @@ mod tests {
     fn stack_safe_debug_matches_pubgrub_debug() {
         let package = PubGrubPackage::from(PubGrubPackageInner::Root(None));
         let leaf = ErrorTree::External(External::NotRoot(package, Version::new([1_u64])));
-        let tree = ErrorTree::Derived(Derived {
+        let tree = StackSafeErrorTree::new(ErrorTree::Derived(Derived {
             terms: pubgrub::Map::default(),
             shared_id: Some(1),
             cause1: Arc::new(leaf.clone()),
             cause2: Arc::new(leaf),
-        });
+        }));
 
-        assert_eq!(
-            format!("{tree:?}"),
-            format!("{:?}", StackSafeDebugErrorTree(&tree))
-        );
+        assert_eq!(format!("{:?}", &*tree), format!("{tree:?}"));
     }
 }
