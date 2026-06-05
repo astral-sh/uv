@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, Bound};
-use std::fmt::Formatter;
+use std::fmt::{Debug, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, OnceLock};
 
@@ -252,6 +252,41 @@ impl Drop for StackSafeErrorTree {
         if let Some(derivation_tree) = self.0.take() {
             drop_derivation_tree(derivation_tree);
         }
+    }
+}
+
+struct StackSafeDebugErrorTree<'a>(&'a ErrorTree);
+
+impl Debug for StackSafeDebugErrorTree<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        with_growing_stack(|| match self.0 {
+            DerivationTree::External(external) => {
+                f.debug_tuple("External").field(external).finish()
+            }
+            DerivationTree::Derived(derived) => f
+                .debug_tuple("Derived")
+                .field(&StackSafeDebugDerived(derived))
+                .finish(),
+        })
+    }
+}
+
+struct StackSafeDebugDerived<'a>(&'a Derived<PubGrubPackage, Range<Version>, UnavailableReason>);
+
+impl Debug for StackSafeDebugDerived<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let Derived {
+            terms,
+            shared_id,
+            cause1,
+            cause2,
+        } = self.0;
+        f.debug_struct("Derived")
+            .field("terms", terms)
+            .field("shared_id", shared_id)
+            .field("cause1", &StackSafeDebugErrorTree(cause1))
+            .field("cause2", &StackSafeDebugErrorTree(cause2))
+            .finish()
     }
 }
 
@@ -628,9 +663,11 @@ impl std::fmt::Debug for NoSolutionError {
         f.debug_struct("NoSolutionError")
             .field(
                 "error",
-                error
-                    .as_ref()
-                    .expect("no-solution error is only taken during drop"),
+                &StackSafeDebugErrorTree(
+                    error
+                        .as_ref()
+                        .expect("no-solution error is only taken during drop"),
+                ),
             )
             .field("included_versions", included_versions)
             .field("available_versions", available_versions)
@@ -1746,5 +1783,35 @@ mod tests {
 
         assert!(thread.join().is_ok());
         Ok(())
+    }
+
+    #[test]
+    fn formats_derivation_tree_without_recursion() -> std::io::Result<()> {
+        let thread = std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let tree = StackSafeErrorTree::new(deep_derivation_tree());
+                let _formatted = format!("{:?}", StackSafeDebugErrorTree(&tree));
+            })?;
+
+        assert!(thread.join().is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn stack_safe_debug_matches_pubgrub_debug() {
+        let package = PubGrubPackage::from(PubGrubPackageInner::Root(None));
+        let leaf = ErrorTree::External(External::NotRoot(package, Version::new([1_u64])));
+        let tree = ErrorTree::Derived(Derived {
+            terms: pubgrub::Map::default(),
+            shared_id: Some(1),
+            cause1: Arc::new(leaf.clone()),
+            cause2: Arc::new(leaf),
+        });
+
+        assert_eq!(
+            format!("{tree:?}"),
+            format!("{:?}", StackSafeDebugErrorTree(&tree))
+        );
     }
 }
