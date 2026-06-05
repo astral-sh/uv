@@ -102,7 +102,7 @@ pub(crate) async fn pip_install(
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
     reinstall: Reinstall,
-    link_mode: LinkMode,
+    link_mode: Option<LinkMode>,
     compile: bool,
     hash_checking: Option<HashCheckingMode>,
     installer_metadata: bool,
