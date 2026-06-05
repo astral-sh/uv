@@ -4087,7 +4087,7 @@ impl ResolverSettings {
 
         Self {
             cuda_driver_version: environment.cuda_driver_version.clone(),
-            amd_gpu_architecture: environment.amd_gpu_architecture.clone(),
+            amd_gpu_architecture: environment.amd_gpu_architecture,
             ..Self::from(options)
         }
     }
@@ -4176,7 +4176,7 @@ impl ResolverInstallerSettings {
         Self {
             resolver: ResolverSettings {
                 cuda_driver_version: environment.cuda_driver_version.clone(),
-                amd_gpu_architecture: environment.amd_gpu_architecture.clone(),
+                amd_gpu_architecture: environment.amd_gpu_architecture,
                 ..base.resolver
             },
             ..base
@@ -4592,7 +4592,7 @@ impl PipSettings {
                 .unwrap_or_default(),
             torch_backend: args.torch_backend.combine(torch_backend),
             cuda_driver_version: environment.cuda_driver_version.clone(),
-            amd_gpu_architecture: environment.amd_gpu_architecture.clone(),
+            amd_gpu_architecture: environment.amd_gpu_architecture,
             python_version: args.python_version.combine(python_version),
             python_platform: args.python_platform.combine(python_platform),
             universal: args.universal.combine(universal).unwrap_or_default(),
