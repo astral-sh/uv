@@ -2263,6 +2263,52 @@ fn transitive_dep_in_git_workspace_with_cache_inside_workspace() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "consumer"
+        version = "0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "outer" },
+            { name = "workspace-member-in-subdir" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "outer", directory = "../" },
+            { name = "workspace-member-in-subdir", git = "https://github.com/astral-sh/workspace-in-root-test?subdirectory=workspace-member-in-subdir&rev=d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68" },
+        ]
+
+        [[package]]
+        name = "outer"
+        version = "0"
+        source = { directory = "../" }
+
+        [[package]]
+        name = "uv-git-workspace-in-root"
+        version = "0.1.0"
+        source = { git = "https://github.com/astral-sh/workspace-in-root-test?rev=d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68#d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68" }
+
+        [[package]]
+        name = "workspace-member-in-subdir"
+        version = "0.1.0"
+        source = { git = "https://github.com/astral-sh/workspace-in-root-test?subdirectory=workspace-member-in-subdir&rev=d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68#d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68" }
+        dependencies = [
+            { name = "uv-git-workspace-in-root" },
+        ]
+        "#);
+    });
+
     Ok(())
 }
 

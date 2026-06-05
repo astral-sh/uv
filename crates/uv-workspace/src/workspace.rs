@@ -55,7 +55,7 @@ impl WorkspaceCache {
     /// Insert a workspace discovery into the cache that may have succeeded or failed.
     ///
     /// Once an error is inserted, it will be returned to all future callers that query the failed
-    /// workspace root.
+    /// query path.
     fn insert(&self, result: CachedWorkspaceResult, install_path: &Path) {
         match result {
             Ok(workspace) => {
@@ -73,6 +73,9 @@ impl WorkspaceCache {
     }
 
     /// Register workspace discovery for a root, or wait for an in-flight discovery.
+    ///
+    /// Calling this function ensures that - given a workspace root - the discovery is only done by
+    /// one thread.
     async fn register_or_wait(&self, workspace_root: &PathBuf) -> Option<CachedWorkspaceResult> {
         self.workspaces.register_or_wait(workspace_root).await
     }
