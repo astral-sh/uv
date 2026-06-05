@@ -996,6 +996,104 @@ fn environment_is_usable(
     Ok(())
 }
 
+/// Return the environment if it is compatible, or if `--no-sync` permits incompatibility.
+fn usable_project_environment(
+    environment: PythonEnvironment,
+    python_request: Option<&PythonRequest>,
+    python_preference: PythonPreference,
+    requires_python: Option<&RequiresPython>,
+    keep_incompatible: bool,
+    cache: &Cache,
+) -> Option<PythonEnvironment> {
+    match environment_is_usable(
+        &environment,
+        EnvironmentKind::Project,
+        python_request,
+        python_preference,
+        requires_python,
+        cache,
+    ) {
+        Ok(()) => Some(environment),
+        Err(err) if keep_incompatible => {
+            warn_user!(
+                "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
+                environment.root().user_display().cyan(),
+            );
+            Some(environment)
+        }
+        Err(err) => {
+            debug!("{err}");
+            None
+        }
+    }
+}
+
+fn discover_project_environment(
+    root: &Path,
+    python_request: Option<&PythonRequest>,
+    python_preference: PythonPreference,
+    requires_python: Option<&RequiresPython>,
+    keep_incompatible: bool,
+    cache: &Cache,
+) -> Result<Option<PythonEnvironment>, ProjectError> {
+    match PythonEnvironment::from_root(root, cache) {
+        Ok(environment) => Ok(usable_project_environment(
+            environment,
+            python_request,
+            python_preference,
+            requires_python,
+            keep_incompatible,
+            cache,
+        )),
+        Err(uv_python::Error::MissingEnvironment(_)) => Ok(None),
+        Err(uv_python::Error::InvalidEnvironment(inner)) => {
+            match inner.kind {
+                InvalidEnvironmentKind::NotDirectory => {
+                    return Err(ProjectError::InvalidProjectEnvironmentDir(
+                        root.to_path_buf(),
+                        inner.kind.to_string(),
+                    ));
+                }
+                InvalidEnvironmentKind::MissingExecutable(_) => {
+                    if fs_err::read_dir(root).is_ok_and(|mut dir| dir.next().is_some()) {
+                        if !root.join("pyvenv.cfg").try_exists().unwrap_or_default() {
+                            return Err(ProjectError::InvalidProjectEnvironmentDir(
+                                root.to_path_buf(),
+                                "it is not a valid Python environment (no Python executable was found)"
+                                    .to_string(),
+                            ));
+                        }
+                    }
+                }
+                InvalidEnvironmentKind::Empty => {}
+            }
+            Ok(None)
+        }
+        Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(_))) => Ok(None),
+        Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenLink(BrokenLink {
+            path,
+            unix,
+            venv: _,
+        }))) => {
+            if unix {
+                let target_path = fs_err::read_link(&path)?;
+                warn_user!(
+                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                    path.user_display().cyan(),
+                    target_path.user_display().cyan(),
+                );
+            } else {
+                warn_user!(
+                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
+                    path.user_display().cyan(),
+                );
+            }
+            Ok(None)
+        }
+        Err(err) => Err(err.into()),
+    }
+}
+
 /// An interpreter suitable for the project.
 #[derive(Debug)]
 #[expect(clippy::large_enum_variant)]
@@ -1029,80 +1127,15 @@ impl ProjectInterpreter {
 
         // Read from the virtual environment first.
         let root = workspace.venv(active);
-        match PythonEnvironment::from_root(&root, cache) {
-            Ok(venv) => {
-                match environment_is_usable(
-                    &venv,
-                    EnvironmentKind::Project,
-                    python_request.as_ref(),
-                    python_preference,
-                    requires_python.as_ref(),
-                    cache,
-                ) {
-                    Ok(()) => return Ok(Self::Environment(venv)),
-                    Err(err) if keep_incompatible => {
-                        warn_user!(
-                            "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
-                            root.user_display().cyan(),
-                        );
-                        return Ok(Self::Environment(venv));
-                    }
-                    Err(err) => {
-                        debug!("{err}");
-                    }
-                }
-            }
-            Err(uv_python::Error::MissingEnvironment(_)) => {}
-            Err(uv_python::Error::InvalidEnvironment(inner)) => {
-                // If there's an invalid environment with existing content, we error instead of
-                // deleting it later on
-                match inner.kind {
-                    InvalidEnvironmentKind::NotDirectory => {
-                        return Err(ProjectError::InvalidProjectEnvironmentDir(
-                            root,
-                            inner.kind.to_string(),
-                        ));
-                    }
-                    InvalidEnvironmentKind::MissingExecutable(_) => {
-                        // If it's not an empty directory
-                        if fs_err::read_dir(&root).is_ok_and(|mut dir| dir.next().is_some()) {
-                            // ... and there's no `pyvenv.cfg`
-                            if !root.join("pyvenv.cfg").try_exists().unwrap_or_default() {
-                                // ... then it's not a valid Python environment
-                                return Err(ProjectError::InvalidProjectEnvironmentDir(
-                                    root,
-                                    "it is not a valid Python environment (no Python executable was found)"
-                                        .to_string(),
-                                ));
-                            }
-                        }
-                        // Otherwise, we'll delete it
-                    }
-                    // If the environment is an empty directory, it's fine to use
-                    InvalidEnvironmentKind::Empty => {}
-                }
-            }
-            Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(_))) => {}
-            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenLink(BrokenLink {
-                path,
-                unix,
-                venv: _,
-            }))) => {
-                if unix {
-                    let target_path = fs_err::read_link(&path)?;
-                    warn_user!(
-                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
-                        path.user_display().cyan(),
-                        target_path.user_display().cyan(),
-                    );
-                } else {
-                    warn_user!(
-                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
-                        path.user_display().cyan(),
-                    );
-                }
-            }
-            Err(err) => return Err(err.into()),
+        if let Some(environment) = discover_project_environment(
+            &root,
+            python_request.as_ref(),
+            python_preference,
+            requires_python.as_ref(),
+            keep_incompatible,
+            cache,
+        )? {
+            return Ok(Self::Environment(environment));
         }
 
         let reporter = PythonDownloadReporter::single(printer);
