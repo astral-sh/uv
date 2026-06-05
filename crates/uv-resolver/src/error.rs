@@ -173,11 +173,17 @@ pub type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, UnavailableR
 const DERIVATION_TREE_RED_ZONE: usize = 64 * 1024;
 
 /// Run one recursive derivation-tree step with enough stack to reach the next growth point.
+///
+/// Recursive tree walkers should call this at every child edge so no individual stack segment
+/// needs to accommodate the full depth of the derivation tree.
 pub(crate) fn with_growing_stack<R>(callback: impl FnOnce() -> R) -> R {
     stacker::maybe_grow(DERIVATION_TREE_RED_ZONE, min_stack_size(), callback)
 }
 
-/// Visit the packages in a derivation tree without recursive calls.
+/// Visit each distinct package in a derivation tree without recursive calls.
+///
+/// The iteration order is unspecified, matching the set semantics of
+/// [`DerivationTree::packages`].
 pub(crate) fn derivation_tree_packages(
     derivation_tree: &ErrorTree,
 ) -> impl Iterator<Item = &PubGrubPackage> {
@@ -208,6 +214,10 @@ pub(crate) fn derivation_tree_packages(
     packages.into_iter()
 }
 
+/// Drop an exclusively owned derivation tree without recursing through its children.
+///
+/// Shared [`Arc`] children are left for their remaining owners; once the last owner is processed,
+/// [`Arc::try_unwrap`] exposes the child for iterative destruction.
 fn drop_derivation_tree(derivation_tree: ErrorTree) {
     let mut trees = vec![derivation_tree];
 
@@ -223,6 +233,10 @@ fn drop_derivation_tree(derivation_tree: ErrorTree) {
     }
 }
 
+/// Own a derivation tree whose destruction must not recurse through the process stack.
+///
+/// The `Option` allows [`Drop`] to take ownership of the tree and applies the same iterative
+/// teardown during normal returns and unwinding.
 struct StackSafeErrorTree(Option<ErrorTree>);
 
 impl StackSafeErrorTree {
@@ -257,6 +271,7 @@ impl Drop for StackSafeErrorTree {
     }
 }
 
+/// Preserve PubGrub's [`Debug`] representation while growing the stack at each tree edge.
 struct StackSafeDebugErrorTree<'a>(&'a ErrorTree);
 
 impl Debug for StackSafeDebugErrorTree<'_> {
@@ -273,6 +288,7 @@ impl Debug for StackSafeDebugErrorTree<'_> {
     }
 }
 
+/// Format a derived incompatibility with stack-safe wrappers around its recursive causes.
 struct StackSafeDebugDerived<'a>(&'a Derived<PubGrubPackage, Range<Version>, UnavailableReason>);
 
 impl Debug for StackSafeDebugDerived<'_> {

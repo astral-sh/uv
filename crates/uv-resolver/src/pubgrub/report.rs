@@ -53,7 +53,8 @@ pub(crate) struct PubGrubReportFormatter<'a> {
 
 /// Render a PubGrub report while growing the stack between recursive steps.
 ///
-/// This mirrors [`pubgrub::DefaultStringReporter`], whose recursive entry point is private.
+/// This preserves the output and shared-node reference behavior of
+/// [`pubgrub::DefaultStringReporter`], whose recursive entry point is private.
 pub(crate) fn report(
     derivation_tree: &ErrorTree,
     formatter: &PubGrubReportFormatter<'_>,
@@ -68,6 +69,7 @@ pub(crate) fn report(
     }
 }
 
+/// Accumulates the report state used by [`report`] while bounding recursion depth per stack.
 #[derive(Default)]
 struct StackSafeReporter {
     ref_count: usize,
@@ -76,6 +78,7 @@ struct StackSafeReporter {
 }
 
 impl StackSafeReporter {
+    /// Render one derived incompatibility, growing the stack before descending further.
     fn build_recursive(
         &mut self,
         derived: &Derived<PubGrubPackage, Range<Version>, UnavailableReason>,
