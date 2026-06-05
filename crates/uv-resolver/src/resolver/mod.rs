@@ -43,7 +43,7 @@ use uv_warnings::warn_user_once;
 
 use crate::candidate_selector::{Candidate, CandidateDist, CandidateSelector};
 use crate::dependency_provider::UvDependencyProvider;
-use crate::error::{NoSolutionError, ResolveError};
+use crate::error::{NoSolutionError, ResolveError, derivation_tree_packages};
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_strategy::ForkStrategy;
 use crate::fork_urls::ForkUrls;
@@ -2699,7 +2699,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         ));
 
         let mut unavailable_packages = FxHashMap::default();
-        for package in err.packages() {
+        for package in derivation_tree_packages(&err) {
             if let PubGrubPackageInner::Package { name, .. } = &**package {
                 if let Some(reason) = self.unavailable_packages.get(name) {
                     unavailable_packages.insert(name.clone(), reason.clone());
@@ -2708,7 +2708,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
 
         let mut incomplete_packages = FxHashMap::default();
-        for package in err.packages() {
+        for package in derivation_tree_packages(&err) {
             if let PubGrubPackageInner::Package { name, .. } = &**package {
                 if let Some(versions) = self.incomplete_packages.get(name) {
                     for entry in versions.iter() {
@@ -2731,7 +2731,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .ok()
                 .and_then(|s| s.parse().ok());
 
-        for package in err.packages() {
+        for package in derivation_tree_packages(&err) {
             let Some(name) = package.name() else { continue };
             if !visited.contains(name) {
                 // Avoid including version data for packages that exist in the derivation
