@@ -1487,4 +1487,58 @@ mod tests {
         assert!(victim_dir.join("payload.txt").is_file());
         assert!(fs_err::symlink_metadata(environments.join("escape")).is_err());
     }
+
+    #[test]
+    #[cfg(unix)]
+    fn prune_ci_does_not_follow_wheel_symlinks() {
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let victim_root = tempfile::tempdir().unwrap();
+        let wheels = cache_root.path().join(CacheBucket::Wheels.to_str());
+        let source_distributions = cache_root
+            .path()
+            .join(CacheBucket::SourceDistributions.to_str());
+        let victim_dir = victim_root.path().join("victim-dir");
+        let symlink = wheels.join("escape");
+
+        fs_err::create_dir_all(&wheels).unwrap();
+        fs_err::create_dir_all(&source_distributions).unwrap();
+        fs_err::create_dir_all(&victim_dir).unwrap();
+        fs_err::write(victim_dir.join("payload.txt"), "payload").unwrap();
+        fs_err::os::unix::fs::symlink(&victim_dir, &symlink).unwrap();
+
+        let summary = Cache::from_path(cache_root.path()).prune(true).unwrap();
+
+        assert_eq!(summary.num_files, 1);
+        assert_eq!(summary.num_dirs, 0);
+        assert!(victim_dir.is_dir());
+        assert!(victim_dir.join("payload.txt").is_file());
+        assert!(fs_err::symlink_metadata(symlink).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn prune_does_not_follow_archive_symlinks() {
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let victim_root = tempfile::tempdir().unwrap();
+        let archives = cache_root.path().join(CacheBucket::Archive.to_str());
+        let victim_dir = victim_root.path().join("victim-dir");
+        let symlink = archives.join("escape");
+
+        fs_err::create_dir_all(&archives).unwrap();
+        fs_err::create_dir_all(&victim_dir).unwrap();
+        fs_err::write(victim_dir.join("payload.txt"), "payload").unwrap();
+        fs_err::os::unix::fs::symlink(&victim_dir, &symlink).unwrap();
+
+        let summary = Cache::from_path(cache_root.path()).prune(false).unwrap();
+
+        assert_eq!(summary.num_files, 1);
+        assert_eq!(summary.num_dirs, 0);
+        assert!(victim_dir.is_dir());
+        assert!(victim_dir.join("payload.txt").is_file());
+        assert!(fs_err::symlink_metadata(symlink).is_err());
+    }
 }
