@@ -74,8 +74,8 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 mod archive;
 mod seek;
 
-pub use archive::DirectoryDigest;
-pub(crate) use archive::{ExtractedFile, directory_tree_from_extracted};
+pub(crate) use archive::directory_tree_from_extracted;
+pub use archive::{DirectoryDigest, ExtractedFile};
 pub(crate) use seek::{unzip, unzip_and_hash};
 
 // Read repeatedly until the whole buffer is full, similar to `read_exact`. But if EOF is

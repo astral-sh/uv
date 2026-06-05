@@ -25,6 +25,7 @@ enum ExtractedEntry {
     File {
         path: SanitizedArchivePath,
         size: u64,
+        executable: bool,
         digest: Option<blake3::Hash>,
     },
     Directory(SanitizedArchivePath),
@@ -32,6 +33,7 @@ enum ExtractedEntry {
 
 struct UnzipOutput {
     files: Vec<(PathBuf, u64)>,
+    extracted_files: Vec<ExtractedFile>,
     tree: Option<DirhashTree>,
 }
 
@@ -48,14 +50,14 @@ pub(crate) fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf,
 pub(crate) fn unzip_and_hash(
     reader: fs_err::File,
     target: &Path,
-) -> Result<(Vec<(PathBuf, u64)>, DirhashTree), Error> {
+) -> Result<(Vec<ExtractedFile>, DirhashTree), Error> {
     let output = unzip_inner(reader, target, true)?;
     let Some(tree) = output.tree else {
         return Err(Error::Io(std::io::Error::other(
             "seekable ZIP hash tree was not computed",
         )));
     };
-    Ok((output.files, tree))
+    Ok((output.extracted_files, tree))
 }
 
 fn unzip_inner(
@@ -103,7 +105,11 @@ fn unzip_inner(
                 Err(err) => Some(Err(err)),
             })
             .collect::<Result<_, Error>>()?;
-        return Ok(UnzipOutput { files, tree: None });
+        return Ok(UnzipOutput {
+            files,
+            extracted_files: Vec::new(),
+            tree: None,
+        });
     }
 
     let extracted = (0..archive.file().entries().len())
@@ -117,9 +123,14 @@ fn unzip_inner(
     let mut digest_directories = FxHashSet::default();
     for extracted in extracted {
         match extracted {
-            ExtractedEntry::File { path, size, digest } => {
+            ExtractedEntry::File {
+                path,
+                size,
+                executable,
+                digest,
+            } => {
                 if let Some(digest) = digest {
-                    extracted_files.push(ExtractedFile::new(path, size, digest));
+                    extracted_files.push(ExtractedFile::new(path, size, executable, digest));
                 }
             }
             ExtractedEntry::Directory(path) => {
@@ -128,13 +139,9 @@ fn unzip_inner(
         }
     }
     let tree = directory_tree_from_extracted(&extracted_files, &digest_directories)?;
-    let files = extracted_files
-        .into_iter()
-        .map(ExtractedFile::into_record)
-        .collect();
-
     Ok(UnzipOutput {
-        files,
+        files: Vec::new(),
+        extracted_files,
         tree: Some(tree),
     })
 }
@@ -283,6 +290,9 @@ where
     }
     .map_err(Error::Io)?;
     let size = entry.uncompressed_size();
+    let executable = entry
+        .unix_permissions()
+        .is_some_and(|mode| mode & 0o111 != 0);
     let writer = buffered_file_writer(outfile, size);
 
     // Keep the hashing state out of ordinary extraction, and pin both futures here to avoid
@@ -309,6 +319,7 @@ where
     Ok(ExtractedEntry::File {
         path: enclosed_name,
         size,
+        executable,
         digest,
     })
 }
