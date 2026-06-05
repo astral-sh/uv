@@ -917,7 +917,7 @@ async fn do_lock(
 
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = if let Some(existing_lock) = existing_lock {
-        match ValidatedLock::validate(
+        match Box::pin(ValidatedLock::validate(
             existing_lock,
             target.install_path(),
             packages,
@@ -944,7 +944,7 @@ async fn do_lock(
             &database,
             preview,
             printer,
-        )
+        ))
         .await
         {
             Ok(result) => Some(result),
