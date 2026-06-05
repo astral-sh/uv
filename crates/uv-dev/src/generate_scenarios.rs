@@ -48,9 +48,16 @@ impl TemplateKind {
 
     fn test_file(self) -> &'static str {
         match self {
-            Self::Install => "crates/uv/tests/it/pip_install_scenarios.rs",
-            Self::Compile => "crates/uv/tests/it/pip_compile_scenarios.rs",
-            Self::Lock => "crates/uv/tests/it/lock_scenarios.rs",
+            Self::Install => "crates/uv-integration/tests/it/pip_install_scenarios.rs",
+            Self::Compile => "crates/uv-integration/tests/it/pip_compile_scenarios.rs",
+            Self::Lock => "crates/uv-integration/tests/it/lock_scenarios.rs",
+        }
+    }
+
+    fn test_target(self) -> &'static str {
+        match self {
+            Self::Install | Self::Compile => "pip",
+            Self::Lock => "lock_scenarios",
         }
     }
 
@@ -271,13 +278,15 @@ fn update_snapshots(template: TemplateKind) -> Result<()> {
         .args([
             "insta",
             "test",
+            "--package",
+            "uv-integration",
             "--features",
             "test-python,test-pypi,test-python-patch",
             "--accept",
             "--test-runner",
             "nextest",
             "--test",
-            "it",
+            template.test_target(),
             "--",
             template.test_name(),
         ])
@@ -902,10 +911,24 @@ fn requirement_specifiers(requirement: &Requirement) -> Option<&uv_pep440::Versi
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::{
-        TemplateKind, check_generated_file, compile_requirements, load_scenarios,
+        ROOT_DIR, TemplateKind, check_generated_file, compile_requirements, load_scenarios,
         load_scenarios_from, render,
     };
+
+    #[test]
+    fn generated_scenario_files_exist() {
+        for template in TemplateKind::ALL {
+            let path = Path::new(ROOT_DIR).join(template.test_file());
+            assert!(
+                path.is_file(),
+                "generated scenario file does not exist: {}",
+                path.display()
+            );
+        }
+    }
 
     #[test]
     fn compile_requirements_preserve_multiple_root_entries() {
