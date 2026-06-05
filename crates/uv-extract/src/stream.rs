@@ -103,21 +103,14 @@ pub async fn unzip_and_hash<D: Display, R: tokio::io::AsyncRead + Unpin>(
     source_hint: D,
     reader: R,
     target: impl AsRef<Path>,
-) -> Result<(Vec<(PathBuf, u64)>, DirectoryDigest), Error> {
+) -> Result<(Vec<ExtractedFile>, DirectoryDigest), Error> {
     let output = Box::pin(unzip_inner(source_hint, reader, target, true)).await?;
     let Some(digest) = output.digest else {
         return Err(Error::Io(std::io::Error::other(
             "streaming ZIP digest was not computed",
         )));
     };
-    Ok((
-        output
-            .extracted_files
-            .into_iter()
-            .map(ExtractedFile::into_record)
-            .collect(),
-        digest,
-    ))
+    Ok((output.extracted_files, digest))
 }
 
 async fn unzip_inner<D: Display, R: tokio::io::AsyncRead + Unpin>(

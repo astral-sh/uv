@@ -64,21 +64,14 @@ pub(crate) fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf,
 pub(crate) fn unzip_and_hash(
     reader: fs_err::File,
     target: &Path,
-) -> Result<(Vec<(PathBuf, u64)>, DirectoryDigest), Error> {
+) -> Result<(Vec<ExtractedFile>, DirectoryDigest), Error> {
     let output = unzip_inner(reader, target, true)?;
     let Some(digest) = output.digest else {
         return Err(Error::Io(std::io::Error::other(
             "seekable ZIP digest was not computed",
         )));
     };
-    Ok((
-        output
-            .extracted_files
-            .into_iter()
-            .map(ExtractedFile::into_record)
-            .collect(),
-        digest,
-    ))
+    Ok((output.extracted_files, digest))
 }
 
 fn unzip_inner(
