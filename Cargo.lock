@@ -5862,6 +5862,7 @@ dependencies = [
  "flate2",
  "fs-err",
  "futures",
+ "indoc",
  "jiff",
  "tempfile",
  "tokio",
