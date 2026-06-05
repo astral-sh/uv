@@ -31,8 +31,8 @@ harness = false
 [dependencies]
 anyhow = { workspace = true }
 fs-err = { workspace = true }
-indoc = { workspace = true }
 tempfile = { workspace = true }
+toml = { workspace = true }
 
 [dev-dependencies]
 uv-cache = { workspace = true }

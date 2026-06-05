@@ -1,8 +1,6 @@
-use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use indoc::{formatdoc, indoc};
 
 pub const SYNTHETIC_MEMBER_COUNT: usize = 127;
 const OPTIONAL_DEPENDENCY_GROUP_COUNT: usize = 122;
@@ -64,7 +62,7 @@ impl SyntheticWorkspace {
 }
 
 fn root_pyproject() -> String {
-    let mut pyproject = String::from(indoc! {r#"
+    let mut pyproject = toml::toml! {
         [build-system]
         requires = ["uv_build>=0.8.0,<0.9.0"]
         build-backend = "uv_build"
@@ -84,59 +82,9 @@ fn root_pyproject() -> String {
             "Programming Language :: Python :: 3.13",
             "Typing :: Typed",
         ]
-        dependencies = [
-    "#});
+        dependencies = []
 
-    for member_index in 0..SYNTHETIC_MEMBER_COUNT {
-        writeln!(
-            pyproject,
-            "    \"synthetic-provider-{member_index:03}>=0.0.0\","
-        )
-        .unwrap();
-    }
-    pyproject.push_str("]\n\n[project.optional-dependencies]\n");
-
-    for group_index in 0..OPTIONAL_DEPENDENCY_GROUP_COUNT {
-        writeln!(pyproject, "provider-set-{group_index:03} = [").unwrap();
-        for offset in 0..5 {
-            let member_index = (group_index * 7 + offset * 11) % SYNTHETIC_MEMBER_COUNT;
-            writeln!(
-                pyproject,
-                "    \"synthetic-provider-{member_index:03}>=0.0.0; python_version >= '3.11'\","
-            )
-            .unwrap();
-        }
-        pyproject.push_str("]\n");
-    }
-
-    pyproject.push_str("\n[dependency-groups]\n");
-    for group_index in 0..DEPENDENCY_GROUP_COUNT {
-        writeln!(pyproject, "development-set-{group_index:03} = [").unwrap();
-        for offset in 0..4 {
-            let member_index = (group_index * 13 + offset * 17) % SYNTHETIC_MEMBER_COUNT;
-            writeln!(
-                pyproject,
-                "    \"synthetic-provider-{member_index:03}>=0.0.0\","
-            )
-            .unwrap();
-        }
-        pyproject.push_str("]\n");
-    }
-
-    pyproject.push_str("\n[tool.uv.workspace]\nmembers = [\n");
-    for member_index in 0..SYNTHETIC_MEMBER_COUNT {
-        writeln!(pyproject, "    \"packages/provider-{member_index:03}\",").unwrap();
-    }
-    pyproject.push_str("]\n\n[tool.uv.sources]\n");
-    for member_index in 0..SYNTHETIC_MEMBER_COUNT {
-        writeln!(
-            pyproject,
-            "synthetic-provider-{member_index:03} = {{ workspace = true }}"
-        )
-        .unwrap();
-    }
-
-    pyproject.push_str(indoc! {r#"
+        [project.optional-dependencies]
 
         [project.urls]
         Documentation = "https://example.invalid/docs"
@@ -151,37 +99,134 @@ fn root_pyproject() -> String {
         initialize = "synthetic_workspace.hooks:initialize"
         validate = "synthetic_workspace.hooks:validate"
         finalize = "synthetic_workspace.hooks:finalize"
-    "#});
 
+        [dependency-groups]
+
+        [tool.uv.workspace]
+        members = []
+
+        [tool.uv.sources]
+
+        [tool.synthetic.generated]
+    };
+
+    let project = pyproject
+        .get_mut("project")
+        .and_then(toml::Value::as_table_mut)
+        .unwrap();
+    let dependencies = project
+        .get_mut("dependencies")
+        .and_then(toml::Value::as_array_mut)
+        .unwrap();
+    for member_index in 0..SYNTHETIC_MEMBER_COUNT {
+        dependencies.push(format!("synthetic-provider-{member_index:03}>=0.0.0").into());
+    }
+
+    let optional_dependencies = project
+        .get_mut("optional-dependencies")
+        .and_then(toml::Value::as_table_mut)
+        .unwrap();
+    for group_index in 0..OPTIONAL_DEPENDENCY_GROUP_COUNT {
+        let mut dependencies = Vec::with_capacity(5);
+        for offset in 0..5 {
+            let member_index = (group_index * 7 + offset * 11) % SYNTHETIC_MEMBER_COUNT;
+            dependencies.push(
+                format!("synthetic-provider-{member_index:03}>=0.0.0; python_version >= '3.11'")
+                    .into(),
+            );
+        }
+        optional_dependencies.insert(
+            format!("provider-set-{group_index:03}"),
+            toml::Value::Array(dependencies),
+        );
+    }
+
+    let dependency_groups = pyproject
+        .get_mut("dependency-groups")
+        .and_then(toml::Value::as_table_mut)
+        .unwrap();
+    for group_index in 0..DEPENDENCY_GROUP_COUNT {
+        let mut dependencies = Vec::with_capacity(4);
+        for offset in 0..4 {
+            let member_index = (group_index * 13 + offset * 17) % SYNTHETIC_MEMBER_COUNT;
+            dependencies.push(format!("synthetic-provider-{member_index:03}>=0.0.0").into());
+        }
+        dependency_groups.insert(
+            format!("development-set-{group_index:03}"),
+            toml::Value::Array(dependencies),
+        );
+    }
+
+    let tool = pyproject
+        .get_mut("tool")
+        .and_then(toml::Value::as_table_mut)
+        .unwrap();
+    let uv = tool
+        .get_mut("uv")
+        .and_then(toml::Value::as_table_mut)
+        .unwrap();
+    let members = uv
+        .get_mut("workspace")
+        .and_then(toml::Value::as_table_mut)
+        .and_then(|workspace| workspace.get_mut("members"))
+        .and_then(toml::Value::as_array_mut)
+        .unwrap();
+    for member_index in 0..SYNTHETIC_MEMBER_COUNT {
+        members.push(format!("packages/provider-{member_index:03}").into());
+    }
+
+    let sources = uv
+        .get_mut("sources")
+        .and_then(toml::Value::as_table_mut)
+        .unwrap();
+    for member_index in 0..SYNTHETIC_MEMBER_COUNT {
+        sources.insert(
+            format!("synthetic-provider-{member_index:03}"),
+            toml::Value::Table(toml::toml! {
+                workspace = true
+            }),
+        );
+    }
+
+    let generated = tool
+        .get_mut("synthetic")
+        .and_then(toml::Value::as_table_mut)
+        .and_then(|synthetic| synthetic.get_mut("generated"))
+        .and_then(toml::Value::as_table_mut)
+        .unwrap();
     for table_index in 0..UNUSED_ROOT_TABLE_COUNT {
         let enabled = table_index % 2 == 0;
         let owner = table_index % 12;
-        writeln!(
-            pyproject,
-            "{}",
-            formatdoc! {r#"
-                [tool.synthetic.generated.root-section-{table_index:03}]
-                enabled = {enabled}
-                label = "Generated root metadata section {table_index:03}"
-                owner = "workspace-team-{owner:02}"
-                tags = ["benchmark", "root", "section-{table_index:03}"]
+        generated.insert(
+            format!("root-section-{table_index:03}"),
+            toml::Value::Table(toml::toml! {
+                enabled = (enabled)
+                label = (format!("Generated root metadata section {table_index:03}"))
+                owner = (format!("workspace-team-{owner:02}"))
+                tags = ["benchmark", "root", (format!("section-{table_index:03}"))]
                 include = ["packages/provider-*", "plugins/**/*.py", "tests/**/*.py"]
                 exclude = ["build/**", "dist/**", ".cache/**"]
-                settings = {{ retries = 3, timeout = 30, strict = false }}
-            "#}
-        )
-        .unwrap();
+                settings = { retries = 3, timeout = 30, strict = false }
+            }),
+        );
     }
 
-    pyproject
+    toml::to_string_pretty(&pyproject).unwrap()
 }
 
 fn member_pyproject(member_index: usize) -> String {
-    let mut pyproject = formatdoc! {r#"
+    let mut dependencies = Vec::with_capacity(4);
+    for offset in 1..=4 {
+        if let Some(dependency_index) = member_index.checked_sub(offset) {
+            dependencies.push(format!("synthetic-provider-{dependency_index:03}>=0.0.0"));
+        }
+    }
+
+    let mut pyproject = toml::toml! {
         [project]
-        name = "synthetic-provider-{member_index:03}"
+        name = (format!("synthetic-provider-{member_index:03}"))
         version = "0.0.0"
-        description = "Generated provider package {member_index:03} for workspace discovery benchmarks"
+        description = (format!("Generated provider package {member_index:03} for workspace discovery benchmarks"))
         requires-python = ">=3.11"
         license = "MIT"
         keywords = ["generated", "provider", "workspace"]
@@ -190,20 +235,7 @@ fn member_pyproject(member_index: usize) -> String {
             "Programming Language :: Python :: 3.11",
             "Typing :: Typed",
         ]
-        dependencies = [
-    "#};
-
-    for offset in 1..=4 {
-        if let Some(dependency_index) = member_index.checked_sub(offset) {
-            writeln!(
-                pyproject,
-                "    \"synthetic-provider-{dependency_index:03}>=0.0.0\","
-            )
-            .unwrap();
-        }
-    }
-    pyproject.push_str(indoc! {r#"
-        ]
+        dependencies = (dependencies)
 
         [project.optional-dependencies]
         diagnostics = ["rich>=13", "typing-extensions>=4.10"]
@@ -218,31 +250,48 @@ fn member_pyproject(member_index: usize) -> String {
         Source = "https://example.invalid/repository"
 
         [project.entry-points."synthetic.providers"]
-    "#});
-    writeln!(
-        pyproject,
-        "provider-{member_index:03} = \"synthetic_provider_{member_index:03}.plugin:Provider\""
-    )
-    .unwrap();
 
+        [tool.synthetic.generated]
+    };
+
+    let project = pyproject
+        .get_mut("project")
+        .and_then(toml::Value::as_table_mut)
+        .unwrap();
+    let entry_points = project
+        .get_mut("entry-points")
+        .and_then(toml::Value::as_table_mut)
+        .and_then(|entry_points| entry_points.get_mut("synthetic.providers"))
+        .and_then(toml::Value::as_table_mut)
+        .unwrap();
+    entry_points.insert(
+        format!("provider-{member_index:03}"),
+        format!("synthetic_provider_{member_index:03}.plugin:Provider").into(),
+    );
+
+    let generated = pyproject
+        .get_mut("tool")
+        .and_then(toml::Value::as_table_mut)
+        .and_then(|tool| tool.get_mut("synthetic"))
+        .and_then(toml::Value::as_table_mut)
+        .and_then(|synthetic| synthetic.get_mut("generated"))
+        .and_then(toml::Value::as_table_mut)
+        .unwrap();
     for table_index in 0..UNUSED_MEMBER_TABLE_COUNT {
         let enabled = table_index % 3 != 0;
         let priority = table_index % 5;
-        writeln!(
-            pyproject,
-            "{}",
-            formatdoc! {r#"
-                [tool.synthetic.generated.member-section-{table_index:02}]
-                member = {member_index}
-                label = "Provider {member_index:03} metadata section {table_index:02}"
-                enabled = {enabled}
+        generated.insert(
+            format!("member-section-{table_index:02}"),
+            toml::Value::Table(toml::toml! {
+                member = (member_index)
+                label = (format!("Provider {member_index:03} metadata section {table_index:02}"))
+                enabled = (enabled)
                 capabilities = ["discover", "validate", "report", "archive"]
                 paths = ["src/**/*.py", "tests/**/*.py", "resources/**/*"]
-                metadata = {{ priority = {priority}, retries = 2, experimental = true }}
-            "#}
-        )
-        .unwrap();
+                metadata = { priority = (priority), retries = 2, experimental = true }
+            }),
+        );
     }
 
-    pyproject
+    toml::to_string_pretty(&pyproject).unwrap()
 }
