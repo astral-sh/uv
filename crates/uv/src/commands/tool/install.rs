@@ -75,6 +75,7 @@ pub(crate) async fn install(
     concurrency: Concurrency,
     no_config: bool,
     cache: Cache,
+    refresh: Refresh,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
@@ -146,11 +147,12 @@ pub(crate) async fn install(
     .into_interpreter();
 
     // If the user passed, e.g., `ruff@latest`, refresh the cache.
-    let cache = if request.is_latest() {
-        cache.with_refresh(Refresh::All(Timestamp::now()))
+    let refresh = if request.is_latest() {
+        refresh.combine(Refresh::All(Timestamp::now()))
     } else {
-        cache
+        refresh
     };
+    let cache = cache.with_refresh(refresh.clone());
 
     // Resolve the `--from` requirement.
     let requirement = match &request {
@@ -382,6 +384,36 @@ pub(crate) async fn install(
             .await?,
         );
         requirements
+    };
+
+    // Explicit local directory requirements should always be rebuilt and reinstalled, matching
+    // `uv pip install`. At this point, all unnamed requirements have been resolved to package names,
+    // including any requirements provided via `--with`.
+    let explicit_local_packages = requirements
+        .iter()
+        .filter(|requirement| {
+            requirement.origin.is_none()
+                && matches!(requirement.source, RequirementSource::Directory { .. })
+        })
+        .map(|requirement| requirement.name.clone())
+        .collect::<Vec<_>>();
+    let (settings, cache) = if explicit_local_packages.is_empty() {
+        (settings, cache)
+    } else {
+        let reinstall = explicit_local_packages
+            .into_iter()
+            .fold(Reinstall::None, |reinstall, package_name| {
+                reinstall.with_package(package_name)
+            })
+            .combine(settings.reinstall);
+        let cache = cache.with_refresh(refresh.combine(Refresh::from(reinstall.clone())));
+        (
+            ResolverInstallerSettings {
+                reinstall,
+                ..settings
+            },
+            cache,
+        )
     };
 
     // Resolve the constraints.
