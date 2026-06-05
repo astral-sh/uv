@@ -1,0 +1,8 @@
+[build]
+rustflags = ["-C", "instrument-coverage"]
+target-dir = "target/coverage"
+
+# Target-specific rustflags take precedence over build.rustflags. Repeat the
+# instrumentation flag so it is combined with Windows' static CRT flag.
+[target.'cfg(all(target_env = "msvc", target_os = "windows"))']
+rustflags = ["-C", "instrument-coverage"]

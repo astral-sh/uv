@@ -8,6 +8,7 @@ use uv_settings::EnvironmentOptions;
 
 use crate::clear_compile::ClearCompileArgs;
 use crate::compile::CompileArgs;
+use crate::coverage::CoverageArgs;
 use crate::generate_all::Args as GenerateAllArgs;
 use crate::generate_cli_reference::Args as GenerateCliReferenceArgs;
 use crate::generate_env_vars_reference::Args as GenerateEnvVarsReferenceArgs;
@@ -23,6 +24,7 @@ use crate::wheel_metadata::WheelMetadataArgs;
 
 mod clear_compile;
 mod compile;
+mod coverage;
 mod generate_all;
 mod generate_cli_reference;
 mod generate_env_vars_reference;
@@ -47,6 +49,8 @@ enum Cli {
     Compile(CompileArgs),
     /// Remove all `.pyc` in the tree.
     ClearCompile(ClearCompileArgs),
+    /// Run tests and collect LLVM coverage profiles.
+    Coverage(CoverageArgs),
     /// List all packages from a Simple API index.
     ListPackages(ListPackagesArgs),
     /// Run all code and documentation generation steps.
@@ -80,6 +84,7 @@ pub async fn run() -> Result<()> {
         Cli::ValidateZip(args) => validate_zip::validate_zip(args, environment).await?,
         Cli::Compile(args) => compile::compile(args).await?,
         Cli::ClearCompile(args) => clear_compile::clear_compile(&args)?,
+        Cli::Coverage(args) => coverage::coverage(args)?,
         Cli::ListPackages(args) => list_packages::list_packages(args, environment).await?,
         Cli::GenerateAll(args) => generate_all::main(&args).await?,
         Cli::GenerateJSONSchema(args) => generate_json_schema::main(&args)?,

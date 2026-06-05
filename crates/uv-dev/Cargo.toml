@@ -63,6 +63,7 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+uv-fastid = { workspace = true }
 uv-performance-memory-allocator = { path = "../uv-performance-memory-allocator", optional = true }
 walkdir = { workspace = true }
 
