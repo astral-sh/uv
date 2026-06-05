@@ -134,7 +134,12 @@ pub(crate) async fn venv(
     let path = path.unwrap_or_else(|| {
         project_environment.map_or_else(
             || PathBuf::from(".venv"),
-            |workspace| workspace.venv(Some(false)),
+            |workspace| {
+                workspace
+                    .venv(Some(false))
+                    .project_path(workspace.install_path())
+                    .into_owned()
+            },
         )
     });
 

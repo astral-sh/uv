@@ -22,6 +22,7 @@ use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState, WorkspacePython,
+    ensure_centralized_environment_uses_persistent_cache,
 };
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
@@ -65,6 +66,14 @@ pub(crate) async fn metadata(
         workspace_cache,
     )
     .await?;
+
+    if sync {
+        ensure_centralized_environment_uses_persistent_cache(
+            &virtual_project.workspace().venv(Some(false)),
+            cache,
+        )?;
+    }
+
     let target = LockTarget::Workspace(virtual_project.workspace());
 
     // Don't enable any groups' requires-python for interpreter discovery.
@@ -148,6 +157,7 @@ pub(crate) async fn metadata(
                     cache,
                     DryRun::Disabled,
                     printer,
+                    true,
                 )
                 .await?;
                 let module_owners = collect_module_owners(

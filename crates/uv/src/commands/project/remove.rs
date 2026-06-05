@@ -33,6 +33,7 @@ use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
     WorkspacePython, default_dependency_groups,
+    ensure_centralized_environment_uses_persistent_cache,
 };
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
@@ -188,6 +189,16 @@ pub(crate) async fn remove(
 
     let content = toml.to_string();
 
+    if frozen.is_none()
+        && !no_sync
+        && let RemoveTarget::Project(project) = &target
+    {
+        ensure_centralized_environment_uses_persistent_cache(
+            &project.workspace().venv(active),
+            cache,
+        )?;
+    }
+
     // Save the modified `pyproject.toml` or script.
     target.write(&content)?;
 
@@ -266,6 +277,7 @@ pub(crate) async fn remove(
                     cache,
                     DryRun::Disabled,
                     printer,
+                    true,
                 )
                 .await?
                 .into_environment()?;

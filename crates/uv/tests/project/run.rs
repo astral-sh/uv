@@ -7088,3 +7088,78 @@ async fn run_malware_detected() {
     error: Malware detected in one or more dependencies that would be installed; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check.
     ");
 }
+
+#[test]
+fn run_centralized_environment_no_cache_is_rejected() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("centralized-envs")
+        .arg("python")
+        .arg("-c")
+        .arg("pass"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--no-cache` is unsupported with the `centralized-envs` feature enabled
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn run_centralized_environment_no_sync_uses_incompatible_python() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+    "#})?;
+    context
+        .sync()
+        .arg("--preview-features")
+        .arg("centralized-envs")
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    // `--no-sync` reuses the existing environment despite the Python request.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--preview-features")
+        .arg("centralized-envs")
+        .arg("--no-sync")
+        .arg("--python")
+        .arg("3.11")
+        .arg("python")
+        .arg("-c")
+        .arg("import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    warning: Using incompatible environment (`project-py3.12.[X]-[HASH]`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.11`)
+    "#);
+    Ok(())
+}

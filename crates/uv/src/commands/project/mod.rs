@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -22,13 +23,13 @@ use uv_distribution_types::{
     ExtraBuildRequirement, ExtraBuildRequires, Index, IndexCredentialsError, Requirement,
     RequiresPython, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified};
+use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified, verbatim_path};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::{
     BrokenLink, EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads,
@@ -51,7 +52,7 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeE
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
-use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
+use uv_workspace::{ProjectEnvironmentTarget, RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
@@ -259,6 +260,9 @@ pub(crate) enum ProjectError {
 
     #[error("Project virtual environment directory `{0}` cannot be used because {1}")]
     InvalidProjectEnvironmentDir(PathBuf, String),
+
+    #[error("`--no-cache` is unsupported with the `centralized-envs` feature enabled")]
+    CentralizedEnvironmentNoCache,
 
     #[error("Failed to parse `uv.lock`")]
     UvLockParse(#[source] toml::de::Error),
@@ -1003,6 +1007,7 @@ fn usable_project_environment(
     python_preference: PythonPreference,
     requires_python: Option<&RequiresPython>,
     keep_incompatible: bool,
+    centralized: bool,
     cache: &Cache,
 ) -> Option<PythonEnvironment> {
     match environment_is_usable(
@@ -1015,10 +1020,21 @@ fn usable_project_environment(
     ) {
         Ok(()) => Some(environment),
         Err(err) if keep_incompatible => {
-            warn_user!(
-                "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
-                environment.root().user_display().cyan(),
-            );
+            if centralized {
+                let root = environment.root();
+                warn_user!(
+                    "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
+                    root.file_name()
+                        .unwrap_or(root.as_os_str())
+                        .to_string_lossy()
+                        .cyan(),
+                );
+            } else {
+                warn_user!(
+                    "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
+                    environment.root().user_display().cyan(),
+                );
+            }
             Some(environment)
         }
         Err(err) => {
@@ -1034,6 +1050,7 @@ fn discover_project_environment(
     python_preference: PythonPreference,
     requires_python: Option<&RequiresPython>,
     keep_incompatible: bool,
+    centralized: bool,
     cache: &Cache,
 ) -> Result<Option<PythonEnvironment>, ProjectError> {
     match PythonEnvironment::from_root(root, cache) {
@@ -1043,6 +1060,7 @@ fn discover_project_environment(
             python_preference,
             requires_python,
             keep_incompatible,
+            centralized,
             cache,
         )),
         Err(uv_python::Error::MissingEnvironment(_)) => Ok(None),
@@ -1055,7 +1073,9 @@ fn discover_project_environment(
                     ));
                 }
                 InvalidEnvironmentKind::MissingExecutable(_) => {
-                    if fs_err::read_dir(root).is_ok_and(|mut dir| dir.next().is_some()) {
+                    if !centralized
+                        && fs_err::read_dir(root).is_ok_and(|mut dir| dir.next().is_some())
+                    {
                         if !root.join("pyvenv.cfg").try_exists().unwrap_or_default() {
                             return Err(ProjectError::InvalidProjectEnvironmentDir(
                                 root.to_path_buf(),
@@ -1094,6 +1114,108 @@ fn discover_project_environment(
     }
 }
 
+fn centralized_environments_enabled(target: &ProjectEnvironmentTarget) -> bool {
+    target.is_default() && uv_preview::is_enabled(PreviewFeature::CentralizedEnvs)
+}
+
+pub(crate) fn ensure_centralized_environment_uses_persistent_cache(
+    target: &ProjectEnvironmentTarget,
+    cache: &Cache,
+) -> Result<(), ProjectError> {
+    if centralized_environments_enabled(target) && cache.is_temporary() {
+        return Err(ProjectError::CentralizedEnvironmentNoCache);
+    }
+    Ok(())
+}
+
+/// Return whether `path` is a directory link to a centralized environment.
+fn is_centralized_environment_link(path: &Path, cache: &Cache) -> bool {
+    let Ok(target) = fs_err::read_link(path) else {
+        return false;
+    };
+    let environments = cache.bucket(CacheBucket::Environments);
+    // Compare Windows paths in the verbatim namespace so long targets returned with `\\?\` match
+    // the cache root.
+    let starts_with =
+        |path: &Path, base: &Path| verbatim_path(path).starts_with(verbatim_path(base).as_ref());
+    if starts_with(&target, &environments) {
+        return true;
+    }
+
+    // Resolve existing indirect links. The lexical check above also recognizes dangling direct
+    // links into the cache.
+    path.simple_canonicalize().is_ok_and(|target| {
+        environments
+            .simple_canonicalize()
+            .is_ok_and(|environments| starts_with(&target, &environments))
+    })
+}
+
+fn centralized_environment_root(
+    workspace: &Workspace,
+    interpreter: &Interpreter,
+    cache: &Cache,
+) -> PathBuf {
+    let digest = cache_digest(&(workspace.install_path(), interpreter.key()));
+    let name = workspace
+        .pyproject_toml()
+        .project
+        .as_ref()
+        .and_then(|project| cache_name(project.name.as_ref(), Some(100)))
+        .or_else(|| {
+            workspace
+                .install_path()
+                .file_name()
+                .and_then(|name| name.to_str())
+                .and_then(|name| cache_name(name, Some(100)))
+        });
+    let python_version = interpreter.python_version();
+    let entry = name.map_or_else(
+        // A virtual workspace can be nameless if its directory has no cache-safe characters.
+        || format!("py{python_version}-{digest}"),
+        |name| format!("{name}-py{python_version}-{digest}"),
+    );
+    cache
+        .shard(CacheBucket::Environments, entry)
+        .into_path_buf()
+}
+
+fn update_venv_link(
+    environment: &PythonEnvironment,
+    workspace: &Workspace,
+    warn_on_link_errors: bool,
+) {
+    let link = workspace.install_path().join(".venv");
+    let report_error = |message: &str, err: &std::io::Error| {
+        if warn_on_link_errors {
+            warn_user_once!("{message}: {err}");
+        } else {
+            warn!("{message}: {err}");
+        }
+    };
+
+    if fs_err::symlink_metadata(&link).is_ok_and(|metadata| metadata.is_dir()) {
+        if uv_fs::is_virtualenv_base(&link) {
+            if let Err(err) = uv_fs::remove_virtualenv(&link) {
+                report_error("Failed to remove existing local virtual environment", &err);
+                return;
+            }
+        } else {
+            // On Windows, copying a junction can produce an empty directory.
+            #[cfg(windows)]
+            if let Err(err) = fs_err::remove_dir(&link) {
+                report_error("Failed to create project environment link at `.venv`", &err);
+                return;
+            }
+        }
+    }
+
+    // TODO(tk): Fall back to a path file when directory links are unavailable.
+    if let Err(err) = uv_fs::replace_symlink(environment.root(), &link) {
+        report_error("Failed to create project environment link at `.venv`", &err);
+    }
+}
+
 /// An interpreter suitable for the project.
 #[derive(Debug)]
 #[expect(clippy::large_enum_variant)]
@@ -1125,14 +1247,37 @@ impl ProjectInterpreter {
             requires_python,
         } = workspace_python;
 
-        // Read from the virtual environment first.
-        let root = workspace.venv(active);
-        if let Some(environment) = discover_project_environment(
-            &root,
+        let environment_target = workspace.venv(active);
+        let centralized = centralized_environments_enabled(&environment_target);
+
+        // For centralized environments, `.venv` identifies the interpreter. The cache path is
+        // derived from the workspace and interpreter instead of trusting the link target.
+        if centralized {
+            let project_environment_path =
+                environment_target.project_path(workspace.install_path());
+            if let Ok(candidate) = PythonEnvironment::from_root(&project_environment_path, cache) {
+                let root = centralized_environment_root(workspace, candidate.interpreter(), cache);
+                if let Some(environment) = discover_project_environment(
+                    &root,
+                    python_request.as_ref(),
+                    python_preference,
+                    requires_python.as_ref(),
+                    keep_incompatible,
+                    centralized,
+                    cache,
+                )? {
+                    return Ok(Self::Environment(environment));
+                }
+            }
+        } else if let Some(environment) = discover_project_environment(
+            environment_target
+                .project_path(workspace.install_path())
+                .as_ref(),
             python_request.as_ref(),
             python_preference,
             requires_python.as_ref(),
             keep_incompatible,
+            centralized,
             cache,
         )? {
             return Ok(Self::Environment(environment));
@@ -1154,6 +1299,21 @@ impl ProjectInterpreter {
             install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?;
+
+        if centralized {
+            let root = centralized_environment_root(workspace, python.interpreter(), cache);
+            if let Some(environment) = discover_project_environment(
+                &root,
+                python_request.as_ref(),
+                python_preference,
+                requires_python.as_ref(),
+                keep_incompatible,
+                centralized,
+                cache,
+            )? {
+                return Ok(Self::Environment(environment));
+            }
+        }
 
         let managed = python.source().is_managed();
         let implementation = python.implementation();
@@ -1195,7 +1355,7 @@ impl ProjectInterpreter {
     pub(crate) fn into_interpreter(self) -> Interpreter {
         match self {
             Self::Interpreter(interpreter) => interpreter,
-            Self::Environment(venv) => venv.into_interpreter(),
+            Self::Environment(environment) => environment.into_interpreter(),
         }
     }
 }
@@ -1466,6 +1626,9 @@ pub(crate) enum ProjectEnvironment {
 
 impl ProjectEnvironment {
     /// Initialize a virtual environment for the current project.
+    ///
+    /// If `warn_on_link_errors` is `true`, failures to update `.venv` are reported to the user.
+    /// Otherwise, they are logged at warning level.
     pub(crate) async fn get_or_init(
         workspace: &Workspace,
         groups: &DependencyGroupsWithDefaults,
@@ -1480,7 +1643,12 @@ impl ProjectEnvironment {
         cache: &Cache,
         dry_run: DryRun,
         printer: Printer,
+        warn_on_link_errors: bool,
     ) -> Result<Self, ProjectError> {
+        let environment_target = workspace.venv(active);
+        let centralized = centralized_environments_enabled(&environment_target);
+        ensure_centralized_environment_uses_persistent_cache(&environment_target, cache)?;
+
         // Lock the project environment to avoid synchronization issues.
         let _lock = lock_project_environment(workspace)
             .await
@@ -1519,38 +1687,57 @@ impl ProjectEnvironment {
         .await?
         {
             // If we found an existing, compatible environment, use it.
-            ProjectInterpreter::Environment(environment) => Ok(Self::Existing(environment)),
+            ProjectInterpreter::Environment(environment) => {
+                if centralized && !dry_run.enabled() {
+                    update_venv_link(&environment, workspace, warn_on_link_errors);
+                }
+                Ok(Self::Existing(environment))
+            }
 
             // Otherwise, create a virtual environment with the discovered interpreter.
             ProjectInterpreter::Interpreter(interpreter) => {
-                let root = workspace.venv(active);
+                let root: Cow<'_, Path> = match &environment_target {
+                    ProjectEnvironmentTarget::Default if centralized => {
+                        Cow::Owned(centralized_environment_root(workspace, &interpreter, cache))
+                    }
+                    _ => environment_target.project_path(workspace.install_path()),
+                };
+                let centralized_environment_link =
+                    !centralized && is_centralized_environment_link(&root, cache);
 
                 // Avoid removing things that are not virtual environments
-                let replace = match (root.try_exists(), root.join("pyvenv.cfg").try_exists()) {
-                    // It's a virtual environment we can remove it
-                    (_, Ok(true)) => true,
-                    // It doesn't exist at all, we should use it without deleting it to avoid TOCTOU bugs
-                    (Ok(false), Ok(false)) => false,
-                    // If it's not a virtual environment, bail
-                    (Ok(true), Ok(false)) => {
-                        // Unless it's empty, in which case we just ignore it
-                        if root.read_dir().is_ok_and(|mut dir| dir.next().is_none()) {
-                            false
-                        } else {
+                let replace_environment = if centralized_environment_link {
+                    true
+                } else {
+                    match (root.try_exists(), root.join("pyvenv.cfg").try_exists()) {
+                        // It's a virtual environment we can remove it
+                        (_, Ok(true)) => true,
+                        // It doesn't exist at all, we should use it without deleting it to avoid TOCTOU bugs
+                        (Ok(false), Ok(false)) => false,
+                        // If it's not a virtual environment, bail
+                        (Ok(true), Ok(false)) => {
+                            // Unless it's empty, in which case we just ignore it
+                            if root.read_dir().is_ok_and(|mut dir| dir.next().is_none()) {
+                                false
+                            } else if centralized {
+                                // We maintain the cache, eagerly recover a mangled env.
+                                true
+                            } else {
+                                return Err(ProjectError::InvalidProjectEnvironmentDir(
+                                    root.into_owned(),
+                                    "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
+                                ));
+                            }
+                        }
+                        // Similarly, if we can't _tell_ if it exists we should bail
+                        (_, Err(err)) | (Err(err), _) => {
                             return Err(ProjectError::InvalidProjectEnvironmentDir(
-                                root,
-                                "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
+                                root.into_owned(),
+                                format!(
+                                    "it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"
+                                ),
                             ));
                         }
-                    }
-                    // Similarly, if we can't _tell_ if it exists we should bail
-                    (_, Err(err)) | (Err(err), _) => {
-                        return Err(ProjectError::InvalidProjectEnvironmentDir(
-                            root,
-                            format!(
-                                "it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"
-                            ),
-                        ));
                     }
                 };
 
@@ -1588,33 +1775,50 @@ impl ProjectEnvironment {
                         false,
                         upgradeable,
                     )?;
-                    return Ok(if replace {
-                        Self::WouldReplace(root, environment, temp_dir)
+                    return Ok(if replace_environment {
+                        Self::WouldReplace(root.into_owned(), environment, temp_dir)
                     } else {
-                        Self::WouldCreate(root, environment, temp_dir)
+                        Self::WouldCreate(root.into_owned(), environment, temp_dir)
                     });
                 }
 
-                // Remove the existing virtual environment if it doesn't meet the requirements.
-                if replace {
-                    match uv_fs::remove_virtualenv(&root) {
-                        Ok(()) => {
-                            writeln!(
-                                printer.stderr(),
-                                "Removed virtual environment at: {}",
-                                root.user_display().cyan()
-                            )?;
+                if replace_environment {
+                    // `clear_virtualenv` follows directory links, so unlink centralized links
+                    // directly to preserve their cached targets.
+                    let removed = if centralized_environment_link {
+                        match uv_fs::remove_virtualenv(&root) {
+                            Ok(()) => true,
+                            Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
+                            Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
                         }
-                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-                        Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
+                    } else {
+                        uv_fs::clear_virtualenv(&root).map_err(uv_virtualenv::Error::from)?
+                    };
+                    if removed {
+                        writeln!(
+                            printer.stderr(),
+                            "Removed virtual environment at: {}",
+                            root.user_display().cyan()
+                        )?;
                     }
                 }
 
-                writeln!(
-                    printer.stderr(),
-                    "Creating virtual environment at: {}",
-                    root.user_display().cyan()
-                )?;
+                if centralized {
+                    writeln!(
+                        printer.stderr(),
+                        "Creating virtual environment `{}` in the centralized store",
+                        root.file_name()
+                            .unwrap_or(root.as_os_str())
+                            .to_string_lossy()
+                            .cyan(),
+                    )?;
+                } else {
+                    writeln!(
+                        printer.stderr(),
+                        "Creating virtual environment at: {}",
+                        root.user_display().cyan()
+                    )?;
+                }
 
                 let environment = uv_virtualenv::create_venv(
                     &root,
@@ -1629,7 +1833,11 @@ impl ProjectEnvironment {
                     upgradeable,
                 )?;
 
-                if replace {
+                if centralized {
+                    update_venv_link(&environment, workspace, warn_on_link_errors);
+                }
+
+                if replace_environment {
                     Ok(Self::Replaced(environment))
                 } else {
                     Ok(Self::Created(environment))

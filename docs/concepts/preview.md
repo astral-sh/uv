@@ -70,6 +70,9 @@ The following preview features are available:
 
 - `add-bounds`: Allows configuring the
   [default bounds for `uv add`](../reference/settings.md#add-bounds) invocations.
+- `centralized-envs`: Stores
+  [project virtual environments](../reference/storage.md#project-virtual-environments) in the uv
+  cache.
 - `json-output`: Allows `--output-format json` for various uv commands.
 - `package-conflicts`: Allows defining workspace conflicts at the package level.
 - `pylock`: Allows installing from `pylock.toml` files.
