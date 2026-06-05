@@ -12,7 +12,7 @@ use uv_warnings::warn_user;
 
 use uv_cache::Cache;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
-use uv_client::{BaseClient, BaseClientBuilder};
+use uv_client::{BaseClient, BaseClientBuilder, CachedClient};
 use uv_pep440::{Prerelease, Version};
 use uv_platform::{Arch, Libc, Os, Platform};
 
@@ -165,6 +165,7 @@ impl PythonInstallation {
             .download_and_warn_if_outdated_prerelease(
                 request,
                 client_builder,
+                cache,
                 python_downloads_json_url,
             )
             .await?;
@@ -194,6 +195,7 @@ impl PythonInstallation {
                     .download_and_warn_if_outdated_prerelease(
                         request,
                         client_builder,
+                        cache,
                         python_downloads_json_url,
                     )
                     .await?;
@@ -216,9 +218,9 @@ impl PythonInstallation {
             return Err(err);
         };
 
-        let download_list_client = client_builder.build()?;
+        let download_list_client = CachedClient::new(client_builder.build()?);
         let download_list =
-            ManagedPythonDownloadList::new(&download_list_client, python_downloads_json_url)
+            ManagedPythonDownloadList::new(&download_list_client, cache, python_downloads_json_url)
                 .await?;
 
         let downloads_enabled = preference.allows_managed()
@@ -530,15 +532,16 @@ impl PythonInstallation {
         &self,
         request: &PythonRequest,
         client_builder: &BaseClientBuilder<'_>,
+        cache: &Cache,
         python_downloads_json_url: Option<&str>,
     ) -> Result<(), Error> {
         if !self.should_check_outdated_prerelease_warning(request) {
             return Ok(());
         }
 
-        let download_list_client = client_builder.build()?;
+        let download_list_client = CachedClient::new(client_builder.build()?);
         let download_list =
-            ManagedPythonDownloadList::new(&download_list_client, python_downloads_json_url)
+            ManagedPythonDownloadList::new(&download_list_client, cache, python_downloads_json_url)
                 .await?;
         self.warn_if_outdated_prerelease(request, &download_list);
 
