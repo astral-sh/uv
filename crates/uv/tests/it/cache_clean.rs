@@ -280,6 +280,8 @@ fn clean_package_does_not_follow_symlinks() -> Result<()> {
     archive_entry.create_dir_all()?;
     archive_entry.child("payload.txt").write_str("payload")?;
     package_entry.create_dir_all()?;
+
+    // Preserve external targets while still removing unreferenced entries in the archive bucket.
     fs_err::os::unix::fs::symlink(&victim_dir, package_entry.join("escape"))?;
     fs_err::os::unix::fs::symlink(&archive_entry, package_entry.join("archive"))?;
 
