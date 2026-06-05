@@ -2605,3 +2605,80 @@ fn padded<'a, T: std::fmt::Display + ?Sized>(
         Ok(())
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use pubgrub::{DefaultStringReporter, Reporter};
+    use uv_distribution_types::RequiresPython;
+    use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
+
+    use super::*;
+
+    fn derived(
+        cause1: DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+        cause2: DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+        shared_id: Option<usize>,
+    ) -> DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason> {
+        DerivationTree::Derived(Derived {
+            terms: Map::default(),
+            shared_id,
+            cause1: cause1.into(),
+            cause2: cause2.into(),
+        })
+    }
+
+    #[test]
+    fn stack_safe_reporter_matches_pubgrub_for_shared_nodes() {
+        let marker_environment = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+            implementation_name: "cpython",
+            implementation_version: "3.12.0",
+            os_name: "posix",
+            platform_machine: "x86_64",
+            platform_python_implementation: "CPython",
+            platform_release: "",
+            platform_system: "Linux",
+            platform_version: "",
+            python_full_version: "3.12.0",
+            python_version: "3.12",
+            sys_platform: "linux",
+        })
+        .expect("valid marker environment");
+        let python_requirement = PythonRequirement::from_marker_environment(
+            &marker_environment,
+            RequiresPython::greater_than_equal_version(&Version::new([3_u64, 12])),
+        );
+        let included_versions = FxHashMap::default();
+        let available_versions = FxHashMap::default();
+        let workspace_members = BTreeSet::default();
+        let formatter = PubGrubReportFormatter {
+            included_versions: &included_versions,
+            available_versions: &available_versions,
+            python_requirement: &python_requirement,
+            workspace_members: &workspace_members,
+            tags: None,
+        };
+
+        let package = PubGrubPackage::from(PubGrubPackageInner::Root(None));
+        let external1 =
+            DerivationTree::External(External::NotRoot(package.clone(), Version::new([1_u64])));
+        let external2 =
+            DerivationTree::External(External::NotRoot(package.clone(), Version::new([2_u64])));
+        let external3 = DerivationTree::External(External::NotRoot(package, Version::new([3_u64])));
+        let shared = derived(external1.clone(), external2.clone(), Some(1));
+        let unshared = derived(external2.clone(), external3.clone(), None);
+
+        let trees = [
+            derived(shared.clone(), external3.clone(), None),
+            derived(external3.clone(), shared.clone(), None),
+            derived(shared.clone(), unshared, None),
+            derived(shared.clone(), shared, None),
+        ];
+
+        for tree in trees {
+            assert_eq!(
+                report(&tree, &formatter),
+                DefaultStringReporter::report_with_formatter(&tree, &formatter)
+            );
+        }
+    }
+}
