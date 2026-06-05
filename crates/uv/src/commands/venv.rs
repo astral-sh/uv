@@ -71,7 +71,7 @@ pub(crate) async fn venv(
     install_mirrors: PythonInstallMirrors,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    link_mode: LinkMode,
+    link_mode: Option<LinkMode>,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,

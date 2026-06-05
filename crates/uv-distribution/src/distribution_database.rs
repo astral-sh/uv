@@ -13,7 +13,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, info_span, instrument, warn};
 use url::Url;
 
-use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
+use uv_cache::{ArchiveFileId, ArchiveId, Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
@@ -23,11 +23,11 @@ use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, File, HashPolicy, Hashed, IndexUrl,
     InstalledDist, Name, SourceDist, ToUrlError,
 };
-use uv_extract::dirhash::DirectoryDigest;
+use uv_extract::dirhash::{DirectoryDigest, ExtractedFile};
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_git::{GIT_LFS, GitError};
-use uv_install_wheel::validate_and_heal_record;
+use uv_install_wheel::{ArchiveFileManifest, ArchiveFileManifestEntry, validate_and_heal_record};
 use uv_platform_tags::Tags;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
@@ -745,7 +745,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
 
-                let ExtractedWheelManifest { files, digest } = match progress {
+                let ExtractedWheelManifest {
+                    files,
+                    extracted_files,
+                    digest,
+                } = match progress {
                     Some((reporter, progress)) => {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
                         match extension {
@@ -793,7 +797,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 // Persist the temporary directory to the directory store.
                 let id = self
-                    .persist_extracted_wheel(temp_dir, wheel_entry.path(), digest)
+                    .persist_extracted_wheel(temp_dir, wheel_entry.path(), digest, extracted_files)
                     .await?;
 
                 if let Some((reporter, progress)) = progress {
@@ -954,7 +958,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .map_err(Error::CacheWrite)?;
 
                 let target = temp_dir.path().to_owned();
-                let ExtractedWheelManifest { files, digest } = match extension {
+                let ExtractedWheelManifest {
+                    files,
+                    extracted_files,
+                    digest,
+                } = match extension {
                     WheelExtension::Whl => {
                         let file = file.into_std().await;
                         tokio::task::spawn_blocking(move || {
@@ -979,7 +987,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 // Persist the temporary directory to the directory store.
                 let id = self
-                    .persist_extracted_wheel(temp_dir, wheel_entry.path(), digest)
+                    .persist_extracted_wheel(temp_dir, wheel_entry.path(), digest, extracted_files)
                     .await?;
 
                 if let Some((reporter, progress)) = progress {
@@ -1146,7 +1154,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
             // Unzip the wheel to a temporary directory.
-            let ExtractedWheelManifest { files, digest } = match extension {
+            let ExtractedWheelManifest {
+                files,
+                extracted_files,
+                digest,
+            } = match extension {
                 WheelExtension::Whl => unzip_streaming_wheel(
                     path.display(),
                     &mut hasher,
@@ -1175,7 +1187,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             // Persist the temporary directory to the directory store.
             let id = self
-                .persist_extracted_wheel(temp_dir, wheel_entry.path(), digest)
+                .persist_extracted_wheel(temp_dir, wheel_entry.path(), digest, extracted_files)
                 .await?;
 
             // Create an archive.
@@ -1226,7 +1238,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
         })
         .await??;
-        let ExtractedWheelManifest { files, digest } = extracted;
+        let ExtractedWheelManifest {
+            files,
+            extracted_files,
+            digest,
+        } = extracted;
 
         // Before we make the wheel accessible by persisting it, ensure that the RECORD is valid.
         validate_and_heal_record(temp_dir.path(), files.iter(), dist)
@@ -1234,7 +1250,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // Persist the temporary directory to the directory store.
         let id = self
-            .persist_extracted_wheel(temp_dir, target, digest)
+            .persist_extracted_wheel(temp_dir, target, digest, extracted_files)
             .await?;
 
         Ok(id)
@@ -1249,16 +1265,31 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         temp_dir: tempfile::TempDir,
         target: &Path,
         digest: Option<DirectoryDigest>,
+        extracted_files: Option<Vec<ExtractedFile>>,
     ) -> Result<ArchiveId, Error> {
         let cache = self.build_context.cache();
-        match digest {
+        let id = match digest {
             Some(digest) => {
                 let id = ArchiveId::from_digest(digest.into());
                 cache.persist_with_id(temp_dir, target, id).await
             }
             None => cache.persist(temp_dir.keep(), target).await,
         }
-        .map_err(Error::CacheWrite)
+        .map_err(Error::CacheWrite)?;
+
+        if let Some(extracted_files) = extracted_files {
+            let cache = cache.clone();
+            let archive_id = id.clone();
+            tokio::task::spawn_blocking(move || {
+                let archive = cache.archive(&archive_id);
+                let archive_metadata = cache.archive_metadata(&archive_id);
+                persist_binary_archive_files(&cache, &archive, &archive_metadata, &extracted_files)
+                    .map_err(Error::CacheWrite)
+            })
+            .await??;
+        }
+
+        Ok(id)
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
@@ -1283,7 +1314,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 }
 
-/// Extract a wheel from a streaming reader, optionally computing its directory digest.
+/// Extract a wheel from a streaming reader, retaining per-file digests for archive manifests.
 async fn unzip_streaming_wheel<D, R>(
     source_hint: D,
     reader: R,
@@ -1294,50 +1325,172 @@ where
     D: Display,
     R: AsyncRead + Unpin,
 {
-    if content_addressed {
-        let (files, digest) =
-            uv_extract::stream::unzip_and_hash(source_hint, reader, target).await?;
-        Ok(ExtractedWheelManifest {
-            files,
-            digest: Some(digest),
-        })
-    } else {
-        let files = uv_extract::stream::unzip(source_hint, reader, target).await?;
-        Ok(ExtractedWheelManifest::without_digest(files))
-    }
+    let (extracted_files, digest) =
+        uv_extract::stream::unzip_and_hash(source_hint, reader, target).await?;
+    Ok(ExtractedWheelManifest::with_extracted_files(
+        extracted_files,
+        content_addressed.then_some(digest),
+    ))
 }
 
-/// Extract a wheel from a seekable file, optionally computing its directory digest.
+/// Extract a wheel from a seekable file, retaining per-file digests for archive manifests.
 fn unzip_seekable_wheel(
     reader: fs_err::File,
     target: &Path,
     content_addressed: bool,
 ) -> Result<ExtractedWheelManifest, uv_extract::Error> {
-    if content_addressed {
-        let (files, digest) = uv_extract::unzip_and_hash(reader, target)?;
-        Ok(ExtractedWheelManifest {
-            files,
-            digest: Some(digest),
-        })
-    } else {
-        let files = uv_extract::unzip(reader, target)?;
-        Ok(ExtractedWheelManifest::without_digest(files))
-    }
+    let (extracted_files, digest) = uv_extract::unzip_and_hash(reader, target)?;
+    Ok(ExtractedWheelManifest::with_extracted_files(
+        extracted_files,
+        content_addressed.then_some(digest),
+    ))
 }
 
 /// The manifest of files extracted from a wheel, along with a hash of the unpacked archive.
 struct ExtractedWheelManifest {
     files: Vec<(PathBuf, u64)>,
+    extracted_files: Option<Vec<ExtractedFile>>,
     digest: Option<DirectoryDigest>,
 }
 
 impl ExtractedWheelManifest {
+    fn with_extracted_files(
+        extracted_files: Vec<ExtractedFile>,
+        digest: Option<DirectoryDigest>,
+    ) -> Self {
+        Self {
+            files: record_files(&extracted_files),
+            extracted_files: Some(extracted_files),
+            digest,
+        }
+    }
+
     fn without_digest(files: Vec<(PathBuf, u64)>) -> Self {
         Self {
             files,
+            extracted_files: None,
             digest: None,
         }
     }
+}
+
+fn record_files(files: &[ExtractedFile]) -> Vec<(PathBuf, u64)> {
+    files.iter().map(ExtractedFile::to_record).collect()
+}
+
+fn persist_binary_archive_files(
+    cache: &Cache,
+    archive: &Path,
+    archive_metadata: &Path,
+    files: &[ExtractedFile],
+) -> io::Result<()> {
+    if let Some(manifest) = ArchiveFileManifest::read_from_metadata(archive_metadata)? {
+        for entry in manifest.files() {
+            let extracted_file = archive.join(entry.path());
+            match fs_err::remove_file(extracted_file) {
+                Ok(()) => {}
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                Err(err) => return Err(err),
+            }
+        }
+        return Ok(());
+    }
+
+    let mut entries = Vec::new();
+
+    for file in files {
+        if !is_binary_payload(file.path()) {
+            continue;
+        }
+
+        let digest = file.digest_hex();
+        let id = ArchiveFileId::from_content_digest(&digest, file.executable());
+        let archive_file = cache.archive_file(&id);
+        let extracted_file = archive.join(file.path());
+        persist_archive_file(&extracted_file, &archive_file, file.executable())?;
+        entries.push(ArchiveFileManifestEntry::new(
+            file.path().to_path_buf(),
+            id.as_ref().to_path_buf(),
+        ));
+    }
+
+    ArchiveFileManifest::new(entries).write_to_metadata(archive_metadata)
+}
+
+fn is_binary_payload(path: &Path) -> bool {
+    let Some(file_name) = path.file_name().and_then(|file_name| file_name.to_str()) else {
+        return false;
+    };
+    let is_binary_extension = path.extension().is_some_and(|extension| {
+        extension.eq_ignore_ascii_case("so")
+            || extension.eq_ignore_ascii_case("pyd")
+            || extension.eq_ignore_ascii_case("dll")
+            || extension.eq_ignore_ascii_case("dylib")
+    });
+
+    is_binary_extension || file_name.to_ascii_lowercase().contains(".so.")
+}
+
+fn persist_archive_file(src: &Path, dst: &Path, executable: bool) -> io::Result<()> {
+    persist_archive_file_with(src, dst, executable, |src, dst| fs_err::hard_link(src, dst))
+}
+
+fn persist_archive_file_with(
+    src: &Path,
+    dst: &Path,
+    executable: bool,
+    hard_link: impl FnOnce(&Path, &Path) -> io::Result<()>,
+) -> io::Result<()> {
+    #[cfg(not(unix))]
+    let _ = executable;
+
+    let Some(parent) = dst.parent() else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "archive file path must have a parent directory",
+        ));
+    };
+    fs_err::create_dir_all(parent)?;
+
+    if dst.try_exists()? {
+        #[cfg(unix)]
+        normalize_archive_file_permissions(dst, executable)?;
+    } else {
+        match hard_link(src, dst) {
+            Ok(()) => {}
+            Err(_) if dst.try_exists()? => {}
+            Err(_) => uv_fs::copy_atomic_sync(src, dst)?,
+        }
+        #[cfg(unix)]
+        normalize_archive_file_permissions(dst, executable)?;
+    }
+
+    match fs_err::remove_file(src) {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err),
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn normalize_archive_file_permissions(path: &Path, executable: bool) -> io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut permissions = fs_err::metadata(path)?.permissions();
+    let mode = permissions.mode();
+    let normalized = if executable {
+        mode | 0o111
+    } else {
+        mode & !0o111
+    };
+    if normalized != mode {
+        permissions.set_mode(normalized);
+        fs_err::set_permissions(path, permissions)?;
+    }
+
+    Ok(())
 }
 
 /// A wrapper around `RegistryClient` that manages a concurrency limit.
@@ -1568,6 +1721,90 @@ fn add_tar_zst_extension(mut url: DisplaySafeUrl) -> DisplaySafeUrl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn persist_binary_archive_files_sparsifies_published_manifest() -> io::Result<()> {
+        let cache = Cache::temp()?;
+        let temp_dir = tempfile::tempdir()?;
+        let archive = temp_dir.path().join("archive");
+        let archive_metadata = temp_dir.path().join("archive-metadata");
+        let archive_file = archive.join("package/native.so");
+        fs_err::create_dir_all(archive_file.parent().expect("archive file has a parent"))?;
+        fs_err::write(&archive_file, "binary contents")?;
+        let manifest = ArchiveFileManifest::new(vec![ArchiveFileManifestEntry::new(
+            PathBuf::from("package/native.so"),
+            PathBuf::from("regular/ab/abcdef"),
+        )]);
+        manifest.write_to_metadata(&archive_metadata)?;
+
+        persist_binary_archive_files(&cache, &archive, &archive_metadata, &[])?;
+
+        assert_eq!(
+            ArchiveFileManifest::read_from_metadata(&archive_metadata)?,
+            Some(manifest)
+        );
+        assert!(!archive_file.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn persist_archive_file_accepts_missing_source_for_existing_object() -> io::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let archive_dir = temp_dir.path().join("archive/package");
+        let archive_files_dir = temp_dir.path().join("archive-files");
+        fs_err::create_dir_all(&archive_dir)?;
+        fs_err::create_dir_all(&archive_files_dir)?;
+        let src = archive_dir.join("native.so");
+        let dst = archive_files_dir.join("native.so");
+        fs_err::write(&dst, "binary contents")?;
+
+        persist_archive_file(&src, &dst, false)?;
+
+        assert!(!src.exists());
+        assert_eq!(fs_err::read(&dst)?, b"binary contents");
+        Ok(())
+    }
+
+    #[test]
+    fn persist_archive_file_copies_when_hardlinks_are_unsupported() -> io::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let archive_dir = temp_dir.path().join("archive/package");
+        let archive_files_dir = temp_dir.path().join("archive-files");
+        fs_err::create_dir_all(&archive_dir)?;
+        let src = archive_dir.join("native.so");
+        let dst = archive_files_dir.join("native.so");
+        fs_err::write(&src, "binary contents")?;
+
+        persist_archive_file_with(&src, &dst, false, |_, _| {
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "hardlinks are unsupported",
+            ))
+        })?;
+
+        assert!(!src.exists());
+        assert_eq!(fs_err::read(&dst)?, b"binary contents");
+        Ok(())
+    }
+
+    #[test]
+    fn persist_archive_file_removes_source_for_existing_object() -> io::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let archive_dir = temp_dir.path().join("archive/package");
+        let archive_files_dir = temp_dir.path().join("archive-files");
+        fs_err::create_dir_all(&archive_dir)?;
+        fs_err::create_dir_all(&archive_files_dir)?;
+        let src = archive_dir.join("native.so");
+        let dst = archive_files_dir.join("native.so");
+        fs_err::write(&src, "binary contents")?;
+        fs_err::write(&dst, "binary contents")?;
+
+        persist_archive_file(&src, &dst, false)?;
+
+        assert!(!src.exists());
+        assert_eq!(fs_err::read(&dst)?, b"binary contents");
+        Ok(())
+    }
 
     #[test]
     fn test_add_tar_zst_extension() {

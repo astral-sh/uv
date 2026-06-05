@@ -52,6 +52,7 @@ struct ComputedEntry {
 
 struct UnzipOutput {
     files: Vec<(PathBuf, u64)>,
+    extracted_files: Vec<ExtractedFile>,
     digest: Option<DirectoryDigest>,
 }
 
@@ -87,14 +88,14 @@ pub async fn unzip_and_hash<D: Display, R: tokio::io::AsyncRead + Unpin>(
     source_hint: D,
     reader: R,
     target: impl AsRef<Path>,
-) -> Result<(Vec<(PathBuf, u64)>, DirectoryDigest), Error> {
+) -> Result<(Vec<ExtractedFile>, DirectoryDigest), Error> {
     let output = Box::pin(unzip_inner(source_hint, reader, target, true)).await?;
     let Some(digest) = output.digest else {
         return Err(Error::Io(std::io::Error::other(
             "streaming ZIP digest was not computed",
         )));
     };
-    Ok((output.files, digest))
+    Ok((output.extracted_files, digest))
 }
 
 async fn unzip_inner<D: Display, R: tokio::io::AsyncRead + Unpin>(
@@ -672,12 +673,16 @@ async fn unzip_inner<D: Display, R: tokio::io::AsyncRead + Unpin>(
     let digest = hash_contents.then(|| {
         let hash_directories = empty_directory_paths(
             &digest_directories,
-            extracted_files.iter().map(ExtractedFile::path),
+            extracted_files.iter().map(ExtractedFile::sanitized_path),
         );
         directory_digest_from_extracted(&extracted_files, hash_directories)
     });
 
-    Ok(UnzipOutput { files, digest })
+    Ok(UnzipOutput {
+        files,
+        extracted_files,
+        digest,
+    })
 }
 
 /// Unpack the given tar archive into the destination directory.
