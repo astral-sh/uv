@@ -2544,6 +2544,33 @@ fn version_get_workspace() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that virtual workspace roots are rejected before discovering their members.
+#[test]
+fn version_virtual_workspace_root_rejects_before_members() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["workspace-member"]
+    "#})?;
+
+    let workspace_member = context.temp_dir.child("workspace-member");
+    workspace_member.create_dir_all()?;
+    workspace_member.child("README.md").touch()?;
+
+    uv_snapshot!(context.filters(), context.version(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No `project` table found in: [TEMP_DIR]/pyproject.toml
+    ");
+
+    Ok(())
+}
+
 /// Edit the version of a workspace member
 ///
 /// Also check that --locked/--frozen/--no-sync do what they say

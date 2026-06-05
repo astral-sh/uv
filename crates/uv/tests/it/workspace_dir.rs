@@ -1,6 +1,6 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::PathChild;
+use assert_fs::fixture::{FileWriteStr, PathChild};
 
 use uv_test::{copy_dir_ignore, uv_snapshot};
 
@@ -75,6 +75,44 @@ fn workspace_metadata_from_member() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     [TEMP_DIR]/workspace
+
+    ----- stderr -----
+    "
+    );
+
+    Ok(())
+}
+
+/// Test that a cached project matched by an outer workspace glob remains isolated.
+#[test]
+fn workspace_dir_cached_project_ignores_outer_workspace() -> Result<()> {
+    let mut context = uv_test::test_context!("3.12");
+    let workspace = context.temp_dir.child("workspace");
+    let cache_dir = workspace.child("cache");
+    let cached_project = cache_dir.child("cached-project");
+
+    fs_err::create_dir_all(&cached_project)?;
+    workspace.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["cache/cached-project"]
+        "#,
+    )?;
+    cached_project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "cached-project"
+        version = "0.1.0"
+        "#,
+    )?;
+
+    context.cache_dir = cache_dir;
+
+    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&cached_project), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/workspace/cache/cached-project
 
     ----- stderr -----
     "

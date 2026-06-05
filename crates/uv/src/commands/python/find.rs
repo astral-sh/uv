@@ -13,7 +13,7 @@ use uv_python::{
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::{
     ExitStatus,
@@ -47,15 +47,25 @@ pub(crate) async fn find(
     let project = if no_project {
         None
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
-            .await
+        match VirtualProject::discover(
+            project_dir,
+            &DiscoveryOptions::default(),
+            cache,
+            workspace_cache,
+        )
+        .await
         {
             Ok(project) => Some(project),
-            Err(WorkspaceError::MissingProject(_)) => None,
-            Err(WorkspaceError::MissingPyprojectToml) => None,
-            Err(WorkspaceError::NonWorkspace(_)) => None,
             Err(err) => {
-                warn_user_once!("{err}");
+                // Ignore missing or unmanaged workspaces in Python discovery.
+                if !matches!(
+                    err.as_ref(),
+                    WorkspaceErrorKind::MissingProject(_)
+                        | WorkspaceErrorKind::MissingPyprojectToml
+                        | WorkspaceErrorKind::NonWorkspace(_)
+                ) {
+                    warn_user_once!("{err}");
+                }
                 None
             }
         }

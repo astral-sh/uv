@@ -43,8 +43,13 @@ pub(crate) async fn pin(
     let virtual_project = if no_project {
         None
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
-            .await
+        match VirtualProject::discover(
+            project_dir,
+            &DiscoveryOptions::default(),
+            cache,
+            workspace_cache,
+        )
+        .await
         {
             Ok(virtual_project) => Some(virtual_project),
             Err(err) => {

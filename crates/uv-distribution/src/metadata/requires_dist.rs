@@ -5,6 +5,7 @@ use std::slice;
 use rustc_hash::FxHashSet;
 
 use uv_auth::CredentialsCache;
+use uv_cache::Cache;
 use uv_configuration::NoSources;
 use uv_distribution_types::{IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -35,7 +36,8 @@ impl RequiresDist {
         locations: &IndexLocations,
         sources: NoSources,
         editable: bool,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         let discovery = DiscoveryOptions {
@@ -51,10 +53,14 @@ impl RequiresDist {
             } else {
                 MemberDiscovery::None
             },
-            ..DiscoveryOptions::default()
         };
-        let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?
+        let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
+            install_path,
+            &discovery,
+            cache,
+            workspace_cache,
+        )
+        .await?
         else {
             return Self::from_metadata23_with_source_context(metadata, git_member);
         };
@@ -454,6 +460,7 @@ mod test {
     use tempfile::TempDir;
 
     use uv_auth::CredentialsCache;
+    use uv_cache::Cache;
     use uv_configuration::NoSources;
     use uv_distribution_types::IndexLocations;
     use uv_normalize::PackageName;
@@ -468,12 +475,14 @@ mod test {
         contents: &str,
     ) -> anyhow::Result<RequiresDist> {
         fs_err::write(temp_dir.join("pyproject.toml"), contents)?;
+        let cache = Cache::from_path(temp_dir.join(".uv_cache"));
         let project_workspace = ProjectWorkspace::discover(
             temp_dir,
             &DiscoveryOptions {
                 stop_discovery_at: Some(temp_dir.to_path_buf()),
                 ..DiscoveryOptions::default()
             },
+            &cache,
             &WorkspaceCache::default(),
         )
         .await?;
