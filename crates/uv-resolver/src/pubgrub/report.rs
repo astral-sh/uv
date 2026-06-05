@@ -20,7 +20,7 @@ use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVers
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
 
 use crate::candidate_selector::CandidateSelector;
-use crate::error::{ErrorTree, PrefixMatch};
+use crate::error::{ErrorTree, PrefixMatch, with_growing_stack};
 use crate::exclude_newer::EffectiveExcludeNewerSource;
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
@@ -49,6 +49,170 @@ pub(crate) struct PubGrubReportFormatter<'a> {
 
     /// The compatible tags for the resolution.
     pub(crate) tags: Option<&'a Tags>,
+}
+
+/// Render a PubGrub report while growing the stack between recursive steps.
+///
+/// This mirrors [`pubgrub::DefaultStringReporter`], whose recursive entry point is private.
+pub(crate) fn report(
+    derivation_tree: &ErrorTree,
+    formatter: &PubGrubReportFormatter<'_>,
+) -> String {
+    match derivation_tree {
+        DerivationTree::External(external) => formatter.format_external(external),
+        DerivationTree::Derived(derived) => {
+            let mut reporter = StackSafeReporter::default();
+            reporter.build_recursive(derived, formatter);
+            reporter.lines.join("\n")
+        }
+    }
+}
+
+#[derive(Default)]
+struct StackSafeReporter {
+    ref_count: usize,
+    shared_with_ref: Map<usize, usize>,
+    lines: Vec<String>,
+}
+
+impl StackSafeReporter {
+    fn build_recursive(
+        &mut self,
+        derived: &Derived<PubGrubPackage, Range<Version>, UnavailableReason>,
+        formatter: &PubGrubReportFormatter<'_>,
+    ) {
+        with_growing_stack(|| self.build_recursive_inner(derived, formatter));
+    }
+
+    fn build_recursive_inner(
+        &mut self,
+        derived: &Derived<PubGrubPackage, Range<Version>, UnavailableReason>,
+        formatter: &PubGrubReportFormatter<'_>,
+    ) {
+        self.build_recursive_helper(derived, formatter);
+        if let Some(id) = derived.shared_id
+            && !self.shared_with_ref.contains_key(&id)
+        {
+            self.add_line_ref();
+            self.shared_with_ref.insert(id, self.ref_count);
+        }
+    }
+
+    fn build_recursive_helper(
+        &mut self,
+        current: &Derived<PubGrubPackage, Range<Version>, UnavailableReason>,
+        formatter: &PubGrubReportFormatter<'_>,
+    ) {
+        match (current.cause1.as_ref(), current.cause2.as_ref()) {
+            (DerivationTree::External(external1), DerivationTree::External(external2)) => {
+                self.lines.push(formatter.explain_both_external(
+                    external1,
+                    external2,
+                    &current.terms,
+                ));
+            }
+            (DerivationTree::Derived(derived), DerivationTree::External(external))
+            | (DerivationTree::External(external), DerivationTree::Derived(derived)) => {
+                self.report_one_each(derived, external, &current.terms, formatter);
+            }
+            (DerivationTree::Derived(derived1), DerivationTree::Derived(derived2)) => {
+                match (
+                    self.line_ref_of(derived1.shared_id),
+                    self.line_ref_of(derived2.shared_id),
+                ) {
+                    (Some(ref1), Some(ref2)) => self.lines.push(formatter.explain_both_ref(
+                        ref1,
+                        derived1,
+                        ref2,
+                        derived2,
+                        &current.terms,
+                    )),
+                    (Some(ref1), None) => {
+                        self.build_recursive(derived2, formatter);
+                        self.lines
+                            .push(formatter.and_explain_ref(ref1, derived1, &current.terms));
+                    }
+                    (None, Some(ref2)) => {
+                        self.build_recursive(derived1, formatter);
+                        self.lines
+                            .push(formatter.and_explain_ref(ref2, derived2, &current.terms));
+                    }
+                    (None, None) => {
+                        self.build_recursive(derived1, formatter);
+                        if derived1.shared_id.is_some() {
+                            self.lines.push(String::new());
+                            self.build_recursive(current, formatter);
+                        } else {
+                            self.add_line_ref();
+                            let ref1 = self.ref_count;
+                            self.lines.push(String::new());
+                            self.build_recursive(derived2, formatter);
+                            self.lines.push(formatter.and_explain_ref(
+                                ref1,
+                                derived1,
+                                &current.terms,
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn report_one_each(
+        &mut self,
+        derived: &Derived<PubGrubPackage, Range<Version>, UnavailableReason>,
+        external: &External<PubGrubPackage, Range<Version>, UnavailableReason>,
+        current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
+        formatter: &PubGrubReportFormatter<'_>,
+    ) {
+        if let Some(ref_id) = self.line_ref_of(derived.shared_id) {
+            self.lines.push(formatter.explain_ref_and_external(
+                ref_id,
+                derived,
+                external,
+                current_terms,
+            ));
+        } else {
+            self.report_recurse_one_each(derived, external, current_terms, formatter);
+        }
+    }
+
+    fn report_recurse_one_each(
+        &mut self,
+        derived: &Derived<PubGrubPackage, Range<Version>, UnavailableReason>,
+        external: &External<PubGrubPackage, Range<Version>, UnavailableReason>,
+        current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
+        formatter: &PubGrubReportFormatter<'_>,
+    ) {
+        match (derived.cause1.as_ref(), derived.cause2.as_ref()) {
+            (DerivationTree::Derived(prior_derived), DerivationTree::External(prior_external))
+            | (DerivationTree::External(prior_external), DerivationTree::Derived(prior_derived)) => {
+                self.build_recursive(prior_derived, formatter);
+                self.lines.push(formatter.and_explain_prior_and_external(
+                    prior_external,
+                    external,
+                    current_terms,
+                ));
+            }
+            _ => {
+                self.build_recursive(derived, formatter);
+                self.lines
+                    .push(formatter.and_explain_external(external, current_terms));
+            }
+        }
+    }
+
+    fn add_line_ref(&mut self) {
+        self.ref_count += 1;
+        if let Some(line) = self.lines.last_mut() {
+            *line = format!("{line} ({})", self.ref_count);
+        }
+    }
+
+    fn line_ref_of(&self, shared_id: Option<usize>) -> Option<usize> {
+        shared_id.and_then(|id| self.shared_with_ref.get(&id).copied())
+    }
 }
 
 impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
@@ -770,44 +934,48 @@ impl PubGrubReportFormatter<'_> {
                         .or_insert_with(|| range.clone());
                 }
 
-                self.generate_hints(
-                    &derived.cause1,
-                    index,
-                    selector,
-                    index_locations,
-                    index_capabilities,
-                    available_indexes,
-                    unavailable_packages,
-                    incomplete_packages,
-                    fork_urls,
-                    fork_indexes,
-                    env,
-                    current_environment,
-                    tags,
-                    workspace_members,
-                    options,
-                    &cause1_inherited_exclude_newer_ranges,
-                    output_hints,
-                );
-                self.generate_hints(
-                    &derived.cause2,
-                    index,
-                    selector,
-                    index_locations,
-                    index_capabilities,
-                    available_indexes,
-                    unavailable_packages,
-                    incomplete_packages,
-                    fork_urls,
-                    fork_indexes,
-                    env,
-                    current_environment,
-                    tags,
-                    workspace_members,
-                    options,
-                    &cause2_inherited_exclude_newer_ranges,
-                    output_hints,
-                );
+                with_growing_stack(|| {
+                    self.generate_hints(
+                        &derived.cause1,
+                        index,
+                        selector,
+                        index_locations,
+                        index_capabilities,
+                        available_indexes,
+                        unavailable_packages,
+                        incomplete_packages,
+                        fork_urls,
+                        fork_indexes,
+                        env,
+                        current_environment,
+                        tags,
+                        workspace_members,
+                        options,
+                        &cause1_inherited_exclude_newer_ranges,
+                        output_hints,
+                    );
+                });
+                with_growing_stack(|| {
+                    self.generate_hints(
+                        &derived.cause2,
+                        index,
+                        selector,
+                        index_locations,
+                        index_capabilities,
+                        available_indexes,
+                        unavailable_packages,
+                        incomplete_packages,
+                        fork_urls,
+                        fork_indexes,
+                        env,
+                        current_environment,
+                        tags,
+                        workspace_members,
+                        options,
+                        &cause2_inherited_exclude_newer_ranges,
+                        output_hints,
+                    );
+                });
             }
         }
     }
@@ -840,8 +1008,8 @@ impl PubGrubReportFormatter<'_> {
                 }
                 DerivationTree::External(_) => {}
                 DerivationTree::Derived(derived) => {
-                    collect(&derived.cause1, exclude_newer_ranges);
-                    collect(&derived.cause2, exclude_newer_ranges);
+                    with_growing_stack(|| collect(&derived.cause1, exclude_newer_ranges));
+                    with_growing_stack(|| collect(&derived.cause2, exclude_newer_ranges));
                 }
             }
         }
