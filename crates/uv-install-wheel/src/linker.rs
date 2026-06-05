@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 use std::time::SystemTime;
 
@@ -11,10 +11,11 @@ use tracing::{debug, instrument};
 
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
-use uv_fs::link::{CopyLocks, LinkOptions, OnExistingDirectory, link_dir};
+use uv_fs::link::{CopyLocks, LinkOptions, OnExistingDirectory, link_dir, link_file};
 use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 
+use crate::ArchiveFileManifest;
 use crate::Error;
 
 pub use uv_fs::link::LinkMode;
@@ -27,6 +28,8 @@ pub struct InstallState {
     /// Top level files and directories in site-packages, stored as relative path, and wheels they
     /// are from, with the absolute paths in the unpacked wheel.
     site_packages_paths: Mutex<FxHashMap<PathBuf, BTreeSet<(WheelFilename, PathBuf)>>>,
+    /// Files omitted from the unpacked wheel and stored in the shared archive-file bucket.
+    archive_file_paths: Mutex<BTreeMap<PathBuf, BTreeSet<(WheelFilename, PathBuf)>>>,
     /// Preview settings for feature flags.
     preview: Preview,
 }
@@ -37,6 +40,7 @@ impl InstallState {
         Self {
             locks: CopyLocks::default(),
             site_packages_paths: Mutex::new(FxHashMap::default()),
+            archive_file_paths: Mutex::new(BTreeMap::default()),
             preview,
         }
     }
@@ -63,6 +67,19 @@ impl InstallState {
         }
 
         self.site_packages_paths
+            .lock()
+            .unwrap()
+            .entry(relative.to_path_buf())
+            .or_default()
+            .insert((wheel.clone(), absolute.to_path_buf()));
+    }
+
+    /// Register an installed file stored in the shared archive-file bucket.
+    fn register_archive_file_path(&self, relative: &Path, absolute: &Path, wheel: &WheelFilename) {
+        debug_assert!(!relative.is_absolute());
+        debug_assert!(absolute.is_absolute());
+
+        self.archive_file_paths
             .lock()
             .unwrap()
             .entry(relative.to_path_buf())
@@ -111,7 +128,9 @@ impl InstallState {
             return Ok(());
         }
 
-        for (relative, wheels) in &*self.site_packages_paths.lock().unwrap() {
+        let site_packages_paths = self.site_packages_paths.lock().unwrap();
+        let mut warned_top_level_paths = BTreeSet::new();
+        for (relative, wheels) in &*site_packages_paths {
             // Fast path: Only one package is using this module name, no conflicts.
             let mut wheel_iter = wheels.iter();
             let Some(first_wheel) = wheel_iter.next() else {
@@ -131,14 +150,61 @@ impl InstallState {
                     .iter()
                     .map(|(wheel, absolute)| Ok((wheel, absolute.metadata()?.len())))
                     .collect::<Result<_, io::Error>>()?;
-                Self::warn_file_conflict(relative, &files);
+                if Self::warn_file_conflict(relative, &files) {
+                    warned_top_level_paths.insert(relative.clone());
+                }
             } else if file_type.is_dir() {
                 // Don't early return if the method returns true, so we show warnings for each
                 // top-level module.
-                Self::warn_directory_conflict(relative, wheels)?;
+                if Self::warn_directory_conflict(relative, wheels)? {
+                    warned_top_level_paths.insert(relative.clone());
+                }
             } else {
                 // We don't expect any other file type, but it's ok if this check has false
                 // negatives.
+            }
+        }
+
+        for (relative, archive_files) in &*self.archive_file_paths.lock().unwrap() {
+            let Some(top_level) = relative.components().next() else {
+                continue;
+            };
+            let top_level = Path::new(top_level.as_os_str());
+            if warned_top_level_paths.contains(top_level) {
+                continue;
+            }
+
+            let mut files: BTreeSet<(&WheelFilename, u64)> = archive_files
+                .iter()
+                .map(|(wheel, absolute)| Ok((wheel, absolute.metadata()?.len())))
+                .collect::<Result<_, io::Error>>()?;
+
+            let archive_wheels = archive_files
+                .iter()
+                .map(|(wheel, _)| wheel)
+                .collect::<BTreeSet<_>>();
+            if let Some(wheels) = site_packages_paths.get(top_level) {
+                let Ok(remainder) = relative.strip_prefix(top_level) else {
+                    continue;
+                };
+                for (wheel, absolute) in wheels {
+                    if archive_wheels.contains(wheel) {
+                        continue;
+                    }
+                    let absolute = absolute.join(remainder);
+                    match absolute.metadata() {
+                        Ok(metadata) if metadata.is_file() => {
+                            files.insert((wheel, metadata.len()));
+                        }
+                        Ok(_) => {}
+                        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                        Err(err) => return Err(err),
+                    }
+                }
+            }
+
+            if Self::warn_file_conflict(relative, &files) {
+                warned_top_level_paths.insert(top_level.to_path_buf());
             }
         }
 
@@ -250,23 +316,42 @@ impl InstallState {
 /// Extract a wheel by linking all of its files into site packages.
 #[instrument(skip_all)]
 pub(crate) fn link_wheel_files(
-    link_mode: LinkMode,
+    link_mode: Option<LinkMode>,
     site_packages: impl AsRef<Path>,
     wheel: impl AsRef<Path>,
+    archive_metadata: Option<&Path>,
+    archive_files: Option<&Path>,
     state: &InstallState,
     filename: &WheelFilename,
 ) -> Result<(), Error> {
     let wheel = wheel.as_ref();
     let site_packages = site_packages.as_ref();
+    let archive_file_manifest = read_archive_file_manifest(wheel, archive_metadata)?;
     register_installed_paths(wheel, state, filename)?;
+    // Preserve the existing directory-linking default for ordinary wheel files.
+    let directory_link_mode = link_mode.unwrap_or_default();
 
     // The `RECORD` file is modified during installation, so it needs a real
     // copy rather than a link back to the cache.
-    let options = LinkOptions::new(link_mode)
+    let options = LinkOptions::new(directory_link_mode)
         .with_mutable_copy_filter(|p: &Path| p.ends_with("RECORD"))
         .with_copy_locks(state.copy_locks())
         .with_on_existing_directory(OnExistingDirectory::Merge);
     let used_link_mode = link_dir(wheel, site_packages, &options)?;
+
+    if let (Some(archive_file_manifest), Some(archive_files)) =
+        (archive_file_manifest.as_ref(), archive_files)
+    {
+        link_archive_file_manifest_entries(
+            site_packages,
+            archive_files,
+            archive_file_manifest,
+            archive_file_link_mode(link_mode, used_link_mode),
+            state.copy_locks(),
+            state,
+            filename,
+        )?;
+    }
 
     if used_link_mode == LinkMode::Clone {
         // The directory mtime is not updated when cloning and the mtime is
@@ -279,6 +364,77 @@ pub(crate) fn link_wheel_files(
     }
 
     Ok(())
+}
+
+fn archive_file_link_mode(
+    requested_link_mode: Option<LinkMode>,
+    used_link_mode: LinkMode,
+) -> LinkMode {
+    if requested_link_mode.is_none() && used_link_mode == LinkMode::Clone {
+        LinkMode::Hardlink
+    } else {
+        used_link_mode
+    }
+}
+
+/// Read the archive-file manifest for a cached archive directory.
+fn read_archive_file_manifest(
+    wheel: &Path,
+    archive_metadata: Option<&Path>,
+) -> Result<Option<ArchiveFileManifest>, Error> {
+    let Some(archive_metadata) = archive_metadata else {
+        return Ok(None);
+    };
+    let Some(archive_id) = wheel.file_name() else {
+        return Ok(None);
+    };
+
+    Ok(ArchiveFileManifest::read_from_metadata(
+        &archive_metadata.join(archive_id),
+    )?)
+}
+
+/// Replace installed payloads with links to their shared archive-file objects.
+fn link_archive_file_manifest_entries(
+    site_packages: &Path,
+    archive_files: &Path,
+    archive_file_manifest: &ArchiveFileManifest,
+    link_mode: LinkMode,
+    copy_locks: &CopyLocks,
+    state: &InstallState,
+    filename: &WheelFilename,
+) -> Result<(), Error> {
+    let options = LinkOptions::new(link_mode)
+        .with_copy_locks(copy_locks)
+        .with_on_existing_directory(OnExistingDirectory::Merge);
+
+    for entry in archive_file_manifest.files() {
+        if !is_relative_path(entry.path()) || !is_relative_path(entry.object()) {
+            return Err(Error::InvalidWheel(format!(
+                "archive-file manifest contains an unsafe path: {}",
+                entry.path().display()
+            )));
+        }
+
+        let source = archive_files.join(entry.object());
+        let target = site_packages.join(entry.path());
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        link_file(&source, &target, &options)?;
+        state.register_archive_file_path(entry.path(), &source, filename);
+    }
+
+    Ok(())
+}
+
+/// Return whether a path can be joined below a trusted root.
+fn is_relative_path(path: &Path) -> bool {
+    !path.as_os_str().is_empty()
+        && path
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
 }
 
 /// Update the mtime of the site-packages directory to the current time.
@@ -313,4 +469,26 @@ fn register_installed_paths(
         state.register_installed_path(&relative, &path, filename);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LinkMode, archive_file_link_mode};
+
+    #[test]
+    fn archive_file_link_mode_uses_hardlinks_after_default_clone() {
+        assert_eq!(
+            archive_file_link_mode(None, LinkMode::Clone),
+            LinkMode::Hardlink
+        );
+        assert_eq!(
+            archive_file_link_mode(Some(LinkMode::Clone), LinkMode::Clone),
+            LinkMode::Clone
+        );
+    }
+
+    #[test]
+    fn archive_file_link_mode_preserves_copy_fallback() {
+        assert_eq!(archive_file_link_mode(None, LinkMode::Copy), LinkMode::Copy);
+    }
 }

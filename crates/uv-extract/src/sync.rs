@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::Error;
-use crate::dirhash::DirectoryDigest;
+use crate::dirhash::{DirectoryDigest, ExtractedFile};
 
 /// Unzip a `.zip` archive into the target directory.
 ///
@@ -20,7 +20,7 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
 pub fn unzip_and_hash(
     reader: fs_err::File,
     target: &Path,
-) -> Result<(Vec<(PathBuf, u64)>, DirectoryDigest), Error> {
+) -> Result<(Vec<ExtractedFile>, DirectoryDigest), Error> {
     crate::dirhash::unzip_and_hash(reader, target)
 }
 

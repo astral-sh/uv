@@ -62,6 +62,7 @@ enum ExtractedEntry {
 
 struct UnzipOutput {
     files: Vec<(PathBuf, u64)>,
+    extracted_files: Vec<ExtractedFile>,
     digest: Option<DirectoryDigest>,
 }
 
@@ -77,14 +78,14 @@ pub(crate) fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf,
 pub(crate) fn unzip_and_hash(
     reader: fs_err::File,
     target: &Path,
-) -> Result<(Vec<(PathBuf, u64)>, DirectoryDigest), Error> {
+) -> Result<(Vec<ExtractedFile>, DirectoryDigest), Error> {
     let output = unzip_inner(reader, target, true)?;
     let Some(digest) = output.digest else {
         return Err(Error::Io(std::io::Error::other(
             "seekable ZIP digest was not computed",
         )));
     };
-    Ok((output.files, digest))
+    Ok((output.extracted_files, digest))
 }
 
 fn unzip_inner(
@@ -134,6 +135,7 @@ fn unzip_inner(
             .collect::<Result<_, Error>>()?;
         return Ok(UnzipOutput {
             files,
+            extracted_files: Vec::new(),
             digest: None,
         });
     }
@@ -165,13 +167,9 @@ fn unzip_inner(
         }
     }
     let digest = directory_digest_from_extracted(&extracted_files, &digest_directories)?;
-    let files = extracted_files
-        .into_iter()
-        .map(ExtractedFile::into_record)
-        .collect();
-
     Ok(UnzipOutput {
-        files,
+        files: Vec::new(),
+        extracted_files,
         digest: Some(digest),
     })
 }

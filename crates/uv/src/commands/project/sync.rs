@@ -708,7 +708,7 @@ pub(crate) async fn do_sync<'a>(
                 index_locations: index_locations.clone(),
                 index_strategy,
                 keyring_provider,
-                link_mode,
+                link_mode: link_mode.into(),
                 build_isolation: build_isolation.clone(),
                 extra_build_dependencies: extra_build_dependencies.clone(),
                 extra_build_variables: extra_build_variables.clone(),
