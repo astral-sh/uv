@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, Bound};
 use std::fmt::Formatter;
+use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, OnceLock};
 
 use indexmap::IndexSet;
@@ -216,6 +217,40 @@ fn drop_derivation_tree(derivation_tree: ErrorTree) {
             if let Ok(cause2) = Arc::try_unwrap(derived.cause2) {
                 trees.push(cause2);
             }
+        }
+    }
+}
+
+struct StackSafeErrorTree(Option<ErrorTree>);
+
+impl StackSafeErrorTree {
+    fn new(derivation_tree: ErrorTree) -> Self {
+        Self(Some(derivation_tree))
+    }
+}
+
+impl Deref for StackSafeErrorTree {
+    type Target = ErrorTree;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+            .as_ref()
+            .expect("derivation tree is only taken during drop")
+    }
+}
+
+impl DerefMut for StackSafeErrorTree {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0
+            .as_mut()
+            .expect("derivation tree is only taken during drop")
+    }
+}
+
+impl Drop for StackSafeErrorTree {
+    fn drop(&mut self) {
+        if let Some(derivation_tree) = self.0.take() {
+            drop_derivation_tree(derivation_tree);
         }
     }
 }
@@ -489,7 +524,7 @@ impl NoSolutionError {
         };
 
         // Transform the error tree for reporting
-        let mut tree = self.error().clone();
+        let mut tree = StackSafeErrorTree::new(self.error().clone());
         simplify_derivation_tree_markers(&self.python_requirement, &mut tree);
         let should_display_tree = std::env::var_os(EnvVars::UV_INTERNAL__SHOW_DERIVATION_TREE)
             .is_some()
@@ -1641,4 +1676,34 @@ fn simplify_range(
         // Otherwise, include the version
         true
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn drops_transformed_derivation_tree_without_recursion() -> std::io::Result<()> {
+        let thread = std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let package = PubGrubPackage::from(PubGrubPackageInner::Root(None));
+                let leaf = ErrorTree::External(External::NotRoot(package, Version::new([1_u64])));
+                let mut tree = leaf.clone();
+
+                for _ in 0..100_000 {
+                    tree = ErrorTree::Derived(Derived {
+                        terms: pubgrub::Map::default(),
+                        shared_id: None,
+                        cause1: Arc::new(tree),
+                        cause2: Arc::new(leaf.clone()),
+                    });
+                }
+
+                let _tree = StackSafeErrorTree::new(tree);
+            })?;
+
+        assert!(thread.join().is_ok());
+        Ok(())
+    }
 }
