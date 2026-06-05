@@ -148,6 +148,59 @@ async fn audit_json_no_vulnerabilities() {
     "#);
 }
 
+/// SARIF output for a project with no vulnerabilities or adverse statuses.
+#[tokio::test]
+async fn audit_sarif_no_vulnerabilities() {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+    write_audit_json_project(&context, &proxy.url("/simple"));
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    let context = context.with_filter((uv_version::version(), "[VERSION]"));
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit,json-output")
+        .arg("--output-format")
+        .arg("sarif")
+        .arg("--frozen")
+        .arg("--service-url")
+        .arg(server.uri()), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+      "version": "2.1.0",
+      "runs": [
+        {
+          "tool": {
+            "driver": {
+              "name": "uv-audit",
+              "informationUri": "https://github.com/astral-sh/uv",
+              "version": "[VERSION]",
+              "rules": []
+            }
+          },
+          "results": []
+        }
+      ]
+    }
+
+    ----- stderr -----
+    "#);
+}
+
 /// Requesting JSON output warns unless the JSON preview feature is enabled.
 #[tokio::test]
 async fn audit_json_preview_warning() {
@@ -271,6 +324,118 @@ async fn audit_vulnerability_found() {
     Resolved 2 packages in [TIME]
     Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
+}
+
+/// SARIF output for a project with a single known vulnerability.
+#[tokio::test]
+async fn audit_sarif_vulnerability_found() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "PYSEC-2023-0001"}]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/PYSEC-2023-0001"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "PYSEC-2023-0001",
+            "modified": "2026-01-01T00:00:00Z",
+            "summary": "A test vulnerability in iniconfig",
+            "affected": [{
+                "ranges": [{
+                    "type": "ECOSYSTEM",
+                    "events": [
+                        {"introduced": "0"},
+                        {"fixed": "2.1.0"}
+                    ]
+                }]
+            }],
+            "references": [{
+                "type": "ADVISORY",
+                "url": "https://example.com/advisory/PYSEC-2023-0001"
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    let context = context.with_filter((uv_version::version(), "[VERSION]"));
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit,json-output")
+        .arg("--output-format")
+        .arg("sarif")
+        .arg("--frozen")
+        .arg("--service-url")
+        .arg(server.uri()), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    {
+      "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+      "version": "2.1.0",
+      "runs": [
+        {
+          "tool": {
+            "driver": {
+              "name": "uv-audit",
+              "informationUri": "https://github.com/astral-sh/uv",
+              "version": "[VERSION]",
+              "rules": [
+                {
+                  "id": "PYSEC-2023-0001",
+                  "name": "PYSEC-2023-0001",
+                  "shortDescription": {
+                    "text": "A test vulnerability in iniconfig"
+                  }
+                }
+              ]
+            }
+          },
+          "results": [
+            {
+              "ruleId": "PYSEC-2023-0001",
+              "level": "error",
+              "message": {
+                "text": "A test vulnerability in iniconfig"
+              },
+              "locations": [
+                {
+                  "physicalLocation": {
+                    "artifactLocation": {
+                      "uri": "uv:dependency:iniconfig@2.0.0"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+
+    ----- stderr -----
+    "#);
 }
 
 /// Audit a project when OSV returns a malformed vulnerability record.

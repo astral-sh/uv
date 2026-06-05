@@ -78,6 +78,14 @@ pub(crate) async fn audit(
             PreviewFeature::JsonOutput
         );
     }
+    if matches!(output_format, AuditOutputFormat::Sarif)
+        && !preview.is_enabled(PreviewFeature::JsonOutput)
+    {
+        warn_user!(
+            "The `--output-format sarif` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::JsonOutput
+        );
+    }
 
     let workspace_cache = WorkspaceCache::default();
     let workspace;
@@ -324,6 +332,7 @@ impl AuditResults {
         match self.output_format {
             AuditOutputFormat::Text => self.render_text(),
             AuditOutputFormat::Json => self.render_json(),
+            AuditOutputFormat::Sarif => self.render_sarif(),
         }
     }
 
@@ -647,6 +656,193 @@ impl From<&ProjectStatus> for JsonAdverseStatus {
             name: status.name.to_string(),
             status: status.status.to_string(),
             reason: status.reason.clone(),
+        }
+    }
+}
+
+impl AuditResults {
+    fn render_sarif(&self) -> Result<ExitStatus> {
+        let (vulnerabilities, statuses) = self.split_findings();
+        let report = SarifReport::from_findings(&vulnerabilities, &statuses);
+
+        writeln!(
+            self.printer.stdout_important(),
+            "{}",
+            serde_json::to_string_pretty(&report)?
+        )?;
+
+        Ok(self.exit_status())
+    }
+}
+
+/// SARIF v2.1.0 emitter for `uv audit` findings.
+///
+/// Maps each vulnerability to a SARIF `Result` and each adverse project
+/// status to a SARIF `Result` with `level: "warning"`. Output is intentionally
+/// minimal — the goal is to be GitHub code-scanning compatible out of the
+/// box, not to be a full SARIF reference implementation.
+#[derive(Debug, Serialize)]
+struct SarifReport {
+    #[serde(rename = "$schema")]
+    schema: &'static str,
+    version: &'static str,
+    runs: Vec<SarifRun>,
+}
+
+#[derive(Debug, Serialize)]
+struct SarifRun {
+    tool: SarifTool,
+    results: Vec<SarifResult>,
+}
+
+#[derive(Debug, Serialize)]
+struct SarifTool {
+    driver: SarifDriver,
+}
+
+#[derive(Debug, Serialize)]
+struct SarifDriver {
+    name: &'static str,
+    #[serde(rename = "informationUri")]
+    information_uri: &'static str,
+    version: &'static str,
+    rules: Vec<SarifRule>,
+}
+
+#[derive(Debug, Serialize)]
+struct SarifRule {
+    id: String,
+    name: String,
+    #[serde(rename = "shortDescription")]
+    short_description: SarifMessage,
+}
+
+#[derive(Debug, Serialize)]
+struct SarifResult {
+    #[serde(rename = "ruleId")]
+    rule_id: String,
+    level: &'static str,
+    message: SarifMessage,
+    locations: Vec<SarifLocation>,
+}
+
+#[derive(Debug, Serialize)]
+struct SarifMessage {
+    text: String,
+}
+
+#[derive(Debug, Serialize)]
+struct SarifLocation {
+    #[serde(rename = "physicalLocation")]
+    physical_location: SarifPhysicalLocation,
+}
+
+#[derive(Debug, Serialize)]
+struct SarifPhysicalLocation {
+    #[serde(rename = "artifactLocation")]
+    artifact_location: SarifArtifactLocation,
+}
+
+#[derive(Debug, Serialize)]
+struct SarifArtifactLocation {
+    uri: String,
+}
+
+impl SarifReport {
+    fn from_findings(
+        vulnerabilities: &[&Vulnerability],
+        statuses: &[&ProjectStatus],
+    ) -> Self {
+        // Deduplicate rules by vulnerability ID so the SARIF `rules` array is
+        // compact and the GitHub code-scanning UI groups findings by rule.
+        let mut rules: Vec<SarifRule> = Vec::new();
+        let mut seen_rule_ids: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for vulnerability in vulnerabilities {
+            let id = vulnerability.best_id().as_str().to_string();
+            if seen_rule_ids.insert(id.clone()) {
+                let name = id.clone();
+                let short_description = SarifMessage {
+                    text: vulnerability
+                        .summary
+                        .clone()
+                        .unwrap_or_else(|| "No summary provided".to_string()),
+                };
+                rules.push(SarifRule { id, name, short_description });
+            }
+        }
+        for status in statuses {
+            let id = format!("adverse-status-{}", status.status);
+            if seen_rule_ids.insert(id.clone()) {
+                rules.push(SarifRule {
+                    id: id.clone(),
+                    name: id,
+                    short_description: SarifMessage {
+                        text: format!("Adverse project status: {}", status.status),
+                    },
+                });
+            }
+        }
+
+        let mut results: Vec<SarifResult> = Vec::new();
+        for vulnerability in vulnerabilities {
+            let rule_id = vulnerability.best_id().as_str().to_string();
+            let message = SarifMessage {
+                text: vulnerability
+                    .summary
+                    .clone()
+                    .unwrap_or_else(|| "No summary provided".to_string()),
+            };
+            let uri = format!(
+                "uv:dependency:{}@{}",
+                vulnerability.dependency.name(),
+                vulnerability.dependency.version()
+            );
+            results.push(SarifResult {
+                rule_id,
+                level: "error",
+                message,
+                locations: vec![SarifLocation {
+                    physical_location: SarifPhysicalLocation {
+                        artifact_location: SarifArtifactLocation { uri },
+                    },
+                }],
+            });
+        }
+        for status in statuses {
+            let rule_id = format!("adverse-status-{}", status.status);
+            let message = SarifMessage {
+                text: status
+                    .reason
+                    .clone()
+                    .unwrap_or_else(|| format!("Project is {}", status.status)),
+            };
+            let uri = format!("uv:project:{}", status.name);
+            results.push(SarifResult {
+                rule_id,
+                level: "warning",
+                message,
+                locations: vec![SarifLocation {
+                    physical_location: SarifPhysicalLocation {
+                        artifact_location: SarifArtifactLocation { uri },
+                    },
+                }],
+            });
+        }
+
+        Self {
+            schema: "https://json.schemastore.org/sarif-2.1.0.json",
+            version: "2.1.0",
+            runs: vec![SarifRun {
+                tool: SarifTool {
+                    driver: SarifDriver {
+                        name: "uv-audit",
+                        information_uri: "https://github.com/astral-sh/uv",
+                        version: env!("CARGO_PKG_VERSION"),
+                        rules,
+                    },
+                },
+                results,
+            }],
         }
     }
 }
