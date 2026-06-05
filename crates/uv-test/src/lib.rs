@@ -11,7 +11,7 @@ use std::ffi::OsString;
 use std::io::Write as _;
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Output, Stdio};
+use std::process::{Command, Output, Stdio};
 use std::str::FromStr;
 use std::{env, io};
 use uv_python::downloads::ManagedPythonDownloadList;
@@ -1897,14 +1897,14 @@ impl TestContext {
 
         let lock_path = ChildPath::new(self.temp_dir.join("uv.lock"));
         let old_lock = fs_err::read_to_string(&lock_path).unwrap();
-        let (snapshot, _, status) = run_and_format_with_status(
+        let (snapshot, output) = run_and_format(
             change(self),
             self.filters(),
             "diff_lock",
             Some(WindowsFilters::Platform),
             None,
         );
-        assert!(status.success(), "{snapshot}");
+        assert!(output.status.success(), "{snapshot}");
         let new_lock = fs_err::read_to_string(&lock_path).unwrap();
         diff_snapshot(&old_lock, &new_lock, 10)
     }
@@ -2146,28 +2146,12 @@ pub fn apply_filters<T: AsRef<str>>(mut snapshot: String, filters: impl AsRef<[(
 ///
 /// This function is derived from `insta_cmd`s `spawn_with_info`.
 pub fn run_and_format<T: AsRef<str>>(
-    command: impl BorrowMut<Command>,
-    filters: impl AsRef<[(T, T)]>,
-    function_name: &str,
-    windows_filters: Option<WindowsFilters>,
-    input: Option<&str>,
-) -> (String, Output) {
-    let (snapshot, output, _) =
-        run_and_format_with_status(command, filters, function_name, windows_filters, input);
-    (snapshot, output)
-}
-
-/// Execute the command and format its output status, stdout and stderr into a snapshot string.
-///
-/// This function is derived from `insta_cmd`s `spawn_with_info`.
-#[expect(clippy::print_stderr)]
-fn run_and_format_with_status<T: AsRef<str>>(
     mut command: impl BorrowMut<Command>,
     filters: impl AsRef<[(T, T)]>,
     function_name: &str,
     windows_filters: Option<WindowsFilters>,
     input: Option<&str>,
-) -> (String, Output, ExitStatus) {
+) -> (String, Output) {
     let program = command
         .borrow_mut()
         .get_program()
@@ -2281,8 +2265,7 @@ fn run_and_format_with_status<T: AsRef<str>>(
         }
     }
 
-    let status = output.status;
-    (snapshot, output, status)
+    (snapshot, output)
 }
 
 /// Recursively copy a directory and its contents, skipping gitignored files.
