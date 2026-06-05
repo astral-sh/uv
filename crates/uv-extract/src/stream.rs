@@ -54,6 +54,7 @@ struct ComputedEntry {
 
 struct UnzipOutput {
     files: Vec<(PathBuf, u64)>,
+    extracted_files: Vec<ExtractedFile>,
     tree: Option<DirhashTree>,
 }
 
@@ -68,7 +69,9 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
-    Ok(Box::pin(unzip_inner(reader, target, false)).await?.files)
+    Ok(Box::pin(unzip_inner(reader, target, false, false))
+        .await?
+        .files)
 }
 
 /// Unpack a `.zip` archive into the target directory while computing a hash tree of the extracted
@@ -76,25 +79,29 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 ///
 /// The tree includes regular-file paths, contents, and empty directories. ZIP entries are never
 /// followed as symlinks; non-directory entries are materialized and hashed as regular files.
+/// Set `reject_duplicate_paths` when the directory digest will identify a cached archive;
+/// otherwise, retain the usual duplicate-entry validation while still hashing individual files.
 ///
 /// See [`unzip`] for details.
 pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
-) -> Result<(Vec<(PathBuf, u64)>, DirhashTree), Error> {
-    let output = Box::pin(unzip_inner(reader, target, true)).await?;
+    reject_duplicate_paths: bool,
+) -> Result<(Vec<ExtractedFile>, DirhashTree), Error> {
+    let output = Box::pin(unzip_inner(reader, target, true, reject_duplicate_paths)).await?;
     let Some(tree) = output.tree else {
         return Err(Error::Io(std::io::Error::other(
             "streaming ZIP hash tree was not computed",
         )));
     };
-    Ok((output.files, tree))
+    Ok((output.extracted_files, tree))
 }
 
 async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
     hash_contents: bool,
+    reject_duplicate_paths: bool,
 ) -> Result<UnzipOutput, Error> {
     // Determine whether ZIP validation is disabled.
     let skip_validation = insecure_no_validate();
@@ -141,7 +148,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
 
             continue;
         };
-        if hash_contents && !output_paths.insert(relpath.clone()) {
+        if reject_duplicate_paths && !output_paths.insert(relpath.clone()) {
             return Err(Error::DuplicateOutputPath {
                 path: relpath.into_path_buf(),
             });
@@ -507,9 +514,13 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                         } else {
                             files.push((relpath.to_path_buf(), local_header.uncompressed_size));
                             if let Some(digest) = local_header.digest {
+                                let executable = entry
+                                    .unix_permissions()
+                                    .is_some_and(|mode| mode & 0o111 != 0);
                                 extracted_files.push(ExtractedFile::new(
                                     relpath.clone(),
                                     local_header.uncompressed_size,
+                                    executable,
                                     digest,
                                 ));
                             }
@@ -654,7 +665,11 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
         .then(|| directory_tree_from_extracted(&extracted_files, &digest_directories))
         .transpose()?;
 
-    Ok(UnzipOutput { files, tree })
+    Ok(UnzipOutput {
+        files,
+        extracted_files,
+        tree,
+    })
 }
 
 /// Unpack the given tar archive into the destination directory.
