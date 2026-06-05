@@ -76,6 +76,7 @@ pub(crate) async fn install(
     concurrency: Concurrency,
     no_config: bool,
     cache: Cache,
+    refresh: Refresh,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
@@ -132,11 +133,12 @@ pub(crate) async fn install(
     let request = ToolRequest::parse(&package, from.as_deref())?;
 
     // If the user passed, e.g., `ruff@latest`, refresh the cache.
-    let cache = if request.is_latest() {
-        cache.with_refresh(Refresh::All(Timestamp::now()))
+    let refresh = if request.is_latest() {
+        refresh.combine(Refresh::All(Timestamp::now()))
     } else {
-        cache
+        refresh
     };
+    let cache = cache.with_refresh(refresh.clone());
 
     // Resolve the `--from` requirement.
     let requirement = match &request {
@@ -395,7 +397,7 @@ pub(crate) async fn install(
                 reinstall.with_package(package_name)
             })
             .combine(settings.reinstall);
-        let cache = cache.with_refresh_combined(Refresh::from(reinstall.clone()));
+        let cache = cache.with_refresh(refresh.combine(Refresh::from(reinstall.clone())));
         (
             ResolverInstallerSettings {
                 reinstall,

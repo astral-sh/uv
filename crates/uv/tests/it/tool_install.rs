@@ -1801,6 +1801,8 @@ fn tool_install_editable() {
     });
 }
 
+/// An explicit local tool should be rebuilt after its dynamic metadata changes, including when
+/// switching between editable and non-editable installs.
 #[test]
 fn tool_install_editable_rebuilds_explicit_local_directory() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
@@ -1940,6 +1942,8 @@ fn tool_install_editable_rebuilds_explicit_local_directory() -> Result<()> {
     Ok(())
 }
 
+/// Reinstalling an explicit local tool should use a newly selected global Python even when the
+/// tool's source is unchanged.
 #[test]
 fn tool_install_explicit_local_directory_respects_global_python_change() -> Result<()> {
     let context =
@@ -2021,6 +2025,8 @@ fn tool_install_explicit_local_directory_respects_global_python_change() -> Resu
     Ok(())
 }
 
+/// A direct local `--with` requirement should be rebuilt on every invocation, while a local
+/// requirement discovered through `--with-requirements` should retain its normal cache behavior.
 #[test]
 fn tool_install_rebuilds_explicit_local_with_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();

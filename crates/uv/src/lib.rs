@@ -1514,11 +1514,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .check_refresh_conflict(&args.refresh);
 
             // Initialize the cache.
-            let cache = cache.init().await?.with_refresh(
-                args.refresh
-                    .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
-            );
+            let refresh = args
+                .refresh
+                .combine(Refresh::from(args.settings.reinstall.clone()))
+                .combine(Refresh::from(args.settings.resolver.upgrade.clone()));
+            let cache = cache.init().await?.with_refresh(refresh.clone());
 
             let mut entrypoints = Vec::with_capacity(args.with_executables_from.len());
             let mut requirements = Vec::with_capacity(
@@ -1595,6 +1595,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 globals.concurrency,
                 cli.top_level.no_config,
                 cache,
+                refresh,
                 &workspace_cache,
                 printer,
                 globals.preview,
