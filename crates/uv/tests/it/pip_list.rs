@@ -5,6 +5,7 @@ use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 use assert_fs::prelude::*;
 
+use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
 #[test]
@@ -172,6 +173,68 @@ fn list_outdated_json() -> Result<()> {
 
     ----- stderr -----
     "#
+    );
+
+    Ok(())
+}
+
+#[test]
+fn list_outdated_find_links() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.workspace_root.join("test/links");
+    let first_links_dir = context.temp_dir.child("first-links");
+    first_links_dir.create_dir_all()?;
+    fs_err::copy(
+        links_dir.join("validation-2.0.0-py3-none-any.whl"),
+        first_links_dir
+            .child("validation-2.0.0-py3-none-any.whl")
+            .path(),
+    )?;
+    let second_links_dir = context.temp_dir.child("second-links");
+    second_links_dir.create_dir_all()?;
+    fs_err::copy(
+        links_dir.join("validation-3.0.0-py3-none-any.whl"),
+        second_links_dir
+            .child("validation-3.0.0-py3-none-any.whl")
+            .path(),
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("validation==1.0.0")
+        .arg("--find-links")
+        .arg(&links_dir)
+        .arg("--no-index"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + validation==1.0.0
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.pip_list()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--outdated")
+        .arg("--find-links")
+        .arg(first_links_dir.path())
+        .arg("--find-links")
+        .arg(second_links_dir.path())
+        .arg("--no-index"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package    Version Latest Type
+    ---------- ------- ------ -----
+    validation 1.0.0   3.0.0  wheel
+
+    ----- stderr -----
+    "###
     );
 
     Ok(())

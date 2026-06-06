@@ -395,6 +395,7 @@ impl<'a> IndexLocations {
     pub fn index_urls(&'a self) -> IndexUrls {
         IndexUrls {
             indexes: self.indexes.clone(),
+            flat_indexes: self.flat_index.clone(),
             no_index: self.no_index,
         }
     }
@@ -512,6 +513,7 @@ impl From<&IndexLocations> for uv_auth::Indexes {
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct IndexUrls {
     indexes: Vec<Index>,
+    flat_indexes: Vec<Index>,
     no_index: bool,
 }
 
@@ -519,8 +521,14 @@ impl<'a> IndexUrls {
     pub fn from_indexes(indexes: Vec<Index>) -> Self {
         Self {
             indexes,
+            flat_indexes: Vec::new(),
             no_index: false,
         }
+    }
+
+    /// Return an iterator over the configured flat-index locations.
+    pub fn flat_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
+        self.flat_indexes.iter()
     }
 
     /// Return the default [`Index`] entry.

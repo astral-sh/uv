@@ -444,6 +444,26 @@ impl RegistryClient {
         Ok(results)
     }
 
+    /// Fetch and combine entries for a package from the configured legacy `--find-links` locations.
+    #[instrument(skip_all, fields(package = % package_name))]
+    pub async fn find_links_entries(
+        &self,
+        package_name: &PackageName,
+        download_concurrency: &Semaphore,
+    ) -> Result<Vec<FlatIndexEntry>, Error> {
+        Ok(futures::stream::iter(self.index_urls.flat_indexes())
+            .map(async |index| {
+                let _permit = download_concurrency.acquire().await;
+                self.flat_single_index(package_name, index.url()).await
+            })
+            .buffered(8)
+            .try_collect::<Vec<_>>()
+            .await?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>())
+    }
+
     /// Fetch the [`FlatIndexEntry`] entries for a given package from a single `--find-links` index.
     async fn flat_single_index(
         &self,
@@ -1691,18 +1711,22 @@ impl Connectivity {
 mod tests {
     use std::str::FromStr;
 
+    use tokio::sync::Semaphore;
     use url::Url;
     use uv_normalize::PackageName;
     use uv_pypi_types::PypiSimpleDetail;
     use uv_redacted::DisplaySafeUrl;
+    use uv_torch::{TorchBackend, TorchSource, TorchStrategy};
 
     use crate::{
-        BaseClientBuilder, SimpleDetailMetadata, SimpleDetailMetadatum, html::SimpleDetailHTML,
+        BaseClientBuilder, Connectivity, RegistryClient, RegistryClientBuilder,
+        SimpleDetailMetadata, SimpleDetailMetadatum, html::SimpleDetailHTML,
     };
-
-    use crate::RegistryClientBuilder;
     use uv_cache::Cache;
-    use uv_distribution_types::{FileLocation, ToUrlError};
+    use uv_distribution_types::{
+        FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
+        IndexUrl, ToUrlError,
+    };
     use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -1724,6 +1748,118 @@ mod tests {
             .await;
 
         server
+    }
+
+    fn no_index_client(flat_indexes: Vec<Index>) -> Result<RegistryClient, Error> {
+        Ok(
+            RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+                .index_locations(IndexLocations::new(vec![], flat_indexes, true))
+                .build()?,
+        )
+    }
+
+    async fn assert_no_index(
+        client: &RegistryClient,
+        package: &str,
+        index: Option<IndexMetadataRef<'_>>,
+    ) -> Result<(), Error> {
+        let error = client
+            .simple_detail(
+                &PackageName::from_str(package)?,
+                index,
+                &IndexCapabilities::default(),
+                &Semaphore::new(1),
+            )
+            .await
+            .expect_err("index lookup should be disabled");
+
+        assert!(matches!(
+            error.kind(),
+            crate::ErrorKind::NoIndex(error_package) if error_package == package
+        ));
+        Ok(())
+    }
+
+    async fn assert_no_requests(server: &MockServer) {
+        assert!(
+            server
+                .received_requests()
+                .await
+                .expect("request recording should be enabled")
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn no_index_disables_explicit_simple_index() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        let explicit_index = IndexUrl::from_str(&format!("{}/simple", server.uri()))?;
+        let flat_index = Index::from_find_links(IndexUrl::from_str("https://example.com/flat")?);
+        let registry_client = no_index_client(vec![flat_index])?;
+
+        assert_no_index(
+            &registry_client,
+            "validation",
+            Some(IndexMetadataRef {
+                url: &explicit_index,
+                format: IndexFormat::Simple,
+            }),
+        )
+        .await?;
+        assert_no_requests(&server).await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn no_index_disables_explicit_flat_index() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        let explicit_index = IndexUrl::from_str(&server.uri())?;
+        let registry_client = no_index_client(vec![])?;
+
+        assert_no_index(
+            &registry_client,
+            "validation",
+            Some(IndexMetadataRef {
+                url: &explicit_index,
+                format: IndexFormat::Flat,
+            }),
+        )
+        .await?;
+        assert_no_requests(&server).await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn no_index_disables_torch_simple_index() -> Result<(), Error> {
+        let flat_index_dir = tempfile::tempdir()?;
+        let flat_index = Index::from_find_links(IndexUrl::parse(
+            flat_index_dir.path().to_string_lossy().as_ref(),
+            None,
+        )?);
+        let registry_client = RegistryClientBuilder::new(
+            BaseClientBuilder::default().connectivity(Connectivity::Offline),
+            Cache::temp()?,
+        )
+        .index_locations(IndexLocations::new(vec![], vec![flat_index], true))
+        .torch_backend(Some(TorchStrategy::Backend {
+            backend: TorchBackend::Cpu,
+            source: TorchSource::PyTorch,
+        }))
+        .build()?;
+
+        assert_no_index(&registry_client, "torch", None).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_detail_does_not_fetch_legacy_find_links() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        let flat_index = Index::from_find_links(IndexUrl::from_str(&server.uri())?);
+        let registry_client = no_index_client(vec![flat_index])?;
+
+        assert_no_index(&registry_client, "validation", None).await?;
+        assert_no_requests(&server).await;
+        Ok(())
     }
 
     #[tokio::test]
