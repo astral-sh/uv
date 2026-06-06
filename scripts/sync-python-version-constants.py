@@ -78,15 +78,15 @@ def main() -> None:
     old_versions: dict[str, str] = {}
     for minor in PYTHON_MINOR_VERSIONS:
         const_name = f"LATEST_PYTHON_{minor.replace('.', '_')}"
-        match = re.search(rf'const {const_name}: &str = "([^"]+)";', content)
+        pattern = rf'const {const_name}: &str = "([^"]+)";'
+        match = re.search(pattern, content)
         if match:
             old_versions[minor] = match.group(1)
 
         if minor not in latest_versions:
             continue
-        old_pattern = rf'const {const_name}: &str = "[^"]+";'
         new_value = f'const {const_name}: &str = "{latest_versions[minor]}";'
-        content = re.sub(old_pattern, new_value, content)
+        content = re.sub(pattern, new_value, content)
 
     lib_path.write_text(content)
 
