@@ -337,6 +337,7 @@ impl RegistryClient {
             return Err(ErrorKind::NoIndex(package_name.to_string()).into());
         }
 
+        let has_explicit_index = index.is_some();
         let indexes = if let Some(index) = index {
             Either::Left(std::iter::once(index))
         } else {
@@ -430,6 +431,24 @@ impl RegistryClient {
                     .try_collect::<Vec<_>>()
                     .await?;
             }
+        }
+
+        if !has_explicit_index {
+            let flat_results = futures::stream::iter(self.index_urls.flat_indexes())
+                .map(async |index| {
+                    let _permit = download_concurrency.acquire().await;
+                    let entries = self.flat_single_index(package_name, index.url()).await?;
+                    Ok((index.url(), entries))
+                })
+                .buffered(8)
+                .filter_map(async |result: Result<_, Error>| match result {
+                    Ok((_, entries)) if entries.is_empty() => None,
+                    Ok((index, entries)) => Some(Ok((index, MetadataFormat::Flat(entries)))),
+                    Err(err) => Some(Err(err)),
+                })
+                .try_collect::<Vec<_>>()
+                .await?;
+            results.extend(flat_results);
         }
 
         if results.is_empty() {

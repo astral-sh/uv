@@ -571,22 +571,13 @@ impl<'a> IndexUrls {
     /// Prioritizes the `[tool.uv.index]` definitions over the `--extra-index-url` definitions
     /// over the `--index-url` definition.
     ///
-    /// If `no_index` was enabled, then this always returns only the flat indexes.
+    /// If `no_index` was enabled, then this always returns an empty
+    /// iterator.
     pub fn indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
         let mut seen = FxHashSet::default();
-
-        let simple_indexes = if self.no_index {
-            Either::Left(std::iter::empty())
-        } else {
-            Either::Right(
-                self.implicit_indexes()
-                    .chain(self.default_index())
-                    .filter(|index| !index.explicit),
-            )
-        };
-
-        simple_indexes
-            .chain(self.flat_indexes.iter())
+        self.implicit_indexes()
+            .chain(self.default_index())
+            .filter(|index| !index.explicit)
             .filter(move |index| seen.insert(index.raw_url()))
     }
 
