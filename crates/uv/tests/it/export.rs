@@ -9748,3 +9748,87 @@ fn pylock_toml_filter_by_requires_python() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn requirements_txt_emit_indexes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [tool.uv.sources]
+        iniconfig = { index = "test" }
+
+        [[tool.uv.index]]
+        name = "test"
+        url = "https://test.pypi.org/simple"
+        explicit = true
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    let lock = context.temp_dir.child("uv.lock");
+    lock.write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://test.pypi.org/simple" }
+        dependencies = []
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "iniconfig", specifier = "==2.0.0" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--no-header")
+        .arg("--emit-index-url")
+        .arg("--emit-find-links")
+        .arg("--frozen")
+        .arg("--no-hashes")
+        .arg("--index")
+        .arg("https://example.com/simple")
+        .arg("--find-links")
+        .arg("https://example.com/packages"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    --index-url https://pypi.org/simple
+    --extra-index-url https://example.com/simple
+    --extra-index-url https://test.pypi.org/simple
+    --find-links https://example.com/packages
+
+    -e .
+    iniconfig==2.0.0
+        # via project
+
+    ----- stderr -----
+    warning: `requirements.txt` does not support per-package index pinning; explicit indexes were emitted globally via `--extra-index-url`.
+    ");
+
+    Ok(())
+}

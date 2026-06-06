@@ -334,6 +334,23 @@ impl<'a> IndexLocations {
         }
     }
 
+    /// Return an iterator over the explicit [`Index`] entries.
+    ///
+    /// Explicit indexes are only used when pinned via `tool.uv.sources`.
+    pub fn explicit_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
+        if self.no_index {
+            Either::Left(std::iter::empty())
+        } else {
+            let mut seen = FxHashSet::default();
+            Either::Right(
+                self.indexes
+                    .iter()
+                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
+                    .filter(|index| index.explicit),
+            )
+        }
+    }
+
     /// Return an iterator over all [`Index`] entries in order.
     ///
     /// Explicit indexes are excluded.

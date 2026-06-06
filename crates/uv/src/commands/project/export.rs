@@ -7,12 +7,14 @@ use anyhow::{Result, anyhow};
 use clap::ValueEnum;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashSet;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, DependencyGroups, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions,
 };
+use uv_distribution_types::Verbatim;
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
@@ -20,6 +22,7 @@ use uv_requirements::is_pylock_toml;
 use uv_resolver::{PylockToml, RequirementsTxtExport, cyclonedx_json};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
+use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
@@ -71,6 +74,8 @@ pub(crate) async fn export(
     frozen: Option<FrozenSource>,
     include_annotations: bool,
     include_header: bool,
+    include_index_url: bool,
+    include_find_links: bool,
     script: Option<Pep723Script>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -385,6 +390,51 @@ pub(crate) async fn export(
                 )?;
                 writeln!(writer, "{}", format!("#    {}", cmd()).green())?;
             }
+
+            let mut wrote_preamble = false;
+
+            // If necessary, include the `--index-url` and `--extra-index-url` locations.
+            if include_index_url {
+                let mut seen = FxHashSet::default();
+                let mut emitted_explicit_index = false;
+
+                if let Some(index) = settings.index_locations.default_index() {
+                    writeln!(writer, "--index-url {}", index.url().verbatim())?;
+                    seen.insert(index.url());
+                    wrote_preamble = true;
+                    emitted_explicit_index |= index.explicit;
+                }
+                for index in settings
+                    .index_locations
+                    .implicit_indexes()
+                    .chain(settings.index_locations.explicit_indexes())
+                {
+                    if seen.insert(index.url()) {
+                        writeln!(writer, "--extra-index-url {}", index.url().verbatim())?;
+                        wrote_preamble = true;
+                    }
+                    emitted_explicit_index |= index.explicit;
+                }
+
+                if emitted_explicit_index {
+                    warn_user!(
+                        "`requirements.txt` does not support per-package index pinning; explicit indexes were emitted globally via `--extra-index-url`."
+                    );
+                }
+            }
+
+            // If necessary, include the `--find-links` locations.
+            if include_find_links {
+                for flat_index in settings.index_locations.flat_indexes() {
+                    writeln!(writer, "--find-links {}", flat_index.url().verbatim())?;
+                    wrote_preamble = true;
+                }
+            }
+
+            if wrote_preamble {
+                writeln!(writer)?;
+            }
+
             write!(writer, "{export}")?;
         }
         ExportFormat::PylockToml => {
