@@ -22,6 +22,7 @@ use uv_requirements::is_pylock_toml;
 use uv_resolver::{PylockToml, RequirementsTxtExport, cyclonedx_json};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
+use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
@@ -394,16 +395,37 @@ pub(crate) async fn export(
 
             // If necessary, include the `--index-url` and `--extra-index-url` locations.
             if include_index_url {
+                let mut seen = FxHashSet::default();
+                let mut emitted_explicit_index = false;
+
                 if let Some(index) = settings.index_locations.default_index() {
                     writeln!(writer, "--index-url {}", index.url().verbatim())?;
+                    seen.insert(index.url());
                     wrote_preamble = true;
+                    emitted_explicit_index |= index.explicit;
                 }
-                let mut seen = FxHashSet::default();
                 for extra_index in settings.index_locations.implicit_indexes() {
                     if seen.insert(extra_index.url()) {
                         writeln!(writer, "--extra-index-url {}", extra_index.url().verbatim())?;
                         wrote_preamble = true;
                     }
+                }
+                for explicit_index in settings.index_locations.explicit_indexes() {
+                    if seen.insert(explicit_index.url()) {
+                        writeln!(
+                            writer,
+                            "--extra-index-url {}",
+                            explicit_index.url().verbatim()
+                        )?;
+                        wrote_preamble = true;
+                    }
+                    emitted_explicit_index = true;
+                }
+
+                if emitted_explicit_index {
+                    warn_user!(
+                        "The `requirements.txt` format cannot represent uv's per-package index pinning; emitting explicit indexes as global index URLs may allow packages to resolve from indexes that uv would not otherwise use."
+                    );
                 }
             }
 
