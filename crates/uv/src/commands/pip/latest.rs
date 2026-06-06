@@ -60,10 +60,8 @@ impl LatestClient<'_> {
         }
 
         // Unless explicitly allowed, skip pre-release artifacts.
-        if !filename.version().is_stable() {
-            if !matches!(self.prerelease, PrereleaseMode::Allow) {
-                return false;
-            }
+        if !filename.version().is_stable() && !matches!(self.prerelease, PrereleaseMode::Allow) {
+            return false;
         }
 
         // Avoid yanked or otherwise withdrawn files.
@@ -88,13 +86,12 @@ impl LatestClient<'_> {
         }
 
         // Skip wheels that aren't compatible with the current platform.
-        if let DistFilename::WheelFilename(filename) = filename {
-            if self
+        if let DistFilename::WheelFilename(filename) = filename
+            && self
                 .tags
                 .is_some_and(|tags| !filename.compatibility(tags).is_compatible())
-            {
-                return false;
-            }
+        {
+            return false;
         }
 
         true
@@ -112,20 +109,14 @@ impl LatestClient<'_> {
         let mut latest: Option<DistFilename> = None;
 
         let mut update_latest = |candidate: DistFilename| {
-            match latest.as_ref() {
-                Some(current) => {
-                    // Prefer higher versions, and prefer wheels over sdists at parity.
-                    if candidate.version() > current.version()
-                        || (candidate.version() == current.version()
-                            && matches!(candidate, DistFilename::WheelFilename(_))
-                            && matches!(current, DistFilename::SourceDistFilename(_)))
-                    {
-                        latest = Some(candidate);
-                    }
-                }
-                None => {
-                    latest = Some(candidate);
-                }
+            // Prefer higher versions, and prefer wheels over sdists at parity.
+            if latest.as_ref().is_none_or(|current| {
+                candidate.version() > current.version()
+                    || (candidate.version() == current.version()
+                        && matches!(candidate, DistFilename::WheelFilename(_))
+                        && matches!(current, DistFilename::SourceDistFilename(_)))
+            }) {
+                latest = Some(candidate);
             }
         };
 
@@ -160,26 +151,10 @@ impl LatestClient<'_> {
                             rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(&datum.files)
                                 .expect("archived version files always deserializes");
 
-                        let mut best: Option<DistFilename> = None;
                         for (filename, file) in files.all() {
-                            if !self.consider_candidate(&filename, &file, exclude_newer.as_ref()) {
-                                continue;
+                            if self.consider_candidate(&filename, &file, exclude_newer.as_ref()) {
+                                update_latest(filename);
                             }
-
-                            match filename {
-                                DistFilename::WheelFilename(_) => {
-                                    best = Some(filename);
-                                    break;
-                                }
-                                DistFilename::SourceDistFilename(_) if best.is_none() => {
-                                    best = Some(filename);
-                                }
-                                DistFilename::SourceDistFilename(_) => {}
-                            }
-                        }
-
-                        if let Some(best) = best {
-                            update_latest(best);
                         }
                     }
                 }

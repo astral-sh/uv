@@ -21,7 +21,7 @@ use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
+    BuiltDist, File, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
     IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
 };
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
@@ -323,6 +323,7 @@ impl RegistryClient {
     /// "Simple" here refers to [PEP 503 – Simple Repository API](https://peps.python.org/pep-0503/)
     /// and [PEP 691 – JSON-based Simple API for Python Package Indexes](https://peps.python.org/pep-0691/),
     /// which the PyPI JSON API implements.
+    #[instrument(skip_all, fields(package = % package_name))]
     pub async fn simple_detail<'index>(
         &'index self,
         package_name: &PackageName,
@@ -341,6 +342,7 @@ impl RegistryClient {
     }
 
     /// Fetch package metadata from an index and the configured legacy `--find-links` locations.
+    #[instrument(skip_all, fields(package = % package_name))]
     pub async fn simple_detail_with_find_links<'index>(
         &'index self,
         package_name: &PackageName,
@@ -358,7 +360,6 @@ impl RegistryClient {
         .await
     }
 
-    #[instrument(skip_all, fields(package = % package_name))]
     async fn simple_detail_inner<'index>(
         &'index self,
         package_name: &PackageName,
@@ -373,7 +374,7 @@ impl RegistryClient {
         } else {
             Either::Right(self.index_urls_for(package_name))
         };
-        let indexes = indexes.filter(|_| !self.index_urls.simple_indexes_disabled());
+        let indexes = indexes.filter(|_| !self.index_urls.no_index());
 
         let mut results = Vec::new();
 
@@ -465,19 +466,17 @@ impl RegistryClient {
         }
 
         if include_find_links && !has_explicit_index {
-            let flat_results = futures::stream::iter(self.index_urls.flat_indexes())
+            let flat_index = self.index_urls.flat_indexes().next().map(Index::url);
+            let flat_entries = futures::stream::iter(self.index_urls.flat_indexes())
                 .map(async |index| {
                     let _permit = download_concurrency.acquire().await;
-                    let entries = self.flat_single_index(package_name, index.url()).await?;
-                    Ok::<_, Error>((index.url(), entries))
+                    self.flat_single_index(package_name, index.url()).await
                 })
                 .buffered(8)
                 .try_collect::<Vec<_>>()
-                .await?;
-            let flat_index = flat_results.first().map(|(index, _)| *index);
-            let flat_entries = flat_results
+                .await?
                 .into_iter()
-                .flat_map(|(_, entries)| entries)
+                .flatten()
                 .collect::<Vec<_>>();
             if let Some(flat_index) = flat_index
                 && !flat_entries.is_empty()
@@ -487,7 +486,7 @@ impl RegistryClient {
         }
 
         if results.is_empty() {
-            if self.index_urls.simple_indexes_disabled() {
+            if self.index_urls.no_index() {
                 return Err(ErrorKind::NoIndex(package_name.to_string()).into());
             }
 
@@ -1757,11 +1756,9 @@ mod tests {
     use uv_torch::{TorchBackend, TorchSource, TorchStrategy};
 
     use crate::{
-        BaseClientBuilder, Connectivity, SimpleDetailMetadata, SimpleDetailMetadatum,
-        html::SimpleDetailHTML,
+        BaseClientBuilder, Connectivity, RegistryClient, RegistryClientBuilder,
+        SimpleDetailMetadata, SimpleDetailMetadatum, html::SimpleDetailHTML,
     };
-
-    use crate::RegistryClientBuilder;
     use uv_cache::Cache;
     use uv_distribution_types::{
         FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
@@ -1790,33 +1787,37 @@ mod tests {
         server
     }
 
-    #[tokio::test]
-    async fn no_index_disables_explicit_simple_index() -> Result<(), Error> {
-        let server = MockServer::start().await;
-        let explicit_index = IndexUrl::from_str(&format!("{}/simple", server.uri()))?;
-        let flat_index = Index::from_find_links(IndexUrl::from_str("https://example.com/flat")?);
-        let registry_client =
+    fn no_index_client(flat_indexes: Vec<Index>) -> Result<RegistryClient, Error> {
+        Ok(
             RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
-                .index_locations(IndexLocations::new(vec![], vec![flat_index], true))
-                .build()?;
+                .index_locations(IndexLocations::new(vec![], flat_indexes, true))
+                .build()?,
+        )
+    }
 
-        let error = registry_client
+    async fn assert_no_index(
+        client: &RegistryClient,
+        package: &str,
+        index: Option<IndexMetadataRef<'_>>,
+    ) -> Result<(), Error> {
+        let error = client
             .simple_detail(
-                &PackageName::from_str("validation")?,
-                Some(IndexMetadataRef {
-                    url: &explicit_index,
-                    format: IndexFormat::Simple,
-                }),
+                &PackageName::from_str(package)?,
+                index,
                 &IndexCapabilities::default(),
                 &Semaphore::new(1),
             )
             .await
-            .expect_err("explicit simple index should be disabled");
+            .expect_err("index lookup should be disabled");
 
         assert!(matches!(
             error.kind(),
-            crate::ErrorKind::NoIndex(package) if package == "validation"
+            crate::ErrorKind::NoIndex(error_package) if error_package == package
         ));
+        Ok(())
+    }
+
+    async fn assert_no_requests(server: &MockServer) {
         assert!(
             server
                 .received_requests()
@@ -1824,7 +1825,25 @@ mod tests {
                 .expect("request recording should be enabled")
                 .is_empty()
         );
+    }
 
+    #[tokio::test]
+    async fn no_index_disables_explicit_simple_index() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        let explicit_index = IndexUrl::from_str(&format!("{}/simple", server.uri()))?;
+        let flat_index = Index::from_find_links(IndexUrl::from_str("https://example.com/flat")?);
+        let registry_client = no_index_client(vec![flat_index])?;
+
+        assert_no_index(
+            &registry_client,
+            "validation",
+            Some(IndexMetadataRef {
+                url: &explicit_index,
+                format: IndexFormat::Simple,
+            }),
+        )
+        .await?;
+        assert_no_requests(&server).await;
         Ok(())
     }
 
@@ -1832,36 +1851,18 @@ mod tests {
     async fn no_index_disables_explicit_flat_index() -> Result<(), Error> {
         let server = MockServer::start().await;
         let explicit_index = IndexUrl::from_str(&server.uri())?;
-        let registry_client =
-            RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
-                .index_locations(IndexLocations::new(vec![], vec![], true))
-                .build()?;
+        let registry_client = no_index_client(vec![])?;
 
-        let error = registry_client
-            .simple_detail(
-                &PackageName::from_str("validation")?,
-                Some(IndexMetadataRef {
-                    url: &explicit_index,
-                    format: IndexFormat::Flat,
-                }),
-                &IndexCapabilities::default(),
-                &Semaphore::new(1),
-            )
-            .await
-            .expect_err("explicit flat index should be disabled");
-
-        assert!(matches!(
-            error.kind(),
-            crate::ErrorKind::NoIndex(package) if package == "validation"
-        ));
-        assert!(
-            server
-                .received_requests()
-                .await
-                .expect("request recording should be enabled")
-                .is_empty()
-        );
-
+        assert_no_index(
+            &registry_client,
+            "validation",
+            Some(IndexMetadataRef {
+                url: &explicit_index,
+                format: IndexFormat::Flat,
+            }),
+        )
+        .await?;
+        assert_no_requests(&server).await;
         Ok(())
     }
 
@@ -1883,21 +1884,7 @@ mod tests {
         }))
         .build()?;
 
-        let error = registry_client
-            .simple_detail(
-                &PackageName::from_str("torch")?,
-                None,
-                &IndexCapabilities::default(),
-                &Semaphore::new(1),
-            )
-            .await
-            .expect_err("torch simple index should be disabled");
-
-        assert!(matches!(
-            error.kind(),
-            crate::ErrorKind::NoIndex(package) if package == "torch"
-        ));
-
+        assert_no_index(&registry_client, "torch", None).await?;
         Ok(())
     }
 
@@ -1905,33 +1892,10 @@ mod tests {
     async fn simple_detail_does_not_fetch_legacy_find_links() -> Result<(), Error> {
         let server = MockServer::start().await;
         let flat_index = Index::from_find_links(IndexUrl::from_str(&server.uri())?);
-        let registry_client =
-            RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
-                .index_locations(IndexLocations::new(vec![], vec![flat_index], true))
-                .build()?;
+        let registry_client = no_index_client(vec![flat_index])?;
 
-        let error = registry_client
-            .simple_detail(
-                &PackageName::from_str("validation")?,
-                None,
-                &IndexCapabilities::default(),
-                &Semaphore::new(1),
-            )
-            .await
-            .expect_err("legacy find-links should not be fetched");
-
-        assert!(matches!(
-            error.kind(),
-            crate::ErrorKind::NoIndex(package) if package == "validation"
-        ));
-        assert!(
-            server
-                .received_requests()
-                .await
-                .expect("request recording should be enabled")
-                .is_empty()
-        );
-
+        assert_no_index(&registry_client, "validation", None).await?;
+        assert_no_requests(&server).await;
         Ok(())
     }
 
