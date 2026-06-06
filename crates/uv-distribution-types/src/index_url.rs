@@ -617,11 +617,6 @@ impl<'a> IndexUrls {
         self.no_index
     }
 
-    /// Returns `true` if there are no index sources at all (simple indexes disabled and no flat indexes).
-    pub fn no_indexes(&self) -> bool {
-        self.no_index && self.flat_indexes.is_empty()
-    }
-
     /// Return the [`IndexStatusCodeStrategy`] for an [`IndexUrl`].
     pub fn status_code_strategy_for(&self, url: &IndexUrl) -> IndexStatusCodeStrategy {
         for index in &self.indexes {

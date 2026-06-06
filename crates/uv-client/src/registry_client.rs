@@ -331,18 +331,15 @@ impl RegistryClient {
         capabilities: &IndexCapabilities,
         download_concurrency: &Semaphore,
     ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
-        // If `--no-index` is specified and no flat indexes are available, avoid fetching
-        // regardless of whether the index is implicit, explicit, etc.
-        if self.index_urls.no_indexes() {
-            return Err(ErrorKind::NoIndex(package_name.to_string()).into());
-        }
-
         let has_explicit_index = index.is_some();
         let indexes = if let Some(index) = index {
             Either::Left(std::iter::once(index))
         } else {
             Either::Right(self.index_urls_for(package_name))
         };
+        let indexes = indexes.filter(|index| {
+            index.format == IndexFormat::Flat || !self.index_urls.simple_indexes_disabled()
+        });
 
         let mut results = Vec::new();
 
@@ -1714,18 +1711,24 @@ impl Connectivity {
 mod tests {
     use std::str::FromStr;
 
+    use tokio::sync::Semaphore;
     use url::Url;
     use uv_normalize::PackageName;
     use uv_pypi_types::PypiSimpleDetail;
     use uv_redacted::DisplaySafeUrl;
+    use uv_torch::{TorchBackend, TorchSource, TorchStrategy};
 
     use crate::{
-        BaseClientBuilder, SimpleDetailMetadata, SimpleDetailMetadatum, html::SimpleDetailHTML,
+        BaseClientBuilder, Connectivity, SimpleDetailMetadata, SimpleDetailMetadatum,
+        html::SimpleDetailHTML,
     };
 
     use crate::RegistryClientBuilder;
     use uv_cache::Cache;
-    use uv_distribution_types::{FileLocation, ToUrlError};
+    use uv_distribution_types::{
+        FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
+        IndexUrl, ToUrlError,
+    };
     use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -1747,6 +1750,80 @@ mod tests {
             .await;
 
         server
+    }
+
+    #[tokio::test]
+    async fn no_index_disables_explicit_simple_index() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        let explicit_index = IndexUrl::from_str(&format!("{}/simple", server.uri()))?;
+        let flat_index = Index::from_find_links(IndexUrl::from_str("https://example.com/flat")?);
+        let registry_client =
+            RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+                .index_locations(IndexLocations::new(vec![], vec![flat_index], true))
+                .build()?;
+
+        let error = registry_client
+            .simple_detail(
+                &PackageName::from_str("validation")?,
+                Some(IndexMetadataRef {
+                    url: &explicit_index,
+                    format: IndexFormat::Simple,
+                }),
+                &IndexCapabilities::default(),
+                &Semaphore::new(1),
+            )
+            .await
+            .expect_err("explicit simple index should be disabled");
+
+        assert!(matches!(
+            error.kind(),
+            crate::ErrorKind::NoIndex(package) if package == "validation"
+        ));
+        assert!(
+            server
+                .received_requests()
+                .await
+                .expect("request recording should be enabled")
+                .is_empty()
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn no_index_disables_torch_simple_index() -> Result<(), Error> {
+        let flat_index_dir = tempfile::tempdir()?;
+        let flat_index = Index::from_find_links(IndexUrl::parse(
+            flat_index_dir.path().to_string_lossy().as_ref(),
+            None,
+        )?);
+        let registry_client = RegistryClientBuilder::new(
+            BaseClientBuilder::default().connectivity(Connectivity::Offline),
+            Cache::temp()?,
+        )
+        .index_locations(IndexLocations::new(vec![], vec![flat_index], true))
+        .torch_backend(Some(TorchStrategy::Backend {
+            backend: TorchBackend::Cpu,
+            source: TorchSource::PyTorch,
+        }))
+        .build()?;
+
+        let error = registry_client
+            .simple_detail(
+                &PackageName::from_str("torch")?,
+                None,
+                &IndexCapabilities::default(),
+                &Semaphore::new(1),
+            )
+            .await
+            .expect_err("torch simple index should be disabled");
+
+        assert!(matches!(
+            error.kind(),
+            crate::ErrorKind::NoIndex(package) if package == "torch"
+        ));
+
+        Ok(())
     }
 
     #[tokio::test]
