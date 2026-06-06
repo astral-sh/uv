@@ -323,13 +323,49 @@ impl RegistryClient {
     /// "Simple" here refers to [PEP 503 – Simple Repository API](https://peps.python.org/pep-0503/)
     /// and [PEP 691 – JSON-based Simple API for Python Package Indexes](https://peps.python.org/pep-0691/),
     /// which the PyPI JSON API implements.
-    #[instrument(skip_all, fields(package = % package_name))]
     pub async fn simple_detail<'index>(
         &'index self,
         package_name: &PackageName,
         index: Option<IndexMetadataRef<'index>>,
         capabilities: &IndexCapabilities,
         download_concurrency: &Semaphore,
+    ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
+        self.simple_detail_inner(
+            package_name,
+            index,
+            capabilities,
+            download_concurrency,
+            false,
+        )
+        .await
+    }
+
+    /// Fetch package metadata from an index and the configured legacy `--find-links` locations.
+    pub async fn simple_detail_with_find_links<'index>(
+        &'index self,
+        package_name: &PackageName,
+        index: Option<IndexMetadataRef<'index>>,
+        capabilities: &IndexCapabilities,
+        download_concurrency: &Semaphore,
+    ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
+        self.simple_detail_inner(
+            package_name,
+            index,
+            capabilities,
+            download_concurrency,
+            true,
+        )
+        .await
+    }
+
+    #[instrument(skip_all, fields(package = % package_name))]
+    async fn simple_detail_inner<'index>(
+        &'index self,
+        package_name: &PackageName,
+        index: Option<IndexMetadataRef<'index>>,
+        capabilities: &IndexCapabilities,
+        download_concurrency: &Semaphore,
+        include_find_links: bool,
     ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
         let has_explicit_index = index.is_some();
         let indexes = if let Some(index) = index {
@@ -428,7 +464,7 @@ impl RegistryClient {
             }
         }
 
-        if !has_explicit_index {
+        if include_find_links && !has_explicit_index {
             let flat_results = futures::stream::iter(self.index_urls.flat_indexes())
                 .map(async |index| {
                     let _permit = download_concurrency.acquire().await;
@@ -1861,6 +1897,40 @@ mod tests {
             error.kind(),
             crate::ErrorKind::NoIndex(package) if package == "torch"
         ));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_detail_does_not_fetch_legacy_find_links() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        let flat_index = Index::from_find_links(IndexUrl::from_str(&server.uri())?);
+        let registry_client =
+            RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+                .index_locations(IndexLocations::new(vec![], vec![flat_index], true))
+                .build()?;
+
+        let error = registry_client
+            .simple_detail(
+                &PackageName::from_str("validation")?,
+                None,
+                &IndexCapabilities::default(),
+                &Semaphore::new(1),
+            )
+            .await
+            .expect_err("legacy find-links should not be fetched");
+
+        assert!(matches!(
+            error.kind(),
+            crate::ErrorKind::NoIndex(package) if package == "validation"
+        ));
+        assert!(
+            server
+                .received_requests()
+                .await
+                .expect("request recording should be enabled")
+                .is_empty()
+        );
 
         Ok(())
     }

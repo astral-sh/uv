@@ -131,7 +131,7 @@ impl LatestClient<'_> {
 
         let archives = match self
             .client
-            .simple_detail(
+            .simple_detail_with_find_links(
                 package,
                 index.map(IndexMetadataRef::from),
                 self.capabilities,
