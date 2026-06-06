@@ -2826,7 +2826,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // Persist it to the cache.
-        fs_err::tokio::create_dir_all(target.parent().expect("Cache entry to have parent"))
+        let target_parent = target.parent().expect("Cache entry to have parent");
+        fs_err::tokio::create_dir_all(target_parent)
+            .await
+            .map_err(Error::CacheWrite)?;
+        ensure_group_writable_if_shared_cache(&extracted, target_parent)
             .await
             .map_err(Error::CacheWrite)?;
         if let Err(err) = rename_with_retry(extracted, target).await {
@@ -2894,7 +2898,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // Persist it to the cache.
-        fs_err::tokio::create_dir_all(target.parent().expect("Cache entry to have parent"))
+        let target_parent = target.parent().expect("Cache entry to have parent");
+        fs_err::tokio::create_dir_all(target_parent)
+            .await
+            .map_err(Error::CacheWrite)?;
+        ensure_group_writable_if_shared_cache(&extracted, target_parent)
             .await
             .map_err(Error::CacheWrite)?;
         if let Err(err) = rename_with_retry(extracted, target).await {
@@ -3044,6 +3052,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         };
 
+        self.ensure_group_writable_cached_source_tree(source_root)
+            .await?;
+
         // Read the metadata from the wheel.
         let filename = WheelFilename::from_str(&disk_filename)?;
         let metadata = read_wheel_metadata(&filename, &temp_dir.path().join(&disk_filename))?;
@@ -3052,13 +3063,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         validate_metadata(source, &metadata)?;
         validate_filename(&filename, &metadata)?;
 
+        let wheel = temp_dir.path().join(&disk_filename);
+        ensure_group_writable_if_shared_cache(&wheel, cache_shard)
+            .await
+            .map_err(Error::CacheWrite)?;
+
         // Move the wheel to the cache.
-        rename_with_retry(
-            temp_dir.path().join(&disk_filename),
-            cache_shard.join(&disk_filename),
-        )
-        .await
-        .map_err(Error::CacheWrite)?;
+        rename_with_retry(wheel, cache_shard.join(&disk_filename))
+            .await
+            .map_err(Error::CacheWrite)?;
 
         debug!("Built `{source}` into `{disk_filename}`");
         Ok((disk_filename, filename, metadata))
@@ -3158,6 +3171,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Build the metadata.
         let dist_info = builder.metadata().await.map_err(Error::Build)?;
 
+        self.ensure_group_writable_cached_source_tree(source_root)
+            .await?;
+
         // Store the build context.
         self.build_context.build_arena().insert(
             BuildKey {
@@ -3187,6 +3203,29 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         validate_metadata(source, &metadata)?;
 
         Ok(Some(metadata))
+    }
+
+    /// Repair source trees that are materialized in uv's source-distribution cache.
+    ///
+    /// Build backends can mutate the cached source tree in-place, for example by writing
+    /// `*.egg-info/PKG-INFO` files with explicit `0644` permissions. Avoid touching arbitrary
+    /// local directory requirements by only repairing trees under uv's source-distribution bucket.
+    async fn ensure_group_writable_cached_source_tree(
+        &self,
+        source_root: &Path,
+    ) -> Result<(), Error> {
+        let source_cache = self
+            .build_context
+            .cache()
+            .bucket(CacheBucket::SourceDistributions);
+        if !source_root.starts_with(&source_cache) {
+            return Ok(());
+        }
+
+        let source_parent = source_root.parent().expect("Source root to have parent");
+        ensure_group_writable_if_shared_cache(source_root, source_parent)
+            .await
+            .map_err(Error::CacheWrite)
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
@@ -3663,4 +3702,138 @@ fn read_wheel_metadata(
     let dist_info = read_archive_metadata(filename, reader)
         .map_err(|err| Error::WheelMetadata(wheel.to_path_buf(), Box::new(err)))?;
     Ok(ResolutionMetadata::parse_metadata(&dist_info)?)
+}
+
+/// Preserve group write access when publishing artifacts into a deliberately shared cache.
+///
+/// Unix permissions cannot force newly-created descendants to remain group-writable: archives and
+/// build backends can materialize files with explicit `0644` modes. When the destination cache
+/// directory is already group-writable, treat it as an intentional shared cache and repair extracted
+/// trees or built wheels before making them visible at their final cache path.
+async fn ensure_group_writable_if_shared_cache(
+    path: &Path,
+    cache_parent: &Path,
+) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        let path = path.to_path_buf();
+        let cache_parent = cache_parent.to_path_buf();
+        tokio::task::spawn_blocking(move || {
+            ensure_group_writable_if_shared_cache_sync(&path, &cache_parent)
+        })
+        .await
+        .map_err(std::io::Error::other)?
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        let _ = cache_parent;
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+fn ensure_group_writable_if_shared_cache_sync(
+    path: &Path,
+    cache_parent: &Path,
+) -> std::io::Result<()> {
+    use std::fs::Permissions;
+    use std::os::unix::fs::PermissionsExt;
+
+    let parent_mode = fs_err::metadata(cache_parent)?.permissions().mode();
+    if parent_mode & 0o020 == 0 {
+        return Ok(());
+    }
+
+    fn repair_path(path: &Path) -> std::io::Result<()> {
+        use std::fs::Permissions;
+        use std::os::unix::fs::PermissionsExt;
+
+        let metadata = fs_err::symlink_metadata(path)?;
+        let mode = metadata.permissions().mode();
+        let desired = if metadata.is_dir() {
+            mode | 0o2070
+        } else if metadata.is_file() {
+            mode | 0o060
+        } else {
+            return Ok(());
+        };
+
+        if desired != mode {
+            fs_err::set_permissions(path, Permissions::from_mode(desired))?;
+        }
+
+        Ok(())
+    }
+
+    let metadata = fs_err::symlink_metadata(path)?;
+    if metadata.is_dir() {
+        for entry in walkdir::WalkDir::new(path).follow_links(false) {
+            let entry = entry.map_err(std::io::Error::other)?;
+            repair_path(entry.path())?;
+        }
+    } else if metadata.is_file() {
+        fs_err::set_permissions(
+            path,
+            Permissions::from_mode(metadata.permissions().mode() | 0o060),
+        )?;
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    #[cfg(unix)]
+    use super::ensure_group_writable_if_shared_cache_sync;
+
+    #[test]
+    #[cfg(unix)]
+    fn shared_cache_parent_repairs_tree_permissions() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let cache_parent = temp_dir.path().join("cache-parent");
+        let extracted = temp_dir.path().join("extracted");
+        let nested = extracted.join("package.egg-info");
+        let metadata = nested.join("PKG-INFO");
+
+        fs_err::create_dir_all(&nested).unwrap();
+        fs_err::write(&metadata, b"metadata").unwrap();
+        fs_err::create_dir_all(&cache_parent).unwrap();
+        fs_err::set_permissions(&cache_parent, std::fs::Permissions::from_mode(0o775)).unwrap();
+        fs_err::set_permissions(&extracted, std::fs::Permissions::from_mode(0o755)).unwrap();
+        fs_err::set_permissions(&nested, std::fs::Permissions::from_mode(0o755)).unwrap();
+        fs_err::set_permissions(&metadata, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        ensure_group_writable_if_shared_cache_sync(&extracted, &cache_parent).unwrap();
+
+        let extracted_mode = fs_err::metadata(&extracted).unwrap().permissions().mode();
+        let nested_mode = fs_err::metadata(&nested).unwrap().permissions().mode();
+        let metadata_mode = fs_err::metadata(&metadata).unwrap().permissions().mode();
+
+        assert_eq!(extracted_mode & 0o2070, 0o2070);
+        assert_eq!(nested_mode & 0o2070, 0o2070);
+        assert_eq!(metadata_mode & 0o060, 0o060);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn private_cache_parent_leaves_permissions_unchanged() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let cache_parent = temp_dir.path().join("cache-parent");
+        let wheel = temp_dir.path().join("package-0.1.0-py3-none-any.whl");
+
+        fs_err::create_dir_all(&cache_parent).unwrap();
+        fs_err::write(&wheel, b"wheel").unwrap();
+        fs_err::set_permissions(&cache_parent, std::fs::Permissions::from_mode(0o755)).unwrap();
+        fs_err::set_permissions(&wheel, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        ensure_group_writable_if_shared_cache_sync(&wheel, &cache_parent).unwrap();
+
+        let wheel_mode = fs_err::metadata(&wheel).unwrap().permissions().mode();
+        assert_eq!(wheel_mode & 0o777, 0o644);
+    }
 }
