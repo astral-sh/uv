@@ -8179,27 +8179,27 @@ fn install_with_overrides_from_stdin() -> Result<()> {
     Ok(())
 }
 
-/// Install with excludes from stdin.
+/// Install with a direct exclusion from stdin.
 #[test]
 #[expect(clippy::disallowed_types)]
 fn install_with_excludes_from_stdin() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let excludes_txt = context.temp_dir.child("excludes.txt");
-    excludes_txt.write_str("anyio>4.0.0")?;
+    excludes_txt.write_str("anyio")?;
 
     uv_snapshot!(context.pip_install()
         .arg("anyio==4.0.1")
         .arg("--exclude")
         .arg("-")
         .stdin(std::fs::File::open(excludes_txt)?), @"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of anyio==4.0.1 and you require anyio==4.0.1, we can conclude that your requirements are unsatisfiable.
+    Resolved in [TIME]
+    Checked in [TIME]
     "
     );
 
