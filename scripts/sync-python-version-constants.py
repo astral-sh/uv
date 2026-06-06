@@ -26,6 +26,7 @@ from packaging.version import Version
 
 SELF_DIR = Path(__file__).parent
 ROOT = SELF_DIR.parent
+PYTHON_MINOR_VERSIONS = ("3.15", "3.14", "3.13", "3.12", "3.11", "3.10")
 
 
 def main() -> None:
@@ -76,13 +77,13 @@ def main() -> None:
 
     # Extract old values first
     old_versions: dict[str, str] = {}
-    for minor in ["3.15", "3.14", "3.13", "3.12", "3.11", "3.10"]:
+    for minor in PYTHON_MINOR_VERSIONS:
         const_name = f"LATEST_PYTHON_{minor.replace('.', '_')}"
         match = re.search(rf'const {const_name}: &str = "([^"]+)";', content)
         if match:
             old_versions[minor] = match.group(1)
 
-    for minor in ["3.15", "3.14", "3.13", "3.12", "3.11", "3.10"]:
+    for minor in PYTHON_MINOR_VERSIONS:
         if minor not in latest_versions:
             continue
         const_name = f"LATEST_PYTHON_{minor.replace('.', '_')}"
@@ -93,7 +94,7 @@ def main() -> None:
     lib_path.write_text(content)
 
     updates = []
-    for minor in ["3.15", "3.14", "3.13", "3.12", "3.11", "3.10"]:
+    for minor in PYTHON_MINOR_VERSIONS:
         if minor not in latest_versions:
             continue
         new_version = latest_versions[minor]
