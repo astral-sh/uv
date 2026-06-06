@@ -337,9 +337,7 @@ impl RegistryClient {
         } else {
             Either::Right(self.index_urls_for(package_name))
         };
-        let indexes = indexes.filter(|index| {
-            index.format == IndexFormat::Flat || !self.index_urls.simple_indexes_disabled()
-        });
+        let indexes = indexes.filter(|_| !self.index_urls.simple_indexes_disabled());
 
         let mut results = Vec::new();
 
@@ -1778,6 +1776,43 @@ mod tests {
             )
             .await
             .expect_err("explicit simple index should be disabled");
+
+        assert!(matches!(
+            error.kind(),
+            crate::ErrorKind::NoIndex(package) if package == "validation"
+        ));
+        assert!(
+            server
+                .received_requests()
+                .await
+                .expect("request recording should be enabled")
+                .is_empty()
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn no_index_disables_explicit_flat_index() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        let explicit_index = IndexUrl::from_str(&server.uri())?;
+        let registry_client =
+            RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+                .index_locations(IndexLocations::new(vec![], vec![], true))
+                .build()?;
+
+        let error = registry_client
+            .simple_detail(
+                &PackageName::from_str("validation")?,
+                Some(IndexMetadataRef {
+                    url: &explicit_index,
+                    format: IndexFormat::Flat,
+                }),
+                &IndexCapabilities::default(),
+                &Semaphore::new(1),
+            )
+            .await
+            .expect_err("explicit flat index should be disabled");
 
         assert!(matches!(
             error.kind(),
