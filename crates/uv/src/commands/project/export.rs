@@ -404,27 +404,21 @@ pub(crate) async fn export(
                     wrote_preamble = true;
                     emitted_explicit_index |= index.explicit;
                 }
-                for extra_index in settings.index_locations.implicit_indexes() {
-                    if seen.insert(extra_index.url()) {
-                        writeln!(writer, "--extra-index-url {}", extra_index.url().verbatim())?;
+                for index in settings
+                    .index_locations
+                    .implicit_indexes()
+                    .chain(settings.index_locations.explicit_indexes())
+                {
+                    if seen.insert(index.url()) {
+                        writeln!(writer, "--extra-index-url {}", index.url().verbatim())?;
                         wrote_preamble = true;
                     }
-                }
-                for explicit_index in settings.index_locations.explicit_indexes() {
-                    if seen.insert(explicit_index.url()) {
-                        writeln!(
-                            writer,
-                            "--extra-index-url {}",
-                            explicit_index.url().verbatim()
-                        )?;
-                        wrote_preamble = true;
-                    }
-                    emitted_explicit_index = true;
+                    emitted_explicit_index |= index.explicit;
                 }
 
                 if emitted_explicit_index {
                     warn_user!(
-                        "The `requirements.txt` format cannot represent uv's per-package index pinning; emitting explicit indexes as global index URLs may allow packages to resolve from indexes that uv would not otherwise use."
+                        "`requirements.txt` does not support per-package index pinning; explicit indexes were emitted globally via `--extra-index-url`."
                     );
                 }
             }
