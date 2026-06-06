@@ -75,7 +75,6 @@ def main() -> None:
     lib_path = ROOT / "crates" / "uv-test" / "src" / "lib.rs"
     content = lib_path.read_text()
 
-    # Extract old values first
     old_versions: dict[str, str] = {}
     for minor in PYTHON_MINOR_VERSIONS:
         const_name = f"LATEST_PYTHON_{minor.replace('.', '_')}"
@@ -83,10 +82,8 @@ def main() -> None:
         if match:
             old_versions[minor] = match.group(1)
 
-    for minor in PYTHON_MINOR_VERSIONS:
         if minor not in latest_versions:
             continue
-        const_name = f"LATEST_PYTHON_{minor.replace('.', '_')}"
         old_pattern = rf'const {const_name}: &str = "[^"]+";'
         new_value = f'const {const_name}: &str = "{latest_versions[minor]}";'
         content = re.sub(old_pattern, new_value, content)
