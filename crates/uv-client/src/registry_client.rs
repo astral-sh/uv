@@ -21,7 +21,7 @@ use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
+    BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
     IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
 };
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
@@ -331,50 +331,17 @@ impl RegistryClient {
         capabilities: &IndexCapabilities,
         download_concurrency: &Semaphore,
     ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
-        self.simple_detail_inner(
-            package_name,
-            index,
-            capabilities,
-            download_concurrency,
-            false,
-        )
-        .await
-    }
+        // If `--no-index` is specified, avoid fetching regardless of whether the index is implicit,
+        // explicit, etc.
+        if self.index_urls.no_index() {
+            return Err(ErrorKind::NoIndex(package_name.to_string()).into());
+        }
 
-    /// Fetch package metadata from an index and the configured legacy `--find-links` locations.
-    #[instrument(skip_all, fields(package = % package_name))]
-    pub async fn simple_detail_with_find_links<'index>(
-        &'index self,
-        package_name: &PackageName,
-        index: Option<IndexMetadataRef<'index>>,
-        capabilities: &IndexCapabilities,
-        download_concurrency: &Semaphore,
-    ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
-        self.simple_detail_inner(
-            package_name,
-            index,
-            capabilities,
-            download_concurrency,
-            true,
-        )
-        .await
-    }
-
-    async fn simple_detail_inner<'index>(
-        &'index self,
-        package_name: &PackageName,
-        index: Option<IndexMetadataRef<'index>>,
-        capabilities: &IndexCapabilities,
-        download_concurrency: &Semaphore,
-        include_find_links: bool,
-    ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
-        let has_explicit_index = index.is_some();
         let indexes = if let Some(index) = index {
             Either::Left(std::iter::once(index))
         } else {
             Either::Right(self.index_urls_for(package_name))
         };
-        let indexes = indexes.filter(|_| !self.index_urls.no_index());
 
         let mut results = Vec::new();
 
@@ -465,31 +432,7 @@ impl RegistryClient {
             }
         }
 
-        if include_find_links && !has_explicit_index {
-            let flat_index = self.index_urls.flat_indexes().next().map(Index::url);
-            let flat_entries = futures::stream::iter(self.index_urls.flat_indexes())
-                .map(async |index| {
-                    let _permit = download_concurrency.acquire().await;
-                    self.flat_single_index(package_name, index.url()).await
-                })
-                .buffered(8)
-                .try_collect::<Vec<_>>()
-                .await?
-                .into_iter()
-                .flatten()
-                .collect::<Vec<_>>();
-            if let Some(flat_index) = flat_index
-                && !flat_entries.is_empty()
-            {
-                results.push((flat_index, MetadataFormat::Flat(flat_entries)));
-            }
-        }
-
         if results.is_empty() {
-            if self.index_urls.no_index() {
-                return Err(ErrorKind::NoIndex(package_name.to_string()).into());
-            }
-
             return match self.connectivity {
                 Connectivity::Online => {
                     Err(ErrorKind::RemotePackageNotFound(package_name.clone()).into())
@@ -499,6 +442,26 @@ impl RegistryClient {
         }
 
         Ok(results)
+    }
+
+    /// Fetch and combine entries for a package from the configured legacy `--find-links` locations.
+    #[instrument(skip_all, fields(package = % package_name))]
+    pub async fn find_links_entries(
+        &self,
+        package_name: &PackageName,
+        download_concurrency: &Semaphore,
+    ) -> Result<Vec<FlatIndexEntry>, Error> {
+        Ok(futures::stream::iter(self.index_urls.flat_indexes())
+            .map(async |index| {
+                let _permit = download_concurrency.acquire().await;
+                self.flat_single_index(package_name, index.url()).await
+            })
+            .buffered(8)
+            .try_collect::<Vec<_>>()
+            .await?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>())
     }
 
     /// Fetch the [`FlatIndexEntry`] entries for a given package from a single `--find-links` index.
