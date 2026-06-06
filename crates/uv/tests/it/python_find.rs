@@ -127,6 +127,18 @@ fn python_find() {
     error: No interpreter found for PyPy in [PYTHON SOURCES]
     ");
 
+    // Request an executable that does not exist
+    uv_snapshot!(context.filters(), context.python_find().arg("foobar"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for executable name `foobar` in [PYTHON SOURCES]
+
+    hint: See `uv help python` to view supported request formats
+    ");
+
     // Swap the order of the Python versions
     context.python_versions.reverse();
 

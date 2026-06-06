@@ -175,7 +175,13 @@ impl std::fmt::Display for MissingPythonHint {
 impl uv_errors::Hint for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
-            Self::MissingPython(_, Some(hint)) => uv_errors::Hints::from(hint.to_string()),
+            Self::MissingPython(err, hint) => {
+                let mut hints = uv_errors::Hint::hints(err);
+                if let Some(hint) = hint {
+                    hints.extend(uv_errors::Hints::from(hint.to_string()));
+                }
+                hints
+            }
             Self::Discovery(err) => err.hints(),
             _ => uv_errors::Hints::none(),
         }

@@ -2406,6 +2406,8 @@ fn tool_run_python_at_version() {
 
     ----- stderr -----
     error: No interpreter found for executable name `@311` in [PYTHON SOURCES]
+
+    hint: See `uv help python` to view supported request formats
     ");
 
     // Request a version in the tool and `-p`
