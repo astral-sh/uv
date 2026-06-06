@@ -5849,6 +5849,39 @@ fn no_install_project() -> Result<()> {
      + sniffio==1.3.1
     ");
 
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_NO_INSTALL_PROJECT, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 4 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_ONLY_INSTALL_PROJECT, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==3.7.0
+     - idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     - sniffio==1.3.1
+    ");
+
     // However, we do require the `pyproject.toml`.
     fs_err::remove_file(pyproject_toml)?;
 
@@ -5939,6 +5972,23 @@ fn no_install_workspace() -> Result<()> {
     ");
 
     // Remove the virtual environment.
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env(EnvVars::UV_NO_INSTALL_WORKSPACE, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    ");
+
     fs_err::remove_dir_all(&context.venv)?;
 
     // We don't require the `pyproject.toml` for non-root members, if `--frozen` is provided.
@@ -6095,6 +6145,56 @@ fn no_install_local() -> Result<()> {
      + anyio==3.7.0
      + idna==3.6
      + sniffio==1.3.1
+    ");
+
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env(EnvVars::UV_NO_INSTALL_LOCAL, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+/// `UV_NO_INSTALL_PROJECT=1` should conflict with `--script`, just like
+/// `--no-install-project`.
+#[test]
+fn no_install_env_var_conflicts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # ///
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::UV_NO_INSTALL_PROJECT, "1"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument `UV_NO_INSTALL_PROJECT` (environment variable) cannot be used with `--script`
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::UV_NO_INSTALL_PROJECT, "1").env(EnvVars::UV_ONLY_INSTALL_PROJECT, "1"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument `UV_NO_INSTALL_PROJECT` (environment variable) cannot be used with `UV_ONLY_INSTALL_PROJECT` (environment variable)
     ");
 
     Ok(())

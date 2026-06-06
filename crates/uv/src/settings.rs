@@ -1794,6 +1794,46 @@ impl SyncSettings {
             Some(environment.no_editable),
         );
 
+        let (no_install_project, only_install_project) = resolve_flag_pair(
+            no_install_project,
+            only_install_project,
+            "no-install-project",
+            "only-install-project",
+            Some(environment.no_install_project),
+            Some(environment.only_install_project),
+        );
+        let (no_install_workspace, only_install_workspace) = resolve_flag_pair(
+            no_install_workspace,
+            only_install_workspace,
+            "no-install-workspace",
+            "only-install-workspace",
+            Some(environment.no_install_workspace),
+            Some(environment.only_install_workspace),
+        );
+        let (no_install_local, only_install_local) = resolve_flag_pair(
+            no_install_local,
+            only_install_local,
+            "no-install-local",
+            "only-install-local",
+            Some(environment.no_install_local),
+            Some(environment.only_install_local),
+        );
+        check_conflicts(no_install_project, only_install_project);
+        check_conflicts(no_install_workspace, only_install_workspace);
+        check_conflicts(no_install_local, only_install_local);
+        if script.is_some() {
+            let script = Flag::from_cli("script");
+            check_conflicts(no_install_project, script);
+            check_conflicts(no_install_workspace, script);
+            check_conflicts(no_install_local, script);
+        }
+        let no_install_project = no_install_project.is_enabled();
+        let only_install_project = only_install_project.is_enabled();
+        let no_install_workspace = no_install_workspace.is_enabled();
+        let only_install_workspace = only_install_workspace.is_enabled();
+        let no_install_local = no_install_local.is_enabled();
+        let only_install_local = only_install_local.is_enabled();
+
         let malware_settings = MalwareCheckSettings::from(&environment);
 
         Self {
@@ -2092,6 +2132,34 @@ impl AddSettings {
             Some(environment.no_editable),
         );
 
+        let (no_install_project, only_install_project) = resolve_flag_pair(
+            no_install_project,
+            only_install_project,
+            "no-install-project",
+            "only-install-project",
+            Some(environment.no_install_project),
+            Some(environment.only_install_project),
+        );
+        let (no_install_workspace, only_install_workspace) = resolve_flag_pair(
+            no_install_workspace,
+            only_install_workspace,
+            "no-install-workspace",
+            "only-install-workspace",
+            Some(environment.no_install_workspace),
+            Some(environment.only_install_workspace),
+        );
+        let (no_install_local, only_install_local) = resolve_flag_pair(
+            no_install_local,
+            only_install_local,
+            "no-install-local",
+            "only-install-local",
+            Some(environment.no_install_local),
+            Some(environment.only_install_local),
+        );
+        check_conflicts(no_install_project, only_install_project);
+        check_conflicts(no_install_workspace, only_install_workspace);
+        check_conflicts(no_install_local, only_install_local);
+
         let dependency_type = if let Some(extra) = optional {
             DependencyType::Optional(extra)
         } else if let Some(group) = group {
@@ -2168,6 +2236,38 @@ impl AddSettings {
 
         // Check for conflicts between no_sync and frozen.
         check_conflicts(no_sync, frozen);
+
+        let no_install_package_flag = if no_install_package.is_empty() {
+            Flag::disabled()
+        } else {
+            Flag::from_cli("no-install-package")
+        };
+        let only_install_package_flag = if only_install_package.is_empty() {
+            Flag::disabled()
+        } else {
+            Flag::from_cli("only-install-package")
+        };
+
+        for install_flag in [
+            no_install_project,
+            no_install_workspace,
+            no_install_local,
+            only_install_project,
+            only_install_workspace,
+            only_install_local,
+            no_install_package_flag,
+            only_install_package_flag,
+        ] {
+            check_conflicts(install_flag, frozen);
+            check_conflicts(install_flag, no_sync);
+        }
+
+        let no_install_project = no_install_project.is_enabled();
+        let only_install_project = only_install_project.is_enabled();
+        let no_install_workspace = no_install_workspace.is_enabled();
+        let only_install_workspace = only_install_workspace.is_enabled();
+        let no_install_local = no_install_local.is_enabled();
+        let only_install_local = only_install_local.is_enabled();
 
         let malware_settings = MalwareCheckSettings::from(&environment);
 

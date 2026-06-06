@@ -260,6 +260,38 @@ impl EnvVars {
     #[attr_added_in("0.9.9")]
     pub const UV_NO_DEFAULT_GROUPS: &'static str = "UV_NO_DEFAULT_GROUPS";
 
+    /// Equivalent to the `--no-install-project` command-line argument. If set, uv will
+    /// install the project's dependencies but not the project itself.
+    #[attr_added_in("next release")]
+    pub const UV_NO_INSTALL_PROJECT: &'static str = "UV_NO_INSTALL_PROJECT";
+
+    /// Equivalent to the `--no-install-workspace` command-line argument. If set, uv will
+    /// install workspace dependencies but not workspace members (including the current
+    /// project).
+    #[attr_added_in("next release")]
+    pub const UV_NO_INSTALL_WORKSPACE: &'static str = "UV_NO_INSTALL_WORKSPACE";
+
+    /// Equivalent to the `--no-install-local` command-line argument. If set, uv will skip
+    /// the current project, workspace members, and any other local (path or editable)
+    /// packages, installing only remote dependencies.
+    #[attr_added_in("next release")]
+    pub const UV_NO_INSTALL_LOCAL: &'static str = "UV_NO_INSTALL_LOCAL";
+
+    /// Equivalent to the hidden `--only-install-project` command-line argument.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_ONLY_INSTALL_PROJECT: &'static str = "UV_ONLY_INSTALL_PROJECT";
+
+    /// Equivalent to the hidden `--only-install-workspace` command-line argument.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_ONLY_INSTALL_WORKSPACE: &'static str = "UV_ONLY_INSTALL_WORKSPACE";
+
+    /// Equivalent to the hidden `--only-install-local` command-line argument.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_ONLY_INSTALL_LOCAL: &'static str = "UV_ONLY_INSTALL_LOCAL";
+
     /// Equivalent to the `--no-binary` command-line argument. If set, uv will install
     /// all packages from source. The resolver will still use pre-built wheels to
     /// extract package metadata, if available.
