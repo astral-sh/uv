@@ -122,7 +122,7 @@ impl LatestClient<'_> {
 
         let archives = match self
             .client
-            .simple_detail_with_find_links(
+            .simple_detail(
                 package,
                 index.map(IndexMetadataRef::from),
                 self.capabilities,
@@ -131,14 +131,17 @@ impl LatestClient<'_> {
             .await
         {
             Ok(archives) => archives,
-            Err(err) => {
-                return match err.kind() {
-                    uv_client::ErrorKind::RemotePackageNotFound(_) => Ok(None),
-                    uv_client::ErrorKind::NoIndex(_) => Ok(None),
-                    uv_client::ErrorKind::Offline(_) => Ok(None),
-                    _ => Err(err),
-                };
+            Err(err)
+                if matches!(
+                    err.kind(),
+                    uv_client::ErrorKind::RemotePackageNotFound(_)
+                        | uv_client::ErrorKind::NoIndex(_)
+                        | uv_client::ErrorKind::Offline(_)
+                ) =>
+            {
+                Vec::new()
             }
+            Err(err) => return Err(err),
         };
 
         for (index, archive) in archives {
@@ -165,6 +168,20 @@ impl LatestClient<'_> {
                             update_latest(filename);
                         }
                     }
+                }
+            }
+        }
+
+        if index.is_none() {
+            for entry in self
+                .client
+                .find_links_entries(package, download_concurrency)
+                .await?
+            {
+                let (filename, file, index) = entry.into_parts();
+                let exclude_newer = self.effective_exclude_newer(package, &index);
+                if self.consider_candidate(&filename, &file, exclude_newer.as_ref()) {
+                    update_latest(filename);
                 }
             }
         }
