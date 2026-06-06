@@ -7518,6 +7518,49 @@ fn find_links() {
     );
 }
 
+/// Install the latest version across multiple `--find-links` directories.
+#[test]
+fn find_links_multiple() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links_dir = context.workspace_root.join("test/links");
+
+    let first_links_dir = context.temp_dir.child("first-links");
+    first_links_dir.create_dir_all()?;
+    fs::copy(
+        links_dir.join("ok-1.0.0-py3-none-any.whl"),
+        first_links_dir.child("ok-1.0.0-py3-none-any.whl").path(),
+    )?;
+
+    let second_links_dir = context.temp_dir.child("second-links");
+    second_links_dir.create_dir_all()?;
+    fs::copy(
+        links_dir.join("ok-2.0.0-py3-none-any.whl"),
+        second_links_dir.child("ok-2.0.0-py3-none-any.whl").path(),
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("ok")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(first_links_dir.path())
+        .arg("--find-links")
+        .arg(second_links_dir.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==2.0.0
+    "
+    );
+
+    Ok(())
+}
+
 /// Install from a `--find-links` HTML page with uppercase tag and attribute names.
 #[tokio::test]
 async fn find_links_uppercase_html() -> Result<()> {

@@ -435,17 +435,21 @@ impl RegistryClient {
                 .map(async |index| {
                     let _permit = download_concurrency.acquire().await;
                     let entries = self.flat_single_index(package_name, index.url()).await?;
-                    Ok((index.url(), entries))
+                    Ok::<_, Error>((index.url(), entries))
                 })
                 .buffered(8)
-                .filter_map(async |result: Result<_, Error>| match result {
-                    Ok((_, entries)) if entries.is_empty() => None,
-                    Ok((index, entries)) => Some(Ok((index, MetadataFormat::Flat(entries)))),
-                    Err(err) => Some(Err(err)),
-                })
                 .try_collect::<Vec<_>>()
                 .await?;
-            results.extend(flat_results);
+            let flat_index = flat_results.first().map(|(index, _)| *index);
+            let flat_entries = flat_results
+                .into_iter()
+                .flat_map(|(_, entries)| entries)
+                .collect::<Vec<_>>();
+            if let Some(flat_index) = flat_index
+                && !flat_entries.is_empty()
+            {
+                results.push((flat_index, MetadataFormat::Flat(flat_entries)));
+            }
         }
 
         if results.is_empty() {
