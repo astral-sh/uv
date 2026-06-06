@@ -1791,6 +1791,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
 
                 requirements
+                    .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .flat_map(move |requirement| {
                         PubGrubDependency::from_requirement(
                             &self.conflicts,

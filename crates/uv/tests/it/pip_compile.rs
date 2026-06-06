@@ -4306,6 +4306,34 @@ fn override_dependency_from_specific_uv_toml() -> Result<()> {
     Ok(())
 }
 
+/// Check that `exclude-dependencies` in `uv.toml` applies to direct requirements.
+#[test]
+fn exclude_direct_dependency_from_uv_toml() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("werkzeug")?;
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(
+        r#"
+        exclude-dependencies = ["werkzeug"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--no-header"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Black==23.10.1 depends on tomli>=1.1.0 for Python versions below 3.11. Demonstrate that we can
 /// override it with a multi-line override.
 #[test]
