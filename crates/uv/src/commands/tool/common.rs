@@ -471,11 +471,14 @@ pub(crate) fn finalize_tool_install(
                     ("s", "exist")
                 };
                 bail!(
-                    "Executable{s} already {exists}: {} (use `--force` to overwrite)",
+                    "Executable{s} already {exists}: {} (use `--force` to overwrite)\n\n{}{} The tool environment was removed, so `{}` is not installed.",
                     existing_entrypoints
                         .iter()
                         .map(|name| name.bold())
-                        .join(", ")
+                        .join(", "),
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    name.cyan(),
                 )
             }
         }
