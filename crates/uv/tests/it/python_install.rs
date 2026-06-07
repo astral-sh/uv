@@ -862,6 +862,59 @@ fn python_install_preview() {
     }
 }
 
+/// Multiple pre-existing, unmanaged executables should be reported as a single grouped error,
+/// rather than one near-identical error per executable.
+///
+/// See: <https://github.com/astral-sh/uv/issues/9707>
+#[test]
+fn python_install_multiple_unmanaged_executables() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_latest_python_versions()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    // Install a version with the default `python`, `python3`, and `python3.13` executables.
+    uv_snapshot!(context.filters(), context.python_install().arg("--default").arg("--preview-features").arg("python-install-default").arg("3.13"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.[LATEST] in [TIME]
+     + cpython-3.13.[LATEST]-[PLATFORM] (python, python3, python3.13)
+    ");
+
+    // Replace each managed executable with an empty, unmanaged file.
+    for name in ["python", "python3", "python3.13"] {
+        let executable = context
+            .bin_dir
+            .child(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+        fs_err::remove_file(executable.path()).unwrap();
+        executable.touch().unwrap();
+    }
+
+    // Re-installing without `--force` should report all three conflicts in a single grouped error.
+    uv_snapshot!(context.filters(), context.python_install().arg("--default").arg("--preview-features").arg("python-install-default").arg("3.13"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to install executable for cpython-3.13.[LATEST]-[PLATFORM]
+      Caused by: Executables `python3.13`, `python3`, and `python` already exist in `[BIN]/` but are not managed by uv; use `--force` to replace them
+    ");
+
+    // The unmanaged executables should be left untouched (still empty).
+    for name in ["python", "python3", "python3.13"] {
+        let executable = context
+            .bin_dir
+            .child(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+        assert_eq!(fs_err::read_to_string(executable.path()).unwrap(), "");
+    }
+}
+
 #[test]
 fn python_install_preview_no_bin() {
     let context = uv_test::test_context_with_versions!(&[])
