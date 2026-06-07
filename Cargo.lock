@@ -218,9 +218,8 @@ dependencies = [
 
 [[package]]
 name = "astral-pubgrub"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6cb15b4f5096a3a1b41fdc2736a1c33d87c78f34d3c1ec2b669e766edadd559"
+version = "0.4.3"
+source = "git+https://github.com/pubgrub-rs/pubgrub?branch=konsti%2Fmain%2Fderivation-tree-as-arena#aa5c80a67036c25f97be4853266c3d0e6c313046"
 dependencies = [
  "astral-version-ranges",
  "indexmap",
@@ -294,8 +293,7 @@ dependencies = [
 [[package]]
 name = "astral-version-ranges"
 version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31979bc305610246d78ac01d63467a12d8454c6e3b8b22b5811d343a1198dfbb"
+source = "git+https://github.com/pubgrub-rs/pubgrub?branch=konsti%2Fmain%2Fderivation-tree-as-arena#aa5c80a67036c25f97be4853266c3d0e6c313046"
 dependencies = [
  "smallvec",
 ]

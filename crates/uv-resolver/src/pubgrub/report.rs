@@ -7,7 +7,7 @@ use indexmap::IndexSet;
 use itertools::Itertools;
 use jiff::Timestamp;
 use owo_colors::OwoColorize;
-use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
+use pubgrub::{Derived, External, Map, Range, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
 
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
@@ -21,7 +21,7 @@ use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVers
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
 
 use crate::candidate_selector::CandidateSelector;
-use crate::error::{ErrorTree, PrefixMatch};
+use crate::error::{ErrorTree, ErrorTreeId, ErrorTreeNode, PrefixMatch};
 use crate::exclude_newer::EffectiveExcludeNewerSource;
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
@@ -33,8 +33,6 @@ use crate::resolver::{
     UnavailableVersion,
 };
 use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse};
-
-type ReportDerived = Derived<PubGrubPackage, Range<Version>, UnavailableReason>;
 
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
@@ -54,19 +52,19 @@ pub(crate) struct PubGrubReportFormatter<'a> {
     pub(crate) tags: Option<&'a Tags>,
 }
 
-/// Render a PubGrub report without recursive tree traversal.
+/// Render a report for uv's reduced PubGrub error tree without recursive traversal.
 ///
 /// This preserves the output and shared-node reference behavior of
-/// [`pubgrub::DefaultStringReporter`], whose recursive entry point is private.
+/// [`pubgrub::DefaultStringReporter`] while operating on uv's local tree wrapper.
 pub(crate) fn report(
     derivation_tree: &ErrorTree,
     formatter: &PubGrubReportFormatter<'_>,
 ) -> String {
-    match derivation_tree {
-        DerivationTree::External(external) => formatter.format_external(external),
-        DerivationTree::Derived(derived) => {
+    match derivation_tree.root() {
+        ErrorTreeNode::External(external) => formatter.format_external(external),
+        ErrorTreeNode::Derived(_) => {
             let mut reporter = IterativeReporter::default();
-            reporter.build(derived, formatter);
+            reporter.build(derivation_tree, derivation_tree.root_id(), formatter);
             reporter.lines.join("\n")
         }
     }
@@ -81,14 +79,19 @@ struct IterativeReporter {
 }
 
 impl IterativeReporter {
-    fn build(&mut self, root: &ReportDerived, formatter: &PubGrubReportFormatter<'_>) {
-        enum Task<'a> {
-            Build(&'a ReportDerived),
+    fn build(
+        &mut self,
+        tree: &ErrorTree,
+        root: ErrorTreeId,
+        formatter: &PubGrubReportFormatter<'_>,
+    ) {
+        enum Task {
+            Build(ErrorTreeId),
             Finish(Option<usize>),
             AfterFirstDerived {
-                current: &'a ReportDerived,
-                first: &'a ReportDerived,
-                second: &'a ReportDerived,
+                current: ErrorTreeId,
+                first: ErrorTreeId,
+                second: ErrorTreeId,
             },
             Emit(String),
         }
@@ -96,12 +99,15 @@ impl IterativeReporter {
         let mut tasks = vec![Task::Build(root)];
         while let Some(task) = tasks.pop() {
             match task {
-                Task::Build(current) => {
+                Task::Build(current_id) => {
+                    let ErrorTreeNode::Derived(current) = tree.node(current_id) else {
+                        continue;
+                    };
                     tasks.push(Task::Finish(current.shared_id));
-                    match (current.cause1.as_ref(), current.cause2.as_ref()) {
+                    match (tree.node(current.cause1), tree.node(current.cause2)) {
                         (
-                            DerivationTree::External(external1),
-                            DerivationTree::External(external2),
+                            ErrorTreeNode::External(external1),
+                            ErrorTreeNode::External(external2),
                         ) => {
                             self.lines.push(formatter.explain_both_external(
                                 external1,
@@ -109,25 +115,36 @@ impl IterativeReporter {
                                 &current.terms,
                             ));
                         }
-                        (DerivationTree::Derived(derived), DerivationTree::External(external))
-                        | (DerivationTree::External(external), DerivationTree::Derived(derived)) => {
+                        (ErrorTreeNode::Derived(derived), ErrorTreeNode::External(external))
+                        | (ErrorTreeNode::External(external), ErrorTreeNode::Derived(derived)) => {
+                            let derived_id =
+                                match (tree.node(current.cause1), tree.node(current.cause2)) {
+                                    (ErrorTreeNode::Derived(_), ErrorTreeNode::External(_)) => {
+                                        current.cause1
+                                    }
+                                    _ => current.cause2,
+                                };
                             if let Some(ref_id) = self.line_ref_of(derived.shared_id) {
-                                self.lines.push(formatter.explain_ref_and_external(
+                                self.lines.push(formatter.explain_ref_and_external_terms(
                                     ref_id,
-                                    derived,
+                                    &derived.terms,
                                     external,
                                     &current.terms,
                                 ));
                             } else {
-                                match (derived.cause1.as_ref(), derived.cause2.as_ref()) {
+                                match (tree.node(derived.cause1), tree.node(derived.cause2)) {
                                     (
-                                        DerivationTree::Derived(prior_derived),
-                                        DerivationTree::External(prior_external),
+                                        ErrorTreeNode::Derived(_),
+                                        ErrorTreeNode::External(prior_external),
                                     )
                                     | (
-                                        DerivationTree::External(prior_external),
-                                        DerivationTree::Derived(prior_derived),
+                                        ErrorTreeNode::External(prior_external),
+                                        ErrorTreeNode::Derived(_),
                                     ) => {
+                                        let prior_derived_id = match tree.node(derived.cause1) {
+                                            ErrorTreeNode::Derived(_) => derived.cause1,
+                                            ErrorTreeNode::External(_) => derived.cause2,
+                                        };
                                         tasks.push(Task::Emit(
                                             formatter.and_explain_prior_and_external(
                                                 prior_external,
@@ -135,55 +152,55 @@ impl IterativeReporter {
                                                 &current.terms,
                                             ),
                                         ));
-                                        tasks.push(Task::Build(prior_derived));
+                                        tasks.push(Task::Build(prior_derived_id));
                                     }
                                     _ => {
                                         tasks.push(Task::Emit(
                                             formatter
                                                 .and_explain_external(external, &current.terms),
                                         ));
-                                        tasks.push(Task::Build(derived));
+                                        tasks.push(Task::Build(derived_id));
                                     }
                                 }
                             }
                         }
-                        (DerivationTree::Derived(derived1), DerivationTree::Derived(derived2)) => {
+                        (ErrorTreeNode::Derived(derived1), ErrorTreeNode::Derived(derived2)) => {
                             match (
                                 self.line_ref_of(derived1.shared_id),
                                 self.line_ref_of(derived2.shared_id),
                             ) {
                                 (Some(ref1), Some(ref2)) => {
-                                    self.lines.push(formatter.explain_both_ref(
+                                    self.lines.push(formatter.explain_both_ref_terms(
                                         ref1,
-                                        derived1,
+                                        &derived1.terms,
                                         ref2,
-                                        derived2,
+                                        &derived2.terms,
                                         &current.terms,
                                     ));
                                 }
                                 (Some(ref1), None) => {
-                                    tasks.push(Task::Emit(formatter.and_explain_ref(
+                                    tasks.push(Task::Emit(formatter.and_explain_ref_terms(
                                         ref1,
-                                        derived1,
+                                        &derived1.terms,
                                         &current.terms,
                                     )));
-                                    tasks.push(Task::Build(derived2));
+                                    tasks.push(Task::Build(current.cause2));
                                 }
                                 (None, Some(ref2)) => {
-                                    tasks.push(Task::Emit(formatter.and_explain_ref(
+                                    tasks.push(Task::Emit(formatter.and_explain_ref_terms(
                                         ref2,
-                                        derived2,
+                                        &derived2.terms,
                                         &current.terms,
                                     )));
-                                    tasks.push(Task::Build(derived1));
+                                    tasks.push(Task::Build(current.cause1));
                                 }
                                 (None, None) => {
                                     tasks.push(Task::AfterFirstDerived {
-                                        current,
-                                        first: derived1,
-                                        second: derived2,
+                                        current: current_id,
+                                        first: current.cause1,
+                                        second: current.cause2,
                                     });
-                                    tasks.push(Task::Build(derived1));
+                                    tasks.push(Task::Build(current.cause1));
                                 }
                             }
                         }
@@ -202,16 +219,22 @@ impl IterativeReporter {
                     first,
                     second,
                 } => {
-                    if first.shared_id.is_some() {
+                    let ErrorTreeNode::Derived(first_derived) = tree.node(first) else {
+                        continue;
+                    };
+                    let ErrorTreeNode::Derived(current_derived) = tree.node(current) else {
+                        continue;
+                    };
+                    if first_derived.shared_id.is_some() {
                         self.lines.push(String::new());
                         tasks.push(Task::Build(current));
                     } else {
                         let ref_id = self.add_line_ref();
                         self.lines.push(String::new());
-                        tasks.push(Task::Emit(formatter.and_explain_ref(
+                        tasks.push(Task::Emit(formatter.and_explain_ref_terms(
                             ref_id,
-                            first,
-                            &current.terms,
+                            &first_derived.terms,
+                            &current_derived.terms,
                         )));
                         tasks.push(Task::Build(second));
                     }
@@ -535,6 +558,65 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
 }
 
 impl PubGrubReportFormatter<'_> {
+    fn explain_both_ref_terms(
+        &self,
+        ref_id1: usize,
+        derived1_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
+        ref_id2: usize,
+        derived2_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
+        current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
+    ) -> String {
+        let derived1_terms = self.format_terms(derived1_terms);
+        let derived2_terms = self.format_terms(derived2_terms);
+        let current_terms = self.format_terms(current_terms);
+
+        format!(
+            "Because we know from ({}) that {}and we know from ({}) that {}{}",
+            ref_id1,
+            padded("", &derived1_terms, " "),
+            ref_id2,
+            padded("", &derived2_terms, ", "),
+            padded("", &current_terms, "."),
+        )
+    }
+
+    fn explain_ref_and_external_terms(
+        &self,
+        ref_id: usize,
+        derived_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
+        external: &External<PubGrubPackage, Range<Version>, UnavailableReason>,
+        current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
+    ) -> String {
+        let derived_terms = self.format_terms(derived_terms);
+        let external = self.format_external(external);
+        let current_terms = self.format_terms(current_terms);
+
+        format!(
+            "Because we know from ({}) that {}and {}we can conclude that {}",
+            ref_id,
+            padded("", &derived_terms, " "),
+            padded("", &external, ", "),
+            padded("", &current_terms, "."),
+        )
+    }
+
+    fn and_explain_ref_terms(
+        &self,
+        ref_id: usize,
+        derived_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
+        current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
+    ) -> String {
+        let derived = self.format_terms(derived_terms);
+        let current = self.format_terms(current_terms);
+
+        format!(
+            "And because we know from ({}) that {}we can conclude that {}",
+            ref_id,
+            padded("", &derived, ", "),
+            padded("", &current, "."),
+        )
+    }
+
     /// Return the formatting for "the root package requires", if the given
     /// package is the root package.
     ///
@@ -745,10 +827,13 @@ impl PubGrubReportFormatter<'_> {
             }
         }
 
-        let mut pending = vec![(derivation_tree, inherited_exclude_newer_ranges.clone())];
-        while let Some((derivation_tree, inherited_exclude_newer_ranges)) = pending.pop() {
-            match derivation_tree {
-                DerivationTree::External(External::Custom(package, set, reason)) => {
+        let mut pending = vec![(
+            derivation_tree.root_id(),
+            inherited_exclude_newer_ranges.clone(),
+        )];
+        while let Some((id, inherited_exclude_newer_ranges)) = pending.pop() {
+            match derivation_tree.node(id) {
+                ErrorTreeNode::External(External::Custom(package, set, reason)) => {
                     if let Some(name) = package.name_no_root() {
                         // Check for no versions due to pre-release options.
                         if !fork_urls.contains_key(name) {
@@ -806,7 +891,7 @@ impl PubGrubReportFormatter<'_> {
                         }
                     }
                 }
-                DerivationTree::External(External::NoVersions(package, set)) => {
+                ErrorTreeNode::External(External::NoVersions(package, set)) => {
                     if let Some(name) = package.name_no_root() {
                         // Check for no versions due to pre-release options.
                         if !fork_urls.contains_key(name) {
@@ -882,7 +967,7 @@ impl PubGrubReportFormatter<'_> {
                         }
                     }
                 }
-                DerivationTree::External(External::FromDependencyOf(
+                ErrorTreeNode::External(External::FromDependencyOf(
                     package,
                     package_set,
                     dependency,
@@ -935,12 +1020,12 @@ impl PubGrubReportFormatter<'_> {
                         }
                     }
                 }
-                DerivationTree::External(External::NotRoot(..)) => {}
-                DerivationTree::Derived(derived) => {
+                ErrorTreeNode::External(External::NotRoot(..)) => {}
+                ErrorTreeNode::Derived(derived) => {
                     let cause1_exclude_newer_ranges =
-                        Self::subtree_exclude_newer_ranges(&derived.cause1);
+                        Self::subtree_exclude_newer_ranges(derivation_tree, derived.cause1);
                     let cause2_exclude_newer_ranges =
-                        Self::subtree_exclude_newer_ranges(&derived.cause2);
+                        Self::subtree_exclude_newer_ranges(derivation_tree, derived.cause2);
 
                     let mut cause1_inherited_exclude_newer_ranges =
                         inherited_exclude_newer_ranges.clone();
@@ -959,8 +1044,8 @@ impl PubGrubReportFormatter<'_> {
                             .or_insert_with(|| range.clone());
                     }
 
-                    pending.push((&derived.cause2, cause2_inherited_exclude_newer_ranges));
-                    pending.push((&derived.cause1, cause1_inherited_exclude_newer_ranges));
+                    pending.push((derived.cause2, cause2_inherited_exclude_newer_ranges));
+                    pending.push((derived.cause1, cause1_inherited_exclude_newer_ranges));
                 }
             }
         }
@@ -970,12 +1055,13 @@ impl PubGrubReportFormatter<'_> {
     /// `exclude-newer`, grouped by package name.
     fn subtree_exclude_newer_ranges(
         derivation_tree: &ErrorTree,
+        root: ErrorTreeId,
     ) -> FxHashMap<PackageName, Range<Version>> {
         let mut exclude_newer_ranges: FxHashMap<PackageName, Range<Version>> = FxHashMap::default();
-        let mut trees = vec![derivation_tree];
-        while let Some(derivation_tree) = trees.pop() {
-            match derivation_tree {
-                DerivationTree::External(External::Custom(package, versions, reason)) => {
+        let mut trees = vec![root];
+        while let Some(id) = trees.pop() {
+            match derivation_tree.node(id) {
+                ErrorTreeNode::External(External::Custom(package, versions, reason)) => {
                     if matches!(
                         reason,
                         UnavailableReason::Version(UnavailableVersion::IncompatibleDist(
@@ -991,10 +1077,10 @@ impl PubGrubReportFormatter<'_> {
                         }
                     }
                 }
-                DerivationTree::External(_) => {}
-                DerivationTree::Derived(derived) => {
-                    trees.push(&derived.cause2);
-                    trees.push(&derived.cause1);
+                ErrorTreeNode::External(_) => {}
+                ErrorTreeNode::Derived(derived) => {
+                    trees.push(derived.cause2);
+                    trees.push(derived.cause1);
                 }
             }
         }
@@ -2590,23 +2676,15 @@ fn padded<'a, T: std::fmt::Display + ?Sized>(
 
 #[cfg(test)]
 mod tests {
-    use pubgrub::{DefaultStringReporter, Reporter};
+    use crate::error::{DerivedMetadata, TreeBuilder};
+
     use uv_distribution_types::RequiresPython;
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
 
     use super::*;
 
-    fn derived(
-        cause1: DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
-        cause2: DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
-        shared_id: Option<usize>,
-    ) -> DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason> {
-        DerivationTree::Derived(Derived {
-            terms: Map::default(),
-            shared_id,
-            cause1: cause1.into(),
-            cause2: cause2.into(),
-        })
+    fn derived(cause1: ErrorTree, cause2: ErrorTree, shared_id: Option<usize>) -> ErrorTree {
+        ErrorTree::derived_from_parts(Map::default(), shared_id, cause1, cause2)
     }
 
     struct FormatterFixture {
@@ -2655,15 +2733,15 @@ mod tests {
     }
 
     #[test]
-    fn iterative_reporter_matches_pubgrub_for_shared_nodes() {
+    fn iterative_reporter_formats_shared_nodes() {
         let fixture = FormatterFixture::new();
         let formatter = fixture.formatter();
         let package = PubGrubPackage::from(PubGrubPackageInner::Root(None));
         let external1 =
-            DerivationTree::External(External::NotRoot(package.clone(), Version::new([1_u64])));
+            ErrorTree::external(External::NotRoot(package.clone(), Version::new([1_u64])));
         let external2 =
-            DerivationTree::External(External::NotRoot(package.clone(), Version::new([2_u64])));
-        let external3 = DerivationTree::External(External::NotRoot(package, Version::new([3_u64])));
+            ErrorTree::external(External::NotRoot(package.clone(), Version::new([2_u64])));
+        let external3 = ErrorTree::external(External::NotRoot(package, Version::new([3_u64])));
         let shared = derived(external1.clone(), external2.clone(), Some(1));
         let unshared = derived(external2.clone(), external3.clone(), None);
 
@@ -2674,12 +2752,26 @@ mod tests {
             derived(shared.clone(), shared, None),
         ];
 
-        for tree in trees {
-            assert_eq!(
-                report(&tree, &formatter),
-                DefaultStringReporter::report_with_formatter(&tree, &formatter)
-            );
-        }
+        let report = trees
+            .iter()
+            .map(|tree| report(tree, &formatter))
+            .join("\n---\n");
+        insta::assert_snapshot!(report, @r"
+Because we are solving dependencies of root 1 and we are solving dependencies of root 2, we can conclude that the requirements are unsatisfiable. (1)
+And because we are solving dependencies of root 3, we can conclude that the requirements are unsatisfiable.
+---
+Because we are solving dependencies of root 1 and we are solving dependencies of root 2, we can conclude that the requirements are unsatisfiable. (1)
+And because we are solving dependencies of root 3, we can conclude that the requirements are unsatisfiable.
+---
+Because we are solving dependencies of root 1 and we are solving dependencies of root 2, we can conclude that the requirements are unsatisfiable. (1)
+
+Because we are solving dependencies of root 2 and we are solving dependencies of root 3, we can conclude that the requirements are unsatisfiable.
+And because we know from (1) that the requirements are unsatisfiable, we can conclude that the requirements are unsatisfiable.
+---
+Because we are solving dependencies of root 1 and we are solving dependencies of root 2, we can conclude that the requirements are unsatisfiable. (1)
+
+Because we know from (1) that the requirements are unsatisfiable and we know from (1) that the requirements are unsatisfiable, the requirements are unsatisfiable.
+");
     }
 
     #[test]
@@ -2690,14 +2782,21 @@ mod tests {
                 let fixture = FormatterFixture::new();
                 let formatter = fixture.formatter();
                 let package = PubGrubPackage::from(PubGrubPackageInner::Root(None));
-                let leaf =
-                    DerivationTree::External(External::NotRoot(package, Version::new([1_u64])));
-                let mut tree = leaf.clone();
+                let mut builder = TreeBuilder::default();
+                let leaf = builder.external(External::NotRoot(package, Version::new([1_u64])));
+                let mut root = leaf;
                 for _ in 0..100_000 {
-                    tree = derived(tree, leaf.clone(), None);
+                    root = builder.derived(
+                        DerivedMetadata {
+                            terms: Map::default(),
+                            shared_id: None,
+                        },
+                        root,
+                        leaf,
+                    );
                 }
+                let tree = builder.finish(root);
                 let _report = report(&tree, &formatter);
-                crate::error::drop_derivation_tree(tree);
             })?;
 
         assert!(thread.join().is_ok());

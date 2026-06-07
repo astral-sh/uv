@@ -43,7 +43,7 @@ use uv_warnings::warn_user_once;
 
 use crate::candidate_selector::{Candidate, CandidateDist, CandidateSelector};
 use crate::dependency_provider::UvDependencyProvider;
-use crate::error::{NoSolutionError, ResolveError, derivation_tree_packages};
+use crate::error::{ErrorTree, NoSolutionError, ResolveError, derivation_tree_packages};
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_strategy::ForkStrategy;
 use crate::fork_urls::ForkUrls;
@@ -2687,16 +2687,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
     fn convert_no_solution_err(
         &self,
-        mut err: pubgrub::NoSolutionError<UvDependencyProvider>,
+        err: pubgrub::NoSolutionError<UvDependencyProvider>,
         fork_urls: ForkUrls,
         fork_indexes: ForkIndexes,
         env: ResolverEnvironment,
         current_environment: MarkerEnvironment,
         visited: &FxHashSet<PackageName>,
     ) -> ResolveError {
-        err = NoSolutionError::collapse_local_version_segments(NoSolutionError::collapse_proxies(
-            err,
-        ));
+        let err = NoSolutionError::collapse_local_version_segments(
+            NoSolutionError::collapse_proxies(ErrorTree::from_pubgrub(err)),
+        );
 
         let mut unavailable_packages = FxHashMap::default();
         for package in derivation_tree_packages(&err) {
@@ -3097,8 +3097,11 @@ impl ForkState {
 
             let proxy_package = self.pubgrub.package_store.alloc(package.clone());
             let base_package_id = self.pubgrub.package_store.alloc(base_package.clone());
-            self.pubgrub
-                .add_proxy_package(proxy_package, base_package_id, version.clone());
+            self.pubgrub.add_proxy_package_incompatibility(
+                proxy_package,
+                base_package_id,
+                version.clone(),
+            );
         }
 
         let conflict = self.pubgrub.add_package_version_dependencies(
