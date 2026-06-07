@@ -1077,7 +1077,6 @@ fn create_bin_links(
                                     );
                                 } else {
                                     // Defer reporting to allow grouping.
-
                                     existing_unmanaged.push(target.clone());
                                 }
                                 continue;
