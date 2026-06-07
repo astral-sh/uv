@@ -27,6 +27,9 @@ uv-cache-key = { workspace = true }
 uv-client = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
+uv-normalize = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
 uv-platform = { workspace = true }
 uv-python = { workspace = true }
 uv-static = { workspace = true }
@@ -39,7 +42,6 @@ assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
 async_zip = { workspace = true }
 backon = { workspace = true }
-base64 = { workspace = true }
 byteorder = { workspace = true }
 bytes = { workspace = true }
 dunce = { workspace = true }
@@ -77,47 +79,47 @@ path = "tests/it/main.rs"
 
 [[test]]
 name = "build"
-path = "tests/build.rs"
+path = "tests/build/main.rs"
 
 [[test]]
 name = "lock"
-path = "tests/lock.rs"
+path = "tests/lock/main.rs"
 
 [[test]]
 name = "lock_scenarios"
-path = "tests/lock_scenarios.rs"
+path = "tests/lock_scenarios/main.rs"
 
 [[test]]
 name = "pip"
-path = "tests/pip.rs"
+path = "tests/pip/main.rs"
 
 [[test]]
 name = "pip_compile"
-path = "tests/pip_compile.rs"
+path = "tests/pip_compile/main.rs"
 
 [[test]]
 name = "pip_install"
-path = "tests/pip_install.rs"
+path = "tests/pip_install/main.rs"
 
 [[test]]
 name = "project"
-path = "tests/project.rs"
+path = "tests/project/main.rs"
 
 [[test]]
 name = "python"
-path = "tests/python.rs"
+path = "tests/python/main.rs"
 
 [[test]]
 name = "sync"
-path = "tests/sync.rs"
+path = "tests/sync/main.rs"
 
 [[test]]
 name = "tool"
-path = "tests/tool.rs"
+path = "tests/tool/main.rs"
 
 [[test]]
 name = "workspace"
-path = "tests/workspace.rs"
+path = "tests/workspace/main.rs"
 
 [features]
 default = ["test-defaults"]

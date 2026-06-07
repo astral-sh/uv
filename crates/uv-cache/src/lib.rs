@@ -1191,16 +1191,16 @@ impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
             // Note that when bumping this, you'll also need to bump it
-            // in `crates/uv-integration/tests/it/cache_prune.rs`.
+            // in `crates/uv-integration/tests/build/cache_prune.rs`.
             Self::SourceDistributions => "sdists-v9",
             Self::FlatIndex => "flat-index-v2",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
-            // in `crates/uv-integration/tests/it/cache_clean.rs`.
+            // in `crates/uv-integration/tests/build/cache_clean.rs`.
             Self::Simple => "simple-v21",
             // Note that when bumping this, you'll also need to bump it
-            // in `crates/uv-integration/tests/it/cache_prune.rs`.
+            // in `crates/uv-integration/tests/build/cache_prune.rs`.
             Self::Wheels => "wheels-v6",
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.

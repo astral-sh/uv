@@ -44,6 +44,7 @@ base64 = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+http = { workspace = true }
 ignore = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true, features = ["filters"] }
@@ -59,4 +60,5 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 toml = { workspace = true }
+url = { workspace = true }
 wiremock = { workspace = true }

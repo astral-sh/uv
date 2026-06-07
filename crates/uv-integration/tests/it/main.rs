@@ -1,5 +1,7 @@
 //! Miscellaneous integration tests for uv.
 
+use uv_test::pypi_proxy;
+
 mod auth;
 
 mod branching_urls;
@@ -22,9 +24,3 @@ mod publish;
 mod self_update;
 
 mod version;
-
-#[expect(
-    dead_code,
-    reason = "The miscellaneous tests only use part of the shared proxy helper"
-)]
-mod pypi_proxy;
