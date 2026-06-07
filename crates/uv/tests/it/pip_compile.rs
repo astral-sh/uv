@@ -1,8 +1,10 @@
 #![expect(clippy::disallowed_types)]
 
+use std::collections::BTreeMap;
 use std::env::current_dir;
 use std::fs;
 use std::io::Cursor;
+use std::str::FromStr;
 
 use anyhow::Result;
 use assert_fs::prelude::*;
@@ -18,8 +20,13 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_fs::Simplified;
+use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_pep508::Requirement;
 use uv_static::EnvVars;
 
+use uv_test::packse::PackseServer;
+use uv_test::packse::scenario::{Package, PackageMetadata, Scenario};
 use uv_test::{DEFAULT_PYTHON_VERSION, TestContext, download_to_disk, uv_snapshot};
 
 fn write_tar_gz(file: File, entries: &[(&str, &str)]) -> Result<()> {
@@ -386,6 +393,76 @@ fn compile_constraints_txt() -> Result<()> {
     Resolved 3 packages in [TIME]
     "
     );
+
+    Ok(())
+}
+
+/// <https://github.com/astral-sh/uv/issues/19672>
+#[test]
+fn compile_constraints_many_versions() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let mut package_versions = BTreeMap::new();
+    for patch in 0..1_000 {
+        let version = Version::from_str(&format!("1.0.{patch}"))?;
+        package_versions.insert(
+            version.clone(),
+            PackageMetadata {
+                requires: vec![Requirement::from_str(&format!("dependency=={version}"))?],
+                sdist: false,
+                wheel: true,
+                ..PackageMetadata::default()
+            },
+        );
+    }
+
+    let mut scenario = Scenario::empty();
+    scenario.packages.insert(
+        PackageName::from_str("package")?,
+        Package {
+            versions: package_versions,
+        },
+    );
+    scenario.packages.insert(
+        PackageName::from_str("dependency")?,
+        Package {
+            versions: BTreeMap::from([(
+                Version::from_str("2.0.0")?,
+                PackageMetadata {
+                    sdist: false,
+                    wheel: true,
+                    ..PackageMetadata::default()
+                },
+            )]),
+        },
+    );
+    let server = PackseServer::from_scenario(&scenario);
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("package<2")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("dependency>=2")?;
+
+    let mut filters = context.filters();
+    filters.push((
+        r"(?s)  × No solution found when resolving dependencies:.*requirements are unsatisfiable\.",
+        "  × No solution found when resolving dependencies: [LONG DERIVATION]",
+    ));
+
+    uv_snapshot!(filters, context.pip_compile()
+            .arg("requirements.in")
+            .arg("--constraint")
+            .arg("constraints.txt")
+            .arg("--index-url")
+            .arg(server.index_url())
+            .env(EnvVars::UV_STACK_SIZE, (4 * 1024 * 1024).to_string()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies: [LONG DERIVATION]
+    ");
 
     Ok(())
 }
