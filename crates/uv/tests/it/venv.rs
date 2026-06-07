@@ -45,7 +45,9 @@ fn create_venv() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      Caused by: A virtual environment already exists at `[VENV]/`. Use `--clear` to replace it
+      Caused by: A virtual environment already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     "
     );
 
@@ -913,6 +915,40 @@ fn create_venv_with_invalid_concurrent_installs() {
 }
 
 #[test]
+fn create_venv_with_invalid_cuda_driver_version() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .env(EnvVars::UV_CUDA_DRIVER_VERSION, "invalid"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_CUDA_DRIVER_VERSION` with invalid value `invalid`: expected version to start with a number, but no leading ASCII digits were found
+    ");
+}
+
+#[test]
+fn create_venv_with_invalid_amd_gpu_architecture() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .env(EnvVars::UV_AMD_GPU_ARCHITECTURE, "invalid"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_AMD_GPU_ARCHITECTURE` with invalid value `invalid`: Unknown AMD GPU architecture: invalid
+    ");
+}
+
+#[test]
 fn create_venv_unknown_python_minor() {
     let context = uv_test::test_context_with_versions!(&["3.12"]).with_filtered_python_sources();
 
@@ -1077,9 +1113,71 @@ fn non_empty_dir_exists() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
+    warning: The `--clear` option will remove the existing directory at `.venv` even though it is not a virtual environment. This will become an error in a future release. Use `--force` to suppress this warning, or `--preview-features venv-safe-clear` to error on this now.
     Activate with: source .venv/[BIN]/activate
     "
     );
+
+    Ok(())
+}
+
+#[test]
+fn non_empty_dir_exists_clear_preview() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let marker = context.temp_dir.child("file");
+    marker.touch()?;
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(".")
+        .arg("--clear")
+        .arg("--preview-features")
+        .arg("venv-safe-clear")
+        .arg("--python")
+        .arg("3.12"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .
+    error: Failed to create virtual environment
+      Caused by: uv will not clear a directory that is not a virtual environment
+
+    hint: Use the `--force` flag to remove the existing directory anyway
+    ");
+
+    marker.assert(predicates::path::is_file());
+
+    Ok(())
+}
+
+#[test]
+fn non_empty_dir_exists_clear_preview_force() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let directory = context.temp_dir.child("not-a-virtualenv");
+    directory.create_dir_all()?;
+    directory.child("file").touch()?;
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(directory.as_os_str())
+        .arg("--clear")
+        .arg("--force")
+        .arg("--preview-features")
+        .arg("venv-safe-clear")
+        .arg("--python")
+        .arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: not-a-virtualenv
+    Activate with: source not-a-virtualenv/[BIN]/activate
+    ");
+
+    directory.child("file").assert(predicates::path::missing());
 
     Ok(())
 }
@@ -1561,7 +1659,9 @@ fn venv_python_preference() {
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      Caused by: A virtual environment already exists at `.venv`. Use `--clear` to replace it
+      Caused by: A virtual environment already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     ");
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--no-managed-python"), @"
@@ -1584,7 +1684,9 @@ fn venv_python_preference() {
     Using CPython 3.12.[X]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      Caused by: A virtual environment already exists at `.venv`. Use `--clear` to replace it
+      Caused by: A virtual environment already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     ");
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--managed-python"), @"

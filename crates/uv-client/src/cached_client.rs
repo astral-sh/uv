@@ -48,7 +48,7 @@ pub(crate) trait Cacheable: Sized {
 /// implement `Cacheable`.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
-pub(crate) struct SerdeCacheable<T> {
+struct SerdeCacheable<T> {
     inner: T,
 }
 

@@ -10,8 +10,11 @@ use uv_dirs::{system_config_file, user_config_dir};
 use uv_distribution_types::Origin;
 use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
+use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
+use uv_redacted::DisplaySafeUrl;
 use uv_static::{EnvVars, InvalidEnvironmentVariable, parse_boolish_environment_variable};
+use uv_torch::AmdGpuArchitecture;
 use uv_warnings::warn_user;
 
 pub use crate::combine::*;
@@ -28,12 +31,6 @@ impl FilesystemOptions {
     /// Convert the [`FilesystemOptions`] into [`Options`].
     pub fn into_options(self) -> Options {
         self.0
-    }
-
-    /// Set the [`Origin`] on all indexes without an existing origin.
-    #[must_use]
-    pub fn with_origin(self, origin: Origin) -> Self {
-        Self(self.0.with_origin(origin))
     }
 }
 
@@ -122,7 +119,7 @@ impl FilesystemOptions {
 
     /// Load a [`FilesystemOptions`] from a directory, preferring a `uv.toml` file over a
     /// `pyproject.toml` file.
-    pub fn from_directory(dir: &Path) -> Result<Option<Self>, Error> {
+    fn from_directory(dir: &Path) -> Result<Option<Self>, Error> {
         // Read a `uv.toml` file in the current directory.
         let path = dir.join("uv.toml");
         match fs_err::read_to_string(&path) {
@@ -703,7 +700,7 @@ pub struct EnvFlag {
 
 impl EnvFlag {
     /// Create a new [`EnvFlag`] by parsing the given environment variable.
-    pub fn new(env_var: &'static str) -> Result<Self, Error> {
+    fn new(env_var: &'static str) -> Result<Self, Error> {
         Ok(Self {
             value: parse_boolish_environment_variable(env_var)?,
             env_var,
@@ -725,6 +722,8 @@ pub struct EnvironmentOptions {
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
     pub lfs: Option<bool>,
+    pub cuda_driver_version: Option<Version>,
+    pub amd_gpu_architecture: Option<AmdGpuArchitecture>,
     pub http_connect_timeout: Duration,
     pub http_read_timeout: Duration,
     /// There's no upload timeout in reqwest, instead we have to use a read timeout as upload
@@ -750,11 +749,23 @@ pub struct EnvironmentOptions {
     pub no_dev: EnvFlag,
     pub show_resolution: EnvFlag,
     pub no_editable: EnvFlag,
+    pub no_install_project: EnvFlag,
+    pub no_install_workspace: EnvFlag,
+    pub no_install_local: EnvFlag,
+    pub only_install_project: EnvFlag,
+    pub only_install_workspace: EnvFlag,
+    pub only_install_local: EnvFlag,
     pub no_env_file: EnvFlag,
+    pub no_group: Option<Vec<GroupName>>,
+    pub no_binary_package: Option<Vec<PackageName>>,
+    pub no_build_package: Option<Vec<PackageName>>,
+    pub no_sources_package: Option<Vec<PackageName>>,
     pub venv_seed: EnvFlag,
     pub venv_clear: EnvFlag,
     pub venv_relocatable: EnvFlag,
     pub init_bare: EnvFlag,
+    pub malware_check: EnvFlag,
+    pub malware_check_url: Option<DisplaySafeUrl>,
 }
 
 impl EnvironmentOptions {
@@ -810,6 +821,14 @@ impl EnvironmentOptions {
             },
             log_context: parse_boolish_environment_variable(EnvVars::UV_LOG_CONTEXT)?,
             lfs: parse_boolish_environment_variable(EnvVars::UV_GIT_LFS)?,
+            cuda_driver_version: parse_typed_environment_variable(
+                EnvVars::UV_CUDA_DRIVER_VERSION,
+                None,
+            )?,
+            amd_gpu_architecture: parse_typed_environment_variable(
+                EnvVars::UV_AMD_GPU_ARCHITECTURE,
+                None,
+            )?,
             http_read_timeout_upload: parse_integer_environment_variable(
                 EnvVars::UV_UPLOAD_HTTP_TIMEOUT,
                 Some("value should be an integer number of seconds"),
@@ -846,11 +865,35 @@ impl EnvironmentOptions {
             no_dev: EnvFlag::new(EnvVars::UV_NO_DEV)?,
             show_resolution: EnvFlag::new(EnvVars::UV_SHOW_RESOLUTION)?,
             no_editable: EnvFlag::new(EnvVars::UV_NO_EDITABLE)?,
+            no_install_project: EnvFlag::new(EnvVars::UV_NO_INSTALL_PROJECT)?,
+            no_install_workspace: EnvFlag::new(EnvVars::UV_NO_INSTALL_WORKSPACE)?,
+            no_install_local: EnvFlag::new(EnvVars::UV_NO_INSTALL_LOCAL)?,
+            only_install_project: EnvFlag::new(EnvVars::UV_ONLY_INSTALL_PROJECT)?,
+            only_install_workspace: EnvFlag::new(EnvVars::UV_ONLY_INSTALL_WORKSPACE)?,
+            only_install_local: EnvFlag::new(EnvVars::UV_ONLY_INSTALL_LOCAL)?,
             no_env_file: EnvFlag::new(EnvVars::UV_NO_ENV_FILE)?,
+            no_group: parse_name_list_environment_variable(EnvVars::UV_NO_GROUP)?,
+            no_binary_package: parse_name_list_environment_variable(EnvVars::UV_NO_BINARY_PACKAGE)?,
+            no_build_package: parse_name_list_environment_variable(EnvVars::UV_NO_BUILD_PACKAGE)?,
+            no_sources_package: parse_name_list_environment_variable(
+                EnvVars::UV_NO_SOURCES_PACKAGE,
+            )?,
             venv_seed: EnvFlag::new(EnvVars::UV_VENV_SEED)?,
             venv_clear: EnvFlag::new(EnvVars::UV_VENV_CLEAR)?,
             venv_relocatable: EnvFlag::new(EnvVars::UV_VENV_RELOCATABLE)?,
             init_bare: EnvFlag::new(EnvVars::UV_INIT_BARE)?,
+            malware_check: EnvFlag::new(EnvVars::UV_MALWARE_CHECK)?,
+            malware_check_url: parse_string_environment_variable(EnvVars::UV_MALWARE_CHECK_URL)?
+                .map(|value| {
+                    value.parse::<DisplaySafeUrl>().map_err(|err| {
+                        Error::InvalidEnvironmentVariable(InvalidEnvironmentVariable {
+                            name: EnvVars::UV_MALWARE_CHECK_URL.to_string(),
+                            value,
+                            err: err.to_string(),
+                        })
+                    })
+                })
+                .transpose()?,
         })
     }
 }
@@ -875,6 +918,79 @@ fn parse_string_environment_variable(name: &'static str) -> Result<Option<String
                 },
             )),
         },
+    }
+}
+
+/// Parse an environment variable containing a whitespace-delimited list of names.
+fn parse_name_list_environment_variable<T>(name: &'static str) -> Result<Option<Vec<T>>, Error>
+where
+    T: FromStr,
+    <T as FromStr>::Err: std::fmt::Display,
+{
+    let Some(value) = parse_string_environment_variable(name)? else {
+        return Ok(None);
+    };
+
+    let names = value
+        .split_whitespace()
+        .map(|entry| {
+            entry.parse::<T>().map_err(|err| {
+                Error::InvalidEnvironmentVariable(InvalidEnvironmentVariable {
+                    name: name.to_string(),
+                    value: value.clone(),
+                    err: err.to_string(),
+                })
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    if names.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(names))
+    }
+}
+
+fn parse_typed_environment_variable<T>(
+    name: &'static str,
+    help: Option<&str>,
+) -> Result<Option<T>, Error>
+where
+    T: std::str::FromStr,
+    <T as std::str::FromStr>::Err: std::fmt::Display,
+{
+    let value = match std::env::var(name) {
+        Ok(v) => v,
+        Err(e) => {
+            return match e {
+                std::env::VarError::NotPresent => Ok(None),
+                std::env::VarError::NotUnicode(err) => Err(Error::InvalidEnvironmentVariable(
+                    InvalidEnvironmentVariable {
+                        name: name.to_string(),
+                        value: err.to_string_lossy().to_string(),
+                        err: "expected a valid UTF-8 string".to_string(),
+                    },
+                )),
+            };
+        }
+    };
+    if value.is_empty() {
+        return Ok(None);
+    }
+
+    match value.parse::<T>() {
+        Ok(v) => Ok(Some(v)),
+        Err(err) => Err(Error::InvalidEnvironmentVariable(
+            InvalidEnvironmentVariable {
+                name: name.to_string(),
+                value,
+                err: if let Some(help) = help {
+                    format!("{err}; {help}")
+                } else {
+                    err.to_string()
+                },
+            },
+        )),
     }
 }
 

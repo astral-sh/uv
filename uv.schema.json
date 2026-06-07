@@ -1801,11 +1801,22 @@
             "marker": {
               "$ref": "#/definitions/MarkerTree"
             },
+            "path": {
+              "description": "The path to the archive within the repository.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/PortablePathBuf"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "rev": {
               "type": ["string", "null"]
             },
             "subdirectory": {
-              "description": "The path to the directory with the `pyproject.toml`, if it's not in the archive root.",
+              "description": "The path to the directory with the `pyproject.toml`, if it's not in the repository root.",
               "anyOf": [
                 {
                   "$ref": "#/definitions/PortablePathBuf"
@@ -2245,9 +2256,14 @@
           "const": "x86_64-linux-android"
         },
         {
-          "description": "A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12.",
+          "description": "A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12.\nSee <https://pyodide.org/en/stable/development/abi/312.html>",
           "type": "string",
           "const": "wasm32-pyodide2024"
+        },
+        {
+          "description": "A wasm32 target using the Pyodide 2025 platform. Meant for use with Python 3.13.\nSee <https://pyodide.org/en/stable/development/abi/313.html>",
+          "type": "string",
+          "const": "wasm32-pyodide2025"
         },
         {
           "description": "An ARM64 target for iOS device\n\nBy default, iOS 13.0 is used, but respects the `IPHONEOS_DEPLOYMENT_TARGET`\nenvironment variable if set.",

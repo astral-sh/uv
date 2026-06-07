@@ -398,7 +398,7 @@ impl ToolEntrypoint {
     }
 
     /// Returns the TOML table for this entrypoint.
-    pub(crate) fn to_toml(&self) -> Table {
+    fn to_toml(&self) -> Table {
         let mut table = Table::new();
         table.insert("name", value(&self.name));
         table.insert(

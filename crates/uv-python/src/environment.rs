@@ -9,7 +9,6 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_pep440::Version;
-use uv_preview::Preview;
 
 use crate::discovery::find_python_installation;
 use crate::installation::PythonInstallation;
@@ -154,11 +153,9 @@ impl PythonEnvironment {
         preference: EnvironmentPreference,
         python_preference: PythonPreference,
         cache: &Cache,
-        preview: Preview,
     ) -> Result<Self, Error> {
         let installation =
-            match find_python_installation(request, preference, python_preference, cache, preview)?
-            {
+            match find_python_installation(request, preference, python_preference, cache)? {
                 Ok(installation) => installation,
                 Err(err) => return Err(EnvironmentNotFound::from(err).into()),
             };

@@ -69,7 +69,7 @@ pub(crate) enum WheelCacheKind {
 }
 
 impl WheelCacheKind {
-    pub(crate) fn to_str(self) -> &'static str {
+    fn to_str(self) -> &'static str {
         match self {
             Self::Pypi => "pypi",
             Self::Index => "index",
@@ -80,7 +80,7 @@ impl WheelCacheKind {
         }
     }
 
-    pub(crate) fn root(self) -> PathBuf {
+    fn root(self) -> PathBuf {
         Path::new(self.to_str()).to_path_buf()
     }
 }

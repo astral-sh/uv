@@ -45,7 +45,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.14"
+          version: "0.11.16"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -53,7 +53,7 @@ jobs:
       - name: "Install secret service"
         run: |
           echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
-          sudo apt install -y --update gnome-keyring
+          sudo apt install -y gnome-keyring
 
       - name: "Start gnome-keyring"
         # run gnome-keyring with 'foobar' as password for the login keyring
@@ -63,7 +63,7 @@ jobs:
 
       - name: "Create btrfs filesystem"
         run: |
-          sudo apt install -y --update btrfs-progs
+          sudo apt install -y btrfs-progs
           truncate -s 1G /tmp/btrfs.img
           mkfs.btrfs /tmp/btrfs.img
           sudo mkdir /btrfs
@@ -85,7 +85,7 @@ jobs:
           sudo chown "$(id -u):$(id -g)" /minix
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
+        uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2.79.2
         with:
           tool: cargo-nextest
 
@@ -153,13 +153,13 @@ jobs:
 
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.14"
+          version: "0.11.16"
 
       - name: "Install required Python versions"
         run: uv python install
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
+        uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2.79.2
         with:
           tool: cargo-nextest
 
@@ -226,7 +226,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.14"
+          version: "0.11.16"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -245,8 +245,13 @@ jobs:
       - name: "Create NTFS test directory (low hardlink limit)"
         run: New-Item -Path "C:\uv" -ItemType Directory -Force
 
+      - name: "Create SMB test share (alternative filesystem)"
+        run: |
+          New-Item -Path "C:\uv-smb" -ItemType Directory -Force
+          New-SmbShare -Name "uv-alt-fs" -Path "C:\uv-smb" -FullAccess "Everyone"
+
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
+        uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2.79.2
         with:
           tool: cargo-nextest
 
@@ -259,6 +264,8 @@ jobs:
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy
           RUST_BACKTRACE: 1
+          UV_INTERNAL__TEST_ALT_FS: "\\\\localhost\\uv-alt-fs"
+          UV_INTERNAL__TEST_SMB_FS: "\\\\localhost\\uv-alt-fs"
           UV_INTERNAL__TEST_LOWLINKS_FS: "C:\\uv"
           # Write pending snapshots to a separate directory for artifact upload
           INSTA_UPDATE: new

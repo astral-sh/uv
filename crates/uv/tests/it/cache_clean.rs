@@ -263,6 +263,45 @@ fn clean_package_index() -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn clean_package_does_not_follow_symlinks() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let victim_dir = context.temp_dir.child("victim");
+    let archive_entry = context.cache_dir.child("archive-v0").child("archive");
+    let package_entry = context
+        .cache_dir
+        .child("wheels-v6")
+        .child("pypi")
+        .child("demo");
+
+    victim_dir.create_dir_all()?;
+    victim_dir.child("payload.txt").write_str("payload")?;
+    archive_entry.create_dir_all()?;
+    archive_entry.child("payload.txt").write_str("payload")?;
+    package_entry.create_dir_all()?;
+
+    // Preserve external targets while still removing unreferenced entries in the archive bucket.
+    fs_err::os::unix::fs::symlink(&victim_dir, package_entry.join("escape"))?;
+    fs_err::os::unix::fs::symlink(&archive_entry, package_entry.join("archive"))?;
+
+    uv_snapshot!(context.filters(), context.clean().arg("demo"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Removed 3 files ([SIZE])
+    ");
+
+    assert!(victim_dir.is_dir());
+    assert!(victim_dir.child("payload.txt").is_file());
+    assert!(fs_err::symlink_metadata(package_entry).is_err());
+    assert!(fs_err::symlink_metadata(archive_entry).is_err());
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn cache_timeout() {
     let context = uv_test::test_context!("3.12");

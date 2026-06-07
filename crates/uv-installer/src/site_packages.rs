@@ -187,7 +187,7 @@ impl SitePackages {
     }
 
     /// Returns `true` if there are any installed packages.
-    pub fn any(&self) -> bool {
+    pub(crate) fn any(&self) -> bool {
         self.distributions.iter().any(Option::is_some)
     }
 

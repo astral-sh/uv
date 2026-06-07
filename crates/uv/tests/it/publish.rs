@@ -515,6 +515,103 @@ async fn read_index_credential_env_vars_for_check_url() {
     );
 }
 
+#[tokio::test]
+async fn check_url_missing_package_ignores_content_type() {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(404).set_body_raw("Not found", "text/plain; charset=UTF-8"),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("-u")
+        .arg("dummy")
+        .arg("-p")
+        .arg("dummy")
+        .arg("--check-url")
+        .arg(format!("{}/simple/", server.uri()))
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(dummy_wheel()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    "
+    );
+}
+
+#[tokio::test]
+async fn check_url_missing_package_follows_redirect() {
+    let context = uv_test::test_context!("3.12");
+
+    let gitlab_server = MockServer::start().await;
+    let pypi_server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(302)
+                .insert_header("Location", format!("{}/simple/ok/", pypi_server.uri()))
+                .set_body_raw("Redirecting", "text/plain"),
+        )
+        .expect(1)
+        .mount(&gitlab_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(404).set_body_raw("Not found", "text/plain; charset=UTF-8"),
+        )
+        .expect(1)
+        .mount(&pypi_server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&gitlab_server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("-u")
+        .arg("dummy")
+        .arg("-p")
+        .arg("dummy")
+        .arg("--check-url")
+        .arg(format!("{}/simple/", gitlab_server.uri()))
+        .arg("--publish-url")
+        .arg(format!("{}/upload", gitlab_server.uri()))
+        .arg(dummy_wheel()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    "
+    );
+}
+
 /// Native GitLab CI trusted publishing using `PYPI_ID_TOKEN`
 #[tokio::test]
 async fn gitlab_trusted_publishing_pypi_id_token() {

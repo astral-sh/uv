@@ -13,16 +13,20 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
+use serde_json::json;
 use std::path::Path;
 use url::Url;
-use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method, matchers::path};
+use wiremock::{
+    Mock, MockServer, ResponseTemplate,
+    matchers::{method, path},
+};
 
 #[cfg(feature = "test-git-lfs")]
 use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
-use uv_test::{packse_index_url, uv_snapshot, venv_bin_path};
+use uv_test::{uv_snapshot, venv_bin_path};
 
 /// Add a PyPI requirement.
 #[test]
@@ -1431,8 +1435,9 @@ fn add_remove_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    hint: `anyio` is in the `dev` group (try: `uv remove anyio --group dev`)
     error: The dependency `anyio` could not be found in `project.dependencies`
+
+    hint: `anyio` is in the `dev` group (try: `uv remove anyio --group dev`)
     ");
 
     // Remove the dependency.
@@ -1641,8 +1646,9 @@ fn add_remove_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    hint: `anyio` is an optional dependency (try: `uv remove anyio --optional io`)
     error: The dependency `anyio` could not be found in `project.dependencies`
+
+    hint: `anyio` is an optional dependency (try: `uv remove anyio --optional io`)
     ");
 
     // Remove the dependency.
@@ -4666,7 +4672,8 @@ fn add_error() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     ");
 
     uv_snapshot!(context.filters(), context.add().arg("xyz").arg("--frozen"), @"
@@ -4679,6 +4686,65 @@ fn add_error() -> Result<()> {
 
     let lock = context.temp_dir.join("uv.lock");
     assert!(!lock.exists());
+
+    Ok(())
+}
+
+/// Suggest avoiding dependencies for modules in the Python standard library.
+#[test]
+fn add_standard_library_error() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("pickle"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because pickle was not found in the package registry and your project depends on pickle, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The module `pickle` is included in the Python standard library and usually should not be added as a dependency
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
+    ");
+
+    Ok(())
+}
+
+/// Avoid suggesting a standard-library alternative for unrelated resolution failures.
+#[test]
+fn add_standard_library_unrelated_resolution_error() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("typing").arg("xyz"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
+    ");
 
     Ok(())
 }
@@ -5040,6 +5106,7 @@ fn add_lower_bound_optional() -> Result<()> {
 /// Omit the local segment when adding dependencies (since `>=1.2.3+local` is invalid).
 #[test]
 fn add_lower_bound_local() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("local/local-simple.toml");
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -5051,8 +5118,8 @@ fn add_lower_bound_local() -> Result<()> {
         dependencies = []
     "#})?;
 
-    // Adding `torch` should include a lower-bound, but no local segment.
-    uv_snapshot!(context.filters(), context.add().arg("local-simple-a").arg("--index").arg(packse_index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    // Adding `a` should include a lower-bound, but no local segment.
+    uv_snapshot!(context.filters(), context.add().arg("a").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5061,7 +5128,7 @@ fn add_lower_bound_local() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + local-simple-a==1.2.3+foo
+     + a==1.2.3+foo
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -5076,11 +5143,11 @@ fn add_lower_bound_local() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "local-simple-a>=1.2.3",
+            "a>=1.2.3",
         ]
 
         [[tool.uv.index]]
-        url = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/"
+        url = "http://[LOCALHOST]/simple/"
         "#
         );
     });
@@ -5097,12 +5164,12 @@ fn add_lower_bound_local() -> Result<()> {
         requires-python = ">=3.12"
 
         [[package]]
-        name = "local-simple-a"
+        name = "a"
         version = "1.2.3+foo"
-        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/local_simple_a-1.2.3+foo.tar.gz", hash = "sha256:cd1855a98a7b0dce1f4617f2f2089906936344392d4bdd7720503e9f3c0b1544" }
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.2.3+foo.tar.gz", hash = "sha256:d8c42806a0bf7b47451778ed2a909a2f9d22fe3a4bac673934fc8fb2537a886a", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/local_simple_a-1.2.3+foo-py3-none-any.whl", hash = "sha256:9a430e6d5e9cd3ab906ea412b00ea8a1bad7c59fd64df2278a2527a60a665751" },
+            { url = "http://[LOCALHOST]/files/a-1.2.3+foo-py3-none-any.whl", hash = "sha256:2fd8eec176cad72b6c4372682485914aff65d215fb8cd71c85e9ed4511fa8bbe", upload-time = "2024-03-24T00:00:00Z" },
         ]
 
         [[package]]
@@ -5110,11 +5177,11 @@ fn add_lower_bound_local() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "local-simple-a" },
+            { name = "a" },
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "local-simple-a", specifier = ">=1.2.3" }]
+        requires-dist = [{ name = "a", specifier = ">=1.2.3" }]
         "#
         );
     });
@@ -5534,7 +5601,7 @@ fn remove_virtual_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The dependency `sortedcontainers` could not be found in `tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`
+    error: The dependency `sortedcontainers` could not be found in `dependency-groups.dev`
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -6952,8 +7019,9 @@ fn remove_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    hint: `anyio` is a production dependency
     error: The dependency `anyio` could not be found in `dependency-groups.test`
+
+    hint: `anyio` is a production dependency
     ");
 
     Ok(())
@@ -8773,8 +8841,10 @@ fn fail_to_add_revert_project() -> Result<()> {
             File "<string>", line 1, in <module>
           ZeroDivisionError: division by zero
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -8875,8 +8945,10 @@ fn fail_to_edit_revert_project() -> Result<()> {
             File "<string>", line 1, in <module>
           ZeroDivisionError: division by zero
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -8988,8 +9060,10 @@ fn fail_to_add_revert_workspace_root() -> Result<()> {
             File "<string>", line 1, in <module>
           ZeroDivisionError: division by zero
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: `broken` was included because `parent` (v0.1.0) depends on `broken`
+    hint: Build failures usually indicate a problem with the package or the build environment
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -9103,8 +9177,10 @@ fn fail_to_add_revert_workspace_member() -> Result<()> {
             File "<string>", line 1, in <module>
           ZeroDivisionError: division by zero
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: `broken` was included because `child` (v0.1.0) depends on `broken`
+    hint: Build failures usually indicate a problem with the package or the build environment
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -9817,8 +9893,8 @@ fn add_shadowed_name() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver==1.6.13, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     ");
 
     // Constraint with several available versions, check for an indirect dependency loop.
@@ -9837,8 +9913,8 @@ fn add_shadowed_name() -> Result<()> {
           And because dagster-webserver==1.6.12 depends on your project, we can conclude that dagster-webserver>=1.6.11,<1.6.13 depends on your project.
           And because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     ");
 
     Ok(())
@@ -9936,8 +10012,8 @@ fn add_warn_index_url() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because only idna==2.7 is available and your project depends on idna>=3.6, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: `idna` was found on https://test.pypi.org/simple, but not at the requested version (idna>=3.6). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    hint: `idna` was found on https://test.pypi.org/simple, but not at the requested version (idna>=3.6). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     ");
 
     Ok(())
@@ -13268,7 +13344,9 @@ fn add_with_build_constraints() -> Result<()> {
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: `requests` (v1.2.0) was included because `project` (v0.1.0) depends on `requests==1.2`
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     ");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -13432,8 +13510,8 @@ async fn add_full_url_in_keyring() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
     Ok(())
@@ -13470,8 +13548,8 @@ async fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
     Ok(())
@@ -13558,10 +13636,88 @@ async fn add_empty_ignore_error_codes() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/) returned a 403 Forbidden error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    hint: An index (http://[LOCALHOST]/) returned a 403 Forbidden error. Check that the index URL is correct and the credentials are valid.
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
+    Ok(())
+}
+
+/// If a package was available from an index that returned a 403, uv should suggest that the index
+/// might use 403s for packages that are not found.
+#[tokio::test]
+async fn lock_forbidden_index_with_available_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/anyio/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"
+            {
+                "name": "anyio",
+                "files": [{
+                    "filename": "anyio-4.3.0-py3-none-any.whl",
+                    "url": "/anyio-4.3.0-py3-none-any.whl",
+                    "hashes": {
+                        "sha256": "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8"
+                    },
+                    "core-metadata": true,
+                    "requires-python": ">=3.8",
+                    "upload-time": "2024-02-19T08:36:26Z"
+                }]
+            }
+            "#,
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/anyio-4.3.0-py3-none-any.whl.metadata"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
+            Metadata-Version: 2.3
+            Name: anyio
+            Version: 4.3.0
+            Requires-Dist: idna>=2.8
+        "}))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/idna/"))
+        .respond_with(ResponseTemplate::new(403))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = ["anyio"]
+
+        [[tool.uv.index]]
+        name = "my-index"
+        url = "{server_url}"
+        ignore-error-codes = []
+        default = true
+        "#,
+        server_url = server.uri(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because idna was not found in the package registry and anyio==4.3.0 depends on idna>=2.8, we can conclude that anyio==4.3.0 cannot be used.
+          And because only anyio==4.3.0 is available and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: An index (http://[LOCALHOST]/) returned a 403 Forbidden error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `[[tool.uv.index]]` entry to continue searching across indexes.
+    ");
     Ok(())
 }
 
@@ -13596,7 +13752,8 @@ fn add_missing_package_on_pytorch() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because fakepkg was not found in the package registry and your project depends on fakepkg, we can conclude that your project's requirements are unsatisfiable.
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
     Ok(())
@@ -13924,8 +14081,8 @@ async fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
 
@@ -14020,8 +14177,8 @@ async fn add_redirect_cross_origin() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
 
@@ -14151,8 +14308,8 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
 
@@ -15016,6 +15173,173 @@ fn add_path_outside_workspace_no_default() -> Result<()> {
     Ok(())
 }
 
+/// Existing sources should survive the in-memory project refresh before re-locking.
+#[test]
+fn add_preserves_existing_sources_during_staged_update() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "preserved-source-dependency",
+        ]
+
+        [tool.uv.sources]
+        preserved-source-dependency = { path = "preserved-source-dependency" }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("preserved-source-dependency")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "preserved-source-dependency"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+    context
+        .temp_dir
+        .child("preserved-source-dependency")
+        .child("src")
+        .child("preserved_source_dependency")
+        .child("__init__.py")
+        .touch()?;
+
+    context
+        .temp_dir
+        .child("added-source-dependency")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "added-source-dependency"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+    context
+        .temp_dir
+        .child("added-source-dependency")
+        .child("src")
+        .child("added_source_dependency")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("./added-source-dependency")
+        .arg("--no-workspace")
+        .arg("--no-sync"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Existing sources should survive the in-memory project refresh before re-locking.
+#[test]
+fn remove_preserves_existing_sources_during_staged_update() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "preserved-source-dependency",
+            "removed-source-dependency",
+        ]
+
+        [tool.uv.sources]
+        preserved-source-dependency = { path = "preserved-source-dependency" }
+        removed-source-dependency = { path = "removed-source-dependency" }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("preserved-source-dependency")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "preserved-source-dependency"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+    context
+        .temp_dir
+        .child("preserved-source-dependency")
+        .child("src")
+        .child("preserved_source_dependency")
+        .child("__init__.py")
+        .touch()?;
+
+    context
+        .temp_dir
+        .child("removed-source-dependency")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "removed-source-dependency"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+    context
+        .temp_dir
+        .child("removed-source-dependency")
+        .child("src")
+        .child("removed_source_dependency")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context
+        .remove()
+        .arg("removed-source-dependency")
+        .arg("--no-sync"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// See: <https://github.com/astral-sh/uv/issues/14961>
 #[test]
 fn add_multiline_indentation() -> Result<()> {
@@ -15167,6 +15491,36 @@ fn add_no_install_project() -> Result<()> {
         );
     });
 
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").env(EnvVars::UV_NO_INSTALL_PROJECT, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--frozen").env(EnvVars::UV_NO_INSTALL_PROJECT, "1"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument `UV_NO_INSTALL_PROJECT` (environment variable) cannot be used with `--frozen`
+    ");
+
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--frozen").env(EnvVars::UV_ONLY_INSTALL_PROJECT, "1"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument `UV_ONLY_INSTALL_PROJECT` (environment variable) cannot be used with `--frozen`
+    ");
+
     Ok(())
 }
 
@@ -15228,4 +15582,57 @@ fn add_git_lfs_error() -> Result<()> {
     ");
 
     Ok(())
+}
+
+/// Ensure that `uv add` aborts when malware is detected in a dependency.
+#[tokio::test]
+async fn add_malware_detected() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})
+        .unwrap();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "MAL-2026-1234"}]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/MAL-2026-1234"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "MAL-2026-1234",
+            "modified": "2026-01-01T00:00:00Z",
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("iniconfig==2.0.0")
+        .arg("--preview-features").arg("malware-check")
+        .env(EnvVars::UV_MALWARE_CHECK, "1")
+        .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    warning: Malware detected in locked dependencies:
+      - `iniconfig==2.0.0`: MAL-2026-1234 (https://osv.dev/vulnerability/MAL-2026-1234)
+    error: Malware detected in one or more dependencies that would be installed; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check.
+    ");
 }

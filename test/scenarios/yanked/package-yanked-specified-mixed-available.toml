@@ -1,0 +1,22 @@
+name = "package-yanked-specified-mixed-available"
+description = "The user requires any version of `a` and both yanked and unyanked releases are available."
+
+[root]
+requires = ["a>=0.1.0"]
+
+[expected]
+satisfiable = true
+explanation = "The latest unyanked version should be selected."
+
+[expected.packages]
+a = "0.3.0"
+
+[packages.a.versions."0.1.0"]
+
+[packages.a.versions."0.2.0"]
+yanked = true
+
+[packages.a.versions."0.3.0"]
+
+[packages.a.versions."1.0.0"]
+yanked = true

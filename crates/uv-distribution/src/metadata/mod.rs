@@ -4,8 +4,9 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use uv_auth::CredentialsCache;
+use uv_cache::Cache;
 use uv_configuration::NoSources;
-use uv_distribution_types::{GitSourceUrl, IndexLocations, Requirement};
+use uv_distribution_types::{GitDirectorySourceUrl, IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{HashDigests, ResolutionMetadata};
@@ -53,6 +54,15 @@ pub enum MetadataError {
     IncompleteSourceGroup(PackageName, GroupName),
 }
 
+impl uv_errors::Hint for MetadataError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::LoweringError(_, err) | Self::GroupLoweringError(_, _, err) => err.hints(),
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Metadata {
     // Mandatory fields
@@ -69,7 +79,7 @@ pub struct Metadata {
 impl Metadata {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
-    pub fn from_metadata23(metadata: ResolutionMetadata) -> Self {
+    pub(crate) fn from_metadata23(metadata: ResolutionMetadata) -> Self {
         Self {
             name: metadata.name,
             version: metadata.version,
@@ -85,14 +95,15 @@ impl Metadata {
 
     /// Lower by considering `tool.uv` in `pyproject.toml` if present, used for Git and directory
     /// dependencies.
-    pub async fn from_workspace(
+    pub(crate) async fn from_workspace(
         metadata: ResolutionMetadata,
         install_path: &Path,
         git_source: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: NoSources,
         editable: bool,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
@@ -116,6 +127,7 @@ impl Metadata {
             sources,
             editable,
             cache,
+            workspace_cache,
             credentials_cache,
         )
         .await?;
@@ -168,5 +180,5 @@ pub struct GitWorkspaceMember<'a> {
     /// The root of the checkout, which may be the root of the workspace or may be above the
     /// workspace root.
     pub fetch_root: &'a Path,
-    pub git_source: &'a GitSourceUrl<'a>,
+    pub git_source: &'a GitDirectorySourceUrl<'a>,
 }

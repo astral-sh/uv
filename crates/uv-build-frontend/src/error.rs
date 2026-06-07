@@ -11,6 +11,7 @@ use regex::Regex;
 use thiserror::Error;
 use uv_configuration::BuildOutput;
 use uv_distribution_types::IsBuildBackendError;
+use uv_errors::{Hint, Hints};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -115,6 +116,20 @@ impl IsBuildBackendError for Error {
             | Self::BuildBackend(_)
             | Self::MissingHeader(_)
             | Self::BuildScriptPath(_) => true,
+        }
+    }
+}
+
+impl Hint for Error {
+    fn hints(&self) -> Hints<'_> {
+        match self {
+            Self::BuildBackend(_) => Hints::from(
+                "Build failures usually indicate a problem with the package or the build environment",
+            ),
+            Self::MissingHeader(err) => Hints::from(err.cause.to_string()),
+            Self::Lowering(err) => err.hints(),
+            Self::RequirementsResolve(_, err) | Self::RequirementsInstall(_, err) => err.hints(),
+            _ => Hints::none(),
         }
     }
 }
@@ -322,13 +337,6 @@ impl Display for BuildBackendError {
             writeln!(f)?;
         }
 
-        write!(
-            f,
-            "\n{}{} This usually indicates a problem with the package or the build environment.",
-            "hint".bold().cyan(),
-            ":".bold()
-        )?;
-
         Ok(())
     }
 }
@@ -353,14 +361,6 @@ impl Display for MissingHeaderError {
         if self.stderr.iter().any(|line| !line.trim().is_empty()) {
             write!(f, "\n\n{}\n{}", "[stderr]".red(), self.stderr.join("\n"))?;
         }
-
-        write!(
-            f,
-            "\n\n{}{} {}",
-            "hint".bold().cyan(),
-            ":".bold(),
-            self.cause
-        )?;
 
         Ok(())
     }
@@ -467,8 +467,19 @@ mod test {
     use std::process::ExitStatus;
     use std::str::FromStr;
     use uv_configuration::BuildOutput;
+    use uv_errors::{ErrorWithHints, Hint};
     use uv_normalize::PackageName;
     use uv_pep440::Version;
+
+    fn format_error_with_hints(err: &Error) -> String {
+        // Unix uses exit status, Windows uses exit code.
+        let formatted = std::error::Error::source(err)
+            .unwrap()
+            .to_string()
+            .replace("exit status: ", "exit code: ");
+        let formatted = ErrorWithHints::new(formatted, err.hints()).to_string();
+        anstream::adapter::strip_str(&formatted).to_string()
+    }
 
     #[test]
     fn missing_header() {
@@ -506,12 +517,7 @@ mod test {
         );
 
         assert!(matches!(err, Error::MissingHeader { .. }));
-        // Unix uses exit status, Windows uses exit code.
-        let formatted = std::error::Error::source(&err)
-            .unwrap()
-            .to_string()
-            .replace("exit status: ", "exit code: ");
-        let formatted = anstream::adapter::strip_str(&formatted);
+        let formatted = format_error_with_hints(&err);
         insta::assert_snapshot!(formatted, @r#"
         Failed building wheel through setup.py (exit code: 0)
 
@@ -564,12 +570,7 @@ mod test {
             Some("pygraphviz-1.11"),
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
-        // Unix uses exit status, Windows uses exit code.
-        let formatted = std::error::Error::source(&err)
-            .unwrap()
-            .to_string()
-            .replace("exit status: ", "exit code: ");
-        let formatted = anstream::adapter::strip_str(&formatted);
+        let formatted = format_error_with_hints(&err);
         insta::assert_snapshot!(formatted, @"
         Failed building wheel through setup.py (exit code: 0)
 
@@ -612,12 +613,7 @@ mod test {
             Some("pygraphviz-1.11"),
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
-        // Unix uses exit status, Windows uses exit code.
-        let formatted = std::error::Error::source(&err)
-            .unwrap()
-            .to_string()
-            .replace("exit status: ", "exit code: ");
-        let formatted = anstream::adapter::strip_str(&formatted);
+        let formatted = format_error_with_hints(&err);
         insta::assert_snapshot!(formatted, @r#"
         Failed building wheel through setup.py (exit code: 0)
 
@@ -663,12 +659,7 @@ mod test {
             Some("pygraphviz-1.11"),
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
-        // Unix uses exit status, Windows uses exit code.
-        let formatted = std::error::Error::source(&err)
-            .unwrap()
-            .to_string()
-            .replace("exit status: ", "exit code: ");
-        let formatted = anstream::adapter::strip_str(&formatted);
+        let formatted = format_error_with_hints(&err);
         insta::assert_snapshot!(formatted, @"
         Failed building wheel through setup.py (exit code: 0)
 

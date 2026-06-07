@@ -32,7 +32,7 @@ pub struct GitSource {
 
 impl GitSource {
     /// Initialize a [`GitSource`] with the given Git URL, HTTP client, and cache path.
-    pub fn new(git: GitUrl, cache: impl Into<PathBuf>, offline: bool) -> Self {
+    pub(crate) fn new(git: GitUrl, cache: impl Into<PathBuf>, offline: bool) -> Self {
         Self {
             git,
             disable_ssl: false,
@@ -53,7 +53,7 @@ impl GitSource {
 
     /// Set the [`Reporter`] to use for the [`GitSource`].
     #[must_use]
-    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
+    pub(crate) fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             reporter: Some(reporter),
             ..self
@@ -62,7 +62,7 @@ impl GitSource {
 
     /// Fetch the underlying Git repository at the given revision.
     #[instrument(skip(self), fields(repository = %self.git.url(), rev = ?self.git.precise()))]
-    pub fn fetch(self) -> Result<Fetch> {
+    pub(crate) fn fetch(self) -> Result<Fetch> {
         let lfs_requested = self.git.lfs().enabled();
 
         // The path to the repo, within the Git database.

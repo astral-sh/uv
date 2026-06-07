@@ -174,12 +174,12 @@ pub fn normalize_url_path(path: &str) -> Cow<'_, str> {
 /// For example, `./a/../../b` cannot be normalized because it escapes the base directory.
 pub fn normalize_absolute_path(path: &Path) -> Result<PathBuf, std::io::Error> {
     let mut components = path.components().peekable();
-    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().copied() {
-        components.next();
-        PathBuf::from(c.as_os_str())
-    } else {
-        PathBuf::new()
-    };
+    let mut ret = components
+        .next_if_map_mut(|component| match component {
+            Component::Prefix(..) => Some(PathBuf::from(component.as_os_str())),
+            _ => None,
+        })
+        .unwrap_or_default();
 
     for component in components {
         match component {

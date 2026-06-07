@@ -17,7 +17,7 @@ use uv_warnings::warn_user;
 
 use crate::{ExcludeNewerOverride, Index, IndexStatusCodeStrategy, Verbatim};
 
-static PYPI_URL: LazyLock<DisplaySafeUrl> =
+pub static PYPI_URL: LazyLock<DisplaySafeUrl> =
     LazyLock::new(|| DisplaySafeUrl::parse("https://pypi.org/simple").unwrap());
 
 static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
@@ -334,6 +334,23 @@ impl<'a> IndexLocations {
         }
     }
 
+    /// Return an iterator over the explicit [`Index`] entries.
+    ///
+    /// Explicit indexes are only used when pinned via `tool.uv.sources`.
+    pub fn explicit_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
+        if self.no_index {
+            Either::Left(std::iter::empty())
+        } else {
+            let mut seen = FxHashSet::default();
+            Either::Right(
+                self.indexes
+                    .iter()
+                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
+                    .filter(|index| index.explicit),
+            )
+        }
+    }
+
     /// Return an iterator over all [`Index`] entries in order.
     ///
     /// Explicit indexes are excluded.
@@ -378,6 +395,7 @@ impl<'a> IndexLocations {
     pub fn index_urls(&'a self) -> IndexUrls {
         IndexUrls {
             indexes: self.indexes.clone(),
+            flat_indexes: self.flat_index.clone(),
             no_index: self.no_index,
         }
     }
@@ -495,6 +513,7 @@ impl From<&IndexLocations> for uv_auth::Indexes {
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct IndexUrls {
     indexes: Vec<Index>,
+    flat_indexes: Vec<Index>,
     no_index: bool,
 }
 
@@ -502,8 +521,14 @@ impl<'a> IndexUrls {
     pub fn from_indexes(indexes: Vec<Index>) -> Self {
         Self {
             indexes,
+            flat_indexes: Vec::new(),
             no_index: false,
         }
+    }
+
+    /// Return an iterator over the configured flat-index locations.
+    pub fn flat_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
+        self.flat_indexes.iter()
     }
 
     /// Return the default [`Index`] entry.

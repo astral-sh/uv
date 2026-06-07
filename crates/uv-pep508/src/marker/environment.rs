@@ -144,7 +144,7 @@ impl MarkerEnvironment {
     /// `Darwin Kernel Version 14.5.0: Wed Jul 29 02:18:53 PDT 2015;
     /// root:xnu-2782.40.9~2/RELEASE_X86_64`.
     #[inline]
-    pub fn platform_version(&self) -> &str {
+    fn platform_version(&self) -> &str {
         &self.inner.platform_version
     }
 

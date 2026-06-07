@@ -38,12 +38,14 @@ use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{Installable, Lock, Preference};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
-use uv_settings::{EnvironmentOptions, FilesystemOptions, PythonInstallMirrors};
+use uv_settings::{
+    EnvironmentOptions, FilesystemOptions, MalwareCheckSettings, PythonInstallMirrors,
+};
 use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::child::run_to_completion;
 
@@ -72,7 +74,7 @@ use crate::commands::project::{
     update_environment, validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics, project};
+use crate::commands::{ExitStatus, diagnostics, project, read_env_files};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, GlobalSettings, LockCheck, LockCheckSource, ResolverInstallerSettings,
@@ -115,20 +117,18 @@ pub(crate) async fn run(
     env_file: EnvFile,
     preview: Preview,
     max_recursion_depth: u32,
+    malware_settings: MalwareCheckSettings,
 ) -> anyhow::Result<ExitStatus> {
     // Check if max recursion depth was exceeded. This most commonly happens
     // for scripts with a shebang line like `#!/usr/bin/env -S uv run`, so try
     // to provide guidance for that case.
     let recursion_depth = read_recursion_depth_from_environment_variable()?;
     if recursion_depth > max_recursion_depth {
-        bail!(
-            r"
-`uv run` was recursively invoked {recursion_depth} times which exceeds the limit of {max_recursion_depth}.
-
-hint: If you are running a script with `{}` in the shebang, you may need to include the `{}` flag.",
-            "uv run".green(),
-            "--script".green(),
-        );
+        return Err(RecursionLimitError {
+            depth: recursion_depth,
+            max: max_recursion_depth,
+        }
+        .into());
     }
 
     // These cases seem quite complex because (in theory) they should change the "current package".
@@ -165,41 +165,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     let lock_state = UniversalState::default();
     let sync_state = lock_state.fork();
 
-    // Read from the `.env` file, if necessary.
-    for env_file_path in env_file.iter().rev().map(PathBuf::as_path) {
-        match dotenvy::from_path(env_file_path) {
-            Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                bail!(
-                    "No environment file found at: `{}`",
-                    env_file_path.simplified_display()
-                );
-            }
-            Err(dotenvy::Error::Io(err)) => {
-                bail!(
-                    "Failed to read environment file `{}`: {err}",
-                    env_file_path.simplified_display()
-                );
-            }
-            Err(dotenvy::Error::LineParse(content, position)) => {
-                warn_user!(
-                    "Failed to parse environment file `{}` at position {position}: {content}",
-                    env_file_path.simplified_display(),
-                );
-            }
-            Err(err) => {
-                warn_user!(
-                    "Failed to parse environment file `{}`: {err}",
-                    env_file_path.simplified_display(),
-                );
-            }
-            Ok(()) => {
-                debug!(
-                    "Read environment file at: `{}`",
-                    env_file_path.simplified_display()
-                );
-            }
-        }
-    }
+    let env_file_environment = read_env_files(env_file.iter())?;
 
     // Initialize any output reporters.
     let download_reporter = PythonDownloadReporter::single(printer);
@@ -250,7 +216,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 &cache,
                 DryRun::Disabled,
                 printer,
-                preview,
             )
             .await?
             .into_environment()?;
@@ -319,7 +284,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 &environment,
                 &extras.with_defaults(DefaultExtras::default()),
                 &groups.with_defaults(DefaultGroups::default()),
-                editable,
+                editable.clone(),
                 install_options,
                 modifications,
                 python_platform.as_ref(),
@@ -338,6 +303,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 DryRun::Disabled,
                 printer,
                 preview,
+                &malware_settings,
             )
             .await
             {
@@ -420,7 +386,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     &cache,
                     DryRun::Disabled,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_environment()?;
@@ -506,7 +471,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     active.map_or(Some(false), Some),
                     &cache,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -576,6 +540,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             let project = VirtualProject::discover_with_package(
                 project_dir,
                 &DiscoveryOptions::default(),
+                &cache,
                 workspace_cache,
                 package.clone(),
             )
@@ -585,6 +550,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             match VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions::default(),
+                &cache,
                 workspace_cache,
             )
             .await
@@ -597,20 +563,24 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         Some(project)
                     }
                 }
-                Err(WorkspaceError::MissingPyprojectToml | WorkspaceError::NonWorkspace(_)) => {
-                    // If the user runs with `--no-project` and we can't find a project, warn.
-                    if no_project {
-                        warn!("`--no-project` was provided, but no project was found");
-                    }
-                    None
-                }
                 Err(err) => {
-                    // If the user runs with `--no-project`, ignore the error.
-                    if no_project {
-                        warn!("Ignoring project discovery error due to `--no-project`: {err}");
+                    if matches!(
+                        err.as_ref(),
+                        WorkspaceErrorKind::MissingPyprojectToml
+                            | WorkspaceErrorKind::NonWorkspace(_)
+                    ) {
+                        if no_project {
+                            warn!("`--no-project` was provided, but no project was found");
+                        }
                         None
                     } else {
-                        return Err(err.into());
+                        // If the user runs with `--no-project`, ignore the error.
+                        if no_project {
+                            warn!("Ignoring project discovery error due to `--no-project`: {err}");
+                            None
+                        } else {
+                            return Err(err.into());
+                        }
                     }
                 }
             }
@@ -698,7 +668,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
-                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -744,7 +713,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     &cache,
                     DryRun::Disabled,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_environment()?
@@ -889,6 +857,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     DryRun::Disabled,
                     printer,
                     preview,
+                    &malware_settings,
                 )
                 .await
                 {
@@ -939,7 +908,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
-                    preview,
                 )
                 .await?;
 
@@ -1296,6 +1264,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
     debug!("Running `{command}`");
     let mut process = command.as_command(interpreter);
+    process.envs(env_file_environment);
 
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
@@ -1866,7 +1835,7 @@ impl RunCommand {
     }
 
     /// Return the directory containing the script, if any.
-    pub(crate) fn script_dir(&self) -> Option<&Path> {
+    fn script_dir(&self) -> Option<&Path> {
         let parent = match self {
             Self::PythonScript(target, _)
             | Self::PythonGuiScript(target, _)
@@ -2186,4 +2155,22 @@ fn copy_entrypoint(
     trace!("Updated entrypoint at {}", target.user_display());
 
     Ok(())
+}
+
+/// `uv run` was invoked recursively too many times.
+#[derive(Debug, thiserror::Error)]
+#[error("`uv run` was recursively invoked {depth} times which exceeds the limit of {max}")]
+pub(crate) struct RecursionLimitError {
+    depth: u32,
+    max: u32,
+}
+
+impl uv_errors::Hint for RecursionLimitError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::from(format!(
+            "If you are running a script with `{}` in the shebang, you may need to include the `{}` flag",
+            "uv run".green(),
+            "--script".green(),
+        ))
+    }
 }

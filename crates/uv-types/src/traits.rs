@@ -289,6 +289,12 @@ impl std::error::Error for AnyErrorBuild {
     }
 }
 
+impl uv_errors::Hint for AnyErrorBuild {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        self.0.hints()
+    }
+}
+
 impl<T: IsBuildBackendError> From<T> for AnyErrorBuild {
     fn from(err: T) -> Self {
         Self(Box::new(err))
@@ -308,11 +314,6 @@ impl Deref for AnyErrorBuild {
 pub struct BuildStack(FxHashSet<DistributionId>);
 
 impl BuildStack {
-    /// Return an empty stack.
-    pub fn empty() -> Self {
-        Self(FxHashSet::default())
-    }
-
     pub fn contains(&self, id: &DistributionId) -> bool {
         self.0.contains(id)
     }

@@ -6,10 +6,13 @@ use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::{prelude::predicate, str::contains};
+use serde_json::json;
 use std::path::Path;
 use uv_fs::copy_dir_all;
 use uv_python::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_test::{TestContext, uv_snapshot};
 
@@ -502,6 +505,68 @@ fn run_pep723_script() -> Result<()> {
 
     ----- stderr -----
     error: An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`.
+    ");
+
+    // Regression test for: <https://github.com/astral-sh/uv/issues/18617>
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # dependencies = []
+        # ///
+
+        print("Hello, world!")
+
+        # /// script
+        # dependencies = []
+        # ///
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The script contains multiple PEP 723 metadata blocks
+    ");
+
+    Ok(())
+}
+
+/// A PEP 723 script with a long file name should still succeed at creating a script environment on
+/// Windows.
+#[test]
+fn run_pep723_script_long_filename() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // The cache environment entry path, which is derived from the script's name, would exceed many
+    // common path component length limits if it was not truncated first.
+    let script_name = format!("{}.py", "a".repeat(240));
+    let test_script = context.temp_dir.child(&script_name);
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg(&script_name), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     ");
 
     Ok(())
@@ -3159,6 +3224,20 @@ fn run_editable() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
+    uv_snapshot!(context.filters(), context.run().arg("--no-editable-package").arg("foo").arg("main.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+    ");
+
     Ok(())
 }
 
@@ -5041,6 +5120,35 @@ fn run_with_env_file() -> Result<()> {
     ----- stderr -----
     ");
 
+    context.temp_dir.child(".file").write_str(indoc! { "
+        UV_PYTHON_SEARCH_PATH=.no-python
+        THE_EMPIRE_VARIABLE=palpatine
+        REBEL_1=leia_organa
+        REBEL_2=obi_wan_kenobi
+        REBEL_3=C3PO
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--no-project")
+        .arg("--no-managed-python")
+        .arg("--python").arg("3.12")
+        .arg("--env-file").arg(".file")
+        .arg("test.py")
+        .env_remove(EnvVars::VIRTUAL_ENV)
+        .env_remove(EnvVars::UV_PYTHON_SEARCH_PATH)
+        .env(EnvVars::PATH, context.python_path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    palpatine
+    leia_organa
+    obi_wan_kenobi
+    C3PO
+
+    ----- stderr -----
+    ");
+
     Ok(())
 }
 
@@ -5943,9 +6051,9 @@ fn detect_infinite_recursion() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: `uv run` was recursively invoked 6 times which exceeds the limit of 5.
+    error: `uv run` was recursively invoked 6 times which exceeds the limit of 5
 
-    hint: If you are running a script with `uv run` in the shebang, you may need to include the `--script` flag.
+    hint: If you are running a script with `uv run` in the shebang, you may need to include the `--script` flag
     ");
 
     Ok(())
@@ -6662,60 +6770,6 @@ fn run_target_workspace_discovery() -> Result<()> {
     Ok(())
 }
 
-/// Test that `--preview` enables target workspace discovery.
-#[test]
-fn run_target_workspace_discovery_preview_flag() -> Result<()> {
-    let context = setup_target_workspace_discovery_context()?;
-
-    context.temp_dir.child("uv.toml").write_str("bad")?;
-    context.temp_dir.child("pyproject.toml").write_str("bad")?;
-
-    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    success
-
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: project/.venv
-    Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/project)
-     + iniconfig==2.0.0
-    ");
-
-    Ok(())
-}
-
-/// Test that `UV_PREVIEW=1` enables target workspace discovery.
-#[test]
-fn run_target_workspace_discovery_uv_preview_env() -> Result<()> {
-    let context = setup_target_workspace_discovery_context()?;
-
-    context.temp_dir.child("uv.toml").write_str("bad")?;
-    context.temp_dir.child("pyproject.toml").write_str("bad")?;
-
-    uv_snapshot!(context.filters(), context.run().env("UV_PREVIEW", "1").arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    success
-
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: project/.venv
-    Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/project)
-     + iniconfig==2.0.0
-    ");
-
-    Ok(())
-}
-
 /// Test that `--preview-features target-workspace-discovery` works with a bare script
 /// filename (no directory component), which would otherwise cause `Path::parent()` to
 /// return an empty path.
@@ -6977,4 +7031,60 @@ fn run_project_file_no_ancestor_project() -> Result<()> {
     ");
 
     Ok(())
+}
+
+/// Ensure that `uv run` aborts when malware is detected in a dependency.
+#[tokio::test]
+async fn run_malware_detected() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "MAL-2026-1234"}]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/MAL-2026-1234"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "MAL-2026-1234",
+            "modified": "2026-01-01T00:00:00Z",
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .run()
+        .arg("--preview-features").arg("malware-check")
+        .arg("python")
+        .arg("--version")
+        .env(EnvVars::UV_MALWARE_CHECK, "1")
+        .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    warning: Malware detected in locked dependencies:
+      - `iniconfig==2.0.0`: MAL-2026-1234 (https://osv.dev/vulnerability/MAL-2026-1234)
+    error: Malware detected in one or more dependencies that would be installed; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check.
+    ");
 }

@@ -5,9 +5,10 @@ use std::time::Duration;
 use std::{fmt::Write, process::ExitCode};
 
 use anstream::AutoStream;
-use anyhow::Context;
+use anyhow::{Context, bail};
 use owo_colors::OwoColorize;
 use tracing::debug;
+use uv_warnings::warn_user;
 
 pub(crate) use auth::dir::dir as auth_dir;
 pub(crate) use auth::helper::helper as auth_helper;
@@ -31,6 +32,7 @@ pub(crate) use pip::tree::pip_tree;
 pub(crate) use pip::uninstall::pip_uninstall;
 pub(crate) use project::add::add;
 pub(crate) use project::audit::audit;
+pub(crate) use project::check::check;
 pub(crate) use project::export::export;
 pub(crate) use project::format::format;
 pub(crate) use project::init::{InitKind, InitProjectKind, init};
@@ -82,7 +84,7 @@ mod cache_clean;
 mod cache_dir;
 mod cache_prune;
 mod cache_size;
-mod diagnostics;
+pub(crate) mod diagnostics;
 mod editable;
 mod help;
 pub(crate) mod pip;
@@ -110,6 +112,94 @@ pub(crate) enum ExitStatus {
 
     /// The command's exit status is propagated from an external command.
     External(u8),
+}
+
+/// Read dotenv files into an overlay for a spawned process.
+///
+/// These values intentionally do not mutate uv's process environment and cannot mutate
+/// the current uv process' settings.
+fn read_env_files<'a>(
+    env_file: impl DoubleEndedIterator<Item = &'a PathBuf>,
+) -> anyhow::Result<Vec<(String, String)>> {
+    let mut environment = Vec::new();
+
+    for env_file_path in env_file.rev().map(PathBuf::as_path) {
+        let iter = match dotenvy::from_path_iter(env_file_path) {
+            Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                bail!(
+                    "No environment file found at: `{}`",
+                    env_file_path.simplified_display()
+                );
+            }
+            Err(dotenvy::Error::Io(err)) => {
+                bail!(
+                    "Failed to read environment file `{}`: {err}",
+                    env_file_path.simplified_display()
+                );
+            }
+            Err(dotenvy::Error::LineParse(content, position)) => {
+                warn_user!(
+                    "Failed to parse environment file `{}` at position {position}: {content}",
+                    env_file_path.simplified_display(),
+                );
+                continue;
+            }
+            Err(err) => {
+                warn_user!(
+                    "Failed to parse environment file `{}`: {err}",
+                    env_file_path.simplified_display(),
+                );
+                continue;
+            }
+            Ok(iter) => iter,
+        };
+
+        let mut parsed = true;
+        for item in iter {
+            match item {
+                Ok((key, value)) => {
+                    if std::env::var(&key).is_err() {
+                        environment.push((key, value));
+                    }
+                }
+                Err(dotenvy::Error::Io(err)) => {
+                    bail!(
+                        "Failed to read environment file `{}`: {err}",
+                        env_file_path.simplified_display()
+                    );
+                }
+                Err(dotenvy::Error::LineParse(content, position)) => {
+                    warn_user!(
+                        "Failed to parse environment file `{}` at position {position}: {content}",
+                        env_file_path.simplified_display(),
+                    );
+                    parsed = false;
+                    break;
+                }
+                Err(err) => {
+                    warn_user!(
+                        "Failed to parse environment file `{}`: {err}",
+                        env_file_path.simplified_display(),
+                    );
+                    parsed = false;
+                    break;
+                }
+            }
+        }
+
+        if parsed {
+            debug!(
+                "Read environment file at: `{}`",
+                env_file_path.simplified_display()
+            );
+        }
+    }
+
+    // `dotenvy::from_path` preserves the first loaded value, while `Command::envs` preserves the
+    // last value set for the child process.
+    environment.reverse();
+
+    Ok(environment)
 }
 
 impl From<ExitStatus> for ExitCode {

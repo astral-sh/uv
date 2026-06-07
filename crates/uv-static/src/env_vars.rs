@@ -188,7 +188,7 @@ impl EnvVars {
     pub const UV_NO_CONFIG: &'static str = "UV_NO_CONFIG";
 
     /// If set, uv will not read system-level configuration files.
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.11.16")]
     pub const UV_NO_SYSTEM_CONFIG: &'static str = "UV_NO_SYSTEM_CONFIG";
 
     /// Equivalent to the `--isolated` command-line argument. If set, uv will avoid discovering
@@ -260,6 +260,38 @@ impl EnvVars {
     #[attr_added_in("0.9.9")]
     pub const UV_NO_DEFAULT_GROUPS: &'static str = "UV_NO_DEFAULT_GROUPS";
 
+    /// Equivalent to the `--no-install-project` command-line argument. If set, uv will
+    /// install the project's dependencies but not the project itself.
+    #[attr_added_in("next release")]
+    pub const UV_NO_INSTALL_PROJECT: &'static str = "UV_NO_INSTALL_PROJECT";
+
+    /// Equivalent to the `--no-install-workspace` command-line argument. If set, uv will
+    /// install workspace dependencies but not workspace members (including the current
+    /// project).
+    #[attr_added_in("next release")]
+    pub const UV_NO_INSTALL_WORKSPACE: &'static str = "UV_NO_INSTALL_WORKSPACE";
+
+    /// Equivalent to the `--no-install-local` command-line argument. If set, uv will skip
+    /// the current project, workspace members, and any other local (path or editable)
+    /// packages, installing only remote dependencies.
+    #[attr_added_in("next release")]
+    pub const UV_NO_INSTALL_LOCAL: &'static str = "UV_NO_INSTALL_LOCAL";
+
+    /// Equivalent to the hidden `--only-install-project` command-line argument.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_ONLY_INSTALL_PROJECT: &'static str = "UV_ONLY_INSTALL_PROJECT";
+
+    /// Equivalent to the hidden `--only-install-workspace` command-line argument.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_ONLY_INSTALL_WORKSPACE: &'static str = "UV_ONLY_INSTALL_WORKSPACE";
+
+    /// Equivalent to the hidden `--only-install-local` command-line argument.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_ONLY_INSTALL_LOCAL: &'static str = "UV_ONLY_INSTALL_LOCAL";
+
     /// Equivalent to the `--no-binary` command-line argument. If set, uv will install
     /// all packages from source. The resolver will still use pre-built wheels to
     /// extract package metadata, if available.
@@ -311,6 +343,7 @@ impl EnvVars {
     #[attr_added_in("0.4.16")]
     pub const UV_PUBLISH_PASSWORD: &'static str = "UV_PUBLISH_PASSWORD";
 
+    /// Equivalent to the `--check-url` command-line argument in `uv publish`.
     /// Don't upload a file if it already exists on the index. The value is the URL of the index.
     #[attr_added_in("0.4.30")]
     pub const UV_PUBLISH_CHECK_URL: &'static str = "UV_PUBLISH_CHECK_URL";
@@ -554,6 +587,19 @@ impl EnvVars {
     #[attr_added_in("0.0.5")]
     pub const UV_NO_WRAP: &'static str = "UV_NO_WRAP";
 
+    /// Set to `1` to enable the automatic malware check that runs after `uv sync`.
+    ///
+    /// When enabled, uv performs a lightweight check against the OSV database for known
+    /// malware advisories after every lockfile sync. Set this variable to `0` to opt out.
+    #[attr_added_in("0.11.16")]
+    pub const UV_MALWARE_CHECK: &'static str = "UV_MALWARE_CHECK";
+
+    /// Override the vulnerability service URL for the automatic malware check.
+    ///
+    /// Defaults to the OSV API endpoint (`https://api.osv.dev/`).
+    #[attr_added_in("0.11.16")]
+    pub const UV_MALWARE_CHECK_URL: &'static str = "UV_MALWARE_CHECK_URL";
+
     /// Provides the HTTP Basic authentication username for a named index.
     ///
     /// The `name` parameter is the name of the index. For example, given an index named `foo`,
@@ -637,6 +683,13 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.10.5")]
     pub const UV_INTERNAL__TEST_ALT_FS: &'static str = "UV_INTERNAL__TEST_ALT_FS";
+
+    /// Network path to a directory on an SMB filesystem for testing.
+    ///
+    /// When populated, uv will run additional tests that cover SMB-specific filesystem behavior.
+    #[attr_hidden]
+    #[attr_added_in("0.11.16")]
+    pub const UV_INTERNAL__TEST_SMB_FS: &'static str = "UV_INTERNAL__TEST_SMB_FS";
 
     /// Path to a directory on a filesystem with a low hardlink limit (e.g., minix with ~250).
     ///
@@ -1181,11 +1234,6 @@ impl EnvVars {
     /// Used to disable delay for HTTP retries in tests.
     #[attr_added_in("0.7.21")]
     pub const UV_TEST_NO_HTTP_RETRY_DELAY: &'static str = "UV_TEST_NO_HTTP_RETRY_DELAY";
-
-    /// Used to set a packse index url for tests.
-    #[attr_hidden]
-    #[attr_added_in("0.2.12")]
-    pub const UV_TEST_PACKSE_INDEX: &'static str = "UV_TEST_PACKSE_INDEX";
 
     /// Used for testing named indexes in tests.
     #[attr_hidden]

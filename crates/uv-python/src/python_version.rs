@@ -188,7 +188,7 @@ impl PythonVersion {
     }
 
     /// Return the full parsed Python version.
-    pub fn into_version(self) -> Version {
+    pub(crate) fn into_version(self) -> Version {
         self.0.version
     }
 

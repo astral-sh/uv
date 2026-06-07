@@ -67,6 +67,29 @@ pub enum BuildDispatchError {
     Lookahead(#[from] uv_requirements::Error),
 }
 
+impl uv_errors::Hint for BuildDispatchError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::BuildFrontend(err) => err.hints(),
+            Self::Resolve(err) => err.hints(),
+            Self::Anyhow(err) => {
+                // Walk the anyhow error chain to find hint-bearing errors
+                // (e.g., ResolveError wrapped via `with_context`).
+                for cause in err.chain() {
+                    if let Some(resolve_err) = cause.downcast_ref::<uv_resolver::ResolveError>() {
+                        let hints = resolve_err.hints();
+                        if !hints.is_empty() {
+                            return hints;
+                        }
+                    }
+                }
+                uv_errors::Hints::none()
+            }
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 impl IsBuildBackendError for BuildDispatchError {
     fn is_build_backend_error(&self) -> bool {
         match self {
@@ -665,15 +688,5 @@ impl SharedState {
     /// Return the [`InFlight`] used by the [`SharedState`].
     pub fn in_flight(&self) -> &InFlight {
         &self.in_flight
-    }
-
-    /// Return the [`IndexCapabilities`] used by the [`SharedState`].
-    pub fn capabilities(&self) -> &IndexCapabilities {
-        &self.capabilities
-    }
-
-    /// Return the [`BuildArena`] used by the [`SharedState`].
-    pub fn build_arena(&self) -> &BuildArena<SourceBuild> {
-        &self.build_arena
     }
 }

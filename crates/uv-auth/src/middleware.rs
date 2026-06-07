@@ -705,14 +705,7 @@ impl AuthMiddleware {
         } else {
             (FetchUrl::Realm(Realm::from(&**url)), username)
         };
-        if !self.cache().fetches.register(key.clone()) {
-            let credentials = self
-                .cache()
-                .fetches
-                .wait(&key)
-                .await
-                .expect("The key must exist after register is called");
-
+        if let Some(credentials) = self.cache().fetches.register_or_wait(&key).await {
             if credentials.is_some() {
                 trace!("Using credentials from previous fetch for {}", key.0);
             } else {

@@ -5,6 +5,7 @@ use std::slice;
 use rustc_hash::FxHashSet;
 
 use uv_auth::CredentialsCache;
+use uv_cache::Cache;
 use uv_configuration::NoSources;
 use uv_distribution_types::{IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -26,30 +27,17 @@ pub struct RequiresDist {
 }
 
 impl RequiresDist {
-    /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
-    /// dependencies.
-    pub fn from_metadata23(metadata: uv_pypi_types::RequiresDist) -> Self {
-        Self {
-            name: metadata.name,
-            requires_dist: Box::into_iter(metadata.requires_dist)
-                .map(Requirement::from)
-                .collect(),
-            provides_extra: metadata.provides_extra,
-            dependency_groups: BTreeMap::default(),
-            dynamic: metadata.dynamic,
-        }
-    }
-
     /// Lower by considering `tool.uv` in `pyproject.toml` if present, used for Git and directory
     /// dependencies.
-    pub async fn from_project_maybe_workspace(
+    pub(crate) async fn from_project_maybe_workspace(
         metadata: uv_pypi_types::RequiresDist,
         install_path: &Path,
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: NoSources,
         editable: bool,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         let discovery = DiscoveryOptions {
@@ -65,10 +53,14 @@ impl RequiresDist {
             } else {
                 MemberDiscovery::None
             },
-            ..DiscoveryOptions::default()
         };
-        let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?
+        let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
+            install_path,
+            &discovery,
+            cache,
+            workspace_cache,
+        )
+        .await?
         else {
             return Self::from_metadata23_with_source_context(metadata, git_member);
         };
@@ -446,11 +438,6 @@ impl FlatRequiresDist {
 
         Self(flattened.into_boxed_slice())
     }
-
-    /// Consume the [`FlatRequiresDist`] and return the inner requirements.
-    pub fn into_inner(self) -> Box<[Requirement]> {
-        self.0
-    }
 }
 
 impl IntoIterator for FlatRequiresDist {
@@ -473,6 +460,7 @@ mod test {
     use tempfile::TempDir;
 
     use uv_auth::CredentialsCache;
+    use uv_cache::Cache;
     use uv_configuration::NoSources;
     use uv_distribution_types::IndexLocations;
     use uv_normalize::PackageName;
@@ -487,12 +475,14 @@ mod test {
         contents: &str,
     ) -> anyhow::Result<RequiresDist> {
         fs_err::write(temp_dir.join("pyproject.toml"), contents)?;
+        let cache = Cache::from_path(temp_dir.join(".uv_cache"));
         let project_workspace = ProjectWorkspace::discover(
             temp_dir,
             &DiscoveryOptions {
                 stop_discovery_at: Some(temp_dir.to_path_buf()),
                 ..DiscoveryOptions::default()
             },
+            &cache,
             &WorkspaceCache::default(),
         )
         .await?;

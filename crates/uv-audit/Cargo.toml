@@ -1,6 +1,6 @@
 [package]
 name = "uv-audit"
-version = "0.0.48"
+version = "0.0.52"
 description = "This is an internal component crate of uv"
 edition.workspace = true
 rust-version.workspace = true
@@ -16,6 +16,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-types = { workspace = true }
@@ -26,7 +27,9 @@ uv-redacted = { workspace = true }
 uv-small-str = { workspace = true }
 
 clap = { workspace = true, optional = true }
+http = { workspace = true }
 futures = { workspace = true }
+indexmap = { workspace = true }
 jiff = { workspace = true }
 reqwest-middleware = { workspace = true, features = ["json"] }
 rkyv = { workspace = true }

@@ -9,8 +9,8 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{
-    ConflictItemRef, Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl,
-    ParsedUrl, VerbatimParsedUrl,
+    ConflictItemRef, Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
+    ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
 };
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
@@ -36,7 +36,7 @@ impl DependencySource {
     ///
     /// Registry requirements only carry a source here when they are tied to a group-scoped
     /// explicit index. Direct URL-like requirements always preserve their verbatim URL.
-    pub(crate) fn from_requirement(requirement: &Requirement) -> Self {
+    fn from_requirement(requirement: &Requirement) -> Self {
         match &requirement.source {
             RequirementSource::Registry { index, .. }
                 if matches!(
@@ -51,7 +51,8 @@ impl DependencySource {
             }
             RequirementSource::Registry { .. } => Self::Unspecified,
             RequirementSource::Url { .. }
-            | RequirementSource::Git { .. }
+            | RequirementSource::GitDirectory { .. }
+            | RequirementSource::GitPath { .. }
             | RequirementSource::Path { .. }
             | RequirementSource::Directory { .. } => requirement
                 .source
@@ -242,10 +243,10 @@ impl PubGrubDependency {
 
 /// A PubGrub-compatible package and version range.
 #[derive(Debug, Clone)]
-pub(crate) struct PubGrubRequirement {
-    pub(crate) package: PubGrubPackage,
-    pub(crate) version: Ranges<Version>,
-    pub(crate) source: DependencySource,
+struct PubGrubRequirement {
+    package: PubGrubPackage,
+    version: Ranges<Version>,
+    source: DependencySource,
 }
 
 impl PubGrubRequirement {
@@ -259,7 +260,7 @@ impl PubGrubRequirement {
 
     /// Convert a [`Requirement`] to a PubGrub-compatible package and range, while returning the URL
     /// on the [`Requirement`], if any.
-    pub(crate) fn from_requirement(
+    fn from_requirement(
         requirement: &Requirement,
         extra: Option<ExtraName>,
         group: Option<GroupName>,
@@ -281,13 +282,28 @@ impl PubGrubRequirement {
                 ));
                 (url, parsed_url)
             }
-            RequirementSource::Git {
+            RequirementSource::GitDirectory {
                 git,
                 url,
                 subdirectory,
             } => {
-                let parsed_url =
-                    ParsedUrl::Git(ParsedGitUrl::from_source(git.clone(), subdirectory.clone()));
+                let parsed_url = ParsedUrl::GitDirectory(ParsedGitDirectoryUrl::from_source(
+                    git.clone(),
+                    subdirectory.clone(),
+                ));
+                (url, parsed_url)
+            }
+            RequirementSource::GitPath {
+                git,
+                install_path,
+                ext,
+                url,
+            } => {
+                let parsed_url = ParsedUrl::GitPath(ParsedGitPathUrl::from_source(
+                    git.clone(),
+                    install_path.clone(),
+                    *ext,
+                ));
                 (url, parsed_url)
             }
             RequirementSource::Path {

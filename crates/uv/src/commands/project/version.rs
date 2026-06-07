@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use anyhow::{Result, anyhow};
 use owo_colors::OwoColorize;
+use thiserror::Error;
 
 use tracing::debug;
 use uv_cache::Cache;
@@ -20,11 +21,12 @@ use uv_normalize::PackageName;
 use uv_pep440::{BumpCommand, PrereleaseKind, Version};
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_settings::PythonInstallMirrors;
-use uv_workspace::VirtualProject;
+use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
+use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::pyproject_mut::Error;
 use uv_workspace::{
-    DiscoveryOptions, WorkspaceCache, WorkspaceError,
+    DiscoveryOptions, ProjectWorkspace, VirtualProject, WorkspaceCache, WorkspaceError,
+    WorkspaceErrorKind,
     pyproject_mut::{DependencyTarget, PyProjectTomlMut},
 };
 
@@ -93,12 +95,14 @@ pub(crate) async fn project_version(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    malware_settings: MalwareCheckSettings,
 ) -> Result<ExitStatus> {
     // Read the metadata
     let project = find_target(
         project_dir,
         package.as_ref(),
         explicit_project,
+        cache,
         workspace_cache,
     )
     .await?;
@@ -334,7 +338,13 @@ pub(crate) async fn project_version(
     let status = if dry_run {
         ExitStatus::Success
     } else if let Some(new_version) = &new_version {
-        let project = update_project(project, new_version, &mut toml, &pyproject_path)?;
+        let project = update_project(
+            project,
+            new_version,
+            &mut toml,
+            &pyproject_path,
+            workspace_cache,
+        )?;
         Box::pin(lock_and_sync(
             project,
             project_dir,
@@ -354,6 +364,7 @@ pub(crate) async fn project_version(
             cache,
             printer,
             preview,
+            &malware_settings,
         ))
         .await?
     } else {
@@ -369,17 +380,27 @@ pub(crate) async fn project_version(
     Ok(status)
 }
 
+/// A [`WorkspaceError`] that may carry a hint to use `uv self version`.
+#[derive(Debug, Error)]
+#[error("{err}")]
+pub(crate) struct MissingProjectVersionError {
+    err: WorkspaceError,
+}
+
+impl uv_errors::Hint for MissingProjectVersionError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::from(format!(
+            "If you meant to view uv's version, use `{}` instead",
+            "uv self version".green()
+        ))
+    }
+}
+
 /// Add hint to use `uv self version` when workspace discovery fails due to missing pyproject.toml
 /// and --project was not explicitly passed
 fn hint_uv_self_version(err: WorkspaceError, explicit_project: bool) -> anyhow::Error {
-    if matches!(err, WorkspaceError::MissingPyprojectToml) && !explicit_project {
-        anyhow!(
-            "{}\n\n{}{} If you meant to view uv's version, use `{}` instead",
-            err,
-            "hint".bold().cyan(),
-            ":".bold(),
-            "uv self version".green()
-        )
+    if matches!(err.as_ref(), WorkspaceErrorKind::MissingPyprojectToml) && !explicit_project {
+        MissingProjectVersionError { err }.into()
     } else {
         err.into()
     }
@@ -392,33 +413,34 @@ async fn find_target(
     project_dir: &Path,
     package: Option<&PackageName>,
     explicit_project: bool,
+    cache: &Cache,
     workspace_cache: &WorkspaceCache,
 ) -> Result<VirtualProject> {
     // Find the project in the workspace.
-    // No workspace caching since `uv version` changes the workspace definition.
     let project = if let Some(package) = package {
         VirtualProject::discover_with_package(
             project_dir,
-            &DiscoveryOptions {
-                project: uv_workspace::ProjectDiscovery::Required,
-                ..DiscoveryOptions::default()
-            },
+            &DiscoveryOptions::default(),
+            cache,
             workspace_cache,
             package.clone(),
         )
         .await
         .map_err(|err| hint_uv_self_version(err, explicit_project))?
     } else {
-        VirtualProject::discover(
-            project_dir,
-            &DiscoveryOptions {
-                project: uv_workspace::ProjectDiscovery::Required,
-                ..DiscoveryOptions::default()
-            },
-            workspace_cache,
+        // Configuration discovery may have cached errors from virtual workspace member discovery.
+        // `uv version` requires a project, so reject non-project roots before consulting that cache.
+        let project_workspace_cache = WorkspaceCache::default();
+        VirtualProject::Project(
+            ProjectWorkspace::discover(
+                project_dir,
+                &DiscoveryOptions::default(),
+                cache,
+                &project_workspace_cache,
+            )
+            .await
+            .map_err(|err| hint_uv_self_version(err, explicit_project))?,
         )
-        .await
-        .map_err(|err| hint_uv_self_version(err, explicit_project))?
     };
     Ok(project)
 }
@@ -429,6 +451,7 @@ fn update_project(
     new_version: &Version,
     toml: &mut PyProjectTomlMut,
     pyproject_path: &Path,
+    workspace_cache: &WorkspaceCache,
 ) -> Result<VirtualProject> {
     // Save to disk
     toml.set_version(new_version)?;
@@ -437,7 +460,11 @@ fn update_project(
 
     // Update the `pyproject.toml` in-memory.
     let project = project
-        .update_member(toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?)?
+        .update_member(
+            PyProjectToml::from_string(content, pyproject_path)
+                .map_err(ProjectError::PyprojectTomlParse)?,
+            workspace_cache,
+        )?
         .ok_or(ProjectError::PyprojectTomlUpdate)?;
 
     Ok(project)
@@ -487,7 +514,6 @@ async fn print_frozen_version(
         active,
         cache,
         printer,
-        preview,
     )
     .await?
     .into_interpreter();
@@ -569,6 +595,7 @@ async fn lock_and_sync(
     cache: &Cache,
     printer: Printer,
     preview: Preview,
+    malware_settings: &MalwareCheckSettings,
 ) -> Result<ExitStatus> {
     // If frozen, don't touch the lock or sync at all
     if frozen.is_some() {
@@ -605,7 +632,6 @@ async fn lock_and_sync(
             active,
             cache,
             printer,
-            preview,
         )
         .await?
         .into_interpreter();
@@ -627,7 +653,6 @@ async fn lock_and_sync(
             cache,
             DryRun::Disabled,
             printer,
-            preview,
         )
         .await?
         .into_environment()?;
@@ -722,6 +747,7 @@ async fn lock_and_sync(
         DryRun::Disabled,
         printer,
         preview,
+        malware_settings,
     )
     .await
     {

@@ -1,0 +1,26 @@
+[package]
+name = "uv-errors"
+version = "0.0.52"
+description = "Common error traits for uv."
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+anstream = { workspace = true }
+owo-colors = { workspace = true }
+terminal_size = { workspace = true }
+textwrap = { workspace = true }
+uv-static = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+indoc = { workspace = true }
+insta = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

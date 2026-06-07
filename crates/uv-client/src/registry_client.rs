@@ -24,6 +24,7 @@ use uv_distribution_types::{
     BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
     IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
 };
+use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -64,7 +65,7 @@ impl<'a> RegistryClientBuilder<'a> {
             index_strategy: IndexStrategy::default(),
             torch_backend: None,
             cache,
-            base_client_builder,
+            base_client_builder: base_client_builder.redirect(RedirectPolicy::RetriggerMiddleware),
         }
     }
 
@@ -135,7 +136,7 @@ impl<'a> RegistryClientBuilder<'a> {
     /// leakage to untrusted domains.
     #[cfg(test)]
     #[must_use]
-    pub(crate) fn allow_cross_origin_credentials(mut self) -> Self {
+    fn allow_cross_origin_credentials(mut self) -> Self {
         self.base_client_builder = self.base_client_builder.allow_cross_origin_credentials();
         self
     }
@@ -169,8 +170,7 @@ impl<'a> RegistryClientBuilder<'a> {
         // Build a base client
         let builder = self
             .base_client_builder
-            .indexes(Indexes::from(&self.index_locations))
-            .redirect(RedirectPolicy::RetriggerMiddleware);
+            .indexes(Indexes::from(&self.index_locations));
 
         let client = builder.build()?;
 
@@ -268,9 +268,9 @@ impl RegistryClient {
         self.client.uncached().for_host(url)
     }
 
-    /// Returns `true` if SSL verification is disabled for the given URL.
-    pub fn disable_ssl(&self, url: &DisplaySafeUrl) -> bool {
-        self.client.uncached().disable_ssl(url)
+    /// Return the [`GitHttpSettings`] for fetching from the given URL.
+    pub fn git_http_settings(&self, url: &DisplaySafeUrl) -> GitHttpSettings {
+        self.client.uncached().git_http_settings(url)
     }
 
     /// Return the [`Connectivity`] mode used by this client.
@@ -442,6 +442,26 @@ impl RegistryClient {
         }
 
         Ok(results)
+    }
+
+    /// Fetch and combine entries for a package from the configured legacy `--find-links` locations.
+    #[instrument(skip_all, fields(package = % package_name))]
+    pub async fn find_links_entries(
+        &self,
+        package_name: &PackageName,
+        download_concurrency: &Semaphore,
+    ) -> Result<Vec<FlatIndexEntry>, Error> {
+        Ok(futures::stream::iter(self.index_urls.flat_indexes())
+            .map(async |index| {
+                let _permit = download_concurrency.acquire().await;
+                self.flat_single_index(package_name, index.url()).await
+            })
+            .buffered(8)
+            .try_collect::<Vec<_>>()
+            .await?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>())
     }
 
     /// Fetch the [`FlatIndexEntry`] entries for a given package from a single `--find-links` index.
@@ -909,7 +929,9 @@ impl RegistryClient {
     pub async fn wheel_metadata(
         &self,
         built_dist: &BuiltDist,
+        git: &GitResolver,
         capabilities: &IndexCapabilities,
+        reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<ResolutionMetadata, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheels) => {
@@ -970,6 +992,51 @@ impl RegistryClient {
             }
             BuiltDist::Path(wheel) => {
                 let file = fs_err::tokio::File::open(wheel.install_path.as_ref())
+                    .await
+                    .map_err(ErrorKind::Io)?;
+                let reader = tokio::io::BufReader::new(file);
+                let contents = read_metadata_async_seek(&wheel.filename, reader)
+                    .await
+                    .map_err(|err| {
+                        ErrorKind::Metadata(wheel.install_path.to_string_lossy().to_string(), err)
+                    })?;
+                ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
+                    ErrorKind::MetadataParseError(
+                        wheel.filename.clone(),
+                        built_dist.to_string(),
+                        Box::new(err),
+                    )
+                })?
+            }
+            BuiltDist::GitPath(wheel) => {
+                // Fetch the Git repository.
+                let fetch = git
+                    .fetch(
+                        &wheel.git,
+                        self.git_http_settings(wheel.git.url()),
+                        self.cache.bucket(CacheBucket::Git),
+                        reporter,
+                    )
+                    .await
+                    .map_err(ErrorKind::Git)?;
+
+                if wheel.git.lfs().enabled() && !fetch.lfs_ready() {
+                    if GIT_LFS.is_err() {
+                        return Err(ErrorKind::MissingWheelGitLfsArtifacts(
+                            wheel.url.to_url(),
+                            GitError::GitLfsNotFound,
+                        )
+                        .into());
+                    }
+                    return Err(ErrorKind::MissingWheelGitLfsArtifacts(
+                        wheel.url.to_url(),
+                        GitError::GitLfsNotConfigured,
+                    )
+                    .into());
+                }
+
+                // Read the metadata.
+                let file = fs_err::tokio::File::open(fetch.path().join(&wheel.install_path))
                     .await
                     .map_err(ErrorKind::Io)?;
                 let reader = tokio::io::BufReader::new(file);
@@ -1262,7 +1329,7 @@ impl RegistryClient {
 }
 
 #[derive(Debug)]
-pub(crate) enum SimpleMetadataSearchOutcome {
+enum SimpleMetadataSearchOutcome {
     /// Simple metadata was found
     Found(OwnedArchive<SimpleDetailMetadata>),
     /// Simple metadata was not found
@@ -1405,13 +1472,6 @@ pub struct SimpleDetailMetadatum {
 impl SimpleDetailMetadata {
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = &SimpleDetailMetadatum> {
         self.versions.iter()
-    }
-
-    /// Return the project-level [PEP 792] status marker for this package.
-    ///
-    /// [PEP 792]: https://peps.python.org/pep-0792/
-    pub fn project_status(&self) -> &ProjectStatus {
-        &self.project_status
     }
 
     fn from_pypi_files(
@@ -1651,18 +1711,22 @@ impl Connectivity {
 mod tests {
     use std::str::FromStr;
 
+    use tokio::sync::Semaphore;
     use url::Url;
     use uv_normalize::PackageName;
     use uv_pypi_types::PypiSimpleDetail;
     use uv_redacted::DisplaySafeUrl;
+    use uv_torch::{TorchBackend, TorchSource, TorchStrategy};
 
     use crate::{
-        BaseClientBuilder, SimpleDetailMetadata, SimpleDetailMetadatum, html::SimpleDetailHTML,
+        BaseClientBuilder, Connectivity, RegistryClient, RegistryClientBuilder,
+        SimpleDetailMetadata, SimpleDetailMetadatum, html::SimpleDetailHTML,
     };
-
-    use crate::RegistryClientBuilder;
     use uv_cache::Cache;
-    use uv_distribution_types::{FileLocation, ToUrlError};
+    use uv_distribution_types::{
+        FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
+        IndexUrl, ToUrlError,
+    };
     use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -1684,6 +1748,118 @@ mod tests {
             .await;
 
         server
+    }
+
+    fn no_index_client(flat_indexes: Vec<Index>) -> Result<RegistryClient, Error> {
+        Ok(
+            RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+                .index_locations(IndexLocations::new(vec![], flat_indexes, true))
+                .build()?,
+        )
+    }
+
+    async fn assert_no_index(
+        client: &RegistryClient,
+        package: &str,
+        index: Option<IndexMetadataRef<'_>>,
+    ) -> Result<(), Error> {
+        let error = client
+            .simple_detail(
+                &PackageName::from_str(package)?,
+                index,
+                &IndexCapabilities::default(),
+                &Semaphore::new(1),
+            )
+            .await
+            .expect_err("index lookup should be disabled");
+
+        assert!(matches!(
+            error.kind(),
+            crate::ErrorKind::NoIndex(error_package) if error_package == package
+        ));
+        Ok(())
+    }
+
+    async fn assert_no_requests(server: &MockServer) {
+        assert!(
+            server
+                .received_requests()
+                .await
+                .expect("request recording should be enabled")
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn no_index_disables_explicit_simple_index() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        let explicit_index = IndexUrl::from_str(&format!("{}/simple", server.uri()))?;
+        let flat_index = Index::from_find_links(IndexUrl::from_str("https://example.com/flat")?);
+        let registry_client = no_index_client(vec![flat_index])?;
+
+        assert_no_index(
+            &registry_client,
+            "validation",
+            Some(IndexMetadataRef {
+                url: &explicit_index,
+                format: IndexFormat::Simple,
+            }),
+        )
+        .await?;
+        assert_no_requests(&server).await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn no_index_disables_explicit_flat_index() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        let explicit_index = IndexUrl::from_str(&server.uri())?;
+        let registry_client = no_index_client(vec![])?;
+
+        assert_no_index(
+            &registry_client,
+            "validation",
+            Some(IndexMetadataRef {
+                url: &explicit_index,
+                format: IndexFormat::Flat,
+            }),
+        )
+        .await?;
+        assert_no_requests(&server).await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn no_index_disables_torch_simple_index() -> Result<(), Error> {
+        let flat_index_dir = tempfile::tempdir()?;
+        let flat_index = Index::from_find_links(IndexUrl::parse(
+            flat_index_dir.path().to_string_lossy().as_ref(),
+            None,
+        )?);
+        let registry_client = RegistryClientBuilder::new(
+            BaseClientBuilder::default().connectivity(Connectivity::Offline),
+            Cache::temp()?,
+        )
+        .index_locations(IndexLocations::new(vec![], vec![flat_index], true))
+        .torch_backend(Some(TorchStrategy::Backend {
+            backend: TorchBackend::Cpu,
+            source: TorchSource::PyTorch,
+        }))
+        .build()?;
+
+        assert_no_index(&registry_client, "torch", None).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_detail_does_not_fetch_legacy_find_links() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        let flat_index = Index::from_find_links(IndexUrl::from_str(&server.uri())?);
+        let registry_client = no_index_client(vec![flat_index])?;
+
+        assert_no_index(&registry_client, "validation", None).await?;
+        assert_no_requests(&server).await;
+        Ok(())
     }
 
     #[tokio::test]

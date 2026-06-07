@@ -28,7 +28,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.14"
+          version: "0.11.16"
       - run: uvx ruff check .
 
   ty:
@@ -41,7 +41,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.14"
+          version: "0.11.16"
       - run: |
           uvx ty check python/uv
           uvx \
@@ -75,7 +75,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          version: "0.11.14"
+          version: "0.11.16"
       - run: uvx --from 'validate-pyproject[all,store]' validate-pyproject pyproject.toml
 
   readme:
@@ -103,7 +103,7 @@ jobs:
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Check uv_build dependencies"
-        uses: EmbarkStudios/cargo-deny-action@91bf2b620e09e18d6eb78b92e7861937469acedb # v2.0.17
+        uses: EmbarkStudios/cargo-deny-action@6c8f9facfa5047ec02d8485b6bf52b587b7777d1 # v2.0.18
         with:
           command: check bans
           manifest-path: crates/uv-build/Cargo.toml
@@ -151,7 +151,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install cargo shear"
-        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
+        uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2.79.2
         with:
           tool: cargo-shear@1.12.4
       - run: cargo shear --deny-warnings
@@ -162,4 +162,4 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - uses: crate-ci/typos@5374cbf686e897b15713110e233094e2874de7ef # v1.46.1
+      - uses: crate-ci/typos@aca895bf05aec0cb7dffa6f94495e923224d9f17 # v1.46.2

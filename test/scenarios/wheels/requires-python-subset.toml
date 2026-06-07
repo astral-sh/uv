@@ -1,0 +1,16 @@
+name = "requires-python-subset"
+description = "While both Linux and Windows are required and `win-only` has only a Windows wheel, `win-only` is also used only on Windows."
+
+[resolver_options]
+universal = true
+required_environments = ['sys_platform == "linux"', 'sys_platform == "win32"']
+
+[root]
+requires = ["win-only; sys_platform == 'win32'"]
+
+[expected]
+satisfiable = true
+
+[packages.win-only.versions."1.0.0"]
+sdist = false
+wheel_tags = ["cp312-abi3-win_amd64"]

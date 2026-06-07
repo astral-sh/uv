@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use uv_auth::CredentialsCache;
+use uv_cache::Cache;
 use uv_configuration::NoSources;
 use uv_distribution_types::{
     ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
@@ -24,7 +25,7 @@ pub struct BuildRequires {
 impl BuildRequires {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
-    pub fn from_metadata23(metadata: uv_pypi_types::BuildRequires) -> Self {
+    fn from_metadata23(metadata: uv_pypi_types::BuildRequires) -> Self {
         Self {
             name: metadata.name,
             requires_dist: metadata
@@ -43,7 +44,8 @@ impl BuildRequires {
         locations: &IndexLocations,
         sources: &NoSources,
         editable: bool,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         let discovery = if sources.all() {
@@ -54,8 +56,13 @@ impl BuildRequires {
         } else {
             DiscoveryOptions::default()
         };
-        let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?
+        let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
+            install_path,
+            &discovery,
+            cache,
+            workspace_cache,
+        )
+        .await?
         else {
             return Ok(Self::from_metadata23(metadata));
         };

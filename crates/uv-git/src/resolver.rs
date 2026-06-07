@@ -36,6 +36,29 @@ pub enum GitResolverError {
     ReqwestMiddleware(#[from] reqwest_middleware::Error),
 }
 
+/// HTTP settings for fetching a Git repository.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GitHttpSettings {
+    disable_ssl: bool,
+    offline: bool,
+}
+
+impl GitHttpSettings {
+    /// Configure whether certificate verification should be disabled.
+    #[must_use]
+    pub fn with_disabled_ssl(mut self, disable_ssl: bool) -> Self {
+        self.disable_ssl = disable_ssl;
+        self
+    }
+
+    /// Configure whether network access should be disabled.
+    #[must_use]
+    pub fn with_offline(mut self, offline: bool) -> Self {
+        self.offline = offline;
+        self
+    }
+}
+
 /// A resolver for Git repositories.
 #[derive(Default, Clone)]
 pub struct GitResolver(Arc<DashMap<RepositoryReference, GitOid>>);
@@ -146,8 +169,7 @@ impl GitResolver {
     pub async fn fetch(
         &self,
         url: &GitUrl,
-        disable_ssl: bool,
-        offline: bool,
+        http_settings: GitHttpSettings,
         cache: PathBuf,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Fetch, GitResolverError> {
@@ -178,13 +200,14 @@ impl GitResolver {
 
         // Fetch the Git repository.
         let source = if let Some(reporter) = reporter {
-            GitSource::new(url.as_ref().clone(), cache, offline).with_reporter(reporter)
+            GitSource::new(url.as_ref().clone(), cache, http_settings.offline)
+                .with_reporter(reporter)
         } else {
-            GitSource::new(url.as_ref().clone(), cache, offline)
+            GitSource::new(url.as_ref().clone(), cache, http_settings.offline)
         };
 
         // If necessary, disable SSL.
-        let source = if disable_ssl {
+        let source = if http_settings.disable_ssl {
             source.dangerous()
         } else {
             source

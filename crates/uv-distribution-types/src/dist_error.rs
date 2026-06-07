@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Inspect whether an error type is a build error.
-pub trait IsBuildBackendError: std::error::Error + Send + Sync + 'static {
+pub trait IsBuildBackendError: uv_errors::Hint + std::error::Error + Send + Sync + 'static {
     /// Returns whether the build backend failed to build the package, so it's not a uv error.
     fn is_build_backend_error(&self) -> bool;
 }
@@ -140,11 +140,6 @@ impl DerivationChain {
         }
 
         None
-    }
-
-    /// Returns the length of the derivation chain.
-    pub fn len(&self) -> usize {
-        self.0.len()
     }
 
     /// Returns `true` if the derivation chain is empty.

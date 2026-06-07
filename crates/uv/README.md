@@ -10,8 +10,8 @@ for more information.
 This crate is the entry point to the uv command-line interface. The Rust API exposed here is not
 considered public interface.
 
-This is version 0.11.15. The source can be found
-[here](https://github.com/astral-sh/uv/blob/0.11.15/crates/uv).
+This is version 0.11.19. The source can be found
+[here](https://github.com/astral-sh/uv/blob/0.11.19/crates/uv).
 
 The following uv workspace members are also available:
 
@@ -33,6 +33,7 @@ The following uv workspace members are also available:
 - [uv-distribution](https://crates.io/crates/uv-distribution)
 - [uv-distribution-filename](https://crates.io/crates/uv-distribution-filename)
 - [uv-distribution-types](https://crates.io/crates/uv-distribution-types)
+- [uv-errors](https://crates.io/crates/uv-errors)
 - [uv-extract](https://crates.io/crates/uv-extract)
 - [uv-fastid](https://crates.io/crates/uv-fastid)
 - [uv-flags](https://crates.io/crates/uv-flags)

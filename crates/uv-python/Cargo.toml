@@ -1,6 +1,6 @@
 [package]
 name = "uv-python"
-version = "0.0.48"
+version = "0.0.52"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -17,6 +17,7 @@ workspace = true
 
 [dependencies]
 uv-cache = { workspace = true }
+uv-errors = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-client = { workspace = true }
@@ -72,6 +73,8 @@ windows-registry = { workspace = true }
 windows = { workspace = true }
 
 [dev-dependencies]
+uv-preview = { workspace = true, features = ["testing"] }
+
 anyhow = { workspace = true }
 assert_fs = { workspace = true }
 indoc = { workspace = true }

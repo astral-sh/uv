@@ -1154,7 +1154,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             .index
             .distributions()
             .wait_blocking(&distribution_id)
-            .ok_or_else(|| ResolveError::UnregisteredTask(dist.to_string()))?;
+            .map_err(|_| ResolveError::UnregisteredTask(dist.to_string()))?;
 
         // If we failed to fetch the metadata for a URL, we can't proceed.
         let metadata = match &*response {
@@ -1189,6 +1189,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let filename = match &dist {
                 BuiltDist::Registry(dist) => &dist.best_wheel().filename,
                 BuiltDist::DirectUrl(dist) => &dist.filename,
+                BuiltDist::GitPath(dist) => &dist.filename,
                 BuiltDist::Path(dist) => &dist.filename,
             };
 
@@ -1270,12 +1271,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.index
                 .explicit()
                 .wait_blocking(&(name.clone(), index.clone()))
-                .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
+                .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))?
         } else {
             self.index
                 .implicit()
                 .wait_blocking(name)
-                .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
+                .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))?
         };
         visited.insert(name.clone());
 
@@ -1790,6 +1791,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
 
                 requirements
+                    .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .flat_map(move |requirement| {
                         PubGrubDependency::from_requirement(
                             &self.conflicts,
@@ -1847,7 +1849,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .index
                     .distributions()
                     .wait_blocking(distribution_id)
-                    .ok_or_else(|| ResolveError::UnregisteredTask(format!("{name}=={version}")))?;
+                    .map_err(|_| ResolveError::UnregisteredTask(format!("{name}=={version}")))?;
 
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
@@ -2514,7 +2516,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .implicit()
                     .wait(&package_name)
                     .await
-                    .ok_or_else(|| ResolveError::UnregisteredTask(package_name.to_string()))?;
+                    .map_err(|_| ResolveError::UnregisteredTask(package_name.to_string()))?;
 
                 let version_map = match *versions_response {
                     VersionsResponse::Found(ref version_map) => version_map,

@@ -5,15 +5,15 @@ use std::path::Path;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
+use uv_errors::ErrorWithHints;
 use uv_fs::Simplified;
-use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::{
     ExitStatus,
@@ -37,7 +37,6 @@ pub(crate) async fn find(
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let environment_preference = if system {
         EnvironmentPreference::OnlySystem
@@ -48,15 +47,25 @@ pub(crate) async fn find(
     let project = if no_project {
         None
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
-            .await
+        match VirtualProject::discover(
+            project_dir,
+            &DiscoveryOptions::default(),
+            cache,
+            workspace_cache,
+        )
+        .await
         {
             Ok(project) => Some(project),
-            Err(WorkspaceError::MissingProject(_)) => None,
-            Err(WorkspaceError::MissingPyprojectToml) => None,
-            Err(WorkspaceError::NonWorkspace(_)) => None,
             Err(err) => {
-                warn_user_once!("{err}");
+                // Ignore missing or unmanaged workspaces in Python discovery.
+                if !matches!(
+                    err.as_ref(),
+                    WorkspaceErrorKind::MissingProject(_)
+                        | WorkspaceErrorKind::MissingPyprojectToml
+                        | WorkspaceErrorKind::NonWorkspace(_)
+                ) {
+                    warn_user_once!("{err}");
+                }
                 None
             }
         }
@@ -83,7 +92,6 @@ pub(crate) async fn find(
         environment_preference,
         python_preference,
         cache,
-        preview,
     )?;
     python
         .download_and_warn_if_outdated_prerelease(
@@ -137,7 +145,6 @@ pub(crate) async fn find_script(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let interpreter = match ScriptInterpreter::discover(
         script,
@@ -151,12 +158,15 @@ pub(crate) async fn find_script(
         Some(false),
         cache,
         printer,
-        preview,
     )
     .await
     {
         Err(error) => {
-            writeln!(printer.stderr(), "{error}")?;
+            writeln!(
+                printer.stderr(),
+                "{}",
+                ErrorWithHints::new(&error, uv_errors::Hint::hints(&error))
+            )?;
             return Ok(ExitStatus::Failure);
         }
         Ok(ScriptInterpreter::Interpreter(interpreter)) => interpreter,

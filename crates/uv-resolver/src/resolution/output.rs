@@ -417,7 +417,6 @@ impl ResolverOutput {
             // Create the locked distribution and recover the metadata using the original URL that
             // was requested during resolution.
             let dist = Dist::from_url(name.clone(), url_to_precise(url.clone(), git))?;
-            let hashes_id = dist.distribution_id();
             let metadata_id = Dist::from_url(name.clone(), url.clone())?.distribution_id();
 
             // Extract the hashes.
@@ -425,7 +424,7 @@ impl ResolverOutput {
                 name,
                 index,
                 Some(url),
-                &hashes_id,
+                &metadata_id,
                 version,
                 preferences,
                 in_memory,
@@ -605,7 +604,7 @@ impl ResolverOutput {
 
     /// Return `true` if there are no packages in the graph.
     pub fn is_empty(&self) -> bool {
-        self.dists().any(AnnotatedDist::is_base)
+        !self.dists().any(AnnotatedDist::is_base)
     }
 
     /// Returns `true` if the graph contains the given package.

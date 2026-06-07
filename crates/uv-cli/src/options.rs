@@ -4,7 +4,7 @@ use anstream::eprintln;
 
 use uv_cache::Refresh;
 use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
-use uv_distribution_types::{ConfigSettings, PackageConfigSettings, Requirement};
+use uv_distribution_types::{ConfigSettings, Index, PackageConfigSettings, Requirement};
 use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
 use uv_settings::{Combine, EnvFlag, PipOptions, ResolverInstallerOptions, ResolverOptions};
 use uv_warnings::owo_colors::OwoColorize;
@@ -105,14 +105,6 @@ impl Flag {
         match self {
             Self::Disabled => None,
             Self::Enabled { source, .. } => Some(source),
-        }
-    }
-
-    /// Returns the CLI flag name, if the flag is enabled.
-    pub fn name(self) -> Option<&'static str> {
-        match self {
-            Self::Disabled => None,
-            Self::Enabled { name, .. } => Some(name),
         }
     }
 }
@@ -232,6 +224,27 @@ impl From<RefreshArgs> for Refresh {
     }
 }
 
+/// Extract the `--index` and `--default-index` values from [`IndexArgs`].
+pub fn indexes_from_args(
+    default_index: Option<&Maybe<Index>>,
+    index: Option<&[Vec<Maybe<Index>>]>,
+) -> Option<Vec<Index>> {
+    let default_index = default_index
+        .cloned()
+        .and_then(Maybe::into_option)
+        .map(|default_index| vec![default_index]);
+    let index = index.map(|index| {
+        index
+            .iter()
+            .flatten()
+            .cloned()
+            .filter_map(Maybe::into_option)
+            .collect()
+    });
+
+    default_index.combine(index)
+}
+
 impl From<ResolverArgs> for PipOptions {
     fn from(args: ResolverArgs) -> Self {
         let ResolverArgs {
@@ -293,7 +306,11 @@ impl From<ResolverArgs> for PipOptions {
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
             no_sources: if no_sources { Some(true) } else { None },
-            no_sources_package: Some(no_sources_package),
+            no_sources_package: if no_sources_package.is_empty() {
+                None
+            } else {
+                Some(no_sources_package)
+            },
             ..Self::from(index_args)
         }
     }
@@ -339,7 +356,11 @@ impl From<InstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
-            no_sources_package: Some(no_sources_package),
+            no_sources_package: if no_sources_package.is_empty() {
+                None
+            } else {
+                Some(no_sources_package)
+            },
             ..Self::from(index_args)
         }
     }
@@ -414,7 +435,11 @@ impl From<ResolverInstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
-            no_sources_package: Some(no_sources_package),
+            no_sources_package: if no_sources_package.is_empty() {
+                None
+            } else {
+                Some(no_sources_package)
+            },
             ..Self::from(index_args)
         }
     }
@@ -450,16 +475,7 @@ impl From<IndexArgs> for PipOptions {
         } = args;
 
         Self {
-            index: default_index
-                .and_then(Maybe::into_option)
-                .map(|default_index| vec![default_index])
-                .combine(index.map(|index| {
-                    index
-                        .iter()
-                        .flat_map(std::clone::Clone::clone)
-                        .filter_map(Maybe::into_option)
-                        .collect()
-                })),
+            index: indexes_from_args(default_index.as_ref(), index.as_deref()),
             index_url: index_url.and_then(Maybe::into_option),
             extra_index_url: extra_index_url.map(|extra_index_urls| {
                 extra_index_urls
@@ -518,17 +534,10 @@ pub fn resolver_options(
     } = build_args;
 
     ResolverOptions {
-        index: index_args
-            .default_index
-            .and_then(Maybe::into_option)
-            .map(|default_index| vec![default_index])
-            .combine(index_args.index.map(|index| {
-                index
-                    .into_iter()
-                    .flat_map(|v| v.clone())
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            })),
+        index: indexes_from_args(
+            index_args.default_index.as_ref(),
+            index_args.index.as_deref(),
+        ),
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url
@@ -582,11 +591,23 @@ pub fn resolver_options(
         link_mode,
         torch_backend: None,
         no_build: flag(no_build, build, "build"),
-        no_build_package: Some(no_build_package),
+        no_build_package: if no_build_package.is_empty() {
+            None
+        } else {
+            Some(no_build_package)
+        },
         no_binary: flag(no_binary, binary, "binary"),
-        no_binary_package: Some(no_binary_package),
+        no_binary_package: if no_binary_package.is_empty() {
+            None
+        } else {
+            Some(no_binary_package)
+        },
         no_sources: if no_sources { Some(true) } else { None },
-        no_sources_package: Some(no_sources_package),
+        no_sources_package: if no_sources_package.is_empty() {
+            None
+        } else {
+            Some(no_sources_package)
+        },
     }
 }
 
@@ -594,6 +615,19 @@ pub fn resolver_options(
 pub fn resolver_installer_options(
     resolver_installer_args: ResolverInstallerArgs,
     build_args: BuildOptionsArgs,
+) -> ResolverInstallerOptions {
+    let index = indexes_from_args(
+        resolver_installer_args.index_args.default_index.as_ref(),
+        resolver_installer_args.index_args.index.as_deref(),
+    );
+    resolver_installer_options_with_indexes(resolver_installer_args, build_args, index)
+}
+
+/// Construct the [`ResolverInstallerOptions`] with a precomputed list of indexes.
+pub fn resolver_installer_options_with_indexes(
+    resolver_installer_args: ResolverInstallerArgs,
+    build_args: BuildOptionsArgs,
+    index: Option<Vec<Index>>,
 ) -> ResolverInstallerOptions {
     let ResolverInstallerArgs {
         index_args,
@@ -633,20 +667,8 @@ pub fn resolver_installer_options(
         no_binary_package,
     } = build_args;
 
-    let default_index = index_args
-        .default_index
-        .and_then(Maybe::into_option)
-        .map(|default_index| vec![default_index]);
-    let index = index_args.index.map(|index| {
-        index
-            .into_iter()
-            .flat_map(|v| v.clone())
-            .filter_map(Maybe::into_option)
-            .collect()
-    });
-
     ResolverInstallerOptions {
-        index: default_index.combine(index),
+        index,
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url

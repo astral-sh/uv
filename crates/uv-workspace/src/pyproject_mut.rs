@@ -79,14 +79,6 @@ struct Comment {
     kind: CommentType,
 }
 
-impl ArrayEdit {
-    pub fn index(&self) -> usize {
-        match self {
-            Self::Update(i) | Self::Add(i) => *i,
-        }
-    }
-}
-
 /// The default version specifier when adding a dependency.
 // While PEP 440 allows an arbitrary number of version digits, the `major` and `minor` build on
 // most projects sticking to two or three components and a SemVer-ish versioning system, so can
@@ -1251,7 +1243,7 @@ fn implicit() -> Item {
 /// Adds a dependency to the given `deps` array.
 ///
 /// Returns `true` if the dependency was added, `false` if it was updated.
-pub fn add_dependency(
+fn add_dependency(
     req: &Requirement,
     deps: &mut Array,
     has_source: bool,

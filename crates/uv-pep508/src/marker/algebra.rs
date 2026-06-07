@@ -558,27 +558,46 @@ impl InternerGuard<'_> {
     /// `((os_name == ... and extra == foo) or (sys_platform == ... and extra != foo))`,
     /// this would return a marker
     /// `os_name == ... or sys_platform == ...`.
-    pub(crate) fn without_extras(&mut self, mut i: NodeId) -> NodeId {
+    pub(crate) fn without_extras(&mut self, i: NodeId) -> NodeId {
+        let mut cache = FxHashMap::default();
+        self.without_extras_cached(i, &mut cache)
+    }
+
+    fn without_extras_cached(
+        &mut self,
+        mut i: NodeId,
+        cache: &mut FxHashMap<NodeId, NodeId>,
+    ) -> NodeId {
         if matches!(i, NodeId::TRUE | NodeId::FALSE) {
             return i;
         }
 
+        if let Some(&cached) = cache.get(&i) {
+            return cached;
+        }
+
+        let original = i;
         let parent = i;
         let node = self.shared.node(i);
-        if matches!(node.var, Variable::Extra(_)) {
+        let result = if matches!(node.var, Variable::Extra(_)) {
             i = NodeId::FALSE;
             for child in node.children.nodes() {
                 i = self.or(i, child.negate(parent));
             }
             if i.is_true() {
-                return NodeId::TRUE;
+                NodeId::TRUE
+            } else {
+                self.without_extras_cached(i, cache)
             }
-            self.without_extras(i)
         } else {
             // Restrict all nodes recursively.
-            let children = node.children.map(i, |node| self.without_extras(node));
+            let children = node
+                .children
+                .map(i, |node| self.without_extras_cached(node, cache));
             self.create_node(node.var.clone(), children)
-        }
+        };
+        cache.insert(original, result);
+        result
     }
 
     /// Returns a new tree where the only nodes remaining are `extra` nodes.

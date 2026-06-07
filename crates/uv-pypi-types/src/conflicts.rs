@@ -224,13 +224,6 @@ pub struct ConflictSet {
 }
 
 impl ConflictSet {
-    /// Create a pair of items that conflict with one another.
-    pub fn pair(item1: ConflictItem, item2: ConflictItem) -> Self {
-        Self {
-            set: BTreeSet::from_iter(vec![item1, item2]),
-        }
-    }
-
     /// Returns an iterator over all conflicting items.
     pub fn iter(&self) -> impl Iterator<Item = &'_ ConflictItem> + Clone + '_ {
         self.set.iter()
@@ -384,16 +377,6 @@ impl<'a> ConflictItemRef<'a> {
         self.kind
     }
 
-    /// Returns the extra name of this conflicting item.
-    pub fn extra(&self) -> Option<&'a ExtraName> {
-        self.kind.extra()
-    }
-
-    /// Returns the group name of this conflicting item.
-    pub fn group(&self) -> Option<&'a GroupName> {
-        self.kind.group()
-    }
-
     /// Converts this borrowed conflicting item to its owned variant.
     pub fn to_owned(&self) -> ConflictItem {
         ConflictItem {
@@ -444,7 +427,7 @@ pub enum ConflictKind {
 impl ConflictKind {
     /// If this conflict corresponds to an extra, then return the
     /// extra name.
-    pub fn extra(&self) -> Option<&ExtraName> {
+    fn extra(&self) -> Option<&ExtraName> {
         match self {
             Self::Extra(extra) => Some(extra),
             Self::Group(_) | Self::Project => None,
@@ -453,7 +436,7 @@ impl ConflictKind {
 
     /// If this conflict corresponds to a group, then return the
     /// group name.
-    pub fn group(&self) -> Option<&GroupName> {
+    fn group(&self) -> Option<&GroupName> {
         match self {
             Self::Group(group) => Some(group),
             Self::Extra(_) | Self::Project => None,
@@ -480,27 +463,9 @@ pub enum ConflictKindRef<'a> {
     Project,
 }
 
-impl<'a> ConflictKindRef<'a> {
-    /// If this conflict corresponds to an extra, then return the
-    /// extra name.
-    pub fn extra(&self) -> Option<&'a ExtraName> {
-        match self {
-            Self::Extra(extra) => Some(extra),
-            Self::Group(_) | Self::Project => None,
-        }
-    }
-
-    /// If this conflict corresponds to a group, then return the
-    /// group name.
-    pub fn group(&self) -> Option<&'a GroupName> {
-        match self {
-            Self::Group(group) => Some(group),
-            Self::Extra(_) | Self::Project => None,
-        }
-    }
-
+impl ConflictKindRef<'_> {
     /// Converts this borrowed conflict to its owned variant.
-    pub fn to_owned(&self) -> ConflictKind {
+    fn to_owned(self) -> ConflictKind {
         match self {
             Self::Extra(extra) => ConflictKind::Extra((*extra).clone()),
             Self::Group(group) => ConflictKind::Group((*group).clone()),

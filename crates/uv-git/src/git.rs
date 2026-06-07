@@ -187,7 +187,7 @@ pub(crate) struct GitRepository {
 
 impl GitRepository {
     /// Opens an existing Git repository at `path`.
-    pub(crate) fn open(path: &Path) -> Result<Self> {
+    fn open(path: &Path) -> Result<Self> {
         // Make sure there is a Git repository at the specified path.
         GIT.as_ref()
             .cloned()?
@@ -505,7 +505,7 @@ impl GitCheckout {
 
     /// Set the Git LFS validation state (if any).
     #[must_use]
-    pub(crate) fn with_lfs_ready(mut self, lfs: Option<bool>) -> Self {
+    fn with_lfs_ready(mut self, lfs: Option<bool>) -> Self {
         self.lfs_ready = lfs;
         self
     }

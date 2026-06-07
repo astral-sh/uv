@@ -1,5 +1,4 @@
 use itertools::{Either, Itertools};
-use owo_colors::AnsiColors;
 use regex::Regex;
 use rustc_hash::{FxBuildHasher, FxHashSet};
 use same_file::is_same_file;
@@ -19,10 +18,8 @@ use uv_pep440::{
     LowerBound, Prerelease, UpperBound, Version, VersionSpecifier, VersionSpecifiers,
     release_specifiers_to_ranges,
 };
-use uv_preview::Preview;
 use uv_static::EnvVars;
-use uv_warnings::anstream;
-use uv_warnings::warn_user_once;
+use uv_warnings::{warn_user_once, write_warning_chain};
 use which::{which, which_all};
 
 use crate::downloads::{ManagedPythonDownloadList, PlatformRequest, PythonDownloadRequest};
@@ -216,9 +213,9 @@ type FindPythonResult = Result<PythonInstallation, PythonNotFound>;
 /// See [`FindPythonResult`].
 #[derive(Clone, Debug, Error)]
 pub struct PythonNotFound {
-    pub request: PythonRequest,
-    pub python_preference: PythonPreference,
-    pub environment_preference: EnvironmentPreference,
+    pub(crate) request: PythonRequest,
+    pub(crate) python_preference: PythonPreference,
+    pub(crate) environment_preference: EnvironmentPreference,
 }
 
 /// A location for discovery of a Python installation or interpreter.
@@ -293,6 +290,15 @@ pub enum Error {
     BuildVersion(#[from] crate::python_version::BuildVersionError),
 }
 
+impl uv_errors::Hint for Error {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::Query(err, _, _) => err.hints(),
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 /// Lazily iterate over Python executables in mutable virtual environments.
 ///
 /// The following sources are supported:
@@ -301,9 +307,8 @@ pub enum Error {
 /// - Discovered virtual environment (e.g. `.venv` in a parent directory)
 ///
 /// Notably, "system" environments are excluded. See [`python_executables_from_installed`].
-fn python_executables_from_virtual_environments<'a>(
-    preview: Preview,
-) -> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
+fn python_executables_from_virtual_environments<'a>()
+-> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
     let from_active_environment = iter::once_with(|| {
         virtualenv_from_env()
             .into_iter()
@@ -314,7 +319,7 @@ fn python_executables_from_virtual_environments<'a>(
 
     // N.B. we prefer the conda environment over discovered virtual environments
     let from_conda_environment = iter::once_with(move || {
-        conda_environment_from_env(CondaEnvironmentKind::Child, preview)
+        conda_environment_from_env(CondaEnvironmentKind::Child)
             .into_iter()
             .map(virtualenv_python_executable)
             .map(|path| Ok((PythonSource::CondaPrefix, path)))
@@ -529,7 +534,6 @@ fn python_executables<'a>(
     platform: PlatformRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
-    preview: Preview,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
     // Always read from `UV_INTERNAL__PARENT_INTERPRETER` — it could be a system interpreter
     let from_parent_interpreter = iter::once_with(|| {
@@ -541,14 +545,14 @@ fn python_executables<'a>(
 
     // Check if the base conda environment is active
     let from_base_conda_environment = iter::once_with(move || {
-        conda_environment_from_env(CondaEnvironmentKind::Base, preview)
+        conda_environment_from_env(CondaEnvironmentKind::Base)
             .into_iter()
             .map(virtualenv_python_executable)
             .map(|path| Ok((PythonSource::BaseCondaPrefix, path)))
     })
     .flatten();
 
-    let from_virtual_environments = python_executables_from_virtual_environments(preview);
+    let from_virtual_environments = python_executables_from_virtual_environments();
     let from_installed =
         python_executables_from_installed(version, implementation, platform, preference);
 
@@ -750,23 +754,16 @@ fn python_installations<'a>(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &'a Cache,
-    preview: Preview,
 ) -> impl Iterator<Item = Result<PythonInstallation, Error>> + 'a {
     let installations = python_installations_from_executables(
         // Perform filtering on the discovered executables based on their source. This avoids
         // unnecessary interpreter queries, which are generally expensive. We'll filter again
         // with `interpreter_satisfies_environment_preference` after querying.
-        python_executables(
-            version,
-            implementation,
-            platform,
-            environments,
-            preference,
-            preview,
-        )
-        .filter_ok(move |(source, path)| {
-            source_satisfies_environment_preference(*source, path, environments)
-        }),
+        python_executables(version, implementation, platform, environments, preference).filter_ok(
+            move |(source, path)| {
+                source_satisfies_environment_preference(*source, path, environments)
+            },
+        ),
         cache,
     )
     .filter_ok(move |installation| {
@@ -1037,7 +1034,6 @@ pub fn find_python_installations<'a>(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &'a Cache,
-    preview: Preview,
 ) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
     let sources = DiscoveryPreferences {
         python_preference: preference,
@@ -1129,7 +1125,6 @@ pub fn find_python_installations<'a>(
                 environments,
                 preference,
                 cache,
-                preview,
             )
             .map_ok(Ok)
         }),
@@ -1142,7 +1137,6 @@ pub fn find_python_installations<'a>(
                 environments,
                 preference,
                 cache,
-                preview,
             )
             .map_ok(Ok)
         }),
@@ -1159,7 +1153,6 @@ pub fn find_python_installations<'a>(
                     environments,
                     preference,
                     cache,
-                    preview,
                 )
                 .map_ok(Ok)
             })
@@ -1173,7 +1166,6 @@ pub fn find_python_installations<'a>(
                 environments,
                 preference,
                 cache,
-                preview,
             )
             .filter_ok(|installation| implementation.matches_interpreter(&installation.interpreter))
             .map_ok(Ok)
@@ -1191,7 +1183,6 @@ pub fn find_python_installations<'a>(
                     environments,
                     preference,
                     cache,
-                    preview,
                 )
                 .filter_ok(|installation| {
                     implementation.matches_interpreter(&installation.interpreter)
@@ -1215,7 +1206,6 @@ pub fn find_python_installations<'a>(
                     environments,
                     preference,
                     cache,
-                    preview,
                 )
                 .filter_ok(move |installation| {
                     request.satisfied_by_interpreter(&installation.interpreter)
@@ -1235,10 +1225,8 @@ pub(crate) fn find_python_installation(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &Cache,
-    preview: Preview,
 ) -> Result<FindPythonResult, Error> {
-    let installations =
-        find_python_installations(request, environments, preference, cache, preview);
+    let installations = find_python_installations(request, environments, preference, cache);
     let mut first_prerelease = None;
     let mut first_debug = None;
     let mut first_managed = None;
@@ -1396,7 +1384,6 @@ pub(crate) async fn find_best_python_installation(
     python_install_mirror: Option<&str>,
     pypy_install_mirror: Option<&str>,
     python_downloads_json_url: Option<&str>,
-    preview: Preview,
 ) -> Result<PythonInstallation, crate::Error> {
     debug!("Starting Python discovery for {request}");
     let original_request = request;
@@ -1431,7 +1418,7 @@ pub(crate) async fn find_best_python_installation(
                 String::new()
             }
         );
-        let result = find_python_installation(request, environments, preference, cache, preview);
+        let result = find_python_installation(request, environments, preference, cache);
         let error = match result {
             Ok(Ok(installation)) => {
                 warn_on_unsupported_python(installation.interpreter());
@@ -1505,19 +1492,10 @@ pub(crate) async fn find_best_python_installation(
                     return Err(error);
                 }
 
-                let mut error_chain = String::new();
-                // Writing to a string can't fail with errors (panics on allocation failure)
                 let error = anyhow::Error::from(error).context(format!(
                     "A managed Python download is available for {request}, but an error occurred when attempting to download it."
                 ));
-                uv_warnings::write_error_chain(
-                    error.as_ref(),
-                    &mut error_chain,
-                    "warning",
-                    AnsiColors::Yellow,
-                )
-                .unwrap();
-                anstream::eprint!("{}", error_chain);
+                write_warning_chain(error.as_ref()).expect("writing to stderr should not fail");
                 previous_fetch_failed = true;
             }
         }
@@ -1757,7 +1735,7 @@ impl PythonVariant {
         }
     }
 
-    pub fn is_freethreaded(self) -> bool {
+    fn is_freethreaded(self) -> bool {
         match self {
             Self::Default | Self::Debug | Self::Gil | Self::GilDebug => false,
             Self::Freethreaded | Self::FreethreadedDebug => true,
@@ -2131,7 +2109,7 @@ impl PythonRequest {
     }
 
     /// Whether this request opts-in to a debug Python version.
-    pub(crate) fn allows_debug(&self) -> bool {
+    fn allows_debug(&self) -> bool {
         match self {
             Self::Default => false,
             Self::Any => true,
@@ -2144,7 +2122,7 @@ impl PythonRequest {
     }
 
     /// Whether this request opts-in to an alternative Python implementation, e.g., PyPy.
-    pub(crate) fn allows_alternative_implementations(&self) -> bool {
+    fn allows_alternative_implementations(&self) -> bool {
         match self {
             Self::Default => false,
             Self::Any => true,
@@ -2246,7 +2224,7 @@ impl PythonSource {
     }
 
     /// Whether a pre-release Python installation from this source can be used without opt-in.
-    pub(crate) fn allows_prereleases(self) -> bool {
+    fn allows_prereleases(self) -> bool {
         match self {
             Self::Managed | Self::Registry | Self::MicrosoftStore => false,
             Self::SearchPath
@@ -2261,7 +2239,7 @@ impl PythonSource {
     }
 
     /// Whether a debug Python installation from this source can be used without opt-in.
-    pub(crate) fn allows_debug(self) -> bool {
+    fn allows_debug(self) -> bool {
         match self {
             Self::Managed | Self::Registry | Self::MicrosoftStore => false,
             Self::SearchPath
@@ -2276,7 +2254,7 @@ impl PythonSource {
     }
 
     /// Whether an alternative Python implementation from this source can be used without opt-in.
-    pub(crate) fn allows_alternative_implementations(self) -> bool {
+    fn allows_alternative_implementations(self) -> bool {
         match self {
             Self::Managed
             | Self::Registry
@@ -2787,7 +2765,7 @@ impl VersionRequest {
     }
 
     /// Return the major version segment of the request, if any.
-    pub(crate) fn major(&self) -> Option<u8> {
+    fn major(&self) -> Option<u8> {
         match self {
             Self::Any | Self::Default | Self::Range(_, _) => None,
             Self::Major(major, _) => Some(*major),
@@ -2799,7 +2777,7 @@ impl VersionRequest {
     }
 
     /// Return the minor version segment of the request, if any.
-    pub(crate) fn minor(&self) -> Option<u8> {
+    fn minor(&self) -> Option<u8> {
         match self {
             Self::Any | Self::Default | Self::Range(_, _) => None,
             Self::Major(_, _) => None,
@@ -2811,7 +2789,7 @@ impl VersionRequest {
     }
 
     /// Return the patch version segment of the request, if any.
-    pub(crate) fn patch(&self) -> Option<u8> {
+    fn patch(&self) -> Option<u8> {
         match self {
             Self::Any | Self::Default | Self::Range(_, _) => None,
             Self::Major(_, _) => None,
@@ -2823,7 +2801,7 @@ impl VersionRequest {
     }
 
     /// Return the pre-release segment of the request, if any.
-    pub(crate) fn prerelease(&self) -> Option<&Prerelease> {
+    fn prerelease(&self) -> Option<&Prerelease> {
         match self {
             Self::Any | Self::Default | Self::Range(_, _) => None,
             Self::Major(_, _) => None,
@@ -2986,7 +2964,7 @@ impl VersionRequest {
     ///
     /// WARNING: Use [`VersionRequest::matches_interpreter`] too. This method is only suitable to
     /// avoid querying interpreters if it's clear it cannot fulfill the request.
-    pub(crate) fn matches_version(&self, version: &PythonVersion) -> bool {
+    fn matches_version(&self, version: &PythonVersion) -> bool {
         match self {
             Self::Any | Self::Default => true,
             Self::Major(major, _) => version.major() == *major,
@@ -3189,7 +3167,7 @@ impl VersionRequest {
     }
 
     /// Whether this request is for a free-threaded Python variant.
-    pub(crate) fn is_freethreaded(&self) -> bool {
+    fn is_freethreaded(&self) -> bool {
         match self {
             Self::Any | Self::Default => false,
             Self::Major(_, variant)
@@ -3218,7 +3196,7 @@ impl VersionRequest {
     /// Convert this request into a concrete PEP 440 `Version` when possible.
     ///
     /// Returns `None` for non-concrete requests
-    pub fn as_pep440_version(&self) -> Option<Version> {
+    fn as_pep440_version(&self) -> Option<Version> {
         match self {
             Self::Default | Self::Any | Self::Range(_, _) => None,
             Self::Major(major, _) => Some(Version::new([u64::from(*major)])),

@@ -94,7 +94,7 @@ pub fn finalize() -> Result<(), PreviewError> {
 ///
 /// When called before [`init`] or (with the `testing` feature) when the
 /// current thread does not hold a [`test::with_features`] guard.
-pub fn get() -> Preview {
+fn get() -> Preview {
     match PREVIEW.get() {
         Some(PreviewMode::Normal(mutex)) => match *mutex.lock().unwrap() {
             PreviewState::Provisional(preview) => preview,
@@ -219,7 +219,7 @@ pub mod test {
 }
 
 #[bitflags]
-#[repr(u32)]
+#[repr(u64)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PreviewFeature {
     PythonInstallDefault = 1 << 0,
@@ -253,6 +253,9 @@ pub enum PreviewFeature {
     IndexExcludeNewer = 1 << 28,
     AzureEndpoint = 1 << 29,
     TomlBackwardsCompatibility = 1 << 30,
+    MalwareCheck = 1 << 31,
+    VenvSafeClear = 1 << 32,
+    Check = 1 << 33,
 }
 
 impl PreviewFeature {
@@ -267,7 +270,7 @@ impl PreviewFeature {
             Self::PackageConflicts => "package-conflicts",
             Self::ExtraBuildDependencies => "extra-build-dependencies",
             Self::DetectModuleConflicts => "detect-module-conflicts",
-            Self::Format => "format",
+            Self::Format => "format-command",
             Self::NativeAuth => "native-auth",
             Self::S3Endpoint => "s3-endpoint",
             Self::CacheSize => "cache-size",
@@ -285,11 +288,14 @@ impl PreviewFeature {
             Self::SpecialCondaEnvNames => "special-conda-env-names",
             Self::RelocatableEnvsDefault => "relocatable-envs-default",
             Self::PublishRequireNormalized => "publish-require-normalized",
-            Self::Audit => "audit",
+            Self::Audit => "audit-command",
             Self::ProjectDirectoryMustExist => "project-directory-must-exist",
             Self::IndexExcludeNewer => "index-exclude-newer",
             Self::AzureEndpoint => "azure-endpoint",
             Self::TomlBackwardsCompatibility => "toml-backwards-compatibility",
+            Self::MalwareCheck => "malware-check",
+            Self::VenvSafeClear => "venv-safe-clear",
+            Self::Check => "check-command",
         }
     }
 }
@@ -317,7 +323,7 @@ impl FromStr for PreviewFeature {
             "package-conflicts" => Self::PackageConflicts,
             "extra-build-dependencies" => Self::ExtraBuildDependencies,
             "detect-module-conflicts" => Self::DetectModuleConflicts,
-            "format" => Self::Format,
+            "format" | "format-command" => Self::Format,
             "native-auth" => Self::NativeAuth,
             "s3-endpoint" => Self::S3Endpoint,
             "gcs-endpoint" => Self::GcsEndpoint,
@@ -335,12 +341,42 @@ impl FromStr for PreviewFeature {
             "special-conda-env-names" => Self::SpecialCondaEnvNames,
             "relocatable-envs-default" => Self::RelocatableEnvsDefault,
             "publish-require-normalized" => Self::PublishRequireNormalized,
-            "audit" => Self::Audit,
+            "audit" | "audit-command" => Self::Audit,
             "project-directory-must-exist" => Self::ProjectDirectoryMustExist,
             "index-exclude-newer" => Self::IndexExcludeNewer,
             "azure-endpoint" => Self::AzureEndpoint,
             "toml-backwards-compatibility" => Self::TomlBackwardsCompatibility,
+            "malware-check" => Self::MalwareCheck,
+            "venv-safe-clear" => Self::VenvSafeClear,
+            "check" | "check-command" => Self::Check,
             _ => return Err(PreviewFeatureParseError),
+        })
+    }
+}
+
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+#[error("preview feature name cannot be empty")]
+pub struct EmptyPreviewFeatureNameError;
+
+/// A user-provided preview feature name, which may refer to an unknown feature.
+#[derive(Debug, Clone)]
+pub enum MaybePreviewFeature {
+    Known(PreviewFeature),
+    Unknown(String),
+}
+
+impl FromStr for MaybePreviewFeature {
+    type Err = EmptyPreviewFeatureNameError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+        if s.is_empty() {
+            return Err(EmptyPreviewFeatureNameError);
+        }
+
+        Ok(match PreviewFeature::from_str(s) {
+            Ok(feature) => Self::Known(feature),
+            Err(_) => Self::Unknown(s.to_string()),
         })
     }
 }
@@ -370,7 +406,12 @@ impl Preview {
         }
     }
 
-    pub fn from_args(preview: bool, no_preview: bool, preview_features: &[PreviewFeature]) -> Self {
+    /// Resolve preview arguments, warning and ignoring unknown feature names.
+    pub fn from_args(
+        preview: bool,
+        no_preview: bool,
+        preview_features: &[MaybePreviewFeature],
+    ) -> Self {
         if no_preview {
             return Self::default();
         }
@@ -379,7 +420,7 @@ impl Preview {
             return Self::all();
         }
 
-        Self::new(preview_features)
+        Self::from_feature_names(preview_features)
     }
 
     /// Check if a single feature is enabled.
@@ -395,6 +436,23 @@ impl Preview {
     /// Check if any preview feature is enabled.
     pub fn any_enabled(&self) -> bool {
         !self.flags.is_empty()
+    }
+
+    fn from_feature_names<'a>(
+        feature_names: impl IntoIterator<Item = &'a MaybePreviewFeature>,
+    ) -> Self {
+        let mut flags = BitFlags::empty();
+
+        for feature_name in feature_names {
+            match feature_name {
+                MaybePreviewFeature::Known(feature) => flags |= *feature,
+                MaybePreviewFeature::Unknown(feature_name) => {
+                    warn_user_once!("Unknown preview feature: `{feature_name}`");
+                }
+            }
+        }
+
+        Self { flags }
     }
 }
 
@@ -414,35 +472,16 @@ impl Display for Preview {
     }
 }
 
-#[derive(Debug, Error, Clone)]
-pub enum PreviewParseError {
-    #[error("Empty string in preview features: {0}")]
-    Empty(String),
-}
-
 impl FromStr for Preview {
-    type Err = PreviewParseError;
+    type Err = EmptyPreviewFeatureNameError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut flags = BitFlags::empty();
+        let feature_names = s
+            .split(',')
+            .map(MaybePreviewFeature::from_str)
+            .collect::<Result<Vec<_>, _>>()?;
 
-        for part in s.split(',') {
-            let part = part.trim();
-            if part.is_empty() {
-                return Err(PreviewParseError::Empty(
-                    "Empty string in preview features".to_string(),
-                ));
-            }
-
-            match PreviewFeature::from_str(part) {
-                Ok(flag) => flags |= flag,
-                Err(_) => {
-                    warn_user_once!("Unknown preview feature: `{part}`");
-                }
-            }
-        }
-
-        Ok(Self { flags })
+        Ok(Self::from_feature_names(&feature_names))
     }
 }
 
@@ -474,7 +513,7 @@ mod tests {
         assert!(preview.is_enabled(PreviewFeature::AddBounds));
 
         // Test empty string error
-        assert!(Preview::from_str("").is_err());
+        assert_eq!(Preview::from_str(""), Err(EmptyPreviewFeatureNameError));
         assert!(Preview::from_str("pylock,").is_err());
         assert!(Preview::from_str(",pylock").is_err());
 
@@ -520,11 +559,17 @@ mod tests {
         assert_eq!(preview.to_string(), "enabled");
 
         // Test specific features
-        let features = vec![PreviewFeature::PythonUpgrade, PreviewFeature::JsonOutput];
+        let features = ["python-upgrade", "json-output"].map(|name| name.parse().unwrap());
         let preview = Preview::from_args(false, false, &features);
         assert!(preview.is_enabled(PreviewFeature::PythonUpgrade));
         assert!(preview.is_enabled(PreviewFeature::JsonOutput));
         assert!(!preview.is_enabled(PreviewFeature::Pylock));
+
+        // Test unknown features
+        let features = ["unknown-feature", "pylock"].map(|name| name.parse().unwrap());
+        let preview = Preview::from_args(false, false, &features);
+        assert!(preview.is_enabled(PreviewFeature::Pylock));
+        assert_eq!(preview.flags.bits().count_ones(), 1);
     }
 
     #[test]
@@ -549,7 +594,7 @@ mod tests {
             PreviewFeature::DetectModuleConflicts.as_str(),
             "detect-module-conflicts"
         );
-        assert_eq!(PreviewFeature::Format.as_str(), "format");
+        assert_eq!(PreviewFeature::Format.as_str(), "format-command");
         assert_eq!(PreviewFeature::NativeAuth.as_str(), "native-auth");
         assert_eq!(PreviewFeature::S3Endpoint.as_str(), "s3-endpoint");
         assert_eq!(PreviewFeature::CacheSize.as_str(), "cache-size");
@@ -598,6 +643,10 @@ mod tests {
             PreviewFeature::TomlBackwardsCompatibility.as_str(),
             "toml-backwards-compatibility"
         );
+        assert_eq!(PreviewFeature::MalwareCheck.as_str(), "malware-check");
+        assert_eq!(PreviewFeature::VenvSafeClear.as_str(), "venv-safe-clear");
+        assert_eq!(PreviewFeature::Audit.as_str(), "audit-command");
+        assert_eq!(PreviewFeature::Check.as_str(), "check-command");
     }
 
     #[test]

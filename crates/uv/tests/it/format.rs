@@ -31,7 +31,7 @@ fn format_project() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
-    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     ");
 
     // Check that the file was formatted
@@ -58,7 +58,7 @@ fn format_missing_pyproject_toml() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
-    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     ");
 
     // Check that the file was formatted
@@ -88,7 +88,7 @@ fn format_missing_project_in_pyproject_toml() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
-    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     ");
 
     // Check that the file was formatted
@@ -127,7 +127,7 @@ fn format_unmanaged_project() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
-    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     ");
 
     // Check that the file was formatted
@@ -167,7 +167,7 @@ fn format_from_project_root() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
-    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     ");
 
     // Check that the file was formatted
@@ -193,7 +193,7 @@ fn format_no_project() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
-    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     ");
 
     // Check that the file was formatted
@@ -235,7 +235,7 @@ fn format_relative_project() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
-    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     ");
 
     // Check that the relative project file was formatted
@@ -275,7 +275,7 @@ fn format_fails_malformed_pyproject() -> Result<()> {
         |           ^
       key with no value, expected `=`
 
-    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 11
       |
@@ -318,7 +318,7 @@ fn format_check() -> Result<()> {
     1 file would be reformatted
 
     ----- stderr -----
-    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     ");
 
     // Verify the file wasn't modified
@@ -359,7 +359,7 @@ fn format_diff() -> Result<()> {
 
 
     ----- stderr -----
-    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     1 file would be reformatted
     ");
 
@@ -398,7 +398,7 @@ fn format_with_ruff_args() -> Result<()> {
     1 file left unchanged
 
     ----- stderr -----
-    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     ");
 
     // Check that the line wasn't wrapped (since we set a long line length)
@@ -442,7 +442,7 @@ fn format_specific_files() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
-    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     ");
 
     let main_content = fs_err::read_to_string(&main_py)?;
@@ -484,7 +484,7 @@ fn format_version_option() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
-    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     ");
 
     Ok(())
@@ -516,7 +516,7 @@ fn format_version_constraints() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
-    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     ruff 0.15.1
     ");
 
@@ -549,7 +549,7 @@ fn format_version_latest() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
-    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     ruff 0.15.1
     ");
 
@@ -583,7 +583,7 @@ fn format_exclude_newer() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
-    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     ruff 0.14.10
     ");
 
@@ -619,7 +619,7 @@ fn format_no_matching_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     error: Failed to find ruff version matching: >=999.0.0
       Caused by: No version of ruff found matching `>=999.0.0` for platform `[PLATFORM]`
     ");

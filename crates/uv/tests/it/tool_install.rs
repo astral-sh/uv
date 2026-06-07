@@ -1,9 +1,13 @@
 #[cfg(any(feature = "test-git", feature = "test-git-lfs"))]
 use std::collections::BTreeSet;
+#[cfg(feature = "test-git")]
+use std::ffi::OsString;
 use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
+#[cfg(feature = "test-git")]
+use assert_fs::fixture::ChildPath;
 use assert_fs::{
     assert::PathAssert,
     fixture::{FileTouch, FileWriteStr, PathChild, PathCreateDir},
@@ -15,6 +19,32 @@ use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
 use uv_test::uv_snapshot;
+
+#[cfg(feature = "test-git")]
+fn tool_install_git_path(bin_dir: &ChildPath) -> OsString {
+    let mut paths = BTreeSet::new();
+    paths.insert(bin_dir.to_path_buf());
+    paths.insert(
+        which::which("git")
+            .expect("Failed to find `git` executable.")
+            .parent()
+            .expect("Failed to find `git` executable directory.")
+            .to_path_buf(),
+    );
+
+    // Git Submodule in macOS seems to rely on `sed`.
+    if cfg!(target_os = "macos") {
+        paths.insert(
+            which::which("sed")
+                .expect("Failed to find `sed` executable.")
+                .parent()
+                .expect("Failed to find `sed` executable directory.")
+                .to_path_buf(),
+        );
+    }
+
+    std::env::join_paths(paths).unwrap()
+}
 
 #[test]
 fn tool_install() {
@@ -215,6 +245,168 @@ fn tool_install_relative_exclude_newer_receipt_preserves_span() {
         exclude-newer-span = "P3W"
         "#);
     });
+}
+
+#[test]
+fn tool_install_from_directory_ignores_global_pin_outside_requires_python_range() {
+    let context = uv_test::test_context_with_versions!(&["3.13", "3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let foo_dir = context.temp_dir.child("foo");
+    foo_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+        })
+        .unwrap();
+    foo_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()
+        .unwrap();
+    foo_dir
+        .child("src")
+        .child("foo")
+        .child("main.py")
+        .write_str(indoc! {r#"
+        import sys
+
+        def run():
+            print(f"{sys.version_info.major}.{sys.version_info.minor}")
+        "#
+        })
+        .unwrap();
+
+    context
+        .python_pin()
+        .arg("3.13")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(foo_dir.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    Installed 1 executable: foo
+    ");
+
+    uv_snapshot!(context.filters(), Command::new("foo")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn tool_install_from_directory_uses_global_pin_within_requires_python_range() {
+    let context = uv_test::test_context_with_versions!(&["3.13", "3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let foo_dir = context.temp_dir.child("foo");
+    foo_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+        })
+        .unwrap();
+    foo_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()
+        .unwrap();
+    foo_dir
+        .child("src")
+        .child("foo")
+        .child("main.py")
+        .write_str(indoc! {r#"
+        import sys
+
+        def run():
+            print(f"{sys.version_info.major}.{sys.version_info.minor}")
+        "#
+        })
+        .unwrap();
+
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(foo_dir.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    Installed 1 executable: foo
+    ");
+
+    uv_snapshot!(context.filters(), Command::new("foo")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.11
+
+    ----- stderr -----
+    ");
 }
 
 #[test]
@@ -1509,8 +1701,6 @@ fn tool_install_suggest_other_packages_with_executable() {
     exit_code: 2
     ----- stdout -----
     No executables are provided by package `fastapi`; removing tool
-    hint: An executable with the name `fastapi` is available via dependency `fastapi-cli`.
-          Did you mean `uv tool install fastapi-cli`?
 
     ----- stderr -----
     Resolved 35 packages in [TIME]
@@ -1551,6 +1741,9 @@ fn tool_install_suggest_other_packages_with_executable() {
      + watchfiles==0.21.0
      + websockets==12.0
     error: Failed to install entrypoints for `fastapi`
+
+    hint: An executable with the name `fastapi` is available via dependency `fastapi-cli`.
+          Did you mean `uv tool install fastapi-cli`?
     ");
 }
 
@@ -1798,6 +1991,371 @@ fn tool_install_editable() {
         exclude-newer = "2024-03-25T00:00:00Z"
         "#);
     });
+}
+
+/// An explicit local tool should be rebuilt after its dynamic metadata changes, including when
+/// switching between editable and non-editable installs.
+#[test]
+fn tool_install_editable_rebuilds_explicit_local_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let project = context.temp_dir.child("dynamic_tool");
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [build-system]
+        requires = ["setuptools>=61"]
+        build-backend = "setuptools.build_meta"
+
+        [project]
+        name = "dynamic-tool-demo"
+        dynamic = ["version", "scripts"]
+        requires-python = ">=3.11"
+        "#
+    })?;
+
+    project.child("setup.py").write_str(indoc! {r#"
+        from pathlib import Path
+        from setuptools import setup
+
+        root = Path(__file__).parent
+        version = (root / "VERSION").read_text().strip()
+        commands = [
+            line.strip()
+            for line in (root / "commands.txt").read_text().splitlines()
+            if line.strip()
+        ]
+
+        setup(
+            version=version,
+            entry_points={
+                "console_scripts": [
+                    f"dynamic-tool-{command}=dynamic_tool.commands.{command}:main"
+                    for command in commands
+                ]
+            },
+        )
+        "#
+    })?;
+
+    project.child("VERSION").write_str("0.1.0")?;
+    project.child("commands.txt").write_str("alpha")?;
+    project
+        .child("src")
+        .child("dynamic_tool")
+        .child("__init__.py")
+        .touch()?;
+    project
+        .child("src")
+        .child("dynamic_tool")
+        .child("commands")
+        .child("__init__.py")
+        .touch()?;
+    project
+        .child("src")
+        .child("dynamic_tool")
+        .child("commands")
+        .child("alpha.py")
+        .write_str(indoc! {r#"
+            def main():
+                print("alpha")
+            "#
+        })?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("-e")
+        .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dynamic-tool-demo==0.1.0 (from file://[TEMP_DIR]/dynamic_tool)
+    Installed 1 executable: dynamic-tool-alpha
+    ");
+
+    project.child("VERSION").write_str("0.2.0")?;
+    project.child("commands.txt").write_str("alpha\nbeta")?;
+    project
+        .child("src")
+        .child("dynamic_tool")
+        .child("commands")
+        .child("beta.py")
+        .write_str(indoc! {r#"
+            def main():
+                print("beta")
+            "#
+        })?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - dynamic-tool-demo==0.1.0 (from file://[TEMP_DIR]/dynamic_tool)
+     + dynamic-tool-demo==0.2.0 (from file://[TEMP_DIR]/dynamic_tool)
+    Installed 2 executables: dynamic-tool-alpha, dynamic-tool-beta
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("-e")
+        .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ dynamic-tool-demo==0.2.0 (from file://[TEMP_DIR]/dynamic_tool)
+    Installed 2 executables: dynamic-tool-alpha, dynamic-tool-beta
+    ");
+
+    Ok(())
+}
+
+/// Reinstalling an explicit local tool should use a newly selected global Python even when the
+/// tool's source is unchanged.
+#[test]
+fn tool_install_explicit_local_directory_respects_global_python_change() -> Result<()> {
+    let context =
+        uv_test::test_context_with_versions!(&["3.12", "3.13"]).with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let project = context.temp_dir.child("project");
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [project]
+        name = "local-tool"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        local-tool = "local_tool:main"
+        "#
+    })?;
+    project
+        .child("src")
+        .child("local_tool")
+        .child("__init__.py")
+        .write_str(indoc! {r#"
+            import sys
+
+            def main():
+                print(f"{sys.version_info.major}.{sys.version_info.minor}")
+            "#
+        })?;
+
+    context
+        .python_pin()
+        .arg("3.12")
+        .arg("--global")
+        .assert()
+        .success();
+
+    context
+        .tool_install()
+        .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), Command::new("local-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    ");
+
+    context
+        .python_pin()
+        .arg("3.13")
+        .arg("--global")
+        .assert()
+        .success();
+
+    context
+        .tool_install()
+        .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), Command::new("local-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.13
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// A direct local `--with` requirement should be rebuilt on every invocation, while a local
+/// requirement discovered through `--with-requirements` should retain its normal cache behavior.
+#[test]
+fn tool_install_rebuilds_explicit_local_with_requirement() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let project = context.temp_dir.child("project");
+    let helper = context.temp_dir.child("helper");
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [project]
+        name = "local-tool"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        local-tool = "local_tool:main"
+        "#
+    })?;
+    project
+        .child("src")
+        .child("local_tool")
+        .child("__init__.py")
+        .write_str(indoc! {r#"
+            from importlib.metadata import version
+
+            def main():
+                print(version("local-helper"))
+            "#
+        })?;
+
+    helper.child("pyproject.toml").write_str(indoc! {r#"
+        [build-system]
+        requires = ["setuptools>=61"]
+        build-backend = "setuptools.build_meta"
+
+        [project]
+        name = "local-helper"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        "#
+    })?;
+    helper.child("setup.py").write_str(indoc! {r#"
+        from pathlib import Path
+        from setuptools import setup
+
+        setup(version=(Path(__file__).parent / "VERSION").read_text().strip())
+        "#
+    })?;
+    helper.child("VERSION").write_str("0.1.0")?;
+    helper
+        .child("src")
+        .child("local_helper")
+        .child("__init__.py")
+        .touch()?;
+
+    context
+        .tool_install()
+        .arg("--with")
+        .arg(helper.path())
+        .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), Command::new("local-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.1.0
+
+    ----- stderr -----
+    ");
+
+    helper.child("VERSION").write_str("0.2.0")?;
+
+    context
+        .tool_install()
+        .arg("--with")
+        .arg(helper.path())
+        .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), Command::new("local-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.2.0
+
+    ----- stderr -----
+    ");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!("{}\n", helper.path().display()))?;
+    helper.child("VERSION").write_str("0.3.0")?;
+
+    context
+        .tool_install()
+        .arg("--with-requirements")
+        .arg(requirements_txt.path())
+        .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), Command::new("local-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.2.0
+
+    ----- stderr -----
+    ");
+
+    Ok(())
 }
 
 /// Ensure that we remove any existing entrypoints upon error.
@@ -2739,6 +3297,43 @@ fn tool_install_no_entrypoints() {
         .assert(predicate::path::missing());
 }
 
+#[test]
+fn tool_install_no_binary_package_env_var() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pytest")
+        .env(EnvVars::UV_NO_BINARY_PACKAGE, "iniconfig")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+    Installed 2 executables: py.test, pytest
+    ");
+
+    let receipt: toml::Value = toml::from_str(
+        &fs_err::read_to_string(tool_dir.join("pytest").join("uv-receipt.toml")).unwrap(),
+    )
+    .unwrap();
+    assert_snapshot!(
+        receipt["tool"]["options"]["no-binary-package"].to_string(),
+        @r#"["iniconfig"]"#
+    );
+}
+
 /// Test installing a package that can't be installed.
 #[test]
 fn tool_install_uninstallable() {
@@ -2790,7 +3385,8 @@ fn tool_install_uninstallable() {
           #
 
 
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Ensure the tool environment is not created.
@@ -2893,26 +3489,7 @@ fn tool_install_git() {
     let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
-    let mut paths = BTreeSet::new();
-
-    // Avoid removing `git` from PATH
-    let git_path = which::which("git")
-        .expect("Failed to find `git` executable.")
-        .parent()
-        .expect("Failed to find `git` executable directory.")
-        .to_path_buf();
-    paths.insert(bin_dir.to_path_buf());
-    paths.insert(git_path);
-    // Git Submodule in macos seems to rely on `sed`.
-    if cfg!(target_os = "macos") {
-        let sed_path = which::which("sed")
-            .expect("Failed to find `sed` executable.")
-            .parent()
-            .expect("Failed to find `sed` executable directory.")
-            .to_path_buf();
-        paths.insert(sed_path);
-    }
-    let path = std::env::join_paths(paths).unwrap();
+    let path = tool_install_git_path(&bin_dir);
 
     // Unnamed Git Install
     uv_snapshot!(context.filters(), context.tool_install()
@@ -2979,6 +3556,87 @@ fn tool_install_git() {
 
     let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
     assert!(executable.exists());
+}
+
+/// Test that installing a tool from Git uses statically available `requires-python` metadata
+/// before selecting a global Python pin.
+#[test]
+#[cfg(feature = "test-git")]
+fn tool_install_git_infers_static_requires_python() {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let path = tool_install_git_path(&bin_dir);
+
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, path.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + static-requires-python-tool==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static)
+    Installed 1 executable: static-requires-python-tool
+    ");
+
+    uv_snapshot!(context.filters(), Command::new("static-requires-python-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    ");
+}
+
+/// Test that installing a tool from Git does not infer dynamic `requires-python` metadata.
+#[test]
+#[cfg(feature = "test-git")]
+fn tool_install_git_does_not_infer_dynamic_requires_python() {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let path = tool_install_git_path(&bin_dir);
+
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=dynamic")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, path.as_os_str()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the current Python version (3.11.[X]) does not satisfy Python>=3.12,<3.13 and dynamic-requires-python-tool==0.1.0 depends on Python>=3.12,<3.13, we can conclude that dynamic-requires-python-tool==0.1.0 cannot be used.
+          And because only dynamic-requires-python-tool==0.1.0 is available and you require dynamic-requires-python-tool, we can conclude that your requirements are unsatisfiable.
+    ");
 }
 
 /// Test installing a tool with a Git LFS enabled requirement.
@@ -5436,7 +6094,8 @@ fn tool_install_with_executables_from_no_entrypoints() {
     exit_code: 0
     ----- stdout -----
     No executables are provided by package `requests`
-    hint: Use `--with requests` to include `requests` as a dependency without installing its executables.
+
+    hint: Use `--with requests` to include `requests` as a dependency without installing its executables
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
@@ -5564,7 +6223,7 @@ fn tool_install_find_links() {
       ╰─▶ Because only basic-app==0.1 is available and basic-app==0.1 needs to be downloaded from a registry, we can conclude that all versions of basic-app cannot be used.
           And because you require basic-app, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
 }
 

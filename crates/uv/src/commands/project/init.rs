@@ -20,7 +20,6 @@ use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
@@ -31,7 +30,9 @@ use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceError};
+use uv_workspace::{
+    DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceErrorKind,
+};
 
 use crate::commands::ExitStatus;
 use crate::commands::project::{find_requires_python, init_script_python_requirement};
@@ -63,7 +64,6 @@ pub(crate) async fn init(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     match init_kind {
         InitKind::Script => {
@@ -87,7 +87,6 @@ pub(crate) async fn init(
                 pin_python,
                 package,
                 no_config,
-                preview,
             )
             .await?;
 
@@ -164,7 +163,6 @@ pub(crate) async fn init(
                 no_config,
                 cache,
                 printer,
-                preview,
             ))
             .await?;
 
@@ -216,7 +214,6 @@ async fn init_script(
     pin_python: bool,
     package: bool,
     no_config: bool,
-    preview: Preview,
 ) -> Result<()> {
     if no_workspace {
         warn_user_once!("`--no-workspace` is a no-op for Python scripts, which are standalone");
@@ -269,7 +266,6 @@ async fn init_script(
         client_builder,
         cache,
         &reporter,
-        preview,
     )
     .await?;
 
@@ -306,7 +302,6 @@ async fn init_project(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<()> {
     // Discover the current workspace, if it exists.
     let workspace_cache = WorkspaceCache::default();
@@ -329,12 +324,13 @@ async fn init_project(
                 members: MemberDiscovery::Ignore(std::iter::once(path.to_path_buf()).collect()),
                 ..DiscoveryOptions::default()
             },
+            cache,
             &workspace_cache,
         )
         .await
         {
             Ok(workspace) => {
-                // Ignore the current workspace, if `--no-workspace` was provided.
+                // Ignore the current workspace if `--no-workspace` was provided.
                 if no_workspace {
                     debug!("Ignoring discovered workspace due to `--no-workspace`");
                     None
@@ -342,25 +338,28 @@ async fn init_project(
                     Some(workspace)
                 }
             }
-            Err(WorkspaceError::MissingPyprojectToml | WorkspaceError::NonWorkspace(_)) => {
-                // If the user runs with `--no-workspace` and we can't find a workspace, warn.
-                if no_workspace {
-                    warn!("`--no-workspace` was provided, but no workspace was found");
-                }
-                None
-            }
             Err(err) => {
-                // If the user runs with `--no-workspace`, ignore the error.
-                if no_workspace {
-                    warn!("Ignoring workspace discovery error due to `--no-workspace`: {err}");
+                if matches!(
+                    err.as_ref(),
+                    WorkspaceErrorKind::MissingPyprojectToml | WorkspaceErrorKind::NonWorkspace(_)
+                ) {
+                    if no_workspace {
+                        warn!("`--no-workspace` was provided, but no workspace was found");
+                    }
                     None
                 } else {
-                    return Err(err).with_context(|| {
-                        format!(
-                            "Failed to discover parent workspace; use `{}` to ignore",
-                            "uv init --no-workspace".green()
-                        )
-                    });
+                    // If the user runs with `--no-workspace`, ignore the error.
+                    if no_workspace {
+                        warn!("Ignoring workspace discovery error due to `--no-workspace`: {err}");
+                        None
+                    } else {
+                        return Err(err).with_context(|| {
+                            format!(
+                                "Failed to discover parent workspace; use `{}` to ignore",
+                                "uv init --no-workspace".green()
+                            )
+                        });
+                    }
                 }
             }
         }
@@ -377,7 +376,7 @@ async fn init_project(
         &VersionFileDiscoveryOptions::default()
             .with_stop_discovery_at(
                 workspace
-                    .as_ref()
+                    .as_deref()
                     .map(Workspace::install_path)
                     .map(PathBuf::as_ref),
             )
@@ -399,8 +398,7 @@ async fn init_project(
         python_preference,
         python_downloads,
         cache,
-        preview,
-        workspace.as_ref(),
+        workspace.as_deref(),
         &reporter,
         python_request,
     )
@@ -505,7 +503,6 @@ async fn determine_requires_python(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
-    preview: Preview,
     workspace: Option<&Workspace>,
     reporter: &PythonDownloadReporter,
     python_request: Option<PythonRequest>,
@@ -569,7 +566,6 @@ async fn determine_requires_python(
                         install_mirrors.python_install_mirror.as_deref(),
                         install_mirrors.pypy_install_mirror.as_deref(),
                         install_mirrors.python_downloads_json_url.as_deref(),
-                        preview,
                     )
                     .await?
                     .into_interpreter();
@@ -597,7 +593,6 @@ async fn determine_requires_python(
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
-                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -668,7 +663,6 @@ async fn determine_requires_python(
                 install_mirrors.python_install_mirror.as_deref(),
                 install_mirrors.pypy_install_mirror.as_deref(),
                 install_mirrors.python_downloads_json_url.as_deref(),
-                preview,
             )
             .await?
             .into_interpreter();
@@ -698,7 +692,6 @@ async fn determine_requires_python(
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
-            preview,
         )
         .await?
         .into_interpreter();

@@ -1,26 +1,34 @@
-use anyhow::{Context, bail};
-use itertools::Itertools;
-use owo_colors::OwoColorize;
 use std::{
     collections::{BTreeSet, Bound},
     ffi::OsString,
     fmt::Write,
     path::Path,
 };
+
+use anyhow::{Context, bail};
+use itertools::Itertools;
+use owo_colors::OwoColorize;
+use thiserror::Error;
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_distribution_types::{InstalledDist, Name, Requirement};
-use uv_fs::Simplified;
+use uv_configuration::GitLfsSetting;
+use uv_distribution::StaticMetadataDatabase;
+use uv_distribution_types::{
+    InstalledDist, Name, Requirement, RequiresPython, UnresolvedRequirement,
+};
+use uv_errors::{ErrorWithHints, Hint, Hints};
 #[cfg(unix)]
 use uv_fs::replace_symlink;
+use uv_fs::{CWD, Simplified};
+use uv_git::GitResolver;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, VersionRequest,
+    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
+    VersionRequest,
 };
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
@@ -28,7 +36,66 @@ use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip;
-use crate::commands::project::ProjectError;
+
+/// An error raised when a tool package provides no executables.
+#[derive(Debug, Error)]
+pub(crate) enum NoExecutablesError {
+    /// A dependency was requested as a source of tool executables.
+    #[error("No executables are provided by package `{package}`")]
+    Dependency { package: PackageName },
+    /// The root package cannot be installed as a tool.
+    #[error("Failed to install entrypoints for `{package}`")]
+    Root {
+        package: PackageName,
+        /// Executables found in dependencies of the package that match the package name.
+        matching_dependency_packages: Vec<PackageName>,
+    },
+}
+
+impl Hint for NoExecutablesError {
+    fn hints(&self) -> Hints<'_> {
+        let mut hints = Hints::none();
+        let (package, matching_dependency_packages) = match self {
+            Self::Dependency { package } => {
+                hints.push(format!(
+                    "Use `--with {}` to include `{}` as a dependency without installing its executables",
+                    package.cyan(),
+                    package.cyan(),
+                ));
+                return hints;
+            }
+            Self::Root {
+                package,
+                matching_dependency_packages,
+            } => (package, matching_dependency_packages),
+        };
+
+        match matching_dependency_packages.as_slice() {
+            [] => {}
+            [dep] => {
+                let command = format!("uv tool install {dep}");
+                hints.push(format!(
+                    "An executable with the name `{}` is available via dependency `{}`.\n      Did you mean `{}`?",
+                    package.cyan(),
+                    dep.cyan(),
+                    command.bold(),
+                ));
+            }
+            deps => {
+                let dep_list = deps
+                    .iter()
+                    .map(|dep| format!("- {}", dep.cyan()))
+                    .join("\n");
+                hints.push(format!(
+                    "An executable with the name `{}` is available via the following dependencies:\n{dep_list}\n      Did you mean to install one of them instead?",
+                    package.cyan(),
+                ));
+            }
+        }
+        hints
+    }
+}
+use crate::commands::project::{ProjectError, PythonRequestSource};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 
@@ -71,6 +138,122 @@ pub(crate) fn remove_entrypoints(tool: &Tool) {
     }
 }
 
+/// The resolved Python request for a tool invocation.
+#[derive(Debug, Clone)]
+pub(crate) struct ToolPython {
+    /// The source of the Python request.
+    source: PythonRequestSource,
+    /// The selected Python request, computed by considering an explicit request, a global
+    /// version file, and static `requires-python` metadata from the source requirement.
+    pub(crate) python_request: Option<PythonRequest>,
+}
+
+impl ToolPython {
+    /// Determine the [`ToolPython`] request for a tool invocation.
+    pub(crate) async fn from_request(
+        python_request: Option<PythonRequest>,
+        requirement: Option<&UnresolvedRequirement>,
+        no_config: bool,
+        lfs: GitLfsSetting,
+        git_resolver: &GitResolver,
+        client_builder: &BaseClientBuilder<'_>,
+        cache: &Cache,
+    ) -> Result<Self, ProjectError> {
+        let requires_python = if python_request.is_none() {
+            match requirement {
+                Some(requirement) => {
+                    infer_requires_python_from_requirement(
+                        requirement,
+                        lfs,
+                        git_resolver,
+                        client_builder,
+                        cache,
+                    )
+                    .await
+                }
+                None => None,
+            }
+        } else {
+            None
+        };
+
+        let (source, python_request) = if let Some(request) = python_request {
+            (PythonRequestSource::UserRequest, Some(request))
+        } else if let Some(file) = PythonVersionFile::discover(
+            &*CWD,
+            &VersionFileDiscoveryOptions::default()
+                .with_no_config(no_config)
+                .with_no_local(true),
+        )
+        .await?
+        .filter(|file| match (file.version(), requires_python.as_ref()) {
+            (Some(request), Some(requires_python)) => {
+                request.intersects_requires_python(requires_python)
+            }
+            _ => true,
+        }) {
+            (
+                PythonRequestSource::DotPythonVersion(file.clone()),
+                file.version().cloned(),
+            )
+        } else {
+            (
+                PythonRequestSource::RequiresPython,
+                requires_python
+                    .as_ref()
+                    .and_then(PythonRequest::from_requires_python),
+            )
+        };
+
+        if let Some(python_request) = python_request.as_ref() {
+            debug!(
+                "Using Python request `{}` from {source}",
+                python_request.to_canonical_string()
+            );
+        }
+
+        Ok(Self {
+            source,
+            python_request,
+        })
+    }
+
+    /// Returns `true` if the selected request was explicitly provided by the user.
+    pub(crate) fn is_explicit(&self) -> bool {
+        matches!(self.source, PythonRequestSource::UserRequest)
+    }
+}
+
+/// Infer [`RequiresPython`] from a direct source requirement by reading its `pyproject.toml`.
+///
+/// Returns `None` when the requirement is not a directory or Git source, its metadata is not
+/// statically available, or the Git source cannot be fetched.
+async fn infer_requires_python_from_requirement(
+    requirement: &UnresolvedRequirement,
+    lfs: GitLfsSetting,
+    git_resolver: &GitResolver,
+    client_builder: &BaseClientBuilder<'_>,
+    cache: &Cache,
+) -> Option<RequiresPython> {
+    let requirement = requirement
+        .clone()
+        .augment_requirement(None, None, None, lfs.into(), None);
+    let source = requirement.source();
+
+    match StaticMetadataDatabase::new(client_builder, git_resolver, cache)
+        .requires_python(source.as_ref())
+        .await
+    {
+        Ok(requires_python) => requires_python,
+        Err(err) => {
+            debug!(
+                "Failed to infer `requires-python` from source requirement (`{requirement}`): {err}"
+            );
+            None
+        }
+    }
+}
+
 /// Given a no-solution error and the [`Interpreter`] that was used during the solve, attempt to
 /// discover an alternate [`Interpreter`] that satisfies the `requires-python` constraint.
 pub(crate) async fn refine_interpreter(
@@ -83,7 +266,6 @@ pub(crate) async fn refine_interpreter(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
-    preview: Preview,
 ) -> anyhow::Result<Option<Interpreter>, ProjectError> {
     let pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(no_solution_err)) =
         err
@@ -147,7 +329,6 @@ pub(crate) async fn refine_interpreter(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
-        preview,
     )
     .await?
     .into_interpreter();
@@ -230,36 +411,44 @@ pub(crate) fn finalize_tool_install(
             .collect::<BTreeSet<_>>();
 
         if target_entrypoints.is_empty() {
-            // If package is not the root package, suggest to install it as a dependency.
+            let err = if package != name {
+                NoExecutablesError::Dependency {
+                    package: package.clone(),
+                }
+            } else {
+                NoExecutablesError::Root {
+                    package: package.clone(),
+                    matching_dependency_packages: matching_packages(
+                        package.as_ref(),
+                        &site_packages,
+                    )
+                    .into_iter()
+                    .map(|dist| dist.name().clone())
+                    .collect(),
+                }
+            };
+
             if package != name {
+                // Non-root package: display the error with hints and continue.
                 writeln!(
                     printer.stdout(),
-                    "No executables are provided by package `{}`\n{}{} Use `--with {}` to include `{}` as a dependency without installing its executables.",
-                    package.cyan(),
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    package.cyan(),
-                    package.cyan(),
+                    "{}",
+                    ErrorWithHints::new(&err, err.hints())
                 )?;
                 continue;
             }
 
-            // For the root package, this is a fatal error
+            // For the root package, this is a fatal error.
             writeln!(
                 printer.stdout(),
                 "No executables are provided by package `{}`; removing tool",
                 package.cyan()
             )?;
 
-            hint_executable_from_dependency(package, &site_packages, printer)?;
-
             // Clean up the environment we just created.
             installed_tools.remove_environment(name)?;
 
-            return Err(anyhow::anyhow!(
-                "Failed to install entrypoints for `{}`",
-                package.cyan()
-            ));
+            return Err(err.into());
         }
 
         // Error if we're overwriting an existing entrypoint, unless the user passed `--force`.
@@ -379,47 +568,4 @@ fn warn_out_of_path(executable_directory: &Path) {
             );
         }
     }
-}
-
-/// Displays a hint if an executable matching the package name can be found in a dependency of the package.
-fn hint_executable_from_dependency(
-    name: &PackageName,
-    site_packages: &SitePackages,
-    printer: Printer,
-) -> anyhow::Result<()> {
-    let packages = matching_packages(name.as_ref(), site_packages);
-    match packages.as_slice() {
-        [] => {}
-        [package] => {
-            let command = format!("uv tool install {}", package.name());
-            writeln!(
-                printer.stdout(),
-                "{}{} An executable with the name `{}` is available via dependency `{}`.\n      Did you mean `{}`?",
-                "hint".bold().cyan(),
-                ":".bold(),
-                name.cyan(),
-                package.name().cyan(),
-                command.bold(),
-            )?;
-        }
-        packages => {
-            writeln!(
-                printer.stdout(),
-                "{}{} An executable with the name `{}` is available via the following dependencies::",
-                "hint".bold().cyan(),
-                ":".bold(),
-                name.cyan(),
-            )?;
-
-            for package in packages {
-                writeln!(printer.stdout(), "- {}", package.name().cyan())?;
-            }
-            writeln!(
-                printer.stdout(),
-                "      Did you mean to install one of them instead?"
-            )?;
-        }
-    }
-
-    Ok(())
 }

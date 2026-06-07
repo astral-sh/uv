@@ -44,7 +44,10 @@ fn start_connect_tunnel_proxy() -> std::net::SocketAddr {
                         Ok(n) => n,
                     };
                     total_read += n;
-                    if buf[..total_read].windows(4).any(|w| w == b"\r\n\r\n") {
+                    if buf[..total_read]
+                        .array_windows()
+                        .any(|window| window == b"\r\n\r\n")
+                    {
                         break;
                     }
                 }

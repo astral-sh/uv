@@ -28,6 +28,7 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, warn};
 use uv_auth::CredentialsCache;
+use uv_cache::Cache;
 use uv_cache_key::cache_digest;
 use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution::BuildRequires;
@@ -94,7 +95,7 @@ struct BuildSystem {
     requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
     /// A string naming a Python object that will be used to perform the build.
     build_backend: Option<String>,
-    /// Specify that their backend code is hosted in-tree, this key contains a list of directories.
+    /// Specifies that backend code is hosted in-tree, this key contains a list of directories.
     backend_path: Option<BackendPath>,
 }
 
@@ -267,7 +268,7 @@ pub struct SourceBuild {
     /// Distribution identifier, e.g., `foo-1.2.3`. Used for error reporting if the name and
     /// version are unknown.
     version_id: Option<String>,
-    /// Whether we do a regular PEP 517 build or an PEP 660 editable build
+    /// Whether we do a regular PEP 517 build or a PEP 660 editable build
     build_kind: BuildKind,
     /// Whether to send build output to `stderr` or `tracing`, etc.
     level: BuildOutput,
@@ -321,6 +322,7 @@ impl SourceBuild {
             fallback_package_name,
             locations,
             &no_sources,
+            build_context.cache(),
             workspace_cache,
             credentials_cache,
         )
@@ -380,7 +382,7 @@ impl SourceBuild {
         };
 
         // Set up the build environment. If build isolation is disabled, we assume the build
-        // environment is already setup.
+        // environment is already set up.
         if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Resolving build requirements");
 
@@ -439,7 +441,7 @@ impl SourceBuild {
         };
 
         // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
-        // environment is already setup.
+        // environment is already set up.
         let runner = PythonRunner::new(source_build_context.concurrent_build_slots.clone(), level);
         if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Creating PEP 517 build environment");
@@ -572,6 +574,7 @@ impl SourceBuild {
         package_name: Option<&PackageName>,
         locations: &IndexLocations,
         no_sources: &NoSources,
+        cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
@@ -652,6 +655,7 @@ impl SourceBuild {
                     locations,
                     no_sources,
                     true,
+                    cache,
                     workspace_cache,
                     credentials_cache,
                 )
@@ -723,7 +727,7 @@ impl SourceBuild {
 
     /// Try calling `prepare_metadata_for_build_wheel` to get the metadata without executing the
     /// actual build.
-    pub async fn get_metadata_without_build(&mut self) -> Result<Option<PathBuf>, Error> {
+    async fn get_metadata_without_build(&mut self) -> Result<Option<PathBuf>, Error> {
         // We've already called this method; return the existing result.
         if let Some(metadata_dir) = &self.metadata_directory {
             return Ok(Some(metadata_dir.clone()));
@@ -1100,6 +1104,7 @@ async fn create_pep517_build_environment(
             build_context
                 .source_tree_editable_policy()
                 .workspace_member_editable(None),
+            build_context.cache(),
             workspace_cache,
             credentials_cache,
         )

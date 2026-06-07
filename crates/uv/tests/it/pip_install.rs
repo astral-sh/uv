@@ -27,9 +27,11 @@ use uv_fs::{PortablePath, Simplified};
 use uv_static::EnvVars;
 #[cfg(feature = "test-git")]
 use uv_test::decode_token;
+use uv_test::find_links::FindLinksServer;
+use uv_test::packse::PackseServer;
 use uv_test::{
-    DEFAULT_PYTHON_VERSION, TestContext, apply_filters, build_vendor_links_url, download_to_disk,
-    get_bin, packse_index_url, uv_snapshot, venv_bin_path,
+    DEFAULT_PYTHON_VERSION, TestContext, apply_filters, download_to_disk, get_bin, uv_snapshot,
+    venv_bin_path,
 };
 
 fn write_tar_gz(file: File, entries: &[(&str, &str)]) -> Result<()> {
@@ -521,7 +523,7 @@ dependencies = ["flask==1.0.x"]
                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
             File "[CACHE_DIR]/builds-v0/[TMP]/core.py", line 159, in setup
               dist.parse_config_files()
-            File "[CACHE_DIR]/builds-v0/[TMP]/_virtualenv.py", line 20, in parse_config_files
+            File "[CACHE_DIR]/builds-v0/[TMP]/_virtualenv.py", line 21, in parse_config_files
               result = old_parse_config_files(self, *args, **kwargs)
                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
             File "[CACHE_DIR]/builds-v0/[TMP]/dist.py", line 631, in parse_config_files
@@ -536,7 +538,8 @@ dependencies = ["flask==1.0.x"]
           ValueError: invalid pyproject.toml config: `project.dependencies[0]`.
           configuration error: `project.dependencies[0]` must be pep508
 
-          hint: This usually indicates a problem with the package or the build environment.
+
+    hint: Build failures usually indicate a problem with the package or the build environment
     "##
     );
 
@@ -1491,7 +1494,9 @@ fn install_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `<dir>[extra]` syntax or `-r <file>` instead.
+    error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file
+
+    hint: Use `<dir>[extra]` syntax or `-r <file>` instead
     "
     );
 
@@ -1504,7 +1509,9 @@ fn install_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `package[extra]` syntax instead.
+    error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file
+
+    hint: Use `package[extra]` syntax instead
     "
     );
 
@@ -1520,7 +1527,9 @@ fn install_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `package[extra]` syntax instead.
+    error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file
+
+    hint: Use `package[extra]` syntax instead
     "
     );
 
@@ -1642,6 +1651,36 @@ fn install_no_editable() {
 
     let path = context.site_packages().join("executable_file.pth");
     assert!(!path.exists());
+}
+
+#[test]
+fn install_no_editable_package() {
+    let context = uv_test::test_context!("3.12");
+    let executable_file = context.workspace_root.join("test/packages/executable_file");
+    let black = context.workspace_root.join("test/packages/black_editable");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg(&executable_file)
+        .arg("-e")
+        .arg(&black)
+        .arg("--no-editable-package")
+        .arg("executable-file"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     + executable-file==1.0.0 (from file://[WORKSPACE]/test/packages/executable_file)
+    "
+    );
+
+    assert!(context.site_packages().join("black.pth").is_file());
+    assert!(!context.site_packages().join("executable_file.pth").exists());
 }
 
 #[test]
@@ -2204,7 +2243,7 @@ fn install_no_index() {
       × No solution found when resolving dependencies:
       ╰─▶ Because flask was not found in the provided package locations and you require flask, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
 
@@ -2228,7 +2267,7 @@ fn install_no_index_version() {
       × No solution found when resolving dependencies:
       ╰─▶ Because flask was not found in the provided package locations and you require flask==3.0.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
 
@@ -3283,9 +3322,8 @@ fn install_only_binary_all_and_no_binary_all() {
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of anyio have no usable wheels and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-          hint: Pre-releases are available for `anyio` in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
-
-          hint: Wheels are required for `anyio` because building from source is disabled for all packages (i.e., with `--no-build`)
+    hint: Pre-releases are available for `anyio` in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    hint: Wheels are required for `anyio` because building from source is disabled for all packages (i.e., with `--no-build`)
     "
     );
 
@@ -3378,7 +3416,7 @@ fn only_binary_requirements_txt() {
       × No solution found when resolving dependencies:
       ╰─▶ Because django-allauth==0.51.0 has no usable wheels and you require django-allauth==0.51.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: Wheels are required for `django-allauth` because building from source is disabled for `django-allauth` (i.e., with `--no-build-package django-allauth`)
+    hint: Wheels are required for `django-allauth` because building from source is disabled for `django-allauth` (i.e., with `--no-build-package django-allauth`)
     "
     );
 }
@@ -3500,7 +3538,7 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because only setuptools<=40.4.3 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: `setuptools` was filtered by `exclude-newer` to only include packages uploaded before 2018-10-09T00:00:00Z. The latest version satisfying the requirement is v69.2.0, published at 2024-03-13T11:20:54.103Z. Consider using `exclude-newer-package` to override the cutoff for this package.
+    hint: `setuptools` was filtered by `exclude-newer` to only include packages uploaded before 2018-10-09T00:00:00Z. The latest version satisfying the requirement is v69.2.0, published at 2024-03-13T11:20:54.103Z. Consider using `exclude-newer-package` to override the cutoff for this package.
     "
     );
 
@@ -4238,6 +4276,7 @@ fn install_git_source_respects_offline_mode() {
 #[test]
 fn build_prerelease_hint() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/transitive-package-only-prereleases-in-range.toml");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -4247,12 +4286,12 @@ fn build_prerelease_hint() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["transitive-package-only-prereleases-in-range-a"]
+        requires = ["a"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
     let mut command = context.pip_install();
-    command.arg("--index-url").arg(packse_index_url()).arg(".");
+    command.arg("--index-url").arg(server.index_url()).arg(".");
     command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
 
     uv_snapshot!(
@@ -4267,11 +4306,11 @@ fn build_prerelease_hint() -> Result<()> {
     Resolved 1 package in [TIME]
       × Failed to build `project @ file://[TEMP_DIR]/`
       ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `transitive-package-only-prereleases-in-range-a`
-      ╰─▶ Because only transitive-package-only-prereleases-in-range-b<=0.1 is available and transitive-package-only-prereleases-in-range-a==0.1.0 depends on transitive-package-only-prereleases-in-range-b>0.1, we can conclude that transitive-package-only-prereleases-in-range-a==0.1.0 cannot be used.
-          And because only transitive-package-only-prereleases-in-range-a==0.1.0 is available and you require transitive-package-only-prereleases-in-range-a, we can conclude that your requirements are unsatisfiable.
+      ├─▶ No solution found when resolving: `a`
+      ╰─▶ Because only b<=0.1 is available and a==0.1.0 depends on b>0.1, we can conclude that a==0.1.0 cannot be used.
+          And because only a==0.1.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
 
-          hint: Only pre-releases of `transitive-package-only-prereleases-in-range-b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically. Add `transitive-package-only-prereleases-in-range-b>=1.0.0a1` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
+    hint: Only pre-releases of `b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically. Add `b>=1.0.0a1` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
     "
     );
 
@@ -5674,12 +5713,12 @@ fn no_build_isolation() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
 
-          hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+    hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          [tool.uv.extra-build-dependencies]
-          anyio = ["setuptools"]
+    [tool.uv.extra-build-dependencies]
+    anyio = ["setuptools"]
 
-          or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
+    or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
     "#
     );
 
@@ -5747,12 +5786,12 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
 
-          hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+    hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          [tool.uv.extra-build-dependencies]
-          anyio = ["setuptools"]
+    [tool.uv.extra-build-dependencies]
+    anyio = ["setuptools"]
 
-          or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
+    or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
     "#
     );
 
@@ -6566,7 +6605,7 @@ async fn install_package_basic_auth_from_keyring_wrong_password() {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
     "
     );
 }
@@ -6611,7 +6650,7 @@ async fn install_package_basic_auth_from_keyring_wrong_username() {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
     "
     );
 }
@@ -6778,7 +6817,7 @@ fn reinstall_no_index() {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the provided package locations and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
 }
@@ -6826,6 +6865,7 @@ fn already_installed_remote_dependencies() {
 #[test]
 fn already_installed_dependent_editable() {
     let context = uv_test::test_context!("3.12");
+    let vendor = FindLinksServer::vendor();
     let root_path = context
         .workspace_root
         .join("test/packages/dependent_locals");
@@ -6854,7 +6894,7 @@ fn already_installed_dependent_editable() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(vendor.url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6895,7 +6935,7 @@ fn already_installed_dependent_editable() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(vendor.url()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6932,6 +6972,7 @@ fn already_installed_dependent_editable() {
 #[test]
 fn already_installed_local_path_dependent() {
     let context = uv_test::test_context!("3.12");
+    let vendor = FindLinksServer::vendor();
     let root_path = context
         .workspace_root
         .join("test/packages/dependent_locals");
@@ -6958,7 +6999,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(vendor.url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7014,7 +7055,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(vendor.url()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7056,7 +7097,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(vendor.url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7081,7 +7122,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(vendor.url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7145,7 +7186,7 @@ fn already_installed_local_version_of_remote_package() {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the provided package locations and you require anyio==4.2.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
 
@@ -7405,7 +7446,7 @@ fn already_installed_remote_url() {
       × No solution found when resolving dependencies:
       ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     ");
 
     // Request installation again with just the full URL
@@ -7451,7 +7492,7 @@ fn already_installed_remote_url() {
       × No solution found when resolving dependencies:
       ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     ");
 }
 
@@ -7475,6 +7516,94 @@ fn find_links() {
      + tqdm==1000.0.0
     "
     );
+}
+
+/// Install the latest version across multiple `--find-links` directories.
+#[test]
+fn find_links_multiple() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links_dir = context.workspace_root.join("test/links");
+
+    let first_links_dir = context.temp_dir.child("first-links");
+    first_links_dir.create_dir_all()?;
+    fs::copy(
+        links_dir.join("ok-1.0.0-py3-none-any.whl"),
+        first_links_dir.child("ok-1.0.0-py3-none-any.whl").path(),
+    )?;
+
+    let second_links_dir = context.temp_dir.child("second-links");
+    second_links_dir.create_dir_all()?;
+    fs::copy(
+        links_dir.join("ok-2.0.0-py3-none-any.whl"),
+        second_links_dir.child("ok-2.0.0-py3-none-any.whl").path(),
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("ok")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(first_links_dir.path())
+        .arg("--find-links")
+        .arg(second_links_dir.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==2.0.0
+    "
+    );
+
+    Ok(())
+}
+
+/// Install from a `--find-links` HTML page with uppercase tag and attribute names.
+#[tokio::test]
+async fn find_links_uppercase_html() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let wheel_filename = "tqdm-1000.0.0-py3-none-any.whl";
+    let wheel_url = Url::from_file_path(
+        context
+            .workspace_root
+            .join("test/links")
+            .join(wheel_filename),
+    )
+    .map_err(|()| anyhow!("Failed to convert wheel path to URL"))?;
+
+    Mock::given(method("GET"))
+        .and(path("/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                "<!DOCTYPE html><HTML><BODY><A HREF=\"{wheel_url}\">{wheel_filename}</A></BODY></HTML>"
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("tqdm")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    "
+    );
+
+    Ok(())
 }
 
 /// Sync using `--find-links` with a local directory, with wheels disabled.
@@ -8050,27 +8179,27 @@ fn install_with_overrides_from_stdin() -> Result<()> {
     Ok(())
 }
 
-/// Install with excludes from stdin.
+/// Install with a direct exclusion from stdin.
 #[test]
 #[expect(clippy::disallowed_types)]
 fn install_with_excludes_from_stdin() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let excludes_txt = context.temp_dir.child("excludes.txt");
-    excludes_txt.write_str("anyio>4.0.0")?;
+    excludes_txt.write_str("anyio")?;
 
     uv_snapshot!(context.pip_install()
         .arg("anyio==4.0.1")
         .arg("--exclude")
         .arg("-")
         .stdin(std::fs::File::open(excludes_txt)?), @"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of anyio==4.0.1 and you require anyio==4.0.1, we can conclude that your requirements are unsatisfiable.
+    Resolved in [TIME]
+    Checked in [TIME]
     "
     );
 
@@ -9630,12 +9759,12 @@ fn install_build_isolation_package() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This error likely indicates that `iniconfig` depends on `hatchling`, but doesn't declare it as a build dependency. If `iniconfig` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+    hint: This error likely indicates that `iniconfig` depends on `hatchling`, but doesn't declare it as a build dependency. If `iniconfig` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          [tool.uv.extra-build-dependencies]
-          iniconfig = ["hatchling"]
+    [tool.uv.extra-build-dependencies]
+    iniconfig = ["hatchling"]
 
-          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
+    or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
     "#
     );
 
@@ -9973,8 +10102,9 @@ fn sklearn() {
           More information is available at
           https://github.com/scikit-learn/sklearn-pypi-package
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `sklearn` is often confused for `scikit-learn` Did you mean to install `scikit-learn` instead?
+
+    hint: `sklearn` is often confused for `scikit-learn`. Did you mean to install `scikit-learn` instead?
+    hint: Build failures usually indicate a problem with the package or the build environment
     "
     );
 }
@@ -10029,8 +10159,9 @@ fn resolve_derivation_chain() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
+
+    hint: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
+    hint: Build failures usually indicate a problem with the package or the build environment
     "#
     );
 
@@ -10368,7 +10499,8 @@ fn direct_url_hash_source_tree_dependency() -> Result<()> {
 
           Computed:
             sha256:ee81583f376bb38e5e7af425d2453e5e8d4b57bfbf45e5dba1a75329c202652e
-      help: `protobug` (v0.3.0) was included because `pylock` (v0.1.0) depends on `protobug`
+
+    hint: `protobug` (v0.3.0) was included because `pylock` (v0.1.0) depends on `protobug`
     "
     );
 
@@ -10564,11 +10696,11 @@ fn cyclic_build_dependency() {
 
 #[test]
 #[cfg(feature = "test-git")]
-fn direct_url_json_git_default() -> Result<()> {
+fn direct_url_json_git_preserves_repository_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
-        "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage",
+        "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git",
     )?;
 
     uv_snapshot!(context.pip_install()
@@ -10583,7 +10715,7 @@ fn direct_url_json_git_default() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "
     );
 
@@ -10595,7 +10727,7 @@ fn direct_url_json_git_default() -> Result<()> {
     direct_url.assert(predicates::path::is_file());
 
     let direct_url_content = fs_err::read_to_string(direct_url.path())?;
-    insta::assert_snapshot!(direct_url_content, @r#"{"url":"https://github.com/astral-test/uv-public-pypackage","vcs_info":{"vcs":"git","commit_id":"b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"}}"#);
+    insta::assert_snapshot!(direct_url_content, @r#"{"url":"https://github.com/astral-test/uv-public-pypackage.git","vcs_info":{"vcs":"git","commit_id":"b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"}}"#);
 
     Ok(())
 }
@@ -13411,6 +13543,135 @@ fn reject_normalized_reserved_gui_wheel_entrypoint_name() -> Result<()> {
 }
 
 #[test]
+fn reject_free_threaded_python_wheel_entrypoint_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let repacked_wheel =
+        repacked_wheel_with_entrypoint(&context, "console_scripts", "python3.13t")?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+      Caused by: Scripts must not use the reserved name `python3.13t`, got: `python3.13t`
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn reject_windowed_free_threaded_python_wheel_entrypoint_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let repacked_wheel =
+        repacked_wheel_with_entrypoint(&context, "console_scripts", "pythonw3.13t")?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+      Caused by: Scripts must not use the reserved name `pythonw3.13t`, got: `pythonw3.13t`
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn reject_windows_rewritten_python_wheel_entrypoint_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let repacked_wheel = repacked_wheel_with_entrypoint(&context, "console_scripts", "python.py")?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+      Caused by: Scripts must not use the reserved name `python`, got: `python.py`
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn reject_windows_rewritten_free_threaded_python_wheel_entrypoint_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let repacked_wheel =
+        repacked_wheel_with_entrypoint(&context, "console_scripts", "pythonw3.13t.py")?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+      Caused by: Scripts must not use the reserved name `pythonw3.13t`, got: `pythonw3.13t.py`
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn reject_pypy_major_wheel_entrypoint_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let repacked_wheel = repacked_wheel_with_entrypoint(&context, "console_scripts", "pypy3")?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+      Caused by: Scripts must not use the reserved name `pypy3`, got: `pypy3`
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn reject_windows_rewritten_pypy_wheel_entrypoint_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let repacked_wheel = repacked_wheel_with_entrypoint(&context, "console_scripts", "pypy.py")?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+      Caused by: Scripts must not use the reserved name `pypy`, got: `pypy.py`
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
 fn warn_normalized_activation_wheel_entrypoint_name() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let repacked_wheel =
@@ -14229,8 +14490,9 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
           [stderr]
           Expected `anyio` version 3.0 but got 4.3.0
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     // Now constrain the `anyio` build dependency to match the runtime
@@ -14296,8 +14558,9 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
           [stderr]
           Expected `anyio` version 4.0 but got 3.7.1
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+    hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
     uv_snapshot!(context.filters(), context.pip_install().arg(".")
@@ -15441,7 +15704,7 @@ fn abi_compatibility_on_freethreaded_python() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      Caused by: A path dependency is incompatible with the current platform: [WORKSPACE]/test/links/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl
+      Caused by: A path ([WORKSPACE]/test/links/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl) dependency is incompatible with the current platform
 
     hint: You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the stable ABI (`abi3`), which requires a GIL-enabled interpreter
     ");
@@ -15461,7 +15724,7 @@ fn abi_compatibility_on_freethreaded_python() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      Caused by: A path dependency is incompatible with the current platform: [WORKSPACE]/test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl
+      Caused by: A path ([WORKSPACE]/test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl) dependency is incompatible with the current platform
 
     hint: You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the CPython 3.14 ABI (`cp314`), which requires a GIL-enabled interpreter
     ");
@@ -15612,7 +15875,7 @@ fn abi_compatibility_on_nondebug_python_with_debug_wheel() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      Caused by: A path dependency is incompatible with the current platform: cpython_debug_package/dist/cpython_debug_package-1.0.0-cp314-cp314d-manylinux_2_17_x86_64.whl
+      Caused by: A path (cpython_debug_package/dist/cpython_debug_package-1.0.0-cp314-cp314d-manylinux_2_17_x86_64.whl) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with CPython 3.14 (`cp314d`), but you're using CPython 3.14 (`cp314`)
     ");
@@ -15621,11 +15884,12 @@ fn abi_compatibility_on_nondebug_python_with_debug_wheel() {
 #[test]
 fn warn_on_bz2_wheel() {
     let context = uv_test::test_context!("3.14");
+    let vendor = FindLinksServer::vendor();
 
     uv_snapshot!(
         context.filters(),
         context.pip_install()
-            .arg("futzed_bz2 @ https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_bz2-0.1.0-py3-none-any.whl"),
+            .arg(format!("futzed_bz2 @ {}/futzed_bz2-0.1.0-py3-none-any.whl", vendor.url())),
         @"
     success: true
     exit_code: 0
@@ -15633,10 +15897,10 @@ fn warn_on_bz2_wheel() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: One or more file entries in 'https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_bz2-0.1.0-py3-none-any.whl' use the 'bzip2' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the 'stored', 'DEFLATE', or 'zstd' compression methods.
+    warning: One or more file entries in 'http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl' use the 'bzip2' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the 'stored', 'DEFLATE', or 'zstd' compression methods.
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + futzed-bz2==0.1.0 (from https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_bz2-0.1.0-py3-none-any.whl)
+     + futzed-bz2==0.1.0 (from http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl)
     "
     );
 }
@@ -15644,20 +15908,21 @@ fn warn_on_bz2_wheel() {
 #[test]
 fn warn_on_lzma_wheel() {
     let context = uv_test::test_context!("3.14");
+    let vendor = FindLinksServer::vendor();
 
     uv_snapshot!(
         context.filters(),
         context.pip_install()
-            .arg("futzed_lzma @ https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_lzma-0.1.0-py3-none-any.whl"),
+            .arg(format!("futzed_lzma @ {}/futzed_lzma-0.1.0-py3-none-any.whl", vendor.url())),
         @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `futzed-lzma @ https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_lzma-0.1.0-py3-none-any.whl`
+      × Failed to download `futzed-lzma @ http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
       ├─▶ Request failed after 3 retries in [TIME]
-      ├─▶ Failed to read metadata: `https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_lzma-0.1.0-py3-none-any.whl`
+      ├─▶ Failed to read metadata: `http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
       ├─▶ Failed to read from zip file
       ├─▶ an upstream reader returned an error: stream/file format not recognized
       ╰─▶ stream/file format not recognized

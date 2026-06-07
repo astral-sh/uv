@@ -9,6 +9,7 @@ use console::Term;
 use fs_err::File;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+
 use tracing::{debug, trace};
 
 use crate::{Error, Prompt};
@@ -21,6 +22,7 @@ use uv_python::managed::{
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
+use uv_warnings::warn_user_once;
 
 /// Activation scripts for the environment, with dependent paths templated out.
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
@@ -114,27 +116,39 @@ pub(crate) fn create(
             } else {
                 "directory"
             };
-            let hint = format!(
-                "Use the `{}` flag or set `{}` to replace the existing {name}",
-                "--clear".green(),
-                "UV_VENV_CLEAR=1".green()
-            );
             // TODO(zanieb): We may want to consider omitting the hint in some of these cases, e.g.,
             // when `--no-clear` is used do we want to suggest `--clear`?
-            let err = Err(Error::Io(io::Error::new(
-                io::ErrorKind::AlreadyExists,
-                format!(
-                    "A {name} already exists at: {}\n\n{}{} {hint}",
-                    location.user_display(),
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                ),
-            )));
+            let err = Err(Error::Exists {
+                name,
+                path: location.to_path_buf(),
+            });
             match on_existing {
                 OnExisting::Allow => {
                     debug!("Allowing existing {name} due to `--allow-existing`");
                 }
                 OnExisting::Remove(reason) => {
+                    if !is_virtualenv
+                        && let RemovalReason::UserRequest(clear_non_virtualenv) = reason
+                    {
+                        match clear_non_virtualenv {
+                            ClearNonVirtualenv::Allow => {}
+                            ClearNonVirtualenv::Warn => {
+                                warn_user_once!(
+                                    "The `--clear` option will remove the existing directory at `{}` \
+                                    even though it is not a virtual environment. \
+                                    This will become an error in a future release. \
+                                    Use `--force` to suppress this warning, or \
+                                    `--preview-features venv-safe-clear` to error on this now.",
+                                    location.user_display()
+                                );
+                            }
+                            ClearNonVirtualenv::Error => {
+                                return Err(Error::ClearNonVirtualenv {
+                                    path: location.to_path_buf(),
+                                });
+                            }
+                        }
+                    }
                     debug!("Removing existing {name} ({reason})");
                     // Before removing the virtual environment, we need to canonicalize the path
                     // because `Path::metadata` will follow the symlink but we're still operating on
@@ -311,8 +325,11 @@ pub(crate) fn create(
                 replace_link_to_executable(targetwt.as_path(), &executable_target)
                     .map_err(Error::Python)?;
             }
-        } else if matches!(interpreter.platform().os(), Os::Pyodide { .. }) {
-            // For Pyodide, link only `python.exe`.
+        } else if matches!(
+            interpreter.platform().os(),
+            Os::Pyodide { .. } | Os::PyEmscripten { .. }
+        ) {
+            // For PyEmscripten, link only `python.exe`.
             // This should not be copied as `python.exe` is a wrapper that launches Pyodide.
             let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
             replace_link_to_executable(target.as_path(), &executable_target)
@@ -611,9 +628,19 @@ fn confirm_clear(location: &Path, name: &'static str) -> Result<Option<bool>, io
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ClearNonVirtualenv {
+    /// Allow clearing a non-virtual environment directory.
+    Allow,
+    /// Warn before clearing a non-virtual environment directory.
+    Warn,
+    /// Refuse to clear a non-virtual environment directory.
+    Error,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum RemovalReason {
     /// The removal was explicitly requested, i.e., with `--clear`.
-    UserRequest,
+    UserRequest(ClearNonVirtualenv),
     /// The environment can be removed because it is considered temporary, e.g., a build
     /// environment.
     TemporaryEnvironment,
@@ -625,7 +652,7 @@ pub enum RemovalReason {
 impl std::fmt::Display for RemovalReason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UserRequest => f.write_str("requested with `--clear`"),
+            Self::UserRequest(_) => f.write_str("requested with `--clear`"),
             Self::ManagedEnvironment => f.write_str("environment is managed by uv"),
             Self::TemporaryEnvironment => f.write_str("environment is temporary"),
         }
@@ -649,11 +676,16 @@ pub enum OnExisting {
 }
 
 impl OnExisting {
-    pub fn from_args(allow_existing: bool, clear: bool, no_clear: bool) -> Self {
+    pub fn from_args(
+        allow_existing: bool,
+        clear: bool,
+        no_clear: bool,
+        clear_non_virtualenv: ClearNonVirtualenv,
+    ) -> Self {
         if allow_existing {
             Self::Allow
         } else if clear {
-            Self::Remove(RemovalReason::UserRequest)
+            Self::Remove(RemovalReason::UserRequest(clear_non_virtualenv))
         } else if no_clear {
             Self::Fail
         } else {

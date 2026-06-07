@@ -30,7 +30,7 @@ pub struct Authenticator {
 
 impl Authenticator {
     #[allow(dead_code)]
-    pub fn new(login: &str, account: &str, password: &str) -> Self {
+    pub(crate) fn new(login: &str, account: &str, password: &str) -> Self {
         Self {
             login: login.to_owned(),
             account: account.to_owned(),
@@ -83,7 +83,7 @@ impl std::str::FromStr for Netrc {
                 break;
             }
             if tt.chars().nth(0) == Some('#') {
-                if lexer.lineno == saved_lineno && tt.len() == 1 {
+                if lexer.lineno == saved_lineno {
                     lexer.read_line();
                 }
                 continue;
@@ -522,6 +522,32 @@ mod tests {
             r#"#
             machine foo.domain.com login bar password pass
             machine bar.domain.com login foo password pass
+            "#,
+        );
+    }
+
+    #[test]
+    fn test_comment_before_machine_line_multiword_no_space() {
+        test_comment(
+            r#"#comment word2 word3
+            machine foo.domain.com login bar password pass
+            machine bar.domain.com login foo password pass
+            "#,
+        );
+    }
+
+    #[test]
+    fn test_comment_after_machine_line_multiword_no_space() {
+        test_comment(
+            r#"machine foo.domain.com login bar password pass
+            #comment word2 word3
+            machine bar.domain.com login foo password pass
+            "#,
+        );
+        test_comment(
+            r#"machine foo.domain.com login bar password pass
+            machine bar.domain.com login foo password pass
+            #comment word2 word3
             "#,
         );
     }
