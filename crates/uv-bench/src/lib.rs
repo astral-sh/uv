@@ -1,1 +1,1 @@
-pub mod synthetic_workspace;
+pub mod workspace_discovery;

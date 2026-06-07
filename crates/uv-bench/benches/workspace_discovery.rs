@@ -2,17 +2,19 @@ use std::hint::black_box;
 use std::path::PathBuf;
 
 use criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
-use uv_bench::synthetic_workspace::SyntheticWorkspace;
+
+use uv_bench::workspace_discovery::WorkspaceDiscoveryFixture;
 use uv_cache::Cache;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
-fn discover_synthetic_workspace_from_all_members(c: &mut Criterion<WallTime>) {
-    let fixture = SyntheticWorkspace::create().expect("Failed to create synthetic workspace");
+fn discover_workspace_from_all_members(c: &mut Criterion<WallTime>) {
+    let fixture =
+        WorkspaceDiscoveryFixture::create().expect("Failed to create workspace discovery fixture");
     let runtime = benchmark_runtime();
     let cache = Cache::from_path(fixture.root().join(".uv-cache"));
     benchmark_workspace_discovery(
         c,
-        "discover_synthetic_workspace_from_all_members",
+        "discover_workspace_from_all_members",
         &runtime,
         fixture.discovery_roots(),
         &cache,
@@ -48,8 +50,5 @@ fn benchmark_workspace_discovery(
     });
 }
 
-criterion_group!(
-    synthetic_workspace,
-    discover_synthetic_workspace_from_all_members
-);
-criterion_main!(synthetic_workspace);
+criterion_group!(workspace_discovery, discover_workspace_from_all_members);
+criterion_main!(workspace_discovery);

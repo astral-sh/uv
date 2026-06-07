@@ -1,11 +1,11 @@
 use anyhow::Result;
-use uv_bench::synthetic_workspace::{SYNTHETIC_MEMBER_COUNT, SyntheticWorkspace};
+use uv_bench::workspace_discovery::{WORKSPACE_DISCOVERY_MEMBER_COUNT, WorkspaceDiscoveryFixture};
 use uv_cache::Cache;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
 #[tokio::test]
-async fn synthetic_workspace_has_expected_scale() -> Result<()> {
-    let fixture = SyntheticWorkspace::create()?;
+async fn workspace_discovery_fixture_has_expected_scale() -> Result<()> {
+    let fixture = WorkspaceDiscoveryFixture::create()?;
     let root_pyproject = fs_err::read_to_string(fixture.root().join("pyproject.toml"))?;
     let member_pyproject =
         fs_err::read_to_string(fixture.root().join("packages/provider-000/pyproject.toml"))?;
@@ -22,9 +22,15 @@ async fn synthetic_workspace_has_expected_scale() -> Result<()> {
     assert!(root_pyproject.len() > 100_000);
     assert!(member_pyproject.lines().count() > 150);
     assert!(member_pyproject.len() > 5_000);
-    assert_eq!(fixture.discovery_roots().len(), SYNTHETIC_MEMBER_COUNT + 1);
-    assert_eq!(workspace.packages().len(), SYNTHETIC_MEMBER_COUNT + 1);
-    assert_eq!(workspace.sources().len(), SYNTHETIC_MEMBER_COUNT);
+    assert_eq!(
+        fixture.discovery_roots().len(),
+        WORKSPACE_DISCOVERY_MEMBER_COUNT + 1
+    );
+    assert_eq!(
+        workspace.packages().len(),
+        WORKSPACE_DISCOVERY_MEMBER_COUNT + 1
+    );
+    assert_eq!(workspace.sources().len(), WORKSPACE_DISCOVERY_MEMBER_COUNT);
 
     Ok(())
 }

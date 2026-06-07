@@ -2,31 +2,31 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-pub const SYNTHETIC_MEMBER_COUNT: usize = 127;
+pub const WORKSPACE_DISCOVERY_MEMBER_COUNT: usize = 127;
 const OPTIONAL_DEPENDENCY_GROUP_COUNT: usize = 122;
 const DEPENDENCY_GROUP_COUNT: usize = 64;
 const UNUSED_ROOT_TABLE_COUNT: usize = 128;
 const UNUSED_MEMBER_TABLE_COUNT: usize = 16;
 
-pub struct SyntheticWorkspace {
+pub struct WorkspaceDiscoveryFixture {
     root: tempfile::TempDir,
     discovery_roots: Vec<PathBuf>,
 }
 
-impl SyntheticWorkspace {
+impl WorkspaceDiscoveryFixture {
     pub fn create() -> Result<Self> {
-        let root = tempfile::tempdir().context("Failed to create synthetic workspace")?;
-        let mut discovery_roots = Vec::with_capacity(SYNTHETIC_MEMBER_COUNT + 1);
+        let root = tempfile::tempdir().context("Failed to create workspace discovery fixture")?;
+        let mut discovery_roots = Vec::with_capacity(WORKSPACE_DISCOVERY_MEMBER_COUNT + 1);
         discovery_roots.push(root.path().to_path_buf());
 
-        for member_index in 0..SYNTHETIC_MEMBER_COUNT {
+        for member_index in 0..WORKSPACE_DISCOVERY_MEMBER_COUNT {
             let member_root = root
                 .path()
                 .join("packages")
                 .join(format!("provider-{member_index:03}"));
             fs_err::create_dir_all(&member_root).with_context(|| {
                 format!(
-                    "Failed to create synthetic workspace member `{}`",
+                    "Failed to create workspace discovery fixture member `{}`",
                     member_root.display()
                 )
             })?;
@@ -36,7 +36,7 @@ impl SyntheticWorkspace {
             )
             .with_context(|| {
                 format!(
-                    "Failed to write synthetic workspace member `{}`",
+                    "Failed to write workspace discovery fixture member `{}`",
                     member_root.display()
                 )
             })?;
@@ -44,7 +44,7 @@ impl SyntheticWorkspace {
         }
 
         fs_err::write(root.path().join("pyproject.toml"), root_pyproject())
-            .context("Failed to write synthetic workspace root")?;
+            .context("Failed to write workspace discovery fixture root")?;
 
         Ok(Self {
             root,
@@ -68,7 +68,7 @@ fn root_pyproject() -> String {
         build-backend = "uv_build"
 
         [project]
-        name = "synthetic-large-workspace"
+        name = "workspace-discovery-benchmark"
         version = "0.0.0"
         description = "A generated workspace used to benchmark repeated workspace discovery"
         requires-python = ">=3.11"
@@ -92,13 +92,13 @@ fn root_pyproject() -> String {
         Issues = "https://example.invalid/issues"
 
         [project.scripts]
-        synthetic-admin = "synthetic_workspace.cli:main"
-        synthetic-report = "synthetic_workspace.reports:main"
+        workspace-discovery-admin = "workspace_discovery.cli:main"
+        workspace-discovery-report = "workspace_discovery.reports:main"
 
-        [project.entry-points."synthetic.hooks"]
-        initialize = "synthetic_workspace.hooks:initialize"
-        validate = "synthetic_workspace.hooks:validate"
-        finalize = "synthetic_workspace.hooks:finalize"
+        [project.entry-points."workspace_discovery.hooks"]
+        initialize = "workspace_discovery.hooks:initialize"
+        validate = "workspace_discovery.hooks:validate"
+        finalize = "workspace_discovery.hooks:finalize"
 
         [dependency-groups]
 
@@ -107,7 +107,7 @@ fn root_pyproject() -> String {
 
         [tool.uv.sources]
 
-        [tool.synthetic.generated]
+        [tool.workspace_discovery.generated]
     };
 
     let project = pyproject
@@ -118,8 +118,8 @@ fn root_pyproject() -> String {
         .get_mut("dependencies")
         .and_then(toml::Value::as_array_mut)
         .unwrap();
-    for member_index in 0..SYNTHETIC_MEMBER_COUNT {
-        dependencies.push(format!("synthetic-provider-{member_index:03}>=0.0.0").into());
+    for member_index in 0..WORKSPACE_DISCOVERY_MEMBER_COUNT {
+        dependencies.push(format!("workspace-discovery-provider-{member_index:03}>=0.0.0").into());
     }
 
     let optional_dependencies = project
@@ -129,10 +129,12 @@ fn root_pyproject() -> String {
     for group_index in 0..OPTIONAL_DEPENDENCY_GROUP_COUNT {
         let mut dependencies = Vec::with_capacity(5);
         for offset in 0..5 {
-            let member_index = (group_index * 7 + offset * 11) % SYNTHETIC_MEMBER_COUNT;
+            let member_index = (group_index * 7 + offset * 11) % WORKSPACE_DISCOVERY_MEMBER_COUNT;
             dependencies.push(
-                format!("synthetic-provider-{member_index:03}>=0.0.0; python_version >= '3.11'")
-                    .into(),
+                format!(
+                    "workspace-discovery-provider-{member_index:03}>=0.0.0; python_version >= '3.11'"
+                )
+                .into(),
             );
         }
         optional_dependencies.insert(
@@ -148,8 +150,9 @@ fn root_pyproject() -> String {
     for group_index in 0..DEPENDENCY_GROUP_COUNT {
         let mut dependencies = Vec::with_capacity(4);
         for offset in 0..4 {
-            let member_index = (group_index * 13 + offset * 17) % SYNTHETIC_MEMBER_COUNT;
-            dependencies.push(format!("synthetic-provider-{member_index:03}>=0.0.0").into());
+            let member_index = (group_index * 13 + offset * 17) % WORKSPACE_DISCOVERY_MEMBER_COUNT;
+            dependencies
+                .push(format!("workspace-discovery-provider-{member_index:03}>=0.0.0").into());
         }
         dependency_groups.insert(
             format!("development-set-{group_index:03}"),
@@ -171,7 +174,7 @@ fn root_pyproject() -> String {
         .and_then(|workspace| workspace.get_mut("members"))
         .and_then(toml::Value::as_array_mut)
         .unwrap();
-    for member_index in 0..SYNTHETIC_MEMBER_COUNT {
+    for member_index in 0..WORKSPACE_DISCOVERY_MEMBER_COUNT {
         members.push(format!("packages/provider-{member_index:03}").into());
     }
 
@@ -179,9 +182,9 @@ fn root_pyproject() -> String {
         .get_mut("sources")
         .and_then(toml::Value::as_table_mut)
         .unwrap();
-    for member_index in 0..SYNTHETIC_MEMBER_COUNT {
+    for member_index in 0..WORKSPACE_DISCOVERY_MEMBER_COUNT {
         sources.insert(
-            format!("synthetic-provider-{member_index:03}"),
+            format!("workspace-discovery-provider-{member_index:03}"),
             toml::Value::Table(toml::toml! {
                 workspace = true
             }),
@@ -189,9 +192,9 @@ fn root_pyproject() -> String {
     }
 
     let generated = tool
-        .get_mut("synthetic")
+        .get_mut("workspace_discovery")
         .and_then(toml::Value::as_table_mut)
-        .and_then(|synthetic| synthetic.get_mut("generated"))
+        .and_then(|workspace_discovery| workspace_discovery.get_mut("generated"))
         .and_then(toml::Value::as_table_mut)
         .unwrap();
     for table_index in 0..UNUSED_ROOT_TABLE_COUNT {
@@ -218,13 +221,15 @@ fn member_pyproject(member_index: usize) -> String {
     let mut dependencies = Vec::with_capacity(4);
     for offset in 1..=4 {
         if let Some(dependency_index) = member_index.checked_sub(offset) {
-            dependencies.push(format!("synthetic-provider-{dependency_index:03}>=0.0.0"));
+            dependencies.push(format!(
+                "workspace-discovery-provider-{dependency_index:03}>=0.0.0"
+            ));
         }
     }
 
     let mut pyproject = toml::toml! {
         [project]
-        name = (format!("synthetic-provider-{member_index:03}"))
+        name = (format!("workspace-discovery-provider-{member_index:03}"))
         version = "0.0.0"
         description = (format!("Generated provider package {member_index:03} for workspace discovery benchmarks"))
         requires-python = ">=3.11"
@@ -249,9 +254,9 @@ fn member_pyproject(member_index: usize) -> String {
         Documentation = "https://example.invalid/providers"
         Source = "https://example.invalid/repository"
 
-        [project.entry-points."synthetic.providers"]
+        [project.entry-points."workspace_discovery.providers"]
 
-        [tool.synthetic.generated]
+        [tool.workspace_discovery.generated]
     };
 
     let project = pyproject
@@ -261,20 +266,20 @@ fn member_pyproject(member_index: usize) -> String {
     let entry_points = project
         .get_mut("entry-points")
         .and_then(toml::Value::as_table_mut)
-        .and_then(|entry_points| entry_points.get_mut("synthetic.providers"))
+        .and_then(|entry_points| entry_points.get_mut("workspace_discovery.providers"))
         .and_then(toml::Value::as_table_mut)
         .unwrap();
     entry_points.insert(
         format!("provider-{member_index:03}"),
-        format!("synthetic_provider_{member_index:03}.plugin:Provider").into(),
+        format!("workspace_discovery_provider_{member_index:03}.plugin:Provider").into(),
     );
 
     let generated = pyproject
         .get_mut("tool")
         .and_then(toml::Value::as_table_mut)
-        .and_then(|tool| tool.get_mut("synthetic"))
+        .and_then(|tool| tool.get_mut("workspace_discovery"))
         .and_then(toml::Value::as_table_mut)
-        .and_then(|synthetic| synthetic.get_mut("generated"))
+        .and_then(|workspace_discovery| workspace_discovery.get_mut("generated"))
         .and_then(toml::Value::as_table_mut)
         .unwrap();
     for table_index in 0..UNUSED_MEMBER_TABLE_COUNT {

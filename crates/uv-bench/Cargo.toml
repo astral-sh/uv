@@ -24,8 +24,8 @@ path = "benches/uv.rs"
 harness = false
 
 [[bench]]
-name = "synthetic_workspace"
-path = "benches/synthetic_workspace.rs"
+name = "workspace_discovery"
+path = "benches/workspace_discovery.rs"
 harness = false
 
 [dependencies]
