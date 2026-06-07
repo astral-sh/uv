@@ -40,7 +40,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, elapsed};
+use crate::commands::{ExitStatus, conjunction, elapsed};
 use crate::printer::Printer;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -999,9 +999,7 @@ fn create_bin_links(
         vec![installation.key().executable_name_minor()]
     };
 
-    // Collect the executables that already exist and aren't managed by uv, so they can be
-    // reported together as a single error below.
-    let mut existing_unmanaged: Vec<String> = Vec::new();
+    let mut existing_unmanaged = Vec::new();
 
     for target in targets {
         let target = bin.join(target);
@@ -1078,8 +1076,9 @@ fn create_bin_links(
                                         installation.key().variant().display_suffix()
                                     );
                                 } else {
-                                    existing_unmanaged
-                                        .push(target.simplified_display().to_string());
+                                    // Defer reporting to allow grouping.
+
+                                    existing_unmanaged.push(target.clone());
                                 }
                                 continue;
                             }
@@ -1205,30 +1204,31 @@ fn create_bin_links(
         }
     }
 
-    // Report the executables that already exist and aren't managed by uv as a single grouped
-    // error, rather than one near-identical error per executable
-    // (https://github.com/astral-sh/uv/issues/9707).
     match existing_unmanaged.as_slice() {
         [] => {}
-        [executable] => {
-            errors.push((
-                InstallErrorKind::Bin,
-                installation.key().clone(),
-                anyhow::anyhow!(
-                    "Executable already exists at `{executable}` but is not managed by uv; use `--force` to replace it"
+        [executable] => errors.push((
+            InstallErrorKind::Bin,
+            installation.key().clone(),
+            anyhow::anyhow!(
+                "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
+                executable.simplified_display()
+            ),
+        )),
+        executables => errors.push((
+            InstallErrorKind::Bin,
+            installation.key().clone(),
+            anyhow::anyhow!(
+                "Executables {} already exist in `{}` but are not managed by uv; use `--force` to replace them",
+                conjunction(
+                    executables
+                        .iter()
+                        .filter_map(|path| path.file_name())
+                        .map(|name| format!("`{}`", name.to_string_lossy()))
+                        .collect(),
                 ),
-            ));
-        }
-        executables => {
-            errors.push((
-                InstallErrorKind::Bin,
-                installation.key().clone(),
-                anyhow::anyhow!(
-                    "Executables already exist but are not managed by uv; use `--force` to replace them:\n- {}",
-                    executables.join("\n- ")
-                ),
-            ));
-        }
+                bin.simplified_display()
+            ),
+        )),
     }
 }
 

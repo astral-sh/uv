@@ -875,19 +875,19 @@ fn python_install_multiple_unmanaged_executables() {
         .with_managed_python_dirs()
         .with_python_download_cache();
 
-    // Install the latest version, creating the `python`, `python3`, and `python3.14` executables.
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview"), @"
+    // Install a version with the default `python`, `python3`, and `python3.13` executables.
+    uv_snapshot!(context.filters(), context.python_install().arg("--default").arg("--preview-features").arg("python-install-default").arg("3.13"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.[LATEST] in [TIME]
-     + cpython-3.14.[LATEST]-[PLATFORM] (python, python3, python3.14)
+    Installed Python 3.13.[LATEST] in [TIME]
+     + cpython-3.13.[LATEST]-[PLATFORM] (python, python3, python3.13)
     ");
 
-    // Replace each managed executable with an unmanaged file.
-    for name in ["python", "python3", "python3.14"] {
+    // Replace each managed executable with an empty, unmanaged file.
+    for name in ["python", "python3", "python3.13"] {
         let executable = context
             .bin_dir
             .child(format!("{name}{}", std::env::consts::EXE_SUFFIX));
@@ -895,27 +895,23 @@ fn python_install_multiple_unmanaged_executables() {
         executable.touch().unwrap();
     }
 
-    // Re-installing the default executables without `--force` should report all three conflicts
-    // in a single grouped error, rather than emitting a near-identical message per executable.
-    uv_snapshot!(context.filters(), context.python_install().arg("--default").arg("--preview-features").arg("python-install-default").arg("3.14"), @"
+    // Re-installing without `--force` should report all three conflicts in a single grouped error.
+    uv_snapshot!(context.filters(), context.python_install().arg("--default").arg("--preview-features").arg("python-install-default").arg("3.13"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to install executable for cpython-3.14.[LATEST]-[PLATFORM]
-      Caused by: Executables already exist but are not managed by uv; use `--force` to replace them:
-    - [BIN]/python3.14
-    - [BIN]/python3
-    - [BIN]/python
+    warning: Failed to install executable for cpython-3.13.[LATEST]-[PLATFORM]
+      Caused by: Executables `python3.13`, `python3`, and `python` already exist in `[BIN]/` but are not managed by uv; use `--force` to replace them
     ");
 
-    // The unmanaged executables should be left untouched.
-    for name in ["python", "python3", "python3.14"] {
-        context
+    // The unmanaged executables should be left untouched (still empty).
+    for name in ["python", "python3", "python3.13"] {
+        let executable = context
             .bin_dir
-            .child(format!("{name}{}", std::env::consts::EXE_SUFFIX))
-            .assert(predicate::path::exists());
+            .child(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+        assert_eq!(fs_err::read_to_string(executable.path()).unwrap(), "");
     }
 }
 
