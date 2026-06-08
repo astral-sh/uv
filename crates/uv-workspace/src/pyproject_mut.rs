@@ -349,6 +349,50 @@ impl PyProjectTomlMut {
         Ok(edit)
     }
 
+    /// Replaces a dependency in `project.dependencies` without modifying its source.
+    ///
+    /// Returns `Some` if the dependency was replaced, or `None` if it was not found.
+    pub fn replace_dependency(
+        &mut self,
+        req: &Requirement,
+        raw: bool,
+    ) -> Result<Option<ArrayEdit>, Error> {
+        let Some(dependencies) = self
+            .project_mut()?
+            .and_then(|project| project.get_mut("dependencies"))
+            .map(|dependencies| {
+                dependencies
+                    .as_array_mut()
+                    .ok_or(Error::MalformedDependencies)
+            })
+            .transpose()?
+        else {
+            return Ok(None);
+        };
+        let mut to_replace = find_dependencies(&req.name, Some(&req.marker), dependencies);
+
+        match to_replace.as_slice() {
+            [] => Ok(None),
+            [_] => {
+                let (index, _) = to_replace.remove(0);
+                let req_string = if raw {
+                    req.displayable_with_credentials().to_string()
+                } else {
+                    req.to_string()
+                };
+                dependencies.replace(index, req_string);
+                Ok(Some(ArrayEdit::Update(index)))
+            }
+            _ => Err(Error::Ambiguous {
+                package_name: req.name.clone(),
+                requirements: to_replace
+                    .into_iter()
+                    .map(|(_, requirement)| requirement)
+                    .collect(),
+            }),
+        }
+    }
+
     /// Adds a development dependency to `tool.uv.dev-dependencies`.
     ///
     /// Returns `true` if the dependency was added, `false` if it was updated.
@@ -1782,12 +1826,17 @@ fn split_specifiers(req: &str) -> (&str, &str) {
 
 #[cfg(test)]
 mod test {
-    use super::{AddBoundsKind, reformat_array_multiline, remove_dependency, split_specifiers};
+    use super::{
+        AddBoundsKind, DependencyTarget, PyProjectTomlMut, reformat_array_multiline,
+        remove_dependency, split_specifiers,
+    };
+    use anyhow::Result;
     use insta::assert_snapshot;
     use std::str::FromStr;
     use toml_edit::DocumentMut;
     use uv_normalize::PackageName;
     use uv_pep440::Version;
+    use uv_pep508::Requirement;
 
     #[test]
     fn split() {
@@ -1960,6 +2009,35 @@ dependencies = [
                 .to_string();
             assert_eq!(actual, expected, "{version}");
         }
+    }
+
+    #[test]
+    fn replace_dependency_preserves_source() -> Result<()> {
+        let mut pyproject = PyProjectTomlMut::from_toml(
+            r#"[project]
+dependencies = ["anyio<=2"]
+
+[tool.uv.sources]
+anyio = { index = "internal" }
+            "#,
+            DependencyTarget::PyProjectToml,
+        )?;
+        let requirement = Requirement::from_str("anyio")?;
+
+        let replaced = pyproject.replace_dependency(&requirement, false)?;
+        assert!(replaced.is_some());
+
+        assert_snapshot!(
+            pyproject.to_string(),
+            @r#"
+[project]
+dependencies = ["anyio"]
+
+[tool.uv.sources]
+anyio = { index = "internal" }
+"#
+        );
+        Ok(())
     }
 
     #[test]

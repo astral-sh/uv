@@ -41,6 +41,7 @@ pub(crate) use project::remove::remove;
 pub(crate) use project::run::{ParsedRunCommand, RunCommand, run};
 pub(crate) use project::sync::sync;
 pub(crate) use project::tree::tree;
+pub(crate) use project::upgrade::upgrade;
 pub(crate) use project::version::{project_version, self_version};
 pub(crate) use publish::publish;
 pub(crate) use python::dir::dir as python_dir;

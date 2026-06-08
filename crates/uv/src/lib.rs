@@ -2357,6 +2357,34 @@ async fn run_project(
             ))
             .await
         }
+        ProjectCommand::Upgrade(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::UpgradeSettings::resolve(args, filesystem, environment);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache
+                .init()
+                .await?
+                .with_refresh(Refresh::from(args.settings.upgrade.clone()));
+
+            Box::pin(commands::upgrade(
+                project_dir,
+                args.package,
+                args.install_mirrors,
+                args.settings,
+                client_builder.subcommand(vec!["upgrade".to_owned()]),
+                globals.python_preference,
+                globals.python_downloads,
+                globals.concurrency,
+                no_config,
+                &cache,
+                workspace_cache,
+                printer,
+                globals.preview,
+            ))
+            .await
+        }
         ProjectCommand::Add(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let mut args = settings::AddSettings::resolve(args, filesystem, environment);

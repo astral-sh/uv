@@ -1167,6 +1167,9 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Lock(LockArgs),
+    /// Upgrade a dependency in the project.
+    #[command(hide = true)]
+    Upgrade(UpgradeArgs),
     /// Export the project's lockfile to an alternate format.
     ///
     /// At present, `requirements.txt`, `pylock.toml` (PEP 751) and CycloneDX v1.5 JSON output
@@ -4267,6 +4270,13 @@ pub struct LockArgs {
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
+}
+
+#[derive(Args)]
+pub struct UpgradeArgs {
+    /// The package to upgrade.
+    #[arg(value_hint = ValueHint::Other)]
+    pub package: PackageName,
 }
 
 #[derive(Args)]

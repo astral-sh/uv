@@ -19,7 +19,8 @@ use uv_cli::{
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs,
     SyncArgs, SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
-    ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs, VersionBumpSpec, VersionFormat,
+    ToolUninstallArgs, TreeArgs, UpgradeArgs, VenvArgs, VersionArgs, VersionBumpSpec,
+    VersionFormat,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, CheckArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
@@ -1967,6 +1968,41 @@ impl LockSettings {
         }
     }
 }
+
+/// The resolved settings to use for an `upgrade` invocation.
+#[derive(Debug, Clone)]
+pub(crate) struct UpgradeSettings {
+    pub(crate) package: PackageName,
+    pub(crate) install_mirrors: PythonInstallMirrors,
+    pub(crate) settings: ResolverSettings,
+}
+
+impl UpgradeSettings {
+    /// Resolve the [`UpgradeSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(
+        args: UpgradeArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
+        let filesystem_install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+        let package = args.package;
+        let mut settings =
+            ResolverSettings::combine(ResolverOptions::default(), filesystem, &environment);
+        settings.upgrade = Upgrade::package(package.clone());
+
+        Self {
+            package,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
+            settings,
+        }
+    }
+}
+
 /// The resolved settings to use for a `lock` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct MetadataSettings {
@@ -4992,4 +5028,26 @@ where
 fn parse_failure(name: &str, expected: &str) -> ! {
     eprintln!("error: invalid value for {name}, expected {expected}");
     process::exit(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn upgrade_settings_target_only_requested_package() -> anyhow::Result<()> {
+        let package = PackageName::from_str("anyio")?;
+        let settings = UpgradeSettings::resolve(
+            UpgradeArgs {
+                package: package.clone(),
+            },
+            None,
+            EnvironmentOptions::new()?,
+        );
+        let expected = FxHashSet::from_iter([package]);
+
+        assert!(!settings.settings.upgrade.is_all());
+        assert_eq!(settings.settings.upgrade.packages(), Some(&expected));
+        Ok(())
+    }
 }

@@ -78,6 +78,7 @@ pub(crate) mod remove;
 pub(crate) mod run;
 pub(crate) mod sync;
 pub(crate) mod tree;
+pub(crate) mod upgrade;
 pub(crate) mod version;
 
 /// The source of a missing lockfile error.
