@@ -423,7 +423,9 @@ function Invoke-Blocks {
             )
         }
 
+        $blockStartedAtUtc = (Get-Date).ToUniversalTime().ToString("O")
         & hyperfine @hyperfineArguments 2>&1 | Out-Null
+        $blockCompletedAtUtc = (Get-Date).ToUniversalTime().ToString("O")
         if ($LASTEXITCODE -ne 0) {
             throw "Hyperfine failed for $($Case.Name) $CacheState $Phase block $blockNumber"
         }
@@ -449,6 +451,8 @@ function Invoke-Blocks {
                 position = $observation.position
                 variant = $observation.variant
                 seconds = $seconds
+                blockStartedAtUtc = $blockStartedAtUtc
+                blockCompletedAtUtc = $blockCompletedAtUtc
                 outputSha256 = $hash
             })
         }
@@ -478,20 +482,64 @@ $orderedCorpus |
     ConvertTo-Json |
     Set-Content (Join-Path $results "fixture-order.json")
 
-$counterJob = Start-Job -ScriptBlock {
-    param([string]$CounterPath)
+$requestedCounters = @(
+    '\Processor Information(_Total)\% Processor Time',
+    '\Processor Information(_Total)\Processor Frequency',
+    '\Memory\Available MBytes',
+    '\PhysicalDisk(_Total)\% Disk Time'
+)
+$availableCounters = @()
+$counterErrors = @()
+foreach ($counter in $requestedCounters) {
+    try {
+        Get-Counter -Counter $counter -MaxSamples 1 -ErrorAction Stop | Out-Null
+        $availableCounters += $counter
+    } catch {
+        $counterErrors += [pscustomobject]@{
+            counter = $counter
+            error = $_.Exception.Message
+        }
+    }
+}
+if ($availableCounters -notcontains '\Processor Information(_Total)\% Processor Time') {
+    throw "The required processor utilization counter is unavailable"
+}
 
-    Get-Counter -Counter @(
-        '\Processor Information(_Total)\% Processor Time',
-        '\Processor Information(_Total)\Processor Frequency',
-        '\Memory\Available MBytes',
-        '\PhysicalDisk(_Total)\% Disk Time'
-    ) -SampleInterval 5 -Continuous |
-        Export-Counter -Path $CounterPath -FileFormat BLG -Force
-} -ArgumentList (Join-Path $results "machine-counters.blg")
+$counterPath = Join-Path $results "machine-counters.blg"
+[pscustomobject]@{
+    requested = $requestedCounters
+    available = $availableCounters
+    errors = $counterErrors
+} | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $results "counter-selection.json")
+
+$counterConfiguration = [pscustomobject]@{
+    Path = $counterPath
+    Counters = $availableCounters
+}
+$counterJob = Start-Job -ScriptBlock {
+    param([pscustomobject]$Configuration)
+
+    Get-Counter `
+        -Counter $Configuration.Counters `
+        -SampleInterval 5 `
+        -Continuous `
+        -ErrorAction Stop |
+        Export-Counter `
+            -Path $Configuration.Path `
+            -FileFormat BLG `
+            -Force `
+            -ErrorAction Stop
+} -ArgumentList $counterConfiguration
+
+Start-Sleep -Seconds 10
+if ($counterJob.State -ne "Running" -or -not (Test-Path $counterPath)) {
+    $counterFailure = Receive-Job $counterJob 2>&1 | ForEach-Object ToString
+    $counterFailure | Set-Content (Join-Path $results "machine-counters-job.txt")
+    throw "The machine telemetry collector failed during startup"
+}
 
 try {
-    Start-Sleep -Seconds 30
+    Start-Sleep -Seconds 20
 
     for ($caseIndex = 0; $caseIndex -lt $orderedCorpus.Count; $caseIndex++) {
         $case = $orderedCorpus[$caseIndex]
@@ -564,9 +612,17 @@ try {
         Write-Host "::endgroup::"
     }
 } finally {
+    $counterWasRunning = $counterJob.State -eq "Running"
     Stop-Job $counterJob
     Receive-Job $counterJob 2>&1 |
         ForEach-Object ToString |
         Set-Content (Join-Path $results "machine-counters-job.txt")
     Remove-Job $counterJob
+    if (
+        -not $counterWasRunning -or
+        -not (Test-Path $counterPath) -or
+        (Get-Item $counterPath).Length -eq 0
+    ) {
+        throw "The machine telemetry collector did not cover the complete benchmark"
+    }
 }
