@@ -2,8 +2,8 @@
 //!
 //! See: <https://github.com/astral-sh/ruff/blob/dc8db1afb08704ad6a788c497068b01edf8b460d/crates/ruff_macros/src/config.rs>
 
-use proc_macro2::{TokenStream, TokenTree};
-use quote::{quote, quote_spanned};
+use proc_macro::{TokenStream, TokenTree};
+use quote::{ToTokens, quote, quote_spanned};
 use syn::meta::ParseNestedMeta;
 use syn::spanned::Spanned;
 use syn::{
@@ -25,7 +25,7 @@ pub(crate) fn derive_impl(input: DeriveInput) -> syn::Result<TokenStream> {
             fields: Fields::Named(fields),
             ..
         }) => {
-            let mut output = vec![];
+            let mut output: Vec<Box<dyn ToTokens>> = vec![];
 
             for field in &fields.named {
                 if let Some(attr) = field
@@ -33,13 +33,13 @@ pub(crate) fn derive_impl(input: DeriveInput) -> syn::Result<TokenStream> {
                     .iter()
                     .find(|attr| attr.path().is_ident("option"))
                 {
-                    output.push(handle_option(field, attr)?);
+                    output.push(Box::new(handle_option(field, attr)?));
                 } else if field
                     .attrs
                     .iter()
                     .any(|attr| attr.path().is_ident("option_group"))
                 {
-                    output.push(handle_option_group(field)?);
+                    output.push(Box::new(handle_option_group(field)?));
                 } else if let Some(serde) = field
                     .attrs
                     .iter()
@@ -48,12 +48,12 @@ pub(crate) fn derive_impl(input: DeriveInput) -> syn::Result<TokenStream> {
                     // If a field has the `serde(flatten)` attribute, flatten the options into the parent
                     // by calling `Type::record` instead of `visitor.visit_set`
                     if let (Type::Path(ty), Meta::List(list)) = (&field.ty, &serde.meta) {
-                        for token in list.tokens.clone() {
+                        for token in TokenStream::from(list.tokens.clone()) {
                             if let TokenTree::Ident(ident) = token {
-                                if ident == "flatten" {
-                                    output.push(quote_spanned!(
+                                if ident.to_string() == "flatten" {
+                                    output.push(Box::new(quote_spanned!(
                                         ty.span() => (<#ty>::record(visit))
-                                    ));
+                                    )));
 
                                     break;
                                 }
@@ -98,7 +98,8 @@ pub(crate) fn derive_impl(input: DeriveInput) -> syn::Result<TokenStream> {
 
                     #documentation
                 }
-            })
+            }
+            .into())
         }
         _ => Err(syn::Error::new(
             ident.span(),
@@ -110,7 +111,7 @@ pub(crate) fn derive_impl(input: DeriveInput) -> syn::Result<TokenStream> {
 /// For a field with type `Option<Foobar>` where `Foobar` itself is a struct
 /// deriving `ConfigurationOptions`, create code that calls retrieves options
 /// from that group: `Foobar::get_available_options()`
-fn handle_option_group(field: &Field) -> syn::Result<TokenStream> {
+fn handle_option_group(field: &Field) -> syn::Result<impl ToTokens> {
     let ident = field
         .ident
         .as_ref()
@@ -159,7 +160,7 @@ fn parse_doc(doc: &Attribute) -> syn::Result<String> {
 
 /// Parse an `#[option(doc="...", default="...", value_type="...",
 /// example="...")]` attribute and return data in the form of an `OptionField`.
-fn handle_option(field: &Field, attr: &Attribute) -> syn::Result<TokenStream> {
+fn handle_option(field: &Field, attr: &Attribute) -> syn::Result<impl ToTokens> {
     let docs: Vec<&Attribute> = field
         .attrs
         .iter()
@@ -210,7 +211,7 @@ fn handle_option(field: &Field, attr: &Attribute) -> syn::Result<TokenStream> {
         .iter()
         .find(|attr| attr.path().is_ident("deprecated"))
     {
-        fn quote_option(option: Option<String>) -> TokenStream {
+        fn quote_option(option: Option<String>) -> impl ToTokens {
             match option {
                 None => quote!(None),
                 Some(value) => quote!(Some(#value)),

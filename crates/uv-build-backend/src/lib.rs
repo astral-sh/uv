@@ -472,6 +472,7 @@ pub(crate) fn error_on_venv(file_name: &OsStr, path: &Path) -> Result<(), Error>
 mod tests {
     use super::*;
     use async_zip::base::read::mem::ZipFileReader;
+    use base16ct::HexDisplay;
     use flate2::bufread::GzDecoder;
     use fs_err::File;
     use futures_lite::{StreamExt, future::block_on};
@@ -787,7 +788,7 @@ mod tests {
         );
         // Check that the source dist is reproducible across platforms.
         assert_snapshot!(
-            format!("{:x}", sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())),
+            format!("{:x}", HexDisplay(&sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap()))),
             @"8bed1f7a8059064bcbeedb61a867cca7f63a474306011d0114280de631ac705e"
         );
         // Check both the files we report and the actual files
@@ -841,7 +842,7 @@ mod tests {
         );
         // Check that the wheel is reproducible across platforms.
         assert_snapshot!(
-            format!("{:x}", sha2::Sha256::digest(fs_err::read(&wheel_path).unwrap())),
+            format!("{:x}", HexDisplay(&sha2::Sha256::digest(fs_err::read(&wheel_path).unwrap()))),
             @"9e8d80fef76be79a7fe73a2ccac3bdd0132b10fdcff7271ca8b868c99061b8ce"
         );
         assert_snapshot!(build.wheel_contents.join("\n"), @"

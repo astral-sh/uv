@@ -10,7 +10,7 @@ use std::fmt;
 use std::ops::Deref;
 use std::str::FromStr;
 
-use rand::RngCore as _;
+use rand::Rng as _;
 
 const ALPHABET: [u8; 64] = [
     b'_', b'-', b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'a', b'b', b'c', b'd',

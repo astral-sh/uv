@@ -25,6 +25,7 @@ uv-warnings = { workspace = true }
 astral-tokio-tar = { workspace = true }
 async-compression = { workspace = true, features = ["bzip2", "gzip", "zstd", "xz"] }
 async_zip = { workspace = true }
+base16ct = { workspace = true }
 blake2 = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
