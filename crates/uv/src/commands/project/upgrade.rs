@@ -20,7 +20,7 @@ use uv_resolver::MetadataResponse;
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::pyproject::Source;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::{LockEvent, LockMode, LockOperation, LockResult};
@@ -45,17 +45,28 @@ pub(crate) async fn upgrade(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    let project =
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
-            .await
+    let project = match VirtualProject::discover(
+        project_dir,
+        &DiscoveryOptions::default(),
+        cache,
+        workspace_cache,
+    )
+    .await
+    {
+        Ok(VirtualProject::Project(project)) => project,
+        Ok(VirtualProject::NonProject(_)) => {
+            bail!("`uv upgrade` requires a project with a `[project]` table")
+        }
+        Err(err)
+            if matches!(
+                err.as_ref(),
+                WorkspaceErrorKind::MissingPyprojectToml | WorkspaceErrorKind::MissingProject(_)
+            ) =>
         {
-            Ok(VirtualProject::Project(project)) => project,
-            Ok(VirtualProject::NonProject(_))
-            | Err(WorkspaceError::MissingPyprojectToml | WorkspaceError::MissingProject(_)) => {
-                bail!("`uv upgrade` requires a project with a `[project]` table");
-            }
-            Err(err) => return Err(err.into()),
-        };
+            bail!("`uv upgrade` requires a project with a `[project]` table");
+        }
+        Err(err) => return Err(err.into()),
+    };
 
     if project.workspace().packages().len() != 1 {
         bail!("`uv upgrade` does not support workspaces with multiple members yet");
@@ -173,6 +184,7 @@ pub(crate) async fn upgrade(
         &settings.index_locations,
         settings.sources.clone(),
         true,
+        cache,
         workspace_cache,
         client_builder.credentials_cache(),
     )
