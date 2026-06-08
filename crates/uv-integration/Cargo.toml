@@ -20,6 +20,13 @@ ignored = ["axoupdater"]
 
 [dependencies]
 axoupdater = { workspace = true, features = ["github_releases", "tokio"], optional = true }
+uv-main = { package = "uv", version = "0.11.19", path = "../uv", default-features = false }
+uv-performance-memory-allocator = { workspace = true, optional = true }
+
+[build-dependencies]
+embed-manifest = { workspace = true }
+uv-static = { workspace = true }
+uv-version = { workspace = true }
 
 [dev-dependencies]
 uv-cache = { workspace = true }
@@ -73,6 +80,10 @@ walkdir = { workspace = true }
 which = { workspace = true }
 wiremock = { workspace = true }
 
+[[bin]]
+name = "uv"
+path = "src/bin/uv.rs"
+
 [[test]]
 name = "it"
 path = "tests/it/main.rs"
@@ -122,10 +133,16 @@ name = "workspace"
 path = "tests/workspace/main.rs"
 
 [features]
-default = ["test-defaults"]
-native-auth = []
-self-update = ["axoupdater"]
-tracing-durations-export = ["uv-test/tracing-durations-export"]
+default = ["performance", "static", "test-defaults"]
+native-auth = ["uv-main/native-auth"]
+performance = ["performance-memory-allocator", "uv-main/performance"]
+performance-memory-allocator = [
+  "dep:uv-performance-memory-allocator",
+  "uv-main/performance-memory-allocator",
+]
+self-update = ["axoupdater", "uv-main/self-update"]
+static = ["uv-main/static"]
+tracing-durations-export = ["uv-main/tracing-durations-export", "uv-test/tracing-durations-export"]
 test-defaults = [
   "test-crates-io",
   "test-git",

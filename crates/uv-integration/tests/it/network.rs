@@ -12,7 +12,9 @@ use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use serde_json::json;
 use tokio_stream::wrappers::ReceiverStream;
-use wiremock::matchers::{any, method};
+#[cfg(feature = "test-pypi")]
+use wiremock::matchers::any;
+use wiremock::matchers::method;
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use uv_static::EnvVars;
@@ -21,6 +23,7 @@ use uv_test::{TestContext, uv_snapshot};
 /// Creates a CONNECT tunnel proxy that forwards connections to the target.
 ///
 /// Returns the proxy address. The proxy runs in a background thread.
+#[cfg(feature = "test-pypi")]
 fn start_connect_tunnel_proxy() -> std::net::SocketAddr {
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
@@ -95,6 +98,7 @@ fn start_connect_tunnel_proxy() -> std::net::SocketAddr {
 }
 
 /// Creates a mock that serves a Simple API index page for iniconfig.
+#[cfg(feature = "test-pypi")]
 async fn mock_simple_api(server: &MockServer) {
     // Simple API response for iniconfig pointing to the real PyPI wheel.
     // Uses upload-time before EXCLUDE_NEWER (2024-03-25) so the package is available.
@@ -127,6 +131,7 @@ fn connection_reset(_request: &wiremock::Request) -> io::Error {
 }
 
 /// Returns true if the mock server has received any requests.
+#[cfg(feature = "test-pypi")]
 async fn has_received_requests(server: &MockServer) -> bool {
     !server.received_requests().await.unwrap().is_empty()
 }

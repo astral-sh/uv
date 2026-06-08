@@ -1235,11 +1235,6 @@ impl EnvVars {
     #[attr_added_in("0.7.21")]
     pub const UV_TEST_NO_HTTP_RETRY_DELAY: &'static str = "UV_TEST_NO_HTTP_RETRY_DELAY";
 
-    /// The uv executable used by the integration test suite.
-    #[attr_hidden]
-    #[attr_added_in("next release")]
-    pub const UV_TEST_BIN: &'static str = "UV_TEST_BIN";
-
     /// Used for testing named indexes in tests.
     #[attr_hidden]
     #[attr_added_in("0.5.21")]

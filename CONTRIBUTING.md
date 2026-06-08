@@ -66,10 +66,8 @@ used when NASM is found, you can guarantee this behavior by setting `AWS_LC_SYS_
 
 ## Testing
 
-For running tests, we recommend [nextest](https://nexte.st/). The uv integration tests run against a
-pre-built uv executable. The nextest setup hook builds the executable and exposes its path to the
-tests. Integration tests are grouped into harnesses by command area, so editing a test only relinks
-its corresponding harness:
+For running tests, we recommend [nextest](https://nexte.st/). Integration tests are grouped into
+harnesses by command area, so editing a test only relinks its corresponding harness:
 
 To run a specific test by name:
 
@@ -89,21 +87,15 @@ To run all workspace tests:
 cargo nextest run --workspace
 ```
 
-When passing Cargo compilation options that affect the uv executable, set `UV_TEST_UV_BUILD_ARGS`.
-These use Cargo syntax, so use `--profile` instead of nextest's `--cargo-profile`. Pass test harness
-options to nextest as usual. Some options may need to be passed in both places:
+When enabling features for integration tests, pass them to `uv-integration`. The `uv` executable
+under test is a binary target of the same package, so Cargo builds it with the same feature set:
 
 ```shell
-UV_TEST_UV_BUILD_ARGS='--no-default-features --features <uv-features>' \
-  cargo nextest run --package uv-integration --features <test-features>
+cargo nextest run --package uv-integration --features <test-features>
 ```
 
-The nextest setup hook reuses the previously built uv executable when its inputs are unchanged.
 Editing an integration test only rebuilds its test harness. Editing uv or one of its dependencies
 rebuilds the executable in the same nextest invocation.
-
-Workspace test runs build the uv executable as part of the initial Cargo invocation. Focused
-`uv-integration` runs build it from the setup hook when necessary.
 
 To run all tests and accept snapshot changes:
 
