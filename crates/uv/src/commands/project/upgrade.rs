@@ -11,7 +11,7 @@ use uv_distribution::{ArchiveMetadata, Metadata};
 use uv_distribution_types::Identifier;
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{Requirement, VerbatimUrl, VersionOrUrl};
+use uv_pep508::{MarkerTree, Requirement, VerbatimUrl, VersionOrUrl};
 use uv_preview::Preview;
 use uv_pypi_types::{PyProjectToml, ResolutionMetadata, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference};
@@ -112,14 +112,19 @@ pub(crate) async fn upgrade(
         .and_then(|uv| uv.sources.as_ref())
         .and_then(|sources| sources.inner().get(&package))
         .or_else(|| project.workspace().sources().get(&package));
-    let extra = requirement.marker.top_level_extra_name();
     if sources.is_some_and(|sources| {
         sources.iter().any(|source| {
-            source
-                .extra()
-                .is_none_or(|target| extra.as_deref() == Some(target))
-                && source.group().is_none()
-                && !source.marker().is_disjoint(requirement.marker)
+            source_is_applicable(source, requirement.marker)
+                && matches!(source, Source::Git { rev: Some(_), .. })
+        })
+    }) {
+        bail!(
+            "Dependency `{package}` is pinned to a Git revision and cannot be upgraded commit-to-commit"
+        );
+    }
+    if sources.is_some_and(|sources| {
+        sources.iter().any(|source| {
+            source_is_applicable(source, requirement.marker)
                 && !matches!(source, Source::Registry { .. })
         })
     }) {
@@ -268,6 +273,15 @@ pub(crate) async fn upgrade(
     }
 
     Ok(ExitStatus::Success)
+}
+
+fn source_is_applicable(source: &Source, requirement_marker: MarkerTree) -> bool {
+    let extra = requirement_marker.top_level_extra_name();
+    source
+        .extra()
+        .is_none_or(|target| extra.as_deref() == Some(target))
+        && source.group().is_none()
+        && !source.marker().is_disjoint(requirement_marker)
 }
 
 fn relax_requirement(

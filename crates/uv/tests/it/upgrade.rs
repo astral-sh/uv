@@ -440,6 +440,39 @@ fn upgrade_rejects_self_dependency() -> Result<()> {
 }
 
 #[test]
+fn upgrade_rejects_git_revision() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        dependencies = ["requests>=2"]
+
+        [tool.uv.sources]
+        requests = { git = "https://github.com/psf/requests", rev = "main" }
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.upgrade().arg("requests"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Dependency `requests` is pinned to a Git revision and cannot be upgraded commit-to-commit
+    "
+    );
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
 fn upgrade_rejects_non_registry_sources() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
 
