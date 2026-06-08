@@ -449,7 +449,7 @@ fn upgrade_rejects_git_revision() -> Result<()> {
         dependencies = ["requests>=2"]
 
         [tool.uv.sources]
-        requests = { git = "https://github.com/psf/requests", rev = "main" }
+        requests = { git = "https://github.com/psf/requests", rev = "6f205ff422bccd5e4c4fc0b64c5f3e7df5181db6" }
     "#;
     context
         .temp_dir
