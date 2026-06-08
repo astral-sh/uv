@@ -5351,9 +5351,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-durations-export"
-version = "0.3.3"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58269a4977f1e33c702f8b58bec709f4f1c5c11c36382d64ab031e2c6d780318"
+checksum = "32859a54da74e72caf53e314e9de54e25a7cca7af9827b20815ed088d07687fd"
 dependencies = [
  "anyhow",
  "fs-err",
