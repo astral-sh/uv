@@ -4635,9 +4635,9 @@ checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
 
 [[package]]
 name = "similar"
-version = "3.1.0"
+version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04d93e861ede2e497b47833469b8ec9d5c07fa4c78ce7a00f6eb7dd8168b4b3f"
+checksum = "e6505efef05804732ed8a3f2d4f279429eb485bd69d5b0cc6b19cc02005cda16"
 dependencies = [
  "bstr",
 ]
@@ -7263,7 +7263,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "similar 3.1.0",
+ "similar 3.1.1",
  "tempfile",
  "tokio",
  "tokio-util",
