@@ -506,6 +506,7 @@ if ($availableCounters -notcontains '\Processor Information(_Total)\% Processor 
 }
 
 $counterPath = Join-Path $results "machine-counters.blg"
+$counterCsvPath = Join-Path $results "machine-counters.csv"
 [pscustomobject]@{
     requested = $requestedCounters
     available = $availableCounters
@@ -624,5 +625,14 @@ try {
         (Get-Item $counterPath).Length -eq 0
     ) {
         throw "The machine telemetry collector did not cover the complete benchmark"
+    }
+    Import-Counter $counterPath -ErrorAction Stop |
+        Export-Counter `
+            -Path $counterCsvPath `
+            -FileFormat CSV `
+            -Force `
+            -ErrorAction Stop
+    if (-not (Test-Path $counterCsvPath) -or (Get-Item $counterCsvPath).Length -eq 0) {
+        throw "Failed to export machine telemetry as CSV"
     }
 }
