@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>Plank Voice Stopwatch</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app">
+    <h1 class="title">Plank Stopwatch</h1>
+
+    <div class="time" id="time" aria-live="off">00:00.0</div>
+
+    <div class="status" id="status">Tap “Listening” and say <b>“up”</b> to start.</div>
+
+    <div class="controls">
+      <button id="mic" class="btn btn-mic" type="button" aria-pressed="false">
+        🎙️ Start Listening
+      </button>
+      <button id="reset" class="btn btn-ghost" type="button">Reset</button>
+    </div>
+
+    <ul class="hints">
+      <li>Say <b>“up”</b> or <b>“start”</b> to start the clock.</li>
+      <li>Say <b>“down”</b> or <b>“stop”</b> to stop it.</li>
+    </ul>
+
+    <section class="laps" aria-label="Completed planks">
+      <h2 class="laps-title">Completed planks <span id="lapCount" class="muted"></span></h2>
+      <ol id="laps" class="laps-list"></ol>
+      <div class="laps-summary" id="lapsSummary"></div>
+    </section>
+
+    <div class="heard" id="heard" aria-live="polite"></div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
