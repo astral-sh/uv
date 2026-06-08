@@ -1073,7 +1073,7 @@ async fn retry_read_timeout_index() {
     ----- stderr -----
     error: Request failed after 1 retry in [TIME]
       Caused by: Failed to fetch: `http://[LOCALHOST]/tqdm/`
-      Caused by: error decoding response body
+      Caused by: error decoding response body for url (http://[LOCALHOST]/tqdm/)
       Caused by: request or response body error
       Caused by: operation timed out
     ");
