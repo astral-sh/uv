@@ -69,11 +69,26 @@ pub trait Installable<'lock> {
 
         // Determine the set of activated extras and groups, from the root.
         //
-        // TODO(charlie): This isn't quite right. Below, when we add the dependency groups to the
-        // graph, we rely on the activated extras and dependency groups, to evaluate the conflict
-        // marker. But at that point, we don't know the full set of activated extras; this is only
-        // computed below. We somehow need to add the dependency groups _after_ we've computed all
-        // enabled extras, but the groups themselves could depend on the set of enabled extras.
+        // Extras activated by dependency groups (via `pkg[extra]` entries in the group) are
+        // accumulated below, when we process the groups themselves. This ensures that when we
+        // later evaluate conflict markers on transitive dependencies, self-extras enabled by an
+        // active group are treated as enabled.
+        //
+        // TODO(zanieb): For completeness, the group-dep loop below still has two structural
+        // soundness gaps. Neither is reachable through lockfiles the resolver currently
+        // produces — they'd require a group-dep entry with a strict positive conflict marker
+        // referencing an extra *other* than the entry's own self-extra, and the resolver
+        // either emits self-extra markers (handled by `newly_activated_extras` below) or
+        // markers with vacuously-true disjuncts. But the code should still handle them:
+        //
+        // 1. Ordering: an earlier group-dep entry whose marker references an extra activated
+        //    by a later entry is evaluated with an incomplete `activated_extras` set.
+        // 2. Transitive self-extras: a group dep `pkg[a]` where `pkg.optional_dependencies.a`
+        //    includes `pkg[b]` only activates `(pkg, b)` during the first-pass traversal
+        //    below, so any group dep whose marker needs `(pkg, b)` is evaluated too early.
+        //
+        // Fixing these correctly likely means iterating group-dep activation to a fixed point
+        // or interleaving it with the first-pass traversal.
         if !self.lock().conflicts().is_empty() {
             for root_name in self.roots() {
                 let dist = self
@@ -213,6 +228,14 @@ pub trait Installable<'lock> {
                     Edge::Dev(group.clone()),
                 );
 
+                // Persist any self-extras activated by this group dependency (e.g., a group
+                // that references `pkg[extra]`). Without this, conflict markers on transitive
+                // dependencies gated by the activated extra would not evaluate to `true`
+                // during the graph traversals below.
+                for key in additional_activated_extras {
+                    activated_extras.push(key);
+                }
+
                 // Push its dependencies on the queue.
                 if seen.insert((&dep.package_id, None)) {
                     queue.push_back((dep_dist, None));
@@ -329,6 +352,17 @@ pub trait Installable<'lock> {
 
             // Add the edge.
             petgraph.add_edge(root, index, Edge::Dev(group.clone()));
+
+            // Persist any self-extras activated by this group dependency. Mirrors the
+            // handling in the package-level `dependency_groups` loop above; without this,
+            // conflict markers on transitive dependencies gated by the activated extra
+            // would not evaluate to `true` during the graph traversals below.
+            for extra in &dependency.extras {
+                let key = (&dist.id.name, extra);
+                if !activated_extras.contains(&key) {
+                    activated_extras.push(key);
+                }
+            }
 
             // Push its dependencies on the queue.
             if seen.insert((&dist.id, None)) {
