@@ -5241,7 +5241,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
 }
 
 #[test]
-fn invalidate_path_on_commit() -> Result<()> {
+fn invalidate_path_on_worktree_packed_commit() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -5265,19 +5265,22 @@ fn invalidate_path_on_commit() -> Result<()> {
         "#,
     )?;
 
-    // Create a Git repository.
-    context
-        .temp_dir
+    // Create a linked worktree with the branch reference in the common Git directory's
+    // `packed-refs` file.
+    let common_git_dir = context.temp_dir.child("common.git");
+    let worktree_git_dir = common_git_dir.child("worktrees").child("editable");
+    editable_dir
         .child(".git")
+        .write_str(&format!("gitdir: {}\n", worktree_git_dir.path().display()))?;
+    worktree_git_dir
         .child("HEAD")
         .write_str("ref: refs/heads/main")?;
-    context
-        .temp_dir
-        .child(".git")
-        .child("refs")
-        .child("heads")
-        .child("main")
-        .write_str("1b6638fdb424e993d8354e75c55a3e524050c857")?;
+    worktree_git_dir
+        .child("commondir")
+        .write_str(&format!("{}\n", common_git_dir.path().display()))?;
+    common_git_dir
+        .child("packed-refs")
+        .write_str("1b6638fdb424e993d8354e75c55a3e524050c857 refs/heads/main\n")?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -5311,13 +5314,9 @@ fn invalidate_path_on_commit() -> Result<()> {
     );
 
     // Change the current commit.
-    context
-        .temp_dir
-        .child(".git")
-        .child("refs")
-        .child("heads")
-        .child("main")
-        .write_str("a1a42cbd10d83bafd8600ba81f72bbef6c579385")?;
+    common_git_dir
+        .child("packed-refs")
+        .write_str("a1a42cbd10d83bafd8600ba81f72bbef6c579385 refs/heads/main\n")?;
 
     // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
