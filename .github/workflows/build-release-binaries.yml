@@ -112,7 +112,7 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          # Fold identical functions with Rust's bundled Mach-O LLD in optimized artifacts.
+          # ICF only produced useful size wins on macOS, so use Rust's bundled Mach-O LLD here.
           RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -147,7 +147,7 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          # Fold identical functions with Rust's bundled Mach-O LLD in optimized artifacts.
+          # ICF only produced useful size wins on macOS, so use Rust's bundled Mach-O LLD here.
           RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -183,7 +183,7 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          # Fold identical functions with Rust's bundled Mach-O LLD in optimized artifacts.
+          # ICF only produced useful size wins on macOS, so use Rust's bundled Mach-O LLD here.
           RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
       - name: "Test wheel - aarch64"
         run: |
@@ -224,7 +224,7 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          # Fold identical functions with Rust's bundled Mach-O LLD in optimized artifacts.
+          # ICF only produced useful size wins on macOS, so use Rust's bundled Mach-O LLD here.
           RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
       - name: "Test wheel - aarch64"
         run: |
@@ -368,7 +368,7 @@ jobs:
           # from 64-bit version of the container, breaking the pattern from other builds.
           container: quay.io/pypa/manylinux2014
           manylinux: 2_17
-          docker-options: -e CARGO -e CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS
+          docker-options: -e CARGO
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             # Install the 32-bit cross target on 64-bit (noop if we're already on 64-bit)
@@ -395,8 +395,6 @@ jobs:
         env:
           CC: ${{ matrix.cc }}
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          # Rust's distributed x86_64 GNU target uses bundled LLD by default.
-          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-Wl,--icf=safe"
       - name: "Test wheel"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
@@ -437,13 +435,12 @@ jobs:
           maturin-version: v1.13.1
           target: ${{ matrix.target }}
           manylinux: 2_17
-          docker-options: -e CARGO -e CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS
+          docker-options: -e CARGO
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-Wl,--icf=safe"
       - name: "Test wheel uv-build"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
