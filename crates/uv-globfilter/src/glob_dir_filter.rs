@@ -99,8 +99,18 @@ impl GlobDirFilter {
 
         // Paths aren't necessarily UTF-8, which we can gloss over since the globs match bytes only
         // anyway.
+        let separator = u8::try_from(MAIN_SEPARATOR).unwrap();
         let byte_path = path.as_os_str().as_encoded_bytes();
         for b in byte_path {
+            // If we hit a path separator and the state so far is a match, a glob matched a parent
+            // directory of this path. We treat matching a directory as matching everything inside
+            // it, so we can return early.
+            if *b == separator {
+                let eoi_state = dfa.next_eoi_state(state);
+                if !dfa.is_quit_state(eoi_state) && dfa.is_match_state(eoi_state) {
+                    return true;
+                }
+            }
             state = dfa.next_state(state, *b);
         }
         // Say we're looking at a directory `foo/bar`. We want to continue if either `foo/bar` is
@@ -109,7 +119,7 @@ impl GlobDirFilter {
         // We must not call `next_eoi_state` on the slash state, we want to only check if more
         // characters (path components) are allowed, not if we're matching the `$` anchor at the
         // end.
-        let slash_state = dfa.next_state(state, u8::try_from(MAIN_SEPARATOR).unwrap());
+        let slash_state = dfa.next_state(state, separator);
 
         debug_assert!(
             !dfa.is_quit_state(eoi_state) && !dfa.is_quit_state(slash_state),
@@ -137,15 +147,15 @@ mod tests {
     ];
 
     const PATTERNS: [&str; 5] = [
-        // Only sufficient for descending one level
+        // Matches direct children; matched directories include their contents
         "path1/*",
-        // Only sufficient for descending one level
+        // Matches a directory; its contents are included recursively
         "path2/dir2",
-        // Sufficient for descending
+        // Matches a specific file
         "path3/dir3/subdir/a.txt",
-        // Sufficient for descending
+        // Matches everything recursively
         "path4/**/*",
-        // Not sufficient for descending
+        // Matches a directory; its contents are included recursively
         "path5",
     ];
 
@@ -157,7 +167,8 @@ mod tests {
         assert!(matcher.match_directory(&Path::new("path2").join("dir2")));
         assert!(matcher.match_directory(&Path::new("path3").join("dir3")));
         assert!(matcher.match_directory(&Path::new("path4").join("dir4")));
-        assert!(!matcher.match_directory(&Path::new("path5").join("dir5")));
+        // Pattern `path5` matches the directory, so its children are included too.
+        assert!(matcher.match_directory(&Path::new("path5").join("dir5")));
     }
 
     /// Check that we skip directories that can never match.
@@ -202,8 +213,12 @@ mod tests {
                 "",
                 "path1",
                 "path1/dir1",
+                "path1/dir1/subdir",
+                "path1/dir1/subdir/a.txt",
                 "path2",
                 "path2/dir2",
+                "path2/dir2/subdir",
+                "path2/dir2/subdir/a.txt",
                 "path3",
                 "path3/dir3",
                 "path3/dir3/subdir",
@@ -212,7 +227,10 @@ mod tests {
                 "path4/dir4",
                 "path4/dir4/subdir",
                 "path4/dir4/subdir/a.txt",
-                "path5"
+                "path5",
+                "path5/dir5",
+                "path5/dir5/subdir",
+                "path5/dir5/subdir/a.txt",
             ]
         );
     }
@@ -266,8 +284,12 @@ mod tests {
                 "",
                 "path1",
                 "path1/dir1",
+                "path1/dir1/subdir",
+                "path1/dir1/subdir/a.txt",
                 "path2",
                 "path2/dir2",
+                "path2/dir2/subdir",
+                "path2/dir2/subdir/a.txt",
                 "path3",
                 "path3/dir3",
                 "path3/dir3/subdir",
@@ -276,8 +298,104 @@ mod tests {
                 "path4/dir4",
                 "path4/dir4/subdir",
                 "path4/dir4/subdir/a.txt",
-                "path5"
+                "path5",
+                "path5/dir5",
+                "path5/dir5/subdir",
+                "path5/dir5/subdir/a.txt",
             ]
         );
+    }
+
+    /// Test that `**/dir` and `**/dir/` patterns match directories at any depth and include
+    /// their contents.
+    #[test]
+    fn globstar_directory() {
+        let files = [
+            "a/target/file1.txt",
+            "a/target/nested/file2.txt",
+            "b/c/target/file3.txt",
+        ];
+
+        let dir = tempdir().unwrap();
+        for file in files {
+            let path = dir.path().join(file);
+            fs_err::create_dir_all(path.parent().unwrap()).unwrap();
+            fs_err::File::create(path).unwrap();
+        }
+
+        // `**/target` — matches `target` directories at any depth and includes their contents.
+        let patterns = [PortableGlobParser::Uv.parse("**/target").unwrap()];
+        let matcher = GlobDirFilter::from_globs(&patterns).unwrap();
+
+        let walkdir_root = dir.path();
+        let mut matches: Vec<_> = WalkDir::new(walkdir_root)
+            .sort_by_file_name()
+            .into_iter()
+            .filter_entry(|entry| {
+                let relative = entry
+                    .path()
+                    .strip_prefix(walkdir_root)
+                    .expect("walkdir starts with root");
+                matcher.match_directory(relative)
+            })
+            .filter_map(|entry| {
+                let entry = entry.as_ref().unwrap();
+                let relative = entry
+                    .path()
+                    .strip_prefix(walkdir_root)
+                    .expect("walkdir starts with root");
+                if matcher.match_path(relative) {
+                    Some(relative.to_str().unwrap().replace(MAIN_SEPARATOR, "/"))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        matches.sort();
+        assert_eq!(
+            matches,
+            [
+                "",
+                "a",
+                "a/target",
+                "a/target/file1.txt",
+                "a/target/nested",
+                "a/target/nested/file2.txt",
+                "b",
+                "b/c",
+                "b/c/target",
+                "b/c/target/file3.txt",
+            ]
+        );
+
+        // `**/target/` with trailing slash — should behave identically after normalization.
+        let patterns = [PortableGlobParser::Uv.parse("**/target/").unwrap()];
+        let matcher_slash = GlobDirFilter::from_globs(&patterns).unwrap();
+
+        let mut matches_slash: Vec<_> = WalkDir::new(walkdir_root)
+            .sort_by_file_name()
+            .into_iter()
+            .filter_entry(|entry| {
+                let relative = entry
+                    .path()
+                    .strip_prefix(walkdir_root)
+                    .expect("walkdir starts with root");
+                matcher_slash.match_directory(relative)
+            })
+            .filter_map(|entry| {
+                let entry = entry.as_ref().unwrap();
+                let relative = entry
+                    .path()
+                    .strip_prefix(walkdir_root)
+                    .expect("walkdir starts with root");
+                if matcher_slash.match_path(relative) {
+                    Some(relative.to_str().unwrap().replace(MAIN_SEPARATOR, "/"))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        matches_slash.sort();
+        assert_eq!(matches, matches_slash);
     }
 }
