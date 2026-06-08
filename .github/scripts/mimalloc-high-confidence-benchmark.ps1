@@ -505,7 +505,6 @@ if ($availableCounters -notcontains '\Processor Information(_Total)\% Processor 
     throw "The required processor utilization counter is unavailable"
 }
 
-$counterPath = Join-Path $results "machine-counters.blg"
 $counterCsvPath = Join-Path $results "machine-counters.csv"
 [pscustomobject]@{
     requested = $requestedCounters
@@ -514,7 +513,7 @@ $counterCsvPath = Join-Path $results "machine-counters.csv"
 } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $results "counter-selection.json")
 
 $counterConfiguration = [pscustomobject]@{
-    Path = $counterPath
+    Path = $counterCsvPath
     Counters = $availableCounters
 }
 $counterJob = Start-Job -ScriptBlock {
@@ -525,16 +524,23 @@ $counterJob = Start-Job -ScriptBlock {
         -SampleInterval 5 `
         -Continuous `
         -ErrorAction Stop |
-        Export-Counter `
-            -Path $Configuration.Path `
-            -FileFormat BLG `
-            -Force `
-            -ErrorAction Stop
+        ForEach-Object {
+            $timestamp = $_.Timestamp.ToUniversalTime().ToString("O")
+            foreach ($sample in $_.CounterSamples) {
+                [pscustomobject]@{
+                    timestampUtc = $timestamp
+                    path = $sample.Path
+                    value = $sample.CookedValue
+                }
+            }
+        } |
+        Export-Csv -Path $Configuration.Path -NoTypeInformation
 } -ArgumentList $counterConfiguration
 
 Start-Sleep -Seconds 10
-if ($counterJob.State -ne "Running" -or -not (Test-Path $counterPath)) {
-    $counterFailure = Receive-Job $counterJob 2>&1 | ForEach-Object ToString
+if ($counterJob.State -ne "Running" -or -not (Test-Path $counterCsvPath)) {
+    $counterFailure = Receive-Job $counterJob -ErrorAction Continue 2>&1 |
+        ForEach-Object ToString
     $counterFailure | Set-Content (Join-Path $results "machine-counters-job.txt")
     throw "The machine telemetry collector failed during startup"
 }
@@ -621,18 +627,9 @@ try {
     Remove-Job $counterJob
     if (
         -not $counterWasRunning -or
-        -not (Test-Path $counterPath) -or
-        (Get-Item $counterPath).Length -eq 0
+        -not (Test-Path $counterCsvPath) -or
+        (Get-Item $counterCsvPath).Length -eq 0
     ) {
         throw "The machine telemetry collector did not cover the complete benchmark"
-    }
-    Import-Counter $counterPath -ErrorAction Stop |
-        Export-Counter `
-            -Path $counterCsvPath `
-            -FileFormat CSV `
-            -Force `
-            -ErrorAction Stop
-    if (-not (Test-Path $counterCsvPath) -or (Get-Item $counterCsvPath).Length -eq 0) {
-        throw "Failed to export machine telemetry as CSV"
     }
 }
