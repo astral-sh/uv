@@ -149,18 +149,23 @@ $corpus = @(
     New-LockCase "saleor" "test/ecosystem/saleor"
 )
 
-$warmupBlocks = 4
-$warmMeasuredBlocks = 24
+$warmOnlineWarmupBlocks = 4
+$warmOnlineMeasuredBlocks = 16
+$warmOfflineWarmupBlocks = 4
+$warmOfflineMeasuredBlocks = 16
 $coldWarmupBlocks = 2
 $coldMeasuredBlocks = 4
 
 [pscustomobject]@{
     design = "balanced ABBA/BAAB four-observation blocks"
     timer = "hyperfine 1 run per command with shell disabled"
-    warm = "populated per-fixture uv cache, fresh output or project, offline"
-    cold = "empty per-observation uv cache, fresh output or project, online"
-    warmupBlocks = $warmupBlocks
-    warmMeasuredBlocks = $warmMeasuredBlocks
+    warmOnline = "populated per-fixture uv cache, fresh output or project, online"
+    warmOffline = "populated per-fixture uv cache, fresh output or project, offline"
+    coldOnline = "empty per-observation uv cache, fresh output or project, online"
+    warmOnlineWarmupBlocks = $warmOnlineWarmupBlocks
+    warmOnlineMeasuredBlocks = $warmOnlineMeasuredBlocks
+    warmOfflineWarmupBlocks = $warmOfflineWarmupBlocks
+    warmOfflineMeasuredBlocks = $warmOfflineMeasuredBlocks
     coldWarmupBlocks = $coldWarmupBlocks
     coldMeasuredBlocks = $coldMeasuredBlocks
     corpus = $corpus
@@ -241,12 +246,14 @@ function Join-Command {
         [string[]]$Arguments
     )
 
-    foreach ($value in @($Binary) + $Arguments) {
-        if ($value -match '\s') {
-            throw "The shell-free benchmark requires paths without spaces: $value"
+    $tokens = @(@($Binary) + $Arguments) | ForEach-Object {
+        $normalized = $_ -replace '\\', '/'
+        if ($normalized -match '\s') {
+            throw "The shell-free benchmark requires paths without spaces: $normalized"
         }
+        $normalized
     }
-    return (@($Binary) + $Arguments) -join " "
+    return $tokens -join " "
 }
 
 function Invoke-Uv {
@@ -367,7 +374,7 @@ function Invoke-Blocks {
             $position = $positionIndex + 1
             $variant = $variants[$positionIndex]
             $binary = if ($variant -eq "v2") { $v2 } else { $v3 }
-            $cacheDir = if ($CacheState -eq "warm") {
+            $cacheDir = if ($CacheState -like "warm-*") {
                 $WarmCache
             } else {
                 Join-Path $blockRoot "cache-p$position"
@@ -387,7 +394,7 @@ function Invoke-Blocks {
                 -CacheDir $cacheDir `
                 -OutputPath $outputPath `
                 -ProjectDir $projectDir `
-                -Offline:($CacheState -eq "warm")
+                -Offline:($CacheState -eq "warm-offline")
             $commands += Join-Command $binary $arguments
             $observations += [pscustomobject]@{
                 position = $position
@@ -471,56 +478,95 @@ $orderedCorpus |
     ConvertTo-Json |
     Set-Content (Join-Path $results "fixture-order.json")
 
-Start-Sleep -Seconds 30
+$counterJob = Start-Job -ScriptBlock {
+    param([string]$CounterPath)
 
-for ($caseIndex = 0; $caseIndex -lt $orderedCorpus.Count; $caseIndex++) {
-    $case = $orderedCorpus[$caseIndex]
-    Write-Host "::group::Benchmark $($case.Name)"
-    $caseRoot = Join-Path $root $case.Name
-    $warmCache = Join-Path $caseRoot "warm-cache"
-    New-Item -ItemType Directory -Force $caseRoot | Out-Null
+    Get-Counter -Counter @(
+        '\Processor Information(_Total)\% Processor Time',
+        '\Processor Information(_Total)\Processor Frequency',
+        '\Memory\Available MBytes',
+        '\PhysicalDisk(_Total)\% Disk Time'
+    ) -SampleInterval 5 -Continuous |
+        Export-Counter -Path $CounterPath -FileFormat BLG -Force
+} -ArgumentList (Join-Path $results "machine-counters.blg")
 
-    $validatedHash = Prime-Case $case $caseRoot $warmCache
-    [pscustomobject]@{
-        fixture = $case.Name
-        outputSha256 = $validatedHash
-    } | ConvertTo-Json | Set-Content (Join-Path $results "validated-$($case.Name).json")
+try {
+    Start-Sleep -Seconds 30
 
-    Invoke-Blocks `
-        -Case $case `
-        -CaseIndex $caseIndex `
-        -CaseRoot $caseRoot `
-        -WarmCache $warmCache `
-        -CacheState "warm" `
-        -Phase "warmup" `
-        -BlockCount $warmupBlocks `
-        -Seed (920000 + ($replica * 1000) + $caseIndex)
-    Invoke-Blocks `
-        -Case $case `
-        -CaseIndex $caseIndex `
-        -CaseRoot $caseRoot `
-        -WarmCache $warmCache `
-        -CacheState "warm" `
-        -Phase "measured" `
-        -BlockCount $warmMeasuredBlocks `
-        -Seed (930000 + ($replica * 1000) + $caseIndex)
-    Invoke-Blocks `
-        -Case $case `
-        -CaseIndex $caseIndex `
-        -CaseRoot $caseRoot `
-        -WarmCache $warmCache `
-        -CacheState "cold" `
-        -Phase "warmup" `
-        -BlockCount $coldWarmupBlocks `
-        -Seed (940000 + ($replica * 1000) + $caseIndex)
-    Invoke-Blocks `
-        -Case $case `
-        -CaseIndex $caseIndex `
-        -CaseRoot $caseRoot `
-        -WarmCache $warmCache `
-        -CacheState "cold" `
-        -Phase "measured" `
-        -BlockCount $coldMeasuredBlocks `
-        -Seed (950000 + ($replica * 1000) + $caseIndex)
-    Write-Host "::endgroup::"
+    for ($caseIndex = 0; $caseIndex -lt $orderedCorpus.Count; $caseIndex++) {
+        $case = $orderedCorpus[$caseIndex]
+        Write-Host "::group::Benchmark $($case.Name)"
+        $caseRoot = Join-Path $root $case.Name
+        $warmCache = Join-Path $caseRoot "warm-cache"
+        New-Item -ItemType Directory -Force $caseRoot | Out-Null
+
+        $validatedHash = Prime-Case $case $caseRoot $warmCache
+        [pscustomobject]@{
+            fixture = $case.Name
+            outputSha256 = $validatedHash
+        } | ConvertTo-Json |
+            Set-Content (Join-Path $results "validated-$($case.Name).json")
+
+        Invoke-Blocks `
+            -Case $case `
+            -CaseIndex $caseIndex `
+            -CaseRoot $caseRoot `
+            -WarmCache $warmCache `
+            -CacheState "warm-online" `
+            -Phase "warmup" `
+            -BlockCount $warmOnlineWarmupBlocks `
+            -Seed (920000 + ($replica * 1000) + $caseIndex)
+        Invoke-Blocks `
+            -Case $case `
+            -CaseIndex $caseIndex `
+            -CaseRoot $caseRoot `
+            -WarmCache $warmCache `
+            -CacheState "warm-online" `
+            -Phase "measured" `
+            -BlockCount $warmOnlineMeasuredBlocks `
+            -Seed (930000 + ($replica * 1000) + $caseIndex)
+        Invoke-Blocks `
+            -Case $case `
+            -CaseIndex $caseIndex `
+            -CaseRoot $caseRoot `
+            -WarmCache $warmCache `
+            -CacheState "warm-offline" `
+            -Phase "warmup" `
+            -BlockCount $warmOfflineWarmupBlocks `
+            -Seed (940000 + ($replica * 1000) + $caseIndex)
+        Invoke-Blocks `
+            -Case $case `
+            -CaseIndex $caseIndex `
+            -CaseRoot $caseRoot `
+            -WarmCache $warmCache `
+            -CacheState "warm-offline" `
+            -Phase "measured" `
+            -BlockCount $warmOfflineMeasuredBlocks `
+            -Seed (950000 + ($replica * 1000) + $caseIndex)
+        Invoke-Blocks `
+            -Case $case `
+            -CaseIndex $caseIndex `
+            -CaseRoot $caseRoot `
+            -WarmCache $warmCache `
+            -CacheState "cold-online" `
+            -Phase "warmup" `
+            -BlockCount $coldWarmupBlocks `
+            -Seed (960000 + ($replica * 1000) + $caseIndex)
+        Invoke-Blocks `
+            -Case $case `
+            -CaseIndex $caseIndex `
+            -CaseRoot $caseRoot `
+            -WarmCache $warmCache `
+            -CacheState "cold-online" `
+            -Phase "measured" `
+            -BlockCount $coldMeasuredBlocks `
+            -Seed (970000 + ($replica * 1000) + $caseIndex)
+        Write-Host "::endgroup::"
+    }
+} finally {
+    Stop-Job $counterJob
+    Receive-Job $counterJob 2>&1 |
+        ForEach-Object ToString |
+        Set-Content (Join-Path $results "machine-counters-job.txt")
+    Remove-Job $counterJob
 }
