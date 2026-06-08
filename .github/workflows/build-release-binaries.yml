@@ -113,7 +113,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
           # Use Rust's bundled Mach-O LLD, which supports ICF.
-          # ICF reduces macOS binary sizes by up to ~2%.
+          # ICF reduces the macOS x86_64 uv binary size by ~2%.
           RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -149,7 +149,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
           # Use Rust's bundled Mach-O LLD, which supports ICF.
-          # ICF reduces macOS binary sizes by up to ~2%.
+          # ICF reduces the macOS x86_64 uv-build binary size by ~0.7%.
           RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -186,7 +186,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
           # Use Rust's bundled Mach-O LLD, which supports ICF.
-          # ICF reduces macOS binary sizes by up to ~2%.
+          # ICF reduces the macOS aarch64 uv binary size by ~1.4%.
           RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
       - name: "Test wheel - aarch64"
         run: |
@@ -228,7 +228,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
           # Use Rust's bundled Mach-O LLD, which supports ICF.
-          # ICF reduces macOS binary sizes by up to ~2%.
+          # ICF reduces the macOS aarch64 uv-build binary size by ~0.7%.
           RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
       - name: "Test wheel - aarch64"
         run: |
