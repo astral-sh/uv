@@ -80,8 +80,8 @@ end
 deactivate nondestructive
 
 set -gx VIRTUAL_ENV '{{ VIRTUAL_ENV_DIR }}'
-if string match -qr 'CYGWIN|MSYS|MINGW' (uname)
-    set -gx VIRTUAL_ENV (cygpath -u $VIRTUAL_ENV)
+if string match -qr 'CYGWIN|MSYS|MINGW' (uname); and command -s cygpath >/dev/null
+    set -gx VIRTUAL_ENV (cygpath -u "$VIRTUAL_ENV")
 end
 
 # https://github.com/fish-shell/fish-shell/issues/436 altered PATH handling

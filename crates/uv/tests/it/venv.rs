@@ -1392,6 +1392,12 @@ fn verify_pyvenv_cfg_relocatable() {
     let activate_fish = scripts.child("activate.fish");
     activate_fish.assert(predicates::path::is_file());
     activate_fish.assert(predicates::str::contains(r#"set -gx VIRTUAL_ENV ''"$(dirname -- "$(cd "$(dirname -- "$(status -f)")"; and pwd)")"''"#));
+    activate_fish.assert(predicates::str::contains(
+        "if string match -qr 'CYGWIN|MSYS|MINGW' (uname); and command -s cygpath >/dev/null",
+    ));
+    activate_fish.assert(predicates::str::contains(
+        r#"set -gx VIRTUAL_ENV (cygpath -u "$VIRTUAL_ENV")"#,
+    ));
 
     let activate_nu = scripts.child("activate.nu");
     activate_nu.assert(predicates::path::is_file());
