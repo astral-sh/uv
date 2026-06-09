@@ -108,6 +108,8 @@ jobs:
       - name: "Setup srs"
         id: srs
         uses: ./.github/actions/setup-srs
+        with:
+          artifact-cache-scope: depot-linux-bench
 
       - name: "Install Rust toolchain"
         run: rustup show
@@ -134,3 +136,11 @@ jobs:
           run: cargo codspeed run
           mode: simulation
           token: ${{ secrets.CODSPEED_TOKEN }}
+
+      - name: "Save srs build cache"
+        if: ${{ inputs.save-rust-cache == 'true' }}
+        uses: ./.github/actions/save-srs-cache
+        with:
+          artifact-cache-hit: ${{ steps.srs.outputs.artifact-cache-hit }}
+          artifact-cache-primary-key: ${{ steps.srs.outputs.artifact-cache-primary-key }}
+          save-artifact-cache: "true"
