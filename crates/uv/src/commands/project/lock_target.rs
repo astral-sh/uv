@@ -1,10 +1,12 @@
-use itertools::Either;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+
+use itertools::Either;
+use rustc_hash::FxHashSet;
 use tracing::info_span;
 
 use uv_auth::CredentialsCache;
-use uv_configuration::{DependencyGroupsWithDefaults, NoSources};
+use uv_configuration::{DependencyGroupsWithDefaults, NoSources, Upgrade};
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
 use uv_normalize::{GroupName, PackageName};
@@ -12,7 +14,9 @@ use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_resolver::{Lock, LockVersion, VERSION};
 use uv_scripts::Pep723Script;
-use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroup};
+use uv_workspace::dependency_groups::{
+    DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups,
+};
 use uv_workspace::{Editability, Workspace, WorkspaceMember};
 
 use crate::commands::project::{ProjectError, find_requires_python};
@@ -123,6 +127,47 @@ impl<'lock> LockTarget<'lock> {
             Self::Workspace(workspace) => workspace.workspace_dependency_groups(),
             Self::Script(_) => Ok(BTreeMap::new()),
         }
+    }
+
+    /// Validate the dependency groups requested by `--upgrade-group`.
+    pub(crate) fn validate_upgrade_groups(self, upgrade: &Upgrade) -> Result<(), ProjectError> {
+        let Some(groups) = upgrade.groups() else {
+            return Ok(());
+        };
+
+        match self {
+            Self::Workspace(workspace) => {
+                let mut known_groups = FxHashSet::default();
+                for member in workspace.packages().values() {
+                    known_groups.extend(
+                        FlatDependencyGroups::from_pyproject_toml(
+                            member.root(),
+                            member.pyproject_toml(),
+                        )?
+                        .into_inner()
+                        .into_keys(),
+                    );
+                }
+                known_groups.extend(workspace.workspace_dependency_groups()?.into_keys());
+
+                for group in groups {
+                    if !known_groups.contains(group) {
+                        return if workspace.packages().len() == 1 && !workspace.is_non_project() {
+                            Err(ProjectError::MissingGroupProject(group.clone()))
+                        } else {
+                            Err(ProjectError::MissingGroupProjects(group.clone()))
+                        };
+                    }
+                }
+            }
+            Self::Script(_) => {
+                if let Some(group) = groups.iter().next() {
+                    return Err(ProjectError::MissingGroupScript(group.clone()));
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Returns the set of all members within the target.
