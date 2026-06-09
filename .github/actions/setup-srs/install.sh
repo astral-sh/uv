@@ -49,7 +49,9 @@ rustc +"$toolchain" -Vv
 cargo +"$toolchain" -Vv
 cargo +"$toolchain" clippy -V
 
+cargo_wrapper="$(RUSTUP_TOOLCHAIN="$toolchain" rustup which cargo)"
 {
+    echo "CARGO=${cargo_wrapper}"
     echo "CARGO_INCREMENTAL=0"
     echo "RUSTUP_TOOLCHAIN=${toolchain}"
     echo "SRS_CARGO_ARTIFACT_CACHE_MAX_SIZE=4GiB"
