@@ -99,14 +99,14 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
-      - name: "Setup SRS"
-        id: srs
-        uses: ./.github/actions/setup-srs
       - name: "Check uv_build dependencies"
         uses: EmbarkStudios/cargo-deny-action@bb137d7af7e4fb67e5f82a49c4fce4fad40782fe # v2.0.20
         with:
           command: check bans
           manifest-path: crates/uv-build/Cargo.toml
+      - name: "Setup SRS"
+        id: srs
+        uses: ./.github/actions/setup-srs
       - name: "Install Rust toolchain"
         run: rustup show
       - name: "Clippy"
