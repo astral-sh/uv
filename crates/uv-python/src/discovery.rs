@@ -180,11 +180,11 @@ pub(crate) struct DiscoveryPreferences {
 pub enum PythonVariant {
     #[default]
     Default,
+    Gil,
+    GilDebug,
     Debug,
     Freethreaded,
     FreethreadedDebug,
-    Gil,
-    GilDebug,
 }
 
 /// A Python discovery version request.

@@ -517,6 +517,14 @@ pub struct PythonInstallationKey {
 }
 
 impl PythonInstallationKey {
+    fn concrete_variant(variant: PythonVariant) -> PythonVariant {
+        match variant {
+            PythonVariant::Default => PythonVariant::Gil,
+            PythonVariant::Debug => PythonVariant::GilDebug,
+            variant => variant,
+        }
+    }
+
     pub(crate) fn new(
         implementation: LenientImplementationName,
         major: u8,
@@ -526,6 +534,7 @@ impl PythonInstallationKey {
         platform: Platform,
         variant: PythonVariant,
     ) -> Self {
+        let variant = Self::concrete_variant(variant);
         Self {
             implementation,
             major,
@@ -543,15 +552,15 @@ impl PythonInstallationKey {
         platform: Platform,
         variant: PythonVariant,
     ) -> Self {
-        Self {
+        Self::new(
             implementation,
-            major: version.major(),
-            minor: version.minor(),
-            patch: version.patch().unwrap_or_default(),
-            prerelease: version.pre(),
+            version.major(),
+            version.minor(),
+            version.patch().unwrap_or_default(),
+            version.pre(),
             platform,
             variant,
-        }
+        )
     }
 
     pub fn implementation(&self) -> Cow<'_, LenientImplementationName> {
@@ -650,8 +659,10 @@ impl PythonInstallationKey {
 impl fmt::Display for PythonInstallationKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let variant = match self.variant {
-            PythonVariant::Default => String::new(),
-            _ => format!("+{}", self.variant),
+            PythonVariant::Default | PythonVariant::Gil => "",
+            PythonVariant::Debug | PythonVariant::GilDebug => "+debug",
+            PythonVariant::Freethreaded => "+freethreaded",
+            PythonVariant::FreethreadedDebug => "+freethreaded+debug",
         };
         write!(
             f,
@@ -704,7 +715,6 @@ impl FromStr for PythonInstallationKey {
             }
             None => (*version_str, PythonVariant::Default),
         };
-
         let version = PythonVersion::from_str(version).map_err(|err| {
             PythonInstallationKeyError::ParseError(
                 key.to_string(),
@@ -719,15 +729,12 @@ impl FromStr for PythonInstallationKey {
             )
         })?;
 
-        Ok(Self {
+        Ok(Self::new_from_version(
             implementation,
-            major: version.major(),
-            minor: version.minor(),
-            patch: version.patch().unwrap_or_default(),
-            prerelease: version.pre(),
+            &version,
             platform,
             variant,
-        })
+        ))
     }
 }
 
@@ -744,7 +751,7 @@ impl Ord for PythonInstallationKey {
             .then_with(|| self.version().cmp(&other.version()))
             // Platforms are sorted in preferred order for the target
             .then_with(|| self.platform.cmp(&other.platform).reverse())
-            // Python variants are sorted in preferred order, with `Default` first
+            // Python variants are sorted in preferred order, with GIL builds first
             .then_with(|| self.variant.cmp(&other.variant).reverse())
     }
 }
@@ -791,8 +798,10 @@ impl fmt::Display for PythonInstallationMinorVersionKey {
         // Display every field on the wrapped key except the patch
         // and prerelease (with special formatting for the variant).
         let variant = match self.0.variant {
-            PythonVariant::Default => String::new(),
-            _ => format!("+{}", self.0.variant),
+            PythonVariant::Default | PythonVariant::Gil => "",
+            PythonVariant::Debug | PythonVariant::GilDebug => "+debug",
+            PythonVariant::Freethreaded => "+freethreaded",
+            PythonVariant::FreethreadedDebug => "+freethreaded+debug",
         };
         write!(
             f,
@@ -864,6 +873,7 @@ mod tests {
         assert_eq!(key.major, 3);
         assert_eq!(key.minor, 12);
         assert_eq!(key.patch, 0);
+        assert_eq!(key.variant, PythonVariant::Gil);
         assert_eq!(
             key.platform.os,
             Os::new(target_lexicon::OperatingSystem::Linux)
@@ -923,6 +933,10 @@ mod tests {
         );
         assert_eq!(key.platform.libc, Libc::None);
 
+        let key = PythonInstallationKey::from_str("pyodide-3.13.2-emscripten-wasm32-musl").unwrap();
+        assert_eq!(key.variant, PythonVariant::Gil);
+        assert_eq!(key.to_string(), "pyodide-3.13.2-emscripten-wasm32-musl");
+
         // Test error cases
         assert!(PythonInstallationKey::from_str("cpython-3.12.0-linux-x86_64").is_err());
         assert!(PythonInstallationKey::from_str("cpython-3.12.0").is_err());
@@ -941,6 +955,32 @@ mod tests {
             variant: PythonVariant::Default,
         };
         assert_eq!(key.to_string(), "cpython-3.12.0-linux-x86_64-gnu");
+
+        let key_with_gil_variant = PythonInstallationKey {
+            variant: PythonVariant::Gil,
+            ..key.clone()
+        };
+        assert_eq!(
+            key_with_gil_variant.to_string(),
+            "cpython-3.12.0-linux-x86_64-gnu"
+        );
+        assert_eq!(
+            PythonInstallationKey::from_str(&key_with_gil_variant.to_string()).unwrap(),
+            key_with_gil_variant
+        );
+
+        let key_with_gil_debug_variant = PythonInstallationKey {
+            variant: PythonVariant::GilDebug,
+            ..key
+        };
+        assert_eq!(
+            key_with_gil_debug_variant.to_string(),
+            "cpython-3.12.0+debug-linux-x86_64-gnu"
+        );
+        assert_eq!(
+            PythonInstallationKey::from_str(&key_with_gil_debug_variant.to_string()).unwrap(),
+            key_with_gil_debug_variant
+        );
 
         let key_with_variant = PythonInstallationKey {
             implementation: LenientImplementationName::from("cpython"),

@@ -543,6 +543,19 @@ impl PythonDownloadRequest {
         }
     }
 
+    /// Whether a requested variant matches the variant stored in a managed Python key.
+    ///
+    /// `Default` and `Debug` are request variants, while concrete installation keys use `Gil` and
+    /// `GilDebug`.
+    fn variant_satisfied_by_key(request: PythonVariant, key: PythonVariant) -> bool {
+        request == key
+            || matches!(
+                (request, key),
+                (PythonVariant::Default, PythonVariant::Gil)
+                    | (PythonVariant::Debug, PythonVariant::GilDebug)
+            )
+    }
+
     /// Whether this request is satisfied by an installation key.
     pub fn satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
         // Check platform requirements
@@ -574,7 +587,7 @@ impl PythonDownloadRequest {
                 return false;
             }
             if let Some(variant) = version.variant() {
-                if variant != key.variant {
+                if !Self::variant_satisfied_by_key(variant, key.variant) {
                     return false;
                 }
             }
@@ -2010,6 +2023,34 @@ mod tests {
         let result = PythonDownloadRequest::from_str("any-any-any-any-any-any");
 
         assert!(matches!(result, Err(Error::TooManyParts(_))));
+    }
+
+    #[test]
+    fn test_python_download_request_variant_satisfied_by_key() {
+        assert!(PythonDownloadRequest::variant_satisfied_by_key(
+            PythonVariant::Default,
+            PythonVariant::Gil
+        ));
+        assert!(PythonDownloadRequest::variant_satisfied_by_key(
+            PythonVariant::Debug,
+            PythonVariant::GilDebug
+        ));
+        assert!(!PythonDownloadRequest::variant_satisfied_by_key(
+            PythonVariant::Gil,
+            PythonVariant::Default
+        ));
+        assert!(!PythonDownloadRequest::variant_satisfied_by_key(
+            PythonVariant::GilDebug,
+            PythonVariant::Debug
+        ));
+        assert!(!PythonDownloadRequest::variant_satisfied_by_key(
+            PythonVariant::Gil,
+            PythonVariant::Freethreaded
+        ));
+        assert!(!PythonDownloadRequest::variant_satisfied_by_key(
+            PythonVariant::Default,
+            PythonVariant::Freethreaded
+        ));
     }
 
     /// Test that build filtering works correctly

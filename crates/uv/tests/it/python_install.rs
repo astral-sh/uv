@@ -1279,6 +1279,71 @@ fn python_install_freethreaded() {
     ");
 }
 
+/// Test that `+gil` can explicitly install a GIL-enabled Python when the free-threaded variant is
+/// already installed.
+///
+/// Regression test for <https://github.com/astral-sh/uv/issues/17437>.
+#[test]
+fn python_install_gil() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_latest_python_versions()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix();
+
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.14t"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]+freethreaded-[PLATFORM] (python3.14t)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.14+gil"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.14+gil"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Python 3.14+gil is already installed
+    ");
+
+    uv_snapshot!(context.filters(), context.python_find().arg("3.14+gil"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.14+gil"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.14+gil
+    Uninstalled Python 3.14.[LATEST] in [TIME]
+     - cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
+    ");
+}
+
 /// Test that installing both GIL and free-threaded variants of the same Python version
 /// doesn't cause managed installation entries to disappear from `uv python list`
 /// on Windows when registry discovery is enabled.
