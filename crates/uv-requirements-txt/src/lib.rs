@@ -95,6 +95,8 @@ enum RequirementsTxtStatement {
     FindLinks(VerbatimUrl),
     /// `--no-index`
     NoIndex,
+    /// `--require-hashes`
+    RequireHashes,
     /// `--no-binary`
     NoBinary(NoBinary),
     /// `--only-binary`
@@ -158,6 +160,8 @@ pub struct RequirementsTxt {
     pub find_links: Vec<VerbatimUrl>,
     /// Whether to ignore the index, specified with `--no-index`.
     pub no_index: bool,
+    /// Whether all requirements must be hashed, specified with `--require-hashes`.
+    pub require_hashes: bool,
     /// Whether to disallow wheels, specified with `--no-binary`.
     pub no_binary: NoBinary,
     /// Whether to allow only wheels, specified with `--only-binary`.
@@ -542,6 +546,9 @@ impl RequirementsTxt {
                 RequirementsTxtStatement::NoIndex => {
                     data.no_index = true;
                 }
+                RequirementsTxtStatement::RequireHashes => {
+                    data.require_hashes = true;
+                }
                 RequirementsTxtStatement::NoBinary(no_binary) => {
                     data.no_binary.extend(no_binary);
                 }
@@ -592,6 +599,7 @@ impl RequirementsTxt {
             extra_index_urls,
             find_links,
             no_index,
+            require_hashes,
             no_binary,
             only_binary,
         } = other;
@@ -604,6 +612,7 @@ impl RequirementsTxt {
         self.extra_index_urls.extend(extra_index_urls);
         self.find_links.extend(find_links);
         self.no_index = self.no_index || no_index;
+        self.require_hashes = self.require_hashes || require_hashes;
         self.no_binary.extend(no_binary);
         self.only_binary.extend(only_binary);
     }
@@ -615,7 +624,6 @@ impl RequirementsTxt {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum UnsupportedOption {
     PreferBinary,
-    RequireHashes,
     Pre,
     TrustedHost,
     UseFeature,
@@ -626,7 +634,6 @@ impl UnsupportedOption {
     fn name(self) -> &'static str {
         match self {
             Self::PreferBinary => "--prefer-binary",
-            Self::RequireHashes => "--require-hashes",
             Self::Pre => "--pre",
             Self::TrustedHost => "--trusted-host",
             Self::UseFeature => "--use-feature",
@@ -637,7 +644,6 @@ impl UnsupportedOption {
     fn cli(self) -> bool {
         match self {
             Self::PreferBinary => false,
-            Self::RequireHashes => true,
             Self::Pre => true,
             Self::TrustedHost => true,
             Self::UseFeature => false,
@@ -648,7 +654,6 @@ impl UnsupportedOption {
     fn iter() -> impl Iterator<Item = Self> {
         [
             Self::PreferBinary,
-            Self::RequireHashes,
             Self::Pre,
             Self::TrustedHost,
             Self::UseFeature,
@@ -811,6 +816,8 @@ fn parse_entry(
         RequirementsTxtStatement::ExtraIndexUrl(url.with_given(given))
     } else if s.eat_if("--no-index") {
         RequirementsTxtStatement::NoIndex
+    } else if s.eat_if("--require-hashes") {
+        RequirementsTxtStatement::RequireHashes
     } else if s.eat_if("--find-links") || s.eat_if("-f") {
         let given = parse_value("--find-links", content, s, |c: char| !is_terminal(c))?;
         let given = unquote(given)
@@ -2078,6 +2085,7 @@ mod test {
                 extra_index_urls: [],
                 find_links: [],
                 no_index: false,
+                require_hashes: false,
                 no_binary: None,
                 only_binary: None,
             }
@@ -2138,6 +2146,7 @@ mod test {
                 extra_index_urls: [],
                 find_links: [],
                 no_index: false,
+                require_hashes: false,
                 no_binary: Packages(
                     [
                         PackageName(
@@ -2244,6 +2253,7 @@ mod test {
                 extra_index_urls: [],
                 find_links: [],
                 no_index: true,
+                require_hashes: false,
                 no_binary: None,
                 only_binary: None,
             }
@@ -2494,6 +2504,7 @@ mod test {
                 extra_index_urls: [],
                 find_links: [],
                 no_index: false,
+                require_hashes: false,
                 no_binary: All,
                 only_binary: None,
             }
@@ -2854,6 +2865,7 @@ mod test {
                 extra_index_urls: [],
                 find_links: [],
                 no_index: false,
+                require_hashes: false,
                 no_binary: None,
                 only_binary: None,
             }

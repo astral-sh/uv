@@ -212,6 +212,7 @@ pub(crate) async fn pip_compile(
         index_url,
         extra_index_urls,
         no_index,
+        require_hashes: _,
         find_links,
         no_binary,
         no_build,
