@@ -1,4 +1,4 @@
-name: Mimalloc high-confidence benchmark
+name: Mimalloc v3 residual RSS benchmark
 
 on:
   workflow_dispatch:
@@ -55,7 +55,7 @@ jobs:
           retention-days: 7
 
   rss:
-    name: purge-policy RSS replica ${{ matrix.replica }}
+    name: residual RSS replica ${{ matrix.replica }}
     if: startsWith(inputs.mode, 'rss')
     needs: build
     runs-on: namespace-profile-windows-2022-x86-64-4

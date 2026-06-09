@@ -7,6 +7,7 @@ $results = Join-Path $root "results"
 $binaryRoot = Join-Path $env:RUNNER_TEMP "mimalloc-binaries"
 $v2 = Join-Path $binaryRoot "uv-v2.exe"
 $v3 = Join-Path $binaryRoot "uv-v3.exe"
+$v3NoLargePages = Join-Path $binaryRoot "uv-v3-no-large-pages.exe"
 $smoke = $env:BENCH_SMOKE -eq "1"
 
 New-Item -ItemType Directory -Force $results | Out-Null
@@ -18,39 +19,47 @@ $treatments = @(
         Variant = "v2"
         Policy = "v2"
         Binary = $v2
+        LargePages = "v2"
+        PageReclaimOnFree = "native"
         PurgeDelay = "10"
         ArenaPurgeMult = "10"
         EnvironmentOverride = $false
     }
     [pscustomobject]@{
         Code = "B"
-        Name = "v2-v3-policy"
-        Variant = "v2"
-        Policy = "v3"
-        Binary = $v2
-        PurgeDelay = "1000"
-        ArenaPurgeMult = "1"
+        Name = "v3-default"
+        Variant = "v3"
+        Policy = "v2"
+        Binary = $v3
+        LargePages = "enabled"
+        PageReclaimOnFree = "native"
+        PurgeDelay = "10"
+        ArenaPurgeMult = "10"
         EnvironmentOverride = $true
     }
     [pscustomobject]@{
         Code = "C"
-        Name = "v3-v2-policy"
+        Name = "v3-reclaim-disabled"
         Variant = "v3"
         Policy = "v2"
         Binary = $v3
+        LargePages = "enabled"
+        PageReclaimOnFree = "-1"
         PurgeDelay = "10"
         ArenaPurgeMult = "10"
         EnvironmentOverride = $true
     }
     [pscustomobject]@{
         Code = "D"
-        Name = "v3-v3-policy"
+        Name = "v3-large-pages-disabled"
         Variant = "v3"
-        Policy = "v3"
-        Binary = $v3
-        PurgeDelay = "1000"
-        ArenaPurgeMult = "1"
-        EnvironmentOverride = $false
+        Policy = "v2"
+        Binary = $v3NoLargePages
+        LargePages = "disabled"
+        PageReclaimOnFree = "native"
+        PurgeDelay = "10"
+        ArenaPurgeMult = "10"
+        EnvironmentOverride = $true
     }
 )
 
@@ -59,14 +68,18 @@ function Set-MimallocTreatmentEnvironment {
 
     Remove-Item Env:MIMALLOC_PURGE_DELAY -ErrorAction SilentlyContinue
     Remove-Item Env:MIMALLOC_ARENA_PURGE_MULT -ErrorAction SilentlyContinue
+    Remove-Item Env:MIMALLOC_PAGE_RECLAIM_ON_FREE -ErrorAction SilentlyContinue
     if ($Treatment.EnvironmentOverride) {
         $env:MIMALLOC_PURGE_DELAY = $Treatment.PurgeDelay
         $env:MIMALLOC_ARENA_PURGE_MULT = $Treatment.ArenaPurgeMult
     }
+    if ($Treatment.PageReclaimOnFree -ne "native") {
+        $env:MIMALLOC_PAGE_RECLAIM_ON_FREE = $Treatment.PageReclaimOnFree
+    }
     $env:MIMALLOC_PURGE_DECOMMITS = "1"
 }
 
-foreach ($binary in @($v2, $v3)) {
+foreach ($binary in @($v2, $v3, $v3NoLargePages)) {
     if (-not (Test-Path $binary)) {
         throw "Missing benchmark binary: $binary"
     }
@@ -124,6 +137,10 @@ function Get-CommandOutput {
     v3 = [pscustomobject]@{
         bytes = (Get-Item $v3).Length
         sha256 = (Get-FileHash -Algorithm SHA256 $v3).Hash
+    }
+    v3NoLargePages = [pscustomobject]@{
+        bytes = (Get-Item $v3NoLargePages).Length
+        sha256 = (Get-FileHash -Algorithm SHA256 $v3NoLargePages).Hash
     }
 } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $results "machine-metadata.json")
 
@@ -225,6 +242,18 @@ $corpus = @(
     New-LockCase "saleor" "test/ecosystem/saleor"
 )
 
+$selectedFixtures = @(
+    "pip-black"
+    "pip-boto3"
+    "pip-jupyter"
+    "pip-airflow"
+    "pip-bio-embeddings"
+    "pip-backtrack-numpy-numba"
+    "lock-packse"
+    "lock-saleor"
+)
+$corpus = @($corpus | Where-Object Name -in $selectedFixtures)
+
 $coldOnlineWarmupBlocks = 4
 $coldOnlineMeasuredBlocks = 8
 if ($smoke) {
@@ -234,7 +263,7 @@ if ($smoke) {
 }
 
 [pscustomobject]@{
-    design = "four-treatment Williams crossover: ABDC, BCAD, CDBA, DACB"
+    design = "four-treatment residual RSS Williams crossover: ABDC, BCAD, CDBA, DACB"
     smoke = $smoke
     metric = "per-process PeakWorkingSetSize from GetProcessMemoryInfo"
     launcher = "CreateProcessW suspended, then ResumeThread and retain process handle"
@@ -243,8 +272,8 @@ if ($smoke) {
     coldOnlineMeasuredBlocks = $coldOnlineMeasuredBlocks
     purgeDecommits = 1
     treatments = @($treatments |
-        Select-Object Code, Name, Variant, Policy, PurgeDelay, ArenaPurgeMult,
-            EnvironmentOverride)
+        Select-Object Code, Name, Variant, Policy, LargePages,
+            PageReclaimOnFree, PurgeDelay, ArenaPurgeMult, EnvironmentOverride)
     corpus = $corpus
 } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $results "protocol.json")
 
@@ -747,6 +776,8 @@ function Invoke-RssBlocks {
                 treatmentCode = $treatment.Code
                 variant = $treatment.Variant
                 policy = $treatment.Policy
+                largePages = $treatment.LargePages
+                pageReclaimOnFree = $treatment.PageReclaimOnFree
                 purgeDelayMs = $treatment.PurgeDelay
                 arenaPurgeMult = $treatment.ArenaPurgeMult
                 purgeDecommits = 1
