@@ -1,0 +1,95 @@
+---
+source: crates/uv-requirements-txt/src/lib.rs
+expression: actual
+---
+RequirementsTxt {
+    requirements: [
+        RequirementEntry {
+            requirement: Named(
+                Requirement {
+                    name: PackageName(
+                        "numpy",
+                    ),
+                    extras: [],
+                    version_or_url: None,
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/option-with-marker.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+    ],
+    constraints: [],
+    editables: [],
+    index_url: None,
+    extra_index_urls: [
+        VerbatimUrl {
+            url: DisplaySafeUrl {
+                scheme: "https",
+                cannot_be_a_base: false,
+                username: "",
+                password: None,
+                host: Some(
+                    Domain(
+                        "download.pytorch.org",
+                    ),
+                ),
+                port: None,
+                path: "/whl/nightly/cpu",
+                query: None,
+                fragment: None,
+            },
+            given: Some(
+                "https://download.pytorch.org/whl/nightly/cpu",
+            ),
+        },
+        VerbatimUrl {
+            url: DisplaySafeUrl {
+                scheme: "https",
+                cannot_be_a_base: false,
+                username: "",
+                password: None,
+                host: Some(
+                    Domain(
+                        "download.pytorch.org",
+                    ),
+                ),
+                port: None,
+                path: "/whl/nightly/cpu",
+                query: None,
+                fragment: None,
+            },
+            given: Some(
+                "https://download.pytorch.org/whl/nightly/cpu",
+            ),
+        },
+        VerbatimUrl {
+            url: DisplaySafeUrl {
+                scheme: "https",
+                cannot_be_a_base: false,
+                username: "",
+                password: None,
+                host: Some(
+                    Domain(
+                        "download.pytorch.org",
+                    ),
+                ),
+                port: None,
+                path: "/whl/cu129;%20sys_platform%20%20!=%20'darwin'",
+                query: None,
+                fragment: None,
+            },
+            given: Some(
+                "https://download.pytorch.org/whl/cu129; sys_platform  != 'darwin'",
+            ),
+        },
+    ],
+    find_links: [],
+    no_index: false,
+    no_binary: None,
+    only_binary: None,
+}
