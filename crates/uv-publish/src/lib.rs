@@ -1585,7 +1585,7 @@ mod tests {
             .expect("failed to build base client");
 
         let download_concurrency = Arc::new(Semaphore::new(1));
-        let registry = DisplaySafeUrl::parse(&format!("{}/final", &mock_server.uri())).unwrap();
+        let registry = DisplaySafeUrl::parse(&format!("{}/final", mock_server.uri())).unwrap();
         upload(
             &group,
             &form_metadata,
@@ -2213,7 +2213,7 @@ mod tests {
             .and(path("/final"))
             .respond_with(
                 ResponseTemplate::new(308)
-                    .insert_header("Location", format!("{}/final/", &mock_server.uri())),
+                    .insert_header("Location", format!("{}/final/", mock_server.uri())),
             )
             .mount(&mock_server)
             .await;
@@ -2233,7 +2233,7 @@ mod tests {
             .and(path("/final"))
             .respond_with(
                 ResponseTemplate::new(308)
-                    .insert_header("Location", format!("{}/final/", &mock_server.uri())),
+                    .insert_header("Location", format!("{}/final/", mock_server.uri())),
             )
             .mount(&mock_server)
             .await;
@@ -2241,7 +2241,7 @@ mod tests {
             .and(path("/final/"))
             .respond_with(
                 ResponseTemplate::new(308)
-                    .insert_header("Location", format!("{}/final", &mock_server.uri())),
+                    .insert_header("Location", format!("{}/final", mock_server.uri())),
             )
             .mount(&mock_server)
             .await;

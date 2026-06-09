@@ -698,7 +698,7 @@ impl PubGrubReportFormatter<'_> {
                 let external1 = self.format_external(external1);
                 let external2 = self.format_external(external2);
 
-                format!("{}and {}", padded("", &external1, " "), &external2)
+                format!("{}and {}", padded("", &external1, " "), external2)
             }
         }
     }

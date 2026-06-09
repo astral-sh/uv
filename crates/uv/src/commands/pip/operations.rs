@@ -234,7 +234,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             // Complain if dependency groups are named that don't appear.
             for name in groups.explicit_names() {
                 if !metadata.dependency_groups.contains_key(name) {
-                    return Err(anyhow!(
+                    Err(anyhow!(
                         "The dependency group '{name}' was not found in the project: {}",
                         pyproject_path.user_display()
                     ))?;
