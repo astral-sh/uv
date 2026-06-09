@@ -1,9 +1,9 @@
 [alias]
 dev = "run --package uv-dev --features dev"
 
-# The jemalloc 5.3.1 default increased peak RSS by about 3% in uv benchmarks
-# without a measurable performance improvement.
 [env]
+# In jemalloc 5.3.1, this was turned on by default but increased peak RSS by ~3% in uv benchmarks
+# without a measurable performance improvement, so we turn it back off.
 JEMALLOC_SYS_WITH_MALLOC_CONF = "disable_large_size_classes:false"
 
 # statically link the C runtime so the executable does not depend on
