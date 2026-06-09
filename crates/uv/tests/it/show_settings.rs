@@ -856,9 +856,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     let configured = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
-    --- old
-    +++ new
-    @@ -67,7 +67,45 @@
+    ...
          ),
          settings: PipSettings {
              index_locations: IndexLocations {
@@ -905,7 +903,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                  flat_index: [],
                  no_index: false,
              },
-    @@ -120,7 +158,7 @@
+    ...
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -914,7 +912,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
-    @@ -132,7 +170,7 @@
+    ...
              no_annotate: false,
              no_header: false,
              custom_compile_command: None,
@@ -923,6 +921,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
              config_setting: ConfigSettings(
                  {},
              ),
+    ...
     "#
     );
 
@@ -932,9 +931,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             .arg("--show-settings")
             .arg("requirements.in")
             .arg("--resolution=highest"), @"
-    --- old
-    +++ new
-    @@ -158,7 +158,7 @@
+    ...
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -943,6 +940,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
+    ...
     "
     );
 
@@ -953,9 +951,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             .arg("requirements.in")
             .arg("--resolution=highest")
             .arg("--no-generate-hashes"), @"
-    --- old
-    +++ new
-    @@ -170,7 +170,7 @@
+    ...
              no_annotate: false,
              no_header: false,
              custom_compile_command: None,
@@ -964,6 +960,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
              config_setting: ConfigSettings(
                  {},
              ),
+    ...
     "
     );
 
@@ -1012,9 +1009,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     let uv_toml = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
-    --- old
-    +++ new
-    @@ -67,7 +67,45 @@
+    ...
          ),
          settings: PipSettings {
              index_locations: IndexLocations {
@@ -1061,7 +1056,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                  flat_index: [],
                  no_index: false,
              },
-    @@ -120,7 +158,7 @@
+    ...
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -1070,7 +1065,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
-    @@ -132,7 +170,7 @@
+    ...
              no_annotate: false,
              no_header: false,
              custom_compile_command: None,
@@ -1079,6 +1074,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
              config_setting: ConfigSettings(
                  {},
              ),
+    ...
     "#
     );
 
@@ -1108,9 +1104,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     diff_uv_snapshot!(context.filters(), &uv_toml, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @"
-    --- old
-    +++ new
-    @@ -95,9 +95,7 @@
+    ...
                          ),
                          explicit: false,
                          default: true,
@@ -1121,7 +1115,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                          format: Simple,
                          publish_url: None,
                          authenticate: Auto,
-    @@ -178,7 +176,9 @@
+    ...
                  {},
              ),
              python_version: None,
@@ -1132,6 +1126,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
              universal: false,
              exclude_newer: ExcludeNewer {
                  global: None,
+    ...
     "
     );
 
@@ -1172,9 +1167,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     let configured = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
-    --- old
-    +++ new
-    @@ -67,7 +67,78 @@
+    ...
          ),
          settings: PipSettings {
              index_locations: IndexLocations {
@@ -1254,6 +1247,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                  flat_index: [],
                  no_index: false,
              },
+    ...
     "#
     );
 
@@ -1265,9 +1259,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--extra-index-url")
         .arg("https://test.pypi.org/simple"), @r#"
-    --- old
-    +++ new
-    @@ -70,6 +70,43 @@
+    ...
                  indexes: [
                      Index {
                          name: None,
@@ -1311,6 +1303,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                          url: Pypi(
                              VerbatimUrl {
                                  url: DisplaySafeUrl {
+    ...
     "#
     );
 
@@ -1351,9 +1344,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
-    --- old
-    +++ new
-    @@ -68,8 +68,44 @@
+    ...
          settings: PipSettings {
              index_locations: IndexLocations {
                  indexes: [],
@@ -1400,6 +1391,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
              },
              python: None,
              install_mirrors: PythonInstallMirrors {
+    ...
     "#
     );
 
@@ -1439,9 +1431,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @"
-    --- old
-    +++ new
-    @@ -120,7 +120,7 @@
+    ...
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -1450,6 +1440,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
+    ...
     "
     );
 
@@ -1475,9 +1466,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     let combined = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
-    --- old
-    +++ new
-    @@ -67,7 +67,78 @@
+    ...
          ),
          settings: PipSettings {
              index_locations: IndexLocations {
@@ -1557,6 +1546,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                  flat_index: [],
                  no_index: false,
              },
+    ...
     "#
     );
 
@@ -1566,9 +1556,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--resolution=lowest-direct"), @"
-    --- old
-    +++ new
-    @@ -191,7 +191,7 @@
+    ...
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -1577,6 +1565,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
+    ...
     "
     );
 
@@ -1616,9 +1605,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
-    --- old
-    +++ new
-    @@ -120,7 +120,7 @@
+    ...
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -1627,6 +1614,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
+    ...
     "
     );
 
@@ -1643,9 +1631,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
-    --- old
-    +++ new
-    @@ -132,7 +132,7 @@
+    ...
              no_annotate: false,
              no_header: false,
              custom_compile_command: None,
@@ -1654,6 +1640,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
              config_setting: ConfigSettings(
                  {},
              ),
+    ...
     "
     );
 
@@ -1724,9 +1711,7 @@ fn resolve_system_configuration_can_be_disabled() -> anyhow::Result<()> {
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_DIRS, xdg.path())
         .env_remove(EnvVars::UV_NO_SYSTEM_CONFIG), @"
-    --- old
-    +++ new
-    @@ -120,7 +120,7 @@
+    ...
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -1735,6 +1720,7 @@ fn resolve_system_configuration_can_be_disabled() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
+    ...
     ");
 
     diff_uv_snapshot!(
@@ -1789,9 +1775,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
-    --- old
-    +++ new
-    @@ -68,7 +68,9 @@
+    ...
              find_links: None,
              index_strategy: None,
              keyring_provider: None,
@@ -1802,7 +1786,7 @@ fn resolve_tool() -> anyhow::Result<()> {
              prerelease: None,
              fork_strategy: None,
              dependency_metadata: None,
-    @@ -131,7 +133,7 @@
+    ...
                      {},
                  ),
                  prerelease: IfNecessaryOrExplicit,
@@ -1811,6 +1795,7 @@ fn resolve_tool() -> anyhow::Result<()> {
                  sources: None,
                  torch_backend: None,
                  cuda_driver_version: None,
+    ...
     "
     );
 
@@ -1860,9 +1845,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @"
-    --- old
-    +++ new
-    @@ -120,7 +120,7 @@
+    ...
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -1871,6 +1854,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
+    ...
     "
     );
 
@@ -1927,9 +1911,7 @@ fn resolve_both() -> anyhow::Result<()> {
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
-    --- old
-    +++ new
-    @@ -67,7 +67,45 @@
+    ...
          ),
          settings: PipSettings {
              index_locations: IndexLocations {
@@ -1976,7 +1958,7 @@ fn resolve_both() -> anyhow::Result<()> {
                  flat_index: [],
                  no_index: false,
              },
-    @@ -120,7 +158,7 @@
+    ...
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -1985,7 +1967,7 @@ fn resolve_both() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
-    @@ -132,7 +170,7 @@
+    ...
              no_annotate: false,
              no_header: false,
              custom_compile_command: None,
@@ -1994,7 +1976,7 @@ fn resolve_both() -> anyhow::Result<()> {
              config_setting: ConfigSettings(
                  {},
              ),
-    @@ -170,3 +208,7 @@
+    ...
      }
 
      ----- stderr -----
@@ -2002,6 +1984,7 @@ fn resolve_both() -> anyhow::Result<()> {
     +warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The following fields from `[tool.uv]` will be ignored in favor of the `uv.toml` file:
     +- offline
     +- pip
+    ...
     "#
     );
 
@@ -2059,9 +2042,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
-    --- old
-    +++ new
-    @@ -67,7 +67,45 @@
+    ...
          ),
          settings: PipSettings {
              index_locations: IndexLocations {
@@ -2108,7 +2089,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
                  flat_index: [],
                  no_index: false,
              },
-    @@ -120,7 +158,7 @@
+    ...
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -2117,7 +2098,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
-    @@ -132,7 +170,7 @@
+    ...
              no_annotate: false,
              no_header: false,
              custom_compile_command: None,
@@ -2126,11 +2107,12 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
              config_setting: ConfigSettings(
                  {},
              ),
-    @@ -170,3 +208,4 @@
+    ...
      }
 
      ----- stderr -----
     +warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
+    ...
     "#
     );
 
@@ -2274,9 +2256,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         .arg("--config-file")
         .arg(config.path())
         .arg("requirements.in"), @r#"
-    --- old
-    +++ new
-    @@ -67,7 +67,43 @@
+    ...
          ),
          settings: PipSettings {
              index_locations: IndexLocations {
@@ -2321,7 +2301,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
                  flat_index: [],
                  no_index: false,
              },
-    @@ -120,7 +156,7 @@
+    ...
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -2330,7 +2310,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
-    @@ -132,7 +168,7 @@
+    ...
              no_annotate: false,
              no_header: false,
              custom_compile_command: None,
@@ -2339,6 +2319,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
              config_setting: ConfigSettings(
                  {},
              ),
+    ...
     "#
     );
 
@@ -2455,9 +2436,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("requirements.in")
         .current_dir(&child), @"
-    --- old
-    +++ new
-    @@ -120,7 +120,7 @@
+    ...
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -2466,6 +2445,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
+    ...
     "
     );
 
@@ -2515,9 +2495,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
-    --- old
-    +++ new
-    @@ -13,7 +13,18 @@
+    ...
              http_proxy: None,
              https_proxy: None,
              no_proxy: None,
@@ -2537,6 +2515,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
              read_timeout: [TIME],
              connect_timeout: [TIME],
              retries: 3,
+    ...
     "#
     );
 
@@ -2573,9 +2552,7 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("--index-url")
         .arg("https://cli.pypi.org/simple"), @r#"
-    --- old
-    +++ new
-    @@ -67,7 +67,82 @@
+    ...
          ),
          settings: PipSettings {
              index_locations: IndexLocations {
@@ -2659,6 +2636,7 @@ fn index_priority() -> anyhow::Result<()> {
                  flat_index: [],
                  no_index: false,
              },
+    ...
     "#
     );
 
@@ -2682,9 +2660,7 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("--default-index")
         .arg("https://cli.pypi.org/simple"), @"
-    --- old
-    +++ new
-    @@ -131,7 +131,7 @@
+    ...
                              },
                          ),
                          explicit: false,
@@ -2693,6 +2669,7 @@ fn index_priority() -> anyhow::Result<()> {
                          origin: Some(
                              Project,
                          ),
+    ...
     "
     );
 
@@ -2703,9 +2680,7 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("--index")
         .arg("https://cli.pypi.org/simple"), @"
-    --- old
-    +++ new
-    @@ -94,7 +94,7 @@
+    ...
                              },
                          ),
                          explicit: false,
@@ -2714,6 +2689,7 @@ fn index_priority() -> anyhow::Result<()> {
                          origin: Some(
                              Cli,
                          ),
+    ...
     "
     );
 
@@ -2740,9 +2716,7 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("--extra-index-url")
         .arg("https://cli.pypi.org/simple"), @"
-    --- old
-    +++ new
-    @@ -94,7 +94,7 @@
+    ...
                              },
                          ),
                          explicit: false,
@@ -2751,6 +2725,7 @@ fn index_priority() -> anyhow::Result<()> {
                          origin: Some(
                              Cli,
                          ),
+    ...
     "
     );
 
@@ -2788,9 +2763,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             .arg("requirements.in")
             .arg("--no-verify-hashes")
             .arg("--show-settings"), @"
-    --- old
-    +++ new
-    @@ -156,9 +156,7 @@
+    ...
              link_mode: Clone,
              compile_bytecode: false,
              sources: None,
@@ -2801,6 +2774,7 @@ fn verify_hashes() -> anyhow::Result<()> {
              upgrade: Upgrade {
                  strategy: None,
                  constraints: {},
+    ...
     "
     );
 
@@ -2810,9 +2784,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             .arg("requirements.in")
             .arg("--require-hashes")
             .arg("--show-settings"), @"
-    --- old
-    +++ new
-    @@ -157,7 +157,7 @@
+    ...
              compile_bytecode: false,
              sources: None,
              hash_checking: Some(
@@ -2821,6 +2793,7 @@ fn verify_hashes() -> anyhow::Result<()> {
              ),
              upgrade: Upgrade {
                  strategy: None,
+    ...
     "
     );
 
@@ -2830,9 +2803,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             .arg("requirements.in")
             .arg("--no-require-hashes")
             .arg("--show-settings"), @"
-    --- old
-    +++ new
-    @@ -156,9 +156,7 @@
+    ...
              link_mode: Clone,
              compile_bytecode: false,
              sources: None,
@@ -2843,6 +2814,7 @@ fn verify_hashes() -> anyhow::Result<()> {
              upgrade: Upgrade {
                  strategy: None,
                  constraints: {},
+    ...
     "
     );
 
@@ -2852,9 +2824,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             .arg("requirements.in")
             .env(EnvVars::UV_NO_VERIFY_HASHES, "1")
             .arg("--show-settings"), @"
-    --- old
-    +++ new
-    @@ -156,9 +156,7 @@
+    ...
              link_mode: Clone,
              compile_bytecode: false,
              sources: None,
@@ -2865,6 +2835,7 @@ fn verify_hashes() -> anyhow::Result<()> {
              upgrade: Upgrade {
                  strategy: None,
                  constraints: {},
+    ...
     "
     );
 
@@ -2899,9 +2870,7 @@ fn preview_features() {
     );
 
     let preview = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview"), @"
-    --- old
-    +++ new
-    @@ -25,7 +25,42 @@
+    ...
          },
          show_settings: true,
          preview: Preview {
@@ -2945,6 +2914,7 @@ fn preview_features() {
          },
          python_preference: Managed,
          python_downloads: Automatic,
+    ...
     "
     );
 
@@ -2960,9 +2930,7 @@ fn preview_features() {
     );
 
     let preview_features = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview-features").arg("python-install-default,python-upgrade"), @"
-    --- old
-    +++ new
-    @@ -25,7 +25,10 @@
+    ...
          },
          show_settings: true,
          preview: Preview {
@@ -2974,6 +2942,7 @@ fn preview_features() {
          },
          python_preference: Managed,
          python_downloads: Automatic,
+    ...
     "
     );
 
@@ -2985,13 +2954,12 @@ fn preview_features() {
             .arg("--preview-features")
             .arg("python-install-default,unknown-preview-feature,python-upgrade"),
         @"
-    --- old
-    +++ new
-    @@ -124,3 +124,4 @@
+    ...
      }
 
      ----- stderr -----
     +warning: Unknown preview feature: `unknown-preview-feature`
+    ...
     "
     );
 
@@ -3005,13 +2973,12 @@ fn preview_features() {
                 "python-install-default,unknown-preview-feature,python-upgrade",
             ),
         @"
-    --- old
-    +++ new
-    @@ -124,3 +124,4 @@
+    ...
      }
 
      ----- stderr -----
     +warning: Unknown preview feature: `unknown-preview-feature`
+    ...
     "
     );
 
@@ -3084,13 +3051,12 @@ fn system_certs_cli_aliases_override_env() {
         .arg("--show-settings")
         .arg("--no-native-tls")
         .env(EnvVars::UV_SYSTEM_CERTS, "1"), @"
-    --- old
-    +++ new
-    @@ -121,3 +121,4 @@
+    ...
      }
 
      ----- stderr -----
     +warning: The `--no-native-tls` flag is deprecated and will be removed in a future release. Use `--no-system-certs` instead.
+    ...
     "
     );
 
@@ -3098,13 +3064,12 @@ fn system_certs_cli_aliases_override_env() {
         .arg("--show-settings")
         .arg("--no-system-certs")
         .env(EnvVars::UV_NATIVE_TLS, "1"), @"
-    --- old
-    +++ new
-    @@ -121,3 +121,4 @@
+    ...
      }
 
      ----- stderr -----
     +warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+    ...
     "
     );
 }
@@ -3127,9 +3092,7 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
 
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version())
         .arg("--show-settings"), @"
-    --- old
-    +++ new
-    @@ -9,7 +9,7 @@
+    ...
          network_settings: NetworkSettings {
              connectivity: Online,
              offline: Disabled,
@@ -3138,6 +3101,7 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
              http_proxy: None,
              https_proxy: None,
              no_proxy: None,
+    ...
     "
     );
 
@@ -3148,13 +3112,12 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
 
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version())
         .arg("--show-settings"), @"
-    --- old
-    +++ new
-    @@ -121,3 +121,4 @@
+    ...
      }
 
      ----- stderr -----
     +warning: The `native-tls` setting is deprecated and will be removed in a future release. Use `system-certs` instead.
+    ...
     "
     );
 
@@ -3189,9 +3152,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         .arg("sniffio")
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
-    --- old
-    +++ new
-    @@ -162,7 +162,14 @@
+    ...
                  Verify,
              ),
              upgrade: Upgrade {
@@ -3207,6 +3168,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                  constraints: {},
              },
              reinstall: None,
+    ...
     "#
     );
 
@@ -3228,9 +3190,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--show-settings")
             .arg("requirements.in"),
         @r#"
-    --- old
-    +++ new
-    @@ -162,14 +162,7 @@
+    ...
                  Verify,
              ),
              upgrade: Upgrade {
@@ -3246,6 +3206,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                  constraints: {},
              },
              reinstall: None,
+    ...
     "#
     );
 
@@ -3263,9 +3224,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             .arg("idna")
             .arg("--show-settings")
             .arg("requirements.in"), @r#"
-    --- old
-    +++ new
-    @@ -162,14 +162,7 @@
+    ...
                  Verify,
              ),
              upgrade: Upgrade {
@@ -3281,6 +3240,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                  constraints: {},
              },
              reinstall: None,
+    ...
     "#
     );
 
@@ -3296,9 +3256,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--no-upgrade")
             .arg("--show-settings")
             .arg("requirements.in"), @r#"
-    --- old
-    +++ new
-    @@ -165,7 +165,7 @@
+    ...
                  strategy: Some(
                      {
                          PackageName(
@@ -3307,6 +3265,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                          ),
                      },
                      {},
+    ...
     "#
     );
 
@@ -3316,9 +3275,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--upgrade")
             .arg("--show-settings")
             .arg("requirements.in"), @r#"
-    --- old
-    +++ new
-    @@ -165,7 +165,7 @@
+    ...
                  strategy: Some(
                      {
                          PackageName(
@@ -3327,6 +3284,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                          ),
                      },
                      {},
+    ...
     "#
     );
 
@@ -3337,9 +3295,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             .arg("sniffio")
             .arg("--show-settings")
             .arg("requirements.in"), @r#"
-    --- old
-    +++ new
-    @@ -167,6 +167,9 @@
+    ...
                          PackageName(
                              "sniffio",
                          ),
@@ -3349,6 +3305,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                      },
                      {},
                  ),
+    ...
     "#
     );
 
@@ -3385,9 +3342,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         .arg("--upgrade-package")
         .arg("sniffio")
         .arg("--show-settings"), @r#"
-    --- old
-    +++ new
-    @@ -100,7 +100,14 @@
+    ...
              cuda_driver_version: None,
              amd_gpu_architecture: None,
              upgrade: Upgrade {
@@ -3403,6 +3358,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                  constraints: {},
              },
          },
+    ...
     "#
     );
 
@@ -3427,9 +3383,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             .arg("idna")
             .arg("--show-settings"),
         @r#"
-    --- old
-    +++ new
-    @@ -100,14 +100,7 @@
+    ...
              cuda_driver_version: None,
              amd_gpu_architecture: None,
              upgrade: Upgrade {
@@ -3445,6 +3399,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                  constraints: {},
              },
          },
+    ...
     "#
     );
 
@@ -3465,9 +3420,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--upgrade-package")
             .arg("idna")
             .arg("--show-settings"), @r#"
-    --- old
-    +++ new
-    @@ -100,14 +100,7 @@
+    ...
              cuda_driver_version: None,
              amd_gpu_architecture: None,
              upgrade: Upgrade {
@@ -3483,6 +3436,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                  constraints: {},
              },
          },
+    ...
     "#
     );
 
@@ -3501,9 +3455,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.lock())
             .arg("--no-upgrade")
             .arg("--show-settings"), @r#"
-    --- old
-    +++ new
-    @@ -103,7 +103,7 @@
+    ...
                  strategy: Some(
                      {
                          PackageName(
@@ -3512,6 +3464,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                          ),
                      },
                      {},
+    ...
     "#
     );
 
@@ -3520,9 +3473,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.lock())
             .arg("--upgrade")
             .arg("--show-settings"), @r#"
-    --- old
-    +++ new
-    @@ -103,7 +103,7 @@
+    ...
                  strategy: Some(
                      {
                          PackageName(
@@ -3531,6 +3482,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                          ),
                      },
                      {},
+    ...
     "#
     );
 
@@ -3540,9 +3492,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--upgrade-package")
             .arg("sniffio")
             .arg("--show-settings"), @r#"
-    --- old
-    +++ new
-    @@ -105,6 +105,9 @@
+    ...
                          PackageName(
                              "sniffio",
                          ),
@@ -3552,6 +3502,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                      },
                      {},
                  ),
+    ...
     "#
     );
 
@@ -3590,9 +3541,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--no-build-isolation-package").arg("numpy"), @r#"
-    --- old
-    +++ new
-    @@ -106,13 +106,7 @@
+    ...
              torch_backend: None,
              cuda_driver_version: None,
              amd_gpu_architecture: None,
@@ -3607,6 +3556,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
              extra_build_dependencies: ExtraBuildDependencies(
                  {},
              ),
+    ...
     "#);
 
     // Now enable build isolation for all packages except `numpy`.
@@ -3619,9 +3569,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
             .arg("--show-settings")
             .arg("requirements.in")
             .arg("--no-build-isolation-package").arg("numpy"), @r#"
-    --- old
-    +++ new
-    @@ -106,7 +106,13 @@
+    ...
              torch_backend: None,
              cuda_driver_version: None,
              amd_gpu_architecture: None,
@@ -3636,6 +3584,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
              extra_build_dependencies: ExtraBuildDependencies(
                  {},
              ),
+    ...
     "#);
 
     Ok(())

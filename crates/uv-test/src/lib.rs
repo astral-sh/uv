@@ -11,7 +11,7 @@ use std::ffi::OsString;
 use std::io::Write as _;
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Output, Stdio};
+use std::process::{Command, Output, Stdio};
 use std::str::FromStr;
 use std::{env, io};
 use uv_python::downloads::ManagedPythonDownloadList;
@@ -1905,14 +1905,14 @@ impl TestContext {
 
         let lock_path = ChildPath::new(self.temp_dir.join("uv.lock"));
         let old_lock = fs_err::read_to_string(&lock_path).unwrap();
-        let (snapshot, _, status) = run_and_format_with_status(
+        let (snapshot, output) = run_and_format(
             change(self),
             self.filters(),
             "diff_lock",
             Some(WindowsFilters::Platform),
             None,
         );
-        assert!(status.success(), "{snapshot}");
+        assert!(output.status.success(), "{snapshot}");
         let new_lock = fs_err::read_to_string(&lock_path).unwrap();
         diff_snapshot(&old_lock, &new_lock, 10)
     }
@@ -1997,7 +1997,20 @@ pub fn diff_snapshot(old: &str, new: &str, context_radius: usize) -> String {
 macro_rules! diff_uv_snapshot {
     ($filters:expr, $old:expr, $spawnable:expr, @$snapshot:literal) => {{
         let new = $crate::capture_uv_snapshot!($filters, $spawnable);
-        ::insta::assert_snapshot!($crate::diff_snapshot($old, &new, 3), @$snapshot);
+        let snapshot = $crate::diff_snapshot($old, &new, 3);
+        let mut settings = ::insta::Settings::clone_current();
+        // Show the complete diff on failure while avoiding assertions on its unstable metadata.
+        let description = match settings.description() {
+            Some(description) => format!("{description}\n\nUnfiltered diff:\n{snapshot}"),
+            None => format!("Unfiltered diff:\n{snapshot}"),
+        };
+        settings.set_description(description);
+        settings.add_filter(r"^--- old\n\+\+\+ new\n", "");
+        settings.add_filter(r"(?m)^@@.*$", "...");
+        settings.add_filter(r"\n$", "\n...\n");
+        settings.bind(|| {
+            ::insta::assert_snapshot!(snapshot, @$snapshot);
+        });
         new
     }};
 }
@@ -2006,7 +2019,8 @@ macro_rules! diff_uv_snapshot {
 #[macro_export]
 macro_rules! capture_uv_snapshot {
     ($filters:expr, $spawnable:expr) => {{
-        let (snapshot, _) = $crate::run_and_format(
+        // Don't echo the output to stderr while capturing without asserting.
+        let (snapshot, _) = $crate::run_and_format_silent(
             $spawnable,
             &$filters,
             $crate::function_name!(),
@@ -2016,7 +2030,13 @@ macro_rules! capture_uv_snapshot {
         snapshot
     }};
     ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
-        let snapshot = $crate::capture_uv_snapshot!($filters, $spawnable);
+        let (snapshot, _) = $crate::run_and_format(
+            $spawnable,
+            &$filters,
+            $crate::function_name!(),
+            Some($crate::WindowsFilters::Platform),
+            None,
+        );
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         snapshot
     }};
@@ -2153,6 +2173,7 @@ pub fn apply_filters<T: AsRef<str>>(mut snapshot: String, filters: impl AsRef<[(
 /// Execute the command and format its output status, stdout and stderr into a snapshot string.
 ///
 /// This function is derived from `insta_cmd`s `spawn_with_info`.
+#[expect(clippy::print_stderr)]
 pub fn run_and_format<T: AsRef<str>>(
     command: impl BorrowMut<Command>,
     filters: impl AsRef<[(T, T)]>,
@@ -2160,22 +2181,27 @@ pub fn run_and_format<T: AsRef<str>>(
     windows_filters: Option<WindowsFilters>,
     input: Option<&str>,
 ) -> (String, Output) {
-    let (snapshot, output, _) =
-        run_and_format_with_status(command, filters, function_name, windows_filters, input);
+    let (snapshot, output) =
+        run_and_format_silent(command, filters, function_name, windows_filters, input);
+    eprintln!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Unfiltered output ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    eprintln!(
+        "----- stdout -----\n{}\n----- stderr -----\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    eprintln!("────────────────────────────────────────────────────────────────────────────────\n");
     (snapshot, output)
 }
 
-/// Execute the command and format its output status, stdout and stderr into a snapshot string.
-///
-/// This function is derived from `insta_cmd`s `spawn_with_info`.
-#[expect(clippy::print_stderr)]
-fn run_and_format_with_status<T: AsRef<str>>(
+/// Execute the command and format its output without printing the unfiltered output.
+#[doc(hidden)]
+pub fn run_and_format_silent<T: AsRef<str>>(
     mut command: impl BorrowMut<Command>,
     filters: impl AsRef<[(T, T)]>,
     function_name: &str,
     windows_filters: Option<WindowsFilters>,
     input: Option<&str>,
-) -> (String, Output, ExitStatus) {
+) -> (String, Output) {
     let program = command
         .borrow_mut()
         .get_program()
@@ -2222,14 +2248,6 @@ fn run_and_format_with_status<T: AsRef<str>>(
             .output()
             .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"))
     };
-
-    eprintln!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Unfiltered output ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    eprintln!(
-        "----- stdout -----\n{}\n----- stderr -----\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
-    eprintln!("────────────────────────────────────────────────────────────────────────────────\n");
 
     let mut snapshot = apply_filters(
         format!(
@@ -2289,8 +2307,7 @@ fn run_and_format_with_status<T: AsRef<str>>(
         }
     }
 
-    let status = output.status;
-    (snapshot, output, status)
+    (snapshot, output)
 }
 
 /// Recursively copy a directory and its contents, skipping gitignored files.
