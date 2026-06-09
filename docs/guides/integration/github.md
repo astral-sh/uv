@@ -275,6 +275,14 @@ Its effect on performance is dependent on the packages being installed.
     uv cache clean
     ```
 
+!!! note
+
+    If your workflow runs inside a custom container image, ensure the image includes `git` and
+    certificate authorities before using `actions/checkout`. Without `git`, `actions/checkout` may
+    fall back to an archive checkout that does not create a `.git` directory. Tools that rely on
+    Git-aware ignore handling can then miss `.gitignore` files written inside uv-managed
+    directories, including cache directories placed under `${{ github.workspace }}`.
+
 ## Using `uv pip`
 
 If using the `uv pip` interface instead of the uv project interface, uv requires a virtual
