@@ -1,5 +1,10 @@
 on:
   workflow_call:
+    inputs:
+      save-rust-cache:
+        required: false
+        type: string
+        default: "true"
 
 permissions: {}
 
@@ -21,5 +26,14 @@ jobs:
       - name: "Setup srs"
         id: srs
         uses: ./.github/actions/setup-srs
+        with:
+          artifact-cache-scope: depot-linux-publish
       - name: "cargo publish dry-run"
         run: cargo publish --workspace --dry-run
+      - name: "Save srs build cache"
+        if: ${{ inputs.save-rust-cache == 'true' }}
+        uses: ./.github/actions/save-srs-cache
+        with:
+          artifact-cache-hit: ${{ steps.srs.outputs.artifact-cache-hit }}
+          artifact-cache-primary-key: ${{ steps.srs.outputs.artifact-cache-primary-key }}
+          save-artifact-cache: "true"

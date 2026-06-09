@@ -27,6 +27,8 @@ jobs:
       - name: "Setup srs"
         id: srs
         uses: ./.github/actions/setup-srs
+        with:
+          artifact-cache-scope: github-linux-no-debug
 
       - name: "Build"
         run: cargo build --profile no-debug
@@ -39,6 +41,13 @@ jobs:
             ./target/no-debug/uv
             ./target/no-debug/uvx
           retention-days: 1
+      - name: "Save srs build cache"
+        if: ${{ inputs.save-rust-cache == 'true' }}
+        uses: ./.github/actions/save-srs-cache
+        with:
+          artifact-cache-hit: ${{ steps.srs.outputs.artifact-cache-hit }}
+          artifact-cache-primary-key: ${{ steps.srs.outputs.artifact-cache-primary-key }}
+          save-artifact-cache: "true"
 
   build-binary-linux-aarch64:
     name: "linux aarch64"
@@ -150,6 +159,7 @@ jobs:
         id: srs
         uses: ./.github/actions/setup-srs
         with:
+          artifact-cache-scope: github-macos-no-debug
           target-path: ${{ github.workspace }}/target/no-debug
       - name: "Build"
         run: cargo build --profile no-debug --bin uv --bin uvx
@@ -167,6 +177,9 @@ jobs:
         if: ${{ inputs.save-rust-cache == 'true' }}
         uses: ./.github/actions/save-srs-cache
         with:
+          artifact-cache-hit: ${{ steps.srs.outputs.artifact-cache-hit }}
+          artifact-cache-primary-key: ${{ steps.srs.outputs.artifact-cache-primary-key }}
+          save-artifact-cache: "true"
           target-cache-hit: ${{ steps.srs.outputs.target-cache-hit }}
           target-cache-primary-key: ${{ steps.srs.outputs.target-cache-primary-key }}
           target-path: ${{ github.workspace }}/target/no-debug

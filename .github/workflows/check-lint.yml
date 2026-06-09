@@ -107,10 +107,19 @@ jobs:
       - name: "Setup srs"
         id: srs
         uses: ./.github/actions/setup-srs
+        with:
+          artifact-cache-scope: github-linux-clippy
       - name: "Install Rust toolchain"
         run: rustup show
       - name: "Clippy"
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: "Save srs build cache"
+        if: ${{ inputs.save-rust-cache == 'true' }}
+        uses: ./.github/actions/save-srs-cache
+        with:
+          artifact-cache-hit: ${{ steps.srs.outputs.artifact-cache-hit }}
+          artifact-cache-primary-key: ${{ steps.srs.outputs.artifact-cache-primary-key }}
+          save-artifact-cache: "true"
   clippy-windows:
     name: "clippy on windows"
     timeout-minutes: 15

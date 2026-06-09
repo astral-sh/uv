@@ -21,6 +21,8 @@ jobs:
       - name: "Setup srs"
         id: srs
         uses: ./.github/actions/setup-srs
+        with:
+          artifact-cache-scope: github-linux-dev
       - name: "Generate reference documentation"
         run: |
           cargo dev generate-options-reference

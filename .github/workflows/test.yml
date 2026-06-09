@@ -36,6 +36,8 @@ jobs:
       - name: "Setup srs"
         id: srs
         uses: ./.github/actions/setup-srs
+        with:
+          artifact-cache-scope: depot-linux-test
 
       - name: "Install Rust toolchain"
         run: rustup show
@@ -149,6 +151,7 @@ jobs:
         id: srs
         uses: ./.github/actions/setup-srs
         with:
+          artifact-cache-scope: depot-macos-test
           target-path: ${{ github.workspace }}/target/fast-build
 
       - name: "Install Rust toolchain"
