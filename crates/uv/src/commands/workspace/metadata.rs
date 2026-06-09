@@ -129,43 +129,43 @@ pub(crate) async fn metadata(
     {
         Ok(lock) => {
             let lock = lock.into_lock();
-            let environment = if sync {
-                Some(
-                    ProjectEnvironment::get_or_init(
-                        virtual_project.workspace(),
-                        &groups,
-                        python.as_deref().map(PythonRequest::parse),
-                        &install_mirrors,
-                        &client_builder,
-                        python_preference,
-                        python_downloads,
-                        false,
-                        no_config,
-                        Some(false),
-                        cache,
-                        DryRun::Disabled,
-                        printer,
-                    )
-                    .await?,
+            let mut export = Metadata::from_lock(virtual_project.workspace(), &lock)?;
+            if sync {
+                let environment = ProjectEnvironment::get_or_init(
+                    virtual_project.workspace(),
+                    &groups,
+                    python.as_deref().map(PythonRequest::parse),
+                    &install_mirrors,
+                    &client_builder,
+                    python_preference,
+                    python_downloads,
+                    false,
+                    no_config,
+                    Some(false),
+                    cache,
+                    DryRun::Disabled,
+                    printer,
                 )
-            } else {
-                None
-            };
-            let export = export_metadata(
-                virtual_project.workspace(),
-                &lock,
-                environment.as_deref(),
-                true,
-                &settings,
-                &client_builder,
-                &state,
-                &concurrency,
-                cache,
-                workspace_cache,
-                preview,
-                &malware_settings,
-            )
-            .await?;
+                .await?;
+                let module_owners = collect_module_owners(
+                    virtual_project.workspace(),
+                    &lock,
+                    &environment,
+                    &settings,
+                    &client_builder,
+                    &state,
+                    &concurrency,
+                    cache,
+                    workspace_cache,
+                    preview,
+                    &malware_settings,
+                )
+                .await
+                .context("Failed to collect module owners")?;
+                export = export
+                    .with_environment_root(environment.root())
+                    .with_module_owners(module_owners);
+            }
 
             print_metadata(&export, printer)
         }
@@ -182,42 +182,17 @@ pub(crate) async fn metadata(
     }
 }
 
-/// Build the metadata exported by `uv workspace metadata` from an existing lock and environment.
-pub(crate) async fn export_metadata(
+/// Build workspace metadata from an existing lock and environment without synchronizing it.
+pub(crate) fn metadata_from_lock(
     workspace: &Workspace,
     lock: &Lock,
     environment: Option<&PythonEnvironment>,
-    sync_module_owners: bool,
     settings: &ResolverSettings,
-    client_builder: &BaseClientBuilder<'_>,
-    state: &UniversalState,
-    concurrency: &Concurrency,
-    cache: &Cache,
-    workspace_cache: &WorkspaceCache,
-    preview: Preview,
-    malware_settings: &MalwareCheckSettings,
 ) -> Result<Metadata> {
     let mut export = Metadata::from_lock(workspace, lock)?;
     if let Some(environment) = environment {
-        let module_owners = if sync_module_owners {
-            collect_module_owners(
-                workspace,
-                lock,
-                environment,
-                settings,
-                client_builder,
-                state,
-                concurrency,
-                cache,
-                workspace_cache,
-                preview,
-                malware_settings,
-            )
-            .await
-        } else {
-            find_module_owners(workspace, lock, environment, settings)
-        }
-        .context("Failed to collect module owners")?;
+        let module_owners = find_module_owners(workspace, lock, environment, settings)
+            .context("Failed to collect module owners")?;
         export = export
             .with_environment_root(environment.root())
             .with_module_owners(module_owners);

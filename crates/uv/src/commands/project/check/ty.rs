@@ -107,6 +107,9 @@ pub(super) async fn run(
     }
 
     if workspace_metadata.is_some() {
+        // Tell `ty` to expect uv metadata on stdin.
+        // This is an environment variable so older ty's don't complain about an unknown CLI flag.
+        command.env("TY_UV_METADATA", "1");
         command.stdin(Stdio::piped());
     }
 

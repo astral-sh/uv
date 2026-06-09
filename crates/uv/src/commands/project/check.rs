@@ -339,21 +339,12 @@ pub(crate) async fn check(
         };
 
         if let Some(lock) = lock {
-            let metadata = crate::commands::workspace::metadata::export_metadata(
+            let metadata = crate::commands::workspace::metadata::metadata_from_lock(
                 project.workspace(),
                 &lock,
                 environment,
-                false,
                 &settings.resolver,
-                &client_builder,
-                &state,
-                &concurrency,
-                cache,
-                workspace_cache,
-                preview,
-                &malware_settings,
-            )
-            .await?;
+            )?;
             let mut metadata = metadata.to_json()?;
             metadata.push('\n');
             workspace_metadata = Some(metadata);
