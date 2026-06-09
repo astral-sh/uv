@@ -18,7 +18,7 @@ jobs:
           version: "0.11.19"
 
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-      - name: "Setup SRS"
+      - name: "Setup srs"
         id: srs
         uses: ./.github/actions/setup-srs
       - name: "Generate reference documentation"

@@ -104,7 +104,7 @@ jobs:
         with:
           command: check bans
           manifest-path: crates/uv-build/Cargo.toml
-      - name: "Setup SRS"
+      - name: "Setup srs"
         id: srs
         uses: ./.github/actions/setup-srs
       - name: "Install Rust toolchain"

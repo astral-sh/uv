@@ -14,7 +14,7 @@ case "$(uname -s)-$(uname -m)" in
         checksum="45477e527129c972ebf7970677fd36e50e853a8d21ec949ae711b7a63a030fbb"
         ;;
     *)
-        echo "SRS ${version} does not support $(uname -s)-$(uname -m)" >&2
+        echo "srs ${version} does not support $(uname -s)-$(uname -m)" >&2
         exit 1
         ;;
 esac

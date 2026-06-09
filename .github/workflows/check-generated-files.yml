@@ -32,7 +32,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/rustfmt-bin"
           ln -s "$(rustup which rustfmt)" "$RUNNER_TEMP/rustfmt-bin/rustfmt"
           echo "$RUNNER_TEMP/rustfmt-bin" >> "$GITHUB_PATH"
-      - name: "Setup SRS"
+      - name: "Setup srs"
         id: srs
         uses: ./.github/actions/setup-srs
       - name: "Generate all"
