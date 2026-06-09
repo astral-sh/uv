@@ -1502,7 +1502,11 @@ async fn resolve_all_possible_builds(
         context_marker,
     }) = queue.pop_front()
     {
-        let resolve_backend_hook_requirements = solve_marker.is_some();
+        // A registry source distribution can be selected as a fallback on a target where none of
+        // the locked wheels are compatible, even if the runtime resolution selected a wheel in
+        // every environment it considered.
+        let resolve_backend_hook_requirements =
+            solve_marker.is_some() || matches!(&source_dist, SourceDist::Registry(_));
         let target_marker = context_marker.filter(|marker| !marker.is_true());
         let nested_context_marker = match (build_markers.get(&key).copied(), context_marker) {
             (Some(build_marker), Some(context_marker)) => {

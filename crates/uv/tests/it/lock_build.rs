@@ -9777,21 +9777,9 @@ fn lock_build_dependencies_no_build_package_relocks_implicit_default_backend() -
 fn lock_build_dependencies_no_build_package_relocks_find_links_sdist() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let builder_dir = context.temp_dir.child("builder");
-    builder_dir.create_dir_all()?;
-    builder_dir.child("pyproject.toml").write_str(
-        r#"
-        [project]
-        name = "builder"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = []
-        build-backend = "builder"
-        "#,
-    )?;
-    let builder_url = Url::from_directory_path(builder_dir.path()).expect("valid file URL");
+    let builder = context.temp_dir.child("builder-0.1.0-py3-none-any.whl");
+    write_wheel(&builder, "builder", "0.1.0")?;
+    let builder_url = Url::from_file_path(builder.path()).expect("valid file URL");
 
     let artifacts = context.temp_dir.child("artifacts");
     artifacts.create_dir_all()?;
@@ -9979,21 +9967,9 @@ fn sync_filters_locked_build_resolutions_to_selected_packages() -> Result<()> {
 async fn sync_filters_locked_build_resolutions_to_selected_wheels() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let builder_dir = context.temp_dir.child("builder");
-    builder_dir.create_dir_all()?;
-    builder_dir.child("pyproject.toml").write_str(
-        r#"
-        [project]
-        name = "builder"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = []
-        build-backend = "builder"
-        "#,
-    )?;
-    let builder_url = Url::from_directory_path(builder_dir.path()).expect("valid file URL");
+    let builder = context.temp_dir.child("builder-0.1.0-py3-none-any.whl");
+    write_wheel(&builder, "builder", "0.1.0")?;
+    let builder_url = Url::from_file_path(builder.path()).expect("valid file URL");
 
     let artifacts = context.temp_dir.child("artifacts");
     artifacts.create_dir_all()?;
@@ -10106,6 +10082,148 @@ async fn sync_filters_locked_build_resolutions_to_selected_wheels() -> Result<()
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + wheel-selected-dep==0.1.0
+    ");
+
+    Ok(())
+}
+
+/// Verify that a wheel-selected registry package still locks hook requirements
+/// needed when another target falls back to its source distribution.
+#[test]
+fn lock_build_dependencies_capture_fallback_sdist_hook_requirements() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let (host_wheel_tag, target_platform) = if cfg!(target_os = "macos") {
+        ("macosx_10_9_universal2", "windows")
+    } else if cfg!(target_os = "windows") {
+        (
+            if cfg!(target_arch = "aarch64") {
+                "win_arm64"
+            } else {
+                "win_amd64"
+            },
+            "linux",
+        )
+    } else {
+        (
+            if cfg!(target_arch = "aarch64") {
+                "manylinux_2_17_aarch64.manylinux2014_aarch64"
+            } else {
+                "manylinux_2_17_x86_64.manylinux2014_x86_64"
+            },
+            "windows",
+        )
+    };
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+    )?;
+    write_wheel(
+        &links_dir.child(format!("dep-0.1.0-py3-none-{host_wheel_tag}.whl")),
+        "dep",
+        "0.1.0",
+    )?;
+
+    let source_dist = links_dir.child("dep-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return ["helper==0.1.0"]
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    if version("helper") != "0.1.0":
+        raise RuntimeError("helper is unavailable")
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep/__init__.py", "")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    ))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep==0.1.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(
+        dep.contains(r#"{ name = "helper", version = "0.1.0" }"#),
+        "{dep}"
+    );
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--python-platform")
+        .arg(target_platform)
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0
     ");
 
     Ok(())
