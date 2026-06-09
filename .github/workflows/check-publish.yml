@@ -11,15 +11,15 @@ env:
 
 jobs:
   cargo-publish-dry-run:
-    timeout-minutes: 20
+    timeout-minutes: 30
     runs-on: depot-ubuntu-24.04-8
     name: "cargo publish dry-run"
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: "Setup SRS"
+        id: srs
+        uses: ./.github/actions/setup-srs
       - name: "cargo publish dry-run"
         run: cargo publish --workspace --dry-run

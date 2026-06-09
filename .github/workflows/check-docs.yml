@@ -5,7 +5,7 @@ permissions: {}
 
 jobs:
   docs:
-    timeout-minutes: 10
+    timeout-minutes: 20
     name: "mkdocs"
     runs-on: ubuntu-latest
     steps:
@@ -18,9 +18,9 @@ jobs:
           version: "0.11.21"
 
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: "Setup SRS"
+        id: srs
+        uses: ./.github/actions/setup-srs
       - name: "Generate reference documentation"
         run: |
           cargo dev generate-options-reference

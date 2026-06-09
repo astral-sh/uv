@@ -25,7 +25,7 @@ jobs:
   # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
 
   cargo-test-linux:
-    timeout-minutes: 10
+    timeout-minutes: 20
     runs-on: depot-ubuntu-24.04-16
     name: "cargo test on linux"
     steps:
@@ -33,12 +33,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
-
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
+      - name: "Setup SRS"
+        id: srs
+        uses: ./.github/actions/setup-srs
 
       - name: "Install Rust toolchain"
         run: rustup show
@@ -127,8 +124,16 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: "Save SRS build cache"
+        if: ${{ inputs.save-rust-cache == 'true' }}
+        uses: ./.github/actions/save-srs-cache
+        with:
+          artifact-cache-hit: ${{ steps.srs.outputs.artifact-cache-hit }}
+          artifact-cache-primary-key: ${{ steps.srs.outputs.artifact-cache-primary-key }}
+          save-artifact-cache: "true"
+
   cargo-test-macos:
-    timeout-minutes: 20
+    timeout-minutes: 30
     # Only run macOS tests on main without opt-in
     if: ${{ inputs.test-macos == 'true' }}
     runs-on: depot-macos-15
@@ -138,9 +143,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - name: "Setup SRS"
+        id: srs
+        uses: ./.github/actions/setup-srs
         with:
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
+          target-path: ${{ github.workspace }}/target/fast-build
 
       - name: "Install Rust toolchain"
         run: rustup show
@@ -202,6 +209,17 @@ jobs:
           path: target/nextest/ci*/junit.xml
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: "Save SRS build cache"
+        if: ${{ inputs.save-rust-cache == 'true' }}
+        uses: ./.github/actions/save-srs-cache
+        with:
+          artifact-cache-hit: ${{ steps.srs.outputs.artifact-cache-hit }}
+          artifact-cache-primary-key: ${{ steps.srs.outputs.artifact-cache-primary-key }}
+          save-artifact-cache: "true"
+          target-cache-hit: ${{ steps.srs.outputs.target-cache-hit }}
+          target-cache-primary-key: ${{ steps.srs.outputs.target-cache-primary-key }}
+          target-path: ${{ github.workspace }}/target/fast-build
 
   cargo-test-windows:
     timeout-minutes: 15

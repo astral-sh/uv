@@ -1,0 +1,49 @@
+name: "Save SRS cache"
+description: "Save the SRS Cargo build cache"
+
+inputs:
+  artifact-cache-hit:
+    description: "Whether setup-srs restored the primary SRS artifact cache key"
+    required: false
+    default: "false"
+  artifact-cache-primary-key:
+    description: "Primary SRS artifact cache key from setup-srs"
+    required: false
+    default: ""
+  save-artifact-cache:
+    description: "Whether this job is the designated SRS artifact cache writer"
+    required: false
+    default: "false"
+  target-cache-hit:
+    description: "Whether setup-srs restored the primary Cargo target cache key"
+    required: false
+    default: "false"
+  target-cache-primary-key:
+    description: "Primary Cargo target cache key from setup-srs"
+    required: false
+    default: ""
+  target-path:
+    description: "Cargo target profile directory to cache"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Save SRS artifact cache"
+      if: ${{ inputs.save-artifact-cache == 'true' && inputs.artifact-cache-hit != 'true' }}
+      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          ~/.cargo/srs-artifact-cache-v2
+        key: ${{ inputs.artifact-cache-primary-key }}
+
+    - name: "Save Cargo target cache"
+      if: ${{ inputs.target-path != '' && inputs.target-cache-hit != 'true' }}
+      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: ${{ inputs.target-path }}
+        key: ${{ inputs.target-cache-primary-key }}
