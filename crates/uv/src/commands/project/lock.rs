@@ -982,8 +982,7 @@ async fn do_lock(
     let existing_lock = if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
         match existing_lock {
             Some(ValidatedLock::Satisfies(lock))
-                if !build_options.no_build_requirement(None)
-                    && !lock.supports_build_dependencies() =>
+                if build_options.allows_package_builds() && !lock.supports_build_dependencies() =>
             {
                 debug!(
                     "Resolving despite existing lockfile because build-dependency locking is enabled and the lockfile revision does not support build dependencies"
@@ -1152,7 +1151,7 @@ async fn do_lock(
             )
             .relative_to(target.install_path())?;
             if preview.is_enabled(PreviewFeature::LockBuildDependencies)
-                && !build_options.no_build_requirement(None)
+                && build_options.allows_package_builds()
             {
                 manifest = manifest.with_build_settings(build_settings.clone());
             }
@@ -1170,7 +1169,7 @@ async fn do_lock(
 
             // Only record build dependencies in the lock file when the preview feature is enabled.
             if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
-                if !build_options.no_build_requirement(None) {
+                if build_options.allows_package_builds() {
                     let match_runtime_packages = extra_build_requires
                         .iter()
                         .filter(|(_, requirements)| {
@@ -1376,7 +1375,7 @@ async fn lock_missing_build_dependencies(
     database: &DistributionDatabase<'_, BuildDispatch<'_>>,
     build_hasher: &HashStrategy,
 ) -> anyhow::Result<bool> {
-    if build_options.no_build_requirement(None) {
+    if !build_options.allows_package_builds() {
         return Ok(false);
     }
 
