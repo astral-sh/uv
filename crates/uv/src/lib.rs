@@ -538,19 +538,22 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         debug!("Disabling the uv cache due to `--no-cache`");
     }
     let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
+    // This check happens after the first (fallible) workspace discovery, which we need to resolve
+    // the settings that go into the cache constructor, but the check happens before the first
+    // workspace discovery that's used beyond settings discovery.
     let cache_dir = std::path::absolute(cache.root())?;
-    if CWD.starts_with(&cache_dir) {
+    if project_dir.starts_with(&cache_dir) {
         bail!(
-            "The current directory `{}` is inside the cache directory `{}`",
-            CWD.user_display(),
+            "The project directory `{}` is inside the cache directory `{}`",
+            project_dir.user_display(),
             cache_dir.user_display()
         );
     } else if let Ok(cache_dir) = fs_err::canonicalize(&cache_dir)
-        && let Ok(current_dir) = fs_err::canonicalize(&*CWD)
+        && let Ok(current_dir) = fs_err::canonicalize(&*project_dir)
         && current_dir.starts_with(&cache_dir)
     {
         bail!(
-            "The current directory `{}` is inside the cache directory `{}`",
+            "The project directory `{}` is inside the cache directory `{}`",
             current_dir.user_display(),
             cache_dir.user_display()
         );
