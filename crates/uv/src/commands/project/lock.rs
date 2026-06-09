@@ -15,7 +15,7 @@ use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExtrasSpecification, NoBuild, NoSources, Reinstall, Upgrade,
+    ExtrasSpecification, NoBinary, NoBuild, NoSources, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -820,6 +820,15 @@ async fn do_lock(
         NoBuild::Packages(packages) => packages.iter().map(ToString::to_string).collect(),
         NoBuild::None | NoBuild::All => BTreeSet::new(),
     };
+    let no_build_all = matches!(build_options.no_build(), NoBuild::All);
+    let no_binary_settings: Option<(&str, BTreeSet<String>)> = match build_options.no_binary() {
+        NoBinary::None => None,
+        NoBinary::All => Some(("all", BTreeSet::new())),
+        NoBinary::Packages(packages) => Some((
+            "packages",
+            packages.iter().map(ToString::to_string).collect(),
+        )),
+    };
     let has_build_settings = !config_setting.is_empty()
         || *config_settings_package != Default::default()
         || !extra_build_variables.is_empty()
@@ -868,6 +877,15 @@ async fn do_lock(
         )))
     } else {
         None
+    };
+    let build_settings = if let Some(no_binary_settings) = &no_binary_settings {
+        Some(cache_digest(&(
+            build_settings.as_deref(),
+            no_build_all,
+            no_binary_settings,
+        )))
+    } else {
+        build_settings
     };
 
     let make_build_dispatch = |build_preferences, extra_build_requires| {
