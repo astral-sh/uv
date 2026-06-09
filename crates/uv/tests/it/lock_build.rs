@@ -10431,6 +10431,100 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     Ok(())
 }
 
+/// Verify that backend hooks are not called for a registry sdist when a
+/// universal wheel makes it unreachable.
+#[tokio::test]
+#[ignore = "TODO: determine registry sdist reachability before resolving backend hooks"]
+async fn lock_build_dependencies_skip_unreachable_registry_sdist_hooks() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let artifacts = context.temp_dir.child("artifacts");
+    artifacts.create_dir_all()?;
+    write_wheel(
+        &artifacts.child("dep-0.1.0-py3-none-any.whl"),
+        "dep",
+        "0.1.0",
+    )?;
+
+    let source_dist = artifacts.child("dep-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+def get_requires_for_build_wheel(config_settings=None):
+    raise RuntimeError("unreachable source distribution hook was called")
+"#,
+    ))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+
+    let server = MockServer::start().await;
+    let index_url = format!("{}/simple/", server.uri());
+    Mock::given(method("GET"))
+        .and(path("/simple/dep/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"
+                <a href="{}/files/dep-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">dep-0.1.0-py3-none-any.whl</a>
+                <a href="{}/files/dep-0.1.0.zip" data-upload-time="2024-03-01T00:00:00Z">dep-0.1.0.zip</a>
+                "#,
+                server.uri(),
+                server.uri()
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/dep-0.1.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(
+            artifacts.child("dep-0.1.0-py3-none-any.whl").path(),
+        )?))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/dep-0.1.0.zip"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(source_dist.path())?))
+        .mount(&server)
+        .await;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep==0.1.0"]
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(index_url)
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 /// Verify that a wheel selected inside a locked build environment does not
 /// reconstruct the build environment of its fallback source distribution.
 #[tokio::test]
