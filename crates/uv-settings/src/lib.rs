@@ -189,6 +189,8 @@ impl FilesystemOptions {
                 return Ok(Some(Self(options)));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            // A directory named `pyproject.toml` is not a configuration file; skip it.
+            Err(_) if path.is_dir() => {}
             Err(err) => return Err(err.into()),
         }
 
