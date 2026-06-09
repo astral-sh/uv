@@ -1,16 +1,13 @@
 use anyhow::Result;
 use assert_fs::prelude::*;
-#[cfg(unix)]
 use std::process::Command;
 
 #[cfg(unix)]
 use uv_fs::create_symlink;
-#[cfg(unix)]
-use uv_test::get_bin;
-use uv_test::uv_snapshot;
+use uv_test::{get_bin, uv_snapshot};
 
-/// When the current directory is inside the cache directory, we should error before using the
-/// cache.
+/// When the project directory defaults to a current directory inside the cache directory, we should
+/// error before using the cache.
 #[test]
 fn cache_current_dir_inside_cache() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -24,7 +21,7 @@ fn cache_current_dir_inside_cache() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The current directory `.` is inside the cache directory `.`
+    error: The project directory `.` is inside the cache directory `.`
     ");
 
     let child = context.cache_dir.child("child");
@@ -39,13 +36,13 @@ fn cache_current_dir_inside_cache() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The current directory `.` is inside the cache directory `[CACHE_DIR]/`
+    error: The project directory `.` is inside the cache directory `[CACHE_DIR]/`
     ");
 
     Ok(())
 }
 
-/// When the current directory is inside a symlinked cache directory, we should error before using
+/// When the project directory is inside a symlinked cache directory, we should error before using
 /// the cache.
 #[test]
 #[cfg(unix)]
@@ -73,7 +70,107 @@ fn cache_current_dir_inside_symlinked_cache() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The current directory `.` is inside the cache directory `[CACHE_DIR]/`
+    error: The project directory `.` is inside the cache directory `[CACHE_DIR]/`
+    ");
+
+    Ok(())
+}
+
+/// When a workspace is inside the cache directory, we should error before locking the workspace.
+#[test]
+fn cache_workspace_inside_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let workspace = context.cache_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["member"]
+        "#,
+    )?;
+    workspace
+        .child("member")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+        )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--project")
+        .arg(workspace.path()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The project directory `[CACHE_DIR]/workspace` is inside the cache directory `[CACHE_DIR]/`
+    ");
+
+    Ok(())
+}
+
+/// When the cache directory is a non-canonical parent of the project directory, we should still
+/// detect that the project is inside the cache.
+#[test]
+fn cache_project_inside_relative_parent_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    let mut command = Command::new(get_bin!());
+    command.arg("lock").arg("--cache-dir").arg("..");
+    context.add_shared_env(&mut command, false);
+    command.current_dir(project.path());
+
+    uv_snapshot!(context.filters(), command, @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The project directory `.` is inside the cache directory `[TEMP_DIR]/`
+    ");
+
+    Ok(())
+}
+
+/// When `--no-cache` is enabled, running from a project inside the configured cache directory
+/// should not trip the persistent cache guard.
+#[test]
+fn cache_project_inside_cache_no_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.cache_dir.child("project");
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache").current_dir(&project), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
     ");
 
     Ok(())
