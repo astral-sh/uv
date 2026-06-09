@@ -43,13 +43,13 @@ jobs:
           CARGO_TARGET_DIR: ${{ runner.temp }}/srs-artifact-cache-probe
         run: |
           echo "Loader environment:"
-          env | rg '^(GLIBC_TUNABLES|LD_|DYLD_)=' || true
+          env | grep -E '^(GLIBC_TUNABLES|LD_|DYLD_)=' || true
           echo "Restored srs cache:"
           du -sh ~/.cargo/srs-artifact-cache-v2 || true
           find ~/.cargo/srs-artifact-cache-v2 -type f | wc -l
           set -o pipefail
           cargo build --package uv-static --lib 2>&1 \
-            | rg 'artifact cache|Compiling|Finished'
+            | grep -E 'artifact cache|Compiling|Finished'
       - name: "Generate all"
         run: cargo dev generate-all --mode dry-run
       - name: "Check sysconfig mappings"
