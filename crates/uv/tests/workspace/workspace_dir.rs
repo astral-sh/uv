@@ -83,9 +83,10 @@ fn workspace_metadata_from_member() -> Result<()> {
     Ok(())
 }
 
-/// Test that a cached project matched by an outer workspace glob remains isolated.
+/// Test that a project inside the configured cache directory is rejected before workspace
+/// discovery.
 #[test]
-fn workspace_dir_cached_project_ignores_outer_workspace() -> Result<()> {
+fn workspace_dir_rejects_project_inside_cache() -> Result<()> {
     let mut context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
     let cache_dir = workspace.child("cache");
@@ -109,12 +110,12 @@ fn workspace_dir_cached_project_ignores_outer_workspace() -> Result<()> {
     context.cache_dir = cache_dir;
 
     uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&cached_project), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    [TEMP_DIR]/workspace/cache/cached-project
 
     ----- stderr -----
+    error: The project directory `.` is inside the cache directory `[TEMP_DIR]/workspace/cache`
     "
     );
 
