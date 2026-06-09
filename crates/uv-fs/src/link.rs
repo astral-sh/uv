@@ -86,6 +86,21 @@ where
     }
 }
 
+/// Link a file from `src` to `dst` using the mode in `options`.
+///
+/// Returns the [`LinkMode`] that was actually used, which may differ from the requested mode if a
+/// fallback was needed.
+pub fn link_file<F>(
+    src: &Path,
+    dst: &Path,
+    options: &LinkOptions<'_, F>,
+) -> Result<LinkMode, LinkError>
+where
+    F: Fn(&Path) -> bool,
+{
+    Ok(link_file_with_state(src, dst, LinkState::new(options.mode), options)?.mode)
+}
+
 /// Directory-level locks for concurrent copy operations.
 ///
 /// Copying is the only non-atomic [`LinkMode`]: it creates a file then writes bytes, so concurrent
@@ -380,7 +395,7 @@ where
             continue;
         }
 
-        state = link_file(path, &target, state, options)?;
+        state = link_file_with_state(path, &target, state, options)?;
     }
 
     Ok(state.mode)
@@ -391,7 +406,7 @@ where
 /// Returns the (possibly updated) state for the next file. When a strategy fails, it
 /// transitions to [`LinkState::next_mode`] and re-dispatches through this function so the
 /// fallback chain is followed automatically.
-fn link_file<F>(
+fn link_file_with_state<F>(
     path: &Path,
     target: &Path,
     state: LinkState,
@@ -456,7 +471,7 @@ fn reflink_with_permissions(from: &Path, to: &Path) -> io::Result<()> {
     reflink_copy::reflink(from, to)
 }
 
-/// Attempt to reflink a single file, falling back via [`link_file`] on failure.
+/// Attempt to reflink a single file, falling back via [`link_file_with_state`] on failure.
 fn reflink_file_with_fallback<F>(
     path: &Path,
     target: &Path,
@@ -483,7 +498,7 @@ where
                             "Failed to reflink `{}` to temp location, falling back",
                             path.display()
                         );
-                        link_file(path, target, state.next_mode(), options)
+                        link_file_with_state(path, target, state.next_mode(), options)
                     }
                 } else {
                     Err(LinkError::Reflink {
@@ -500,7 +515,7 @@ where
                     target.display(),
                     err
                 );
-                link_file(path, target, state.next_mode(), options)
+                link_file_with_state(path, target, state.next_mode(), options)
             }
         },
         LinkAttempt::Subsequent => match reflink_with_permissions(path, target) {
@@ -630,7 +645,7 @@ where
     Ok(())
 }
 
-/// Attempt to hard link a single file, falling back via [`link_file`] on failure.
+/// Attempt to hard link a single file, falling back via [`link_file_with_state`] on failure.
 ///
 /// Files matching the [`LinkOptions::needs_mutable_copy`] predicate are always copied
 /// to avoid mutating the source through a hard link.
@@ -667,7 +682,7 @@ where
                         If the cache and target directories are on different filesystems, hardlinking may not be supported.\n         \
                         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
                     );
-                    link_file(path, target, state.next_mode(), options)
+                    link_file_with_state(path, target, state.next_mode(), options)
                 }
             } else {
                 Ok(state.mode_working())
@@ -689,7 +704,7 @@ where
     }
 }
 
-/// Attempt to symlink a single file, falling back via [`link_file`] on failure.
+/// Attempt to symlink a single file, falling back via [`link_file_with_state`] on failure.
 ///
 /// Files matching the [`LinkOptions::needs_mutable_copy`] predicate are always copied
 /// to avoid mutating the source through a symlink.
@@ -726,7 +741,7 @@ where
                         If the cache and target directories are on different filesystems, symlinking may not be supported.\n         \
                         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
                     );
-                    link_file(path, target, state.next_mode(), options)
+                    link_file_with_state(path, target, state.next_mode(), options)
                 }
             } else {
                 Ok(state.mode_working())

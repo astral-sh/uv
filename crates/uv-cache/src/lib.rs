@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace, warn};
 
 use uv_cache_info::Timestamp;
@@ -21,7 +21,7 @@ use crate::removal::Remover;
 pub use crate::removal::{Removal, rm_rf};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
-pub use archive::ArchiveId;
+pub use archive::{ArchiveFileId, ArchiveId};
 
 mod archive;
 mod by_timestamp;
@@ -34,6 +34,17 @@ mod wheel;
 ///
 /// Must be kept in-sync with the version in [`CacheBucket::to_str`].
 pub const ARCHIVE_VERSION: u8 = 0;
+
+#[derive(serde::Deserialize)]
+struct ArchiveFileManifest {
+    version: u8,
+    files: Vec<ArchiveFileManifestEntry>,
+}
+
+#[derive(serde::Deserialize)]
+struct ArchiveFileManifestEntry {
+    object: PathBuf,
+}
 
 /// Error locking a cache entry or shard
 #[derive(Debug, thiserror::Error)]
@@ -295,6 +306,16 @@ impl Cache {
     /// Return the path to an archive in the cache.
     pub fn archive(&self, id: &ArchiveId) -> PathBuf {
         self.bucket(CacheBucket::Archive).join(id)
+    }
+
+    /// Return the metadata directory for an archive in the cache.
+    pub fn archive_metadata(&self, id: &ArchiveId) -> PathBuf {
+        self.bucket(CacheBucket::ArchiveMetadata).join(id)
+    }
+
+    /// Return the path to an archive file in the cache.
+    pub fn archive_file(&self, id: &ArchiveFileId) -> PathBuf {
+        self.bucket(CacheBucket::ArchiveFiles).join(id)
     }
 
     /// Create a temporary directory to be used as a Python virtual environment.
@@ -600,7 +621,114 @@ impl Cache {
             }
         }
 
+        summary += self.prune_archive_metadata()?;
+        summary += self.prune_archive_files()?;
+
         Ok(summary)
+    }
+
+    /// Remove archive metadata for archives that no longer exist.
+    fn prune_archive_metadata(&self) -> Result<Removal, io::Error> {
+        let root = self.bucket(CacheBucket::ArchiveMetadata);
+        if !root.exists() {
+            return Ok(Removal::default());
+        }
+
+        let mut summary = Removal::default();
+        for entry in fs_err::read_dir(&root)? {
+            let entry = entry?;
+            if !self
+                .bucket(CacheBucket::Archive)
+                .join(entry.file_name())
+                .exists()
+            {
+                summary += rm_rf(entry.path())?;
+            }
+        }
+
+        Ok(summary)
+    }
+
+    /// Remove archive file objects that are no longer referenced by an archive manifest.
+    fn prune_archive_files(&self) -> Result<Removal, io::Error> {
+        let root = self.bucket(CacheBucket::ArchiveFiles);
+        if !root.exists() {
+            return Ok(Removal::default());
+        }
+
+        let references = self.find_archive_file_references()?;
+        let mut summary = Removal::default();
+        for entry in walkdir::WalkDir::new(&root)
+            .min_depth(1)
+            .contents_first(true)
+        {
+            let entry = entry?;
+            if entry.file_type().is_file() {
+                let relative = entry
+                    .path()
+                    .strip_prefix(&root)
+                    .expect("archive file walk starts at root");
+                if !references.contains(relative) {
+                    summary += rm_rf(entry.path())?;
+                }
+            } else if entry.file_type().is_dir() {
+                match fs_err::remove_dir(entry.path()) {
+                    Ok(()) => {
+                        summary.num_dirs += 1;
+                    }
+                    Err(err)
+                        if matches!(
+                            err.kind(),
+                            io::ErrorKind::DirectoryNotEmpty | io::ErrorKind::NotFound
+                        ) => {}
+                    Err(err) => return Err(err),
+                }
+            }
+        }
+
+        Ok(summary)
+    }
+
+    /// Return the archive file objects referenced by archive manifests.
+    fn find_archive_file_references(&self) -> Result<FxHashSet<PathBuf>, io::Error> {
+        let root = self.bucket(CacheBucket::ArchiveMetadata);
+        if !root.exists() {
+            return Ok(FxHashSet::default());
+        }
+
+        let mut references = FxHashSet::default();
+        for entry in fs_err::read_dir(root)? {
+            let manifest = entry?.path().join("manifest.json");
+            let contents = match fs_err::read(manifest) {
+                Ok(contents) => contents,
+                Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+                Err(err) => return Err(err),
+            };
+            let manifest: ArchiveFileManifest = serde_json::from_slice(&contents)
+                .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+            if manifest.version != 1 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "archive file manifest has an unsupported version",
+                ));
+            }
+            for entry in manifest.files {
+                if entry.object.as_os_str().is_empty()
+                    || !entry
+                        .object
+                        .components()
+                        .all(|component| matches!(component, std::path::Component::Normal(_)))
+                {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "archive file manifest contains an invalid object path",
+                    ));
+                }
+                references.insert(entry.object);
+            }
+        }
+
+        Ok(references)
     }
 
     /// Run the garbage collector on the cache, removing any dangling entries.
@@ -726,6 +854,9 @@ impl Cache {
             Err(err) if err.kind() == io::ErrorKind::NotFound => (),
             Err(err) => return Err(err),
         }
+
+        summary += self.prune_archive_metadata()?;
+        summary += self.prune_archive_files()?;
 
         Ok(summary)
     }
@@ -1194,6 +1325,10 @@ pub enum CacheBucket {
     /// that cache entries can be atomically replaced and removed, as storing directories in the
     /// other buckets directly would make atomic operations impossible.
     Archive,
+    /// Metadata sidecars for archives in [`CacheBucket::Archive`].
+    ArchiveMetadata,
+    /// Content-addressed files that are hardlinked into cached archives.
+    ArchiveFiles,
     /// Ephemeral virtual environments used to execute PEP 517 builds and other operations.
     Builds,
     /// Reusable virtual environments used to invoke Python tools.
@@ -1227,6 +1362,8 @@ impl CacheBucket {
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",
+            Self::ArchiveMetadata => "archive-metadata-v0",
+            Self::ArchiveFiles => "archive-files-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
@@ -1336,6 +1473,8 @@ impl CacheBucket {
             Self::Git
             | Self::Interpreter
             | Self::Archive
+            | Self::ArchiveMetadata
+            | Self::ArchiveFiles
             | Self::Builds
             | Self::Environments
             | Self::Python
@@ -1357,6 +1496,8 @@ impl CacheBucket {
             Self::Interpreter,
             Self::Simple,
             Self::Archive,
+            Self::ArchiveMetadata,
+            Self::ArchiveFiles,
             Self::Builds,
             Self::Environments,
             Self::Binaries,

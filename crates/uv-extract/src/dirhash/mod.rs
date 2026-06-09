@@ -76,7 +76,7 @@ impl DirectoryDigestFile {
 
 /// A file extracted from an archive, along with the metadata used by the directory digest.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct ExtractedFile {
+pub struct ExtractedFile {
     path: PathBuf,
     size: u64,
     executable: bool,
@@ -94,13 +94,28 @@ impl ExtractedFile {
     }
 
     /// Return the path of the extracted file within the archive.
-    pub(crate) fn path(&self) -> &Path {
+    pub fn path(&self) -> &Path {
         &self.path
     }
 
+    /// Return whether the extracted file should be executable.
+    pub fn executable(&self) -> bool {
+        self.executable
+    }
+
+    /// Return the hex-encoded content digest of the extracted file.
+    pub fn digest_hex(&self) -> String {
+        self.digest.to_hex().to_string()
+    }
+
     /// Convert the extracted file into a `(path, size)` pair.
-    pub(crate) fn into_record(self) -> (PathBuf, u64) {
+    pub fn into_record(self) -> (PathBuf, u64) {
         (self.path, self.size)
+    }
+
+    /// Return the extracted file as a `(path, size)` pair.
+    pub fn to_record(&self) -> (PathBuf, u64) {
+        (self.path.clone(), self.size)
     }
 }
 

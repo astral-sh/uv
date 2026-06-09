@@ -50,6 +50,42 @@ pub fn is_same_file_allow_missing(left: &Path, right: &Path) -> Option<bool> {
     None
 }
 
+/// Return the number of hard links to a file.
+#[cfg(unix)]
+pub fn hardlink_count(path: impl AsRef<Path>) -> std::io::Result<u64> {
+    use std::os::unix::fs::MetadataExt;
+
+    Ok(fs_err::metadata(path)?.nlink())
+}
+
+/// Return the number of hard links to a file.
+#[cfg(windows)]
+#[allow(unsafe_code)]
+pub fn hardlink_count(path: impl AsRef<Path>) -> std::io::Result<u64> {
+    use std::os::windows::io::AsRawHandle;
+
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
+    };
+
+    let path = path.as_ref();
+    let file = fs_err::File::open(path)?;
+    let mut information = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: `file` remains open for the duration of the call, so its handle is valid, and
+    // `information` points to writable storage of the expected type.
+    unsafe { GetFileInformationByHandle(HANDLE(file.as_raw_handle()), &raw mut information) }
+        .map_err(std::io::Error::other)?;
+    Ok(u64::from(information.nNumberOfLinks))
+}
+
+/// Return the number of hard links to a file.
+#[cfg(not(any(unix, windows)))]
+pub fn hardlink_count(path: impl AsRef<Path>) -> std::io::Result<u64> {
+    let _ = path;
+    Ok(u64::MAX)
+}
+
 /// Reads data from the path and requires that it be valid UTF-8 or UTF-16.
 ///
 /// This uses BOM sniffing to determine if the data should be transcoded from UTF-16 to Rust's
@@ -889,4 +925,27 @@ pub fn remove_virtualenv(location: &Path) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod hardlink_tests {
+    use super::*;
+
+    #[test]
+    #[cfg(any(unix, windows))]
+    fn counts_hardlinks() -> std::io::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let source = temp_dir.path().join("source");
+        let link = temp_dir.path().join("link");
+        fs_err::write(&source, "contents")?;
+
+        assert_eq!(hardlink_count(&source)?, 1);
+        fs_err::hard_link(&source, &link)?;
+        assert_eq!(hardlink_count(&source)?, 2);
+        assert_eq!(hardlink_count(&link)?, 2);
+        fs_err::remove_file(&link)?;
+        assert_eq!(hardlink_count(&source)?, 1);
+
+        Ok(())
+    }
 }
