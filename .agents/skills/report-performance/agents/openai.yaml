@@ -1,4 +1,4 @@
 interface:
   display_name: "Report Performance"
   short_description: "Benchmark and report performance changes"
-  default_prompt: "Use $report-performance to assess this change and draft reproducible, appropriately scoped performance evidence."
+  default_prompt: "Use $report-performance in the mode requested by the user to plan, audit, or draft concise performance evidence. Do not run benchmarks unless requested."

@@ -1,39 +1,38 @@
 # Useful Report Patterns
 
-These pull requests illustrate individual reporting choices. They are not complete templates, and
-some predate or intentionally omit parts of the workflow in this skill.
+These pull requests show useful reporting techniques rather than complete templates. Performance
+labels are not complete archives; browse the merged [`uv` performance pull requests][uv-performance]
+and [`Ruff` performance pull requests][ruff-performance] for more examples.
 
-## uv
+## Scope and Attribution
 
-- [uv #18311](https://github.com/astral-sh/uv/pull/18311): scopes an aggregate whole-stack result
-  and supports the proposed mechanism with file-read counters.
-- [uv #18094](https://github.com/astral-sh/uv/pull/18094): shows scaling across input sizes and a
-  timeout outcome. Its reported `>2,000x` factor is not a rigorous bound because the candidate value
-  is a point estimate; prefer reporting `baseline > 60s` unless a defensible candidate upper bound
-  is available.
-- [uv #11894](https://github.com/astral-sh/uv/pull/11894): reports a faster ARM point estimate whose
-  uncertainty includes no change, alongside a neutral x86 Windows result. Treat the ARM comparison
-  as inconclusive rather than a demonstrated platform improvement.
+- [uv #18311](https://github.com/astral-sh/uv/pull/18311) scopes a whole-stack result to the
+  measured workflow and uses file-read counts to support the proposed explanation.
+- [Ruff #20098](https://github.com/astral-sh/ruff/pull/20098) combines synthetic scaling, a real
+  pathological input, mechanism-relevant counters, and broader benchmarks.
 
-The [`performance` pull requests for uv][uv-performance-pulls] provide more examples, but labels are
-not a complete archive.
+## Scaling and Limits
 
-[uv-performance-pulls]: https://github.com/astral-sh/uv/pulls?q=label%3Aperformance+is%3Amerged
+- [uv #18094](https://github.com/astral-sh/uv/pull/18094) shows how behavior changes across input
+  sizes and includes a timeout outcome. When one side times out, report the threshold and the
+  completed measurement separately unless the protocol provides bounds for both values.
 
-## Ruff
+## Uncertainty
 
-- [Ruff #25266](https://github.com/astral-sh/ruff/pull/25266): gives an exact microbenchmark
-  command, absolute values, confidence intervals, and an unambiguous time reduction.
-- [Ruff #20098](https://github.com/astral-sh/ruff/pull/20098): combines a proposed mechanism,
-  synthetic scaling, a real pathological input, mechanism-relevant counters, and broader benchmarks.
-- [Ruff #3439](https://github.com/astral-sh/ruff/pull/3439): compares alternatives using wall time
-  and peak memory, then selects the lower-memory design when timing differences are inconclusive.
-- [Ruff #21749](https://github.com/astral-sh/ruff/pull/21749): discloses a large memory improvement
+- [Ruff #25266](https://github.com/astral-sh/ruff/pull/25266) includes the exact benchmark command,
+  absolute values, confidence intervals, and an unambiguous time reduction.
+- [uv #11894](https://github.com/astral-sh/uv/pull/11894) shows results for multiple platforms,
+  including a small change whose reported uncertainty includes no change, making the improvement
+  inconclusive, and a neutral result elsewhere.
+- [Ruff #15731](https://github.com/astral-sh/ruff/pull/15731) notes when a small local result varies
+  across comparisons, including neutral runs and runs that favor main.
+
+## Tradeoffs
+
+- [Ruff #3439](https://github.com/astral-sh/ruff/pull/3439) compares wall time and peak memory, then
+  chooses the lower-memory design when timing differences are inconclusive.
+- [Ruff #21749](https://github.com/astral-sh/ruff/pull/21749) presents a large memory improvement
   alongside a wall-time regression.
-- [Ruff #15731](https://github.com/astral-sh/ruff/pull/15731): discloses that a small local result
-  varies across comparisons, with some runs neutral or favoring the baseline.
 
-The [`performance` pull requests for Ruff][ruff-performance-pulls] provide more examples, but labels
-are not a complete archive.
-
-[ruff-performance-pulls]: https://github.com/astral-sh/ruff/pulls?q=label%3Aperformance+is%3Amerged
+[ruff-performance]: https://github.com/astral-sh/ruff/pulls?q=label%3Aperformance+is%3Amerged
+[uv-performance]: https://github.com/astral-sh/uv/pulls?q=label%3Aperformance+is%3Amerged
