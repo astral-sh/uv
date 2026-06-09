@@ -7,7 +7,8 @@ use toml_edit::{Array, Item, Table, Value, value};
 use uv_distribution_types::Requirement;
 use uv_fs::{PortablePath, Simplified};
 use uv_normalize::PackageName;
-use uv_pypi_types::VerbatimParsedUrl;
+use uv_pep440::Version;
+use uv_pep508::VerbatimParsedUrl;
 use uv_python::PythonRequest;
 use uv_settings::{ToolOptions, ToolOptionsWire};
 
