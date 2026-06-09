@@ -93,6 +93,15 @@ fn create_many_files_sdist() -> tempfile::NamedTempFile {
     archive
 }
 
+fn create_sdist_extraction_directory() -> tempfile::TempDir {
+    #[cfg(target_os = "linux")]
+    if let Ok(directory) = tempfile::tempdir_in("/dev/shm") {
+        return directory;
+    }
+
+    tempfile::tempdir().expect("Failed to create sdist extraction directory")
+}
+
 fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
     let archive = create_many_files_sdist();
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -107,7 +116,7 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
                     runtime
                         .block_on(fs_err::tokio::File::open(archive.path()))
                         .expect("Failed to open temporary archive"),
-                    tempfile::tempdir().expect("Failed to create sdist extraction directory"),
+                    create_sdist_extraction_directory(),
                 )
             },
             |(archive, extracted_sdist)| {
@@ -123,7 +132,7 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
                     .expect("Failed to strip top-level sdist directory");
                 black_box((files, extracted_sdist, source_tree))
             },
-            BatchSize::SmallInput,
+            BatchSize::PerIteration,
         );
     });
 }
