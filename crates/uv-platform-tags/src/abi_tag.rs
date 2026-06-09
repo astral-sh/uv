@@ -242,7 +242,7 @@ impl FromStr for AbiTag {
                     tag: full_tag.to_string(),
                 })?
                 .checked_sub(b'0')
-                .and_then(|d| if d < 10 { Some(d) } else { None })
+                .filter(|&digit| digit < 10)
                 .ok_or_else(|| ParseAbiTagError::InvalidMajorVersion {
                     implementation,
                     tag: full_tag.to_string(),
@@ -275,7 +275,7 @@ impl FromStr for AbiTag {
                     tag: full_tag.to_string(),
                 })?
                 .checked_sub(b'0')
-                .and_then(|d| if d < 10 { Some(d) } else { None })
+                .filter(|&digit| digit < 10)
                 .ok_or_else(|| ParseAbiTagError::InvalidImplMajorVersion {
                     implementation,
                     tag: full_tag.to_string(),
