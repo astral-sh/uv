@@ -457,6 +457,8 @@ pub(crate) fn create(
         compile_error!("Only Windows and Unix are supported")
     }
 
+    // because activate.xsh embeds values into Python syntax,
+    // this turns Rust strings into valid Python/xonsh string literals
     let python_string_literal = |value: &str| -> String {
         let mut literal = String::with_capacity(value.len() + 2);
         literal.push('"');
