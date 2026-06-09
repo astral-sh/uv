@@ -44,7 +44,15 @@ if ($LASTEXITCODE -ne 0) {
     throw "The mimalloc v3 build failed with exit code $LASTEXITCODE"
 }
 
-$originalCxxFlags = $env:CXXFLAGS
+$conflictingCxxFlags = @(Get-ChildItem Env: | Where-Object {
+    $_.Name -eq "CXXFLAGS" -or
+    $_.Name -eq "HOST_CXXFLAGS" -or
+    $_.Name -like "CXXFLAGS_*"
+})
+if ($conflictingCxxFlags.Count -ne 0) {
+    throw "The benchmark requires an empty inherited CXXFLAGS environment"
+}
+
 try {
     $env:CXXFLAGS = "/DMI_ENABLE_LARGE_PAGES=0"
     cargo build `
@@ -57,11 +65,7 @@ try {
         throw "The mimalloc v3 no-large-pages build failed with exit code $LASTEXITCODE"
     }
 } finally {
-    if ($null -eq $originalCxxFlags) {
-        Remove-Item Env:CXXFLAGS -ErrorAction SilentlyContinue
-    } else {
-        $env:CXXFLAGS = $originalCxxFlags
-    }
+    Remove-Item Env:CXXFLAGS -ErrorAction SilentlyContinue
 }
 
 $v2 = Join-Path $artifact "uv-v2.exe"

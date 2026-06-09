@@ -7,11 +7,12 @@ $results = Join-Path $root "results"
 $rawResults = Join-Path $results "hyperfine"
 $binaryRoot = Join-Path $env:RUNNER_TEMP "mimalloc-binaries"
 $v2 = Join-Path $binaryRoot "uv-v2.exe"
-$v3 = Join-Path $binaryRoot "uv-v3.exe"
+$v3Mitigated = Join-Path $binaryRoot "uv-v3-no-large-pages.exe"
+$smoke = $env:BENCH_SMOKE -eq "1"
 
 New-Item -ItemType Directory -Force $results, $rawResults | Out-Null
 
-foreach ($binary in @($v2, $v3)) {
+foreach ($binary in @($v2, $v3Mitigated)) {
     if (-not (Test-Path $binary)) {
         throw "Missing benchmark binary: $binary"
     }
@@ -20,6 +21,37 @@ foreach ($binary in @($v2, $v3)) {
         throw "The benchmark binary failed to start: $binary"
     }
 }
+
+$buildMetadata = Get-Content (Join-Path $binaryRoot "build-metadata.json") -Raw |
+    ConvertFrom-Json
+if ($buildMetadata.v3NoLargePages.cxxflags -ne "/DMI_ENABLE_LARGE_PAGES=0") {
+    throw "The mitigated v3 build has unexpected CXXFLAGS metadata"
+}
+if (
+    (Get-FileHash -Algorithm SHA256 $v2).Hash -ne $buildMetadata.v2.sha256 -or
+    (Get-FileHash -Algorithm SHA256 $v3Mitigated).Hash -ne
+        $buildMetadata.v3NoLargePages.sha256
+) {
+    throw "A downloaded benchmark binary does not match its build metadata"
+}
+
+$env:MIMALLOC_PURGE_DELAY = "10"
+$env:MIMALLOC_ARENA_PURGE_MULT = "10"
+$env:MIMALLOC_PURGE_DECOMMITS = "1"
+Remove-Item Env:MIMALLOC_PAGE_RECLAIM_ON_FREE -ErrorAction SilentlyContinue
+
+foreach ($probe in @(
+    [pscustomobject]@{ Name = "v2"; Binary = $v2 }
+    [pscustomobject]@{ Name = "v3-mitigated"; Binary = $v3Mitigated }
+)) {
+    $env:MIMALLOC_VERBOSE = "1"
+    & $probe.Binary --version 2>&1 |
+        Set-Content (Join-Path $results "mimalloc-options-$($probe.Name).txt")
+    if ($LASTEXITCODE -ne 0) {
+        throw "The mimalloc policy probe failed for $($probe.Name)"
+    }
+}
+Remove-Item Env:MIMALLOC_VERBOSE
 
 function Get-CommandOutput {
     param([scriptblock]$Command)
@@ -55,9 +87,13 @@ function Get-CommandOutput {
         bytes = (Get-Item $v2).Length
         sha256 = (Get-FileHash -Algorithm SHA256 $v2).Hash
     }
-    v3 = [pscustomobject]@{
-        bytes = (Get-Item $v3).Length
-        sha256 = (Get-FileHash -Algorithm SHA256 $v3).Hash
+    v3Mitigated = [pscustomobject]@{
+        bytes = (Get-Item $v3Mitigated).Length
+        sha256 = (Get-FileHash -Algorithm SHA256 $v3Mitigated).Hash
+        largePages = "disabled"
+        purgeDelayMs = 10
+        arenaPurgeMult = 10
+        purgeDecommits = 1
     }
 } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $results "machine-metadata.json")
 
@@ -154,11 +190,37 @@ $warmOnlineMeasuredBlocks = 16
 $warmOfflineWarmupBlocks = 4
 $warmOfflineMeasuredBlocks = 16
 $coldWarmupBlocks = 2
-$coldMeasuredBlocks = 4
+$coldMeasuredBlocks = 8
+if ($smoke) {
+    $corpus = @($corpus | Select-Object -First 1)
+    $warmOnlineWarmupBlocks = 2
+    $warmOnlineMeasuredBlocks = 2
+    $warmOfflineWarmupBlocks = 2
+    $warmOfflineMeasuredBlocks = 2
+    $coldWarmupBlocks = 2
+    $coldMeasuredBlocks = 2
+}
 
 [pscustomobject]@{
     design = "balanced ABBA/BAAB four-observation blocks"
     timer = "hyperfine 1 run per command with shell disabled"
+    treatments = @(
+        [pscustomobject]@{
+            code = "A"
+            name = "v2"
+            variant = "v2"
+            purgePolicy = "v2"
+            largePages = "v2"
+        }
+        [pscustomobject]@{
+            code = "B"
+            name = "v3-mitigated"
+            variant = "v3"
+            purgePolicy = "v2"
+            largePages = "disabled"
+        }
+    )
+    smoke = $smoke
     warmOnline = "populated per-fixture uv cache, fresh output or project, online"
     warmOffline = "populated per-fixture uv cache, fresh output or project, offline"
     coldOnline = "empty per-observation uv cache, fresh output or project, online"
@@ -306,16 +368,16 @@ function Prime-Case {
     if ($Case.Kind -eq "pip-compile") {
         $onlineOutput = Join-Path $primeRoot "online.txt"
         $v2Output = Join-Path $primeRoot "v2.txt"
-        $v3Output = Join-Path $primeRoot "v3.txt"
+        $v3Output = Join-Path $primeRoot "v3-mitigated.txt"
         Invoke-Uv "$($Case.Name) online prime" $v2 $Case $WarmCache $onlineOutput $null
         Invoke-Uv "$($Case.Name) v2 offline check" `
             $v2 $Case $WarmCache $v2Output $null -Offline
-        Invoke-Uv "$($Case.Name) v3 offline check" `
-            $v3 $Case $WarmCache $v3Output $null -Offline
+        Invoke-Uv "$($Case.Name) mitigated v3 offline check" `
+            $v3Mitigated $Case $WarmCache $v3Output $null -Offline
     } else {
         $onlineProject = Join-Path $primeRoot "online"
         $v2Project = Join-Path $primeRoot "v2"
-        $v3Project = Join-Path $primeRoot "v3"
+        $v3Project = Join-Path $primeRoot "v3-mitigated"
         New-ProjectCopy $Case $onlineProject
         New-ProjectCopy $Case $v2Project
         New-ProjectCopy $Case $v3Project
@@ -323,16 +385,18 @@ function Prime-Case {
             $v2 $Case $WarmCache $null $onlineProject
         Invoke-Uv "$($Case.Name) v2 offline check" `
             $v2 $Case $WarmCache $null $v2Project -Offline
-        Invoke-Uv "$($Case.Name) v3 offline check" `
-            $v3 $Case $WarmCache $null $v3Project -Offline
+        Invoke-Uv "$($Case.Name) mitigated v3 offline check" `
+            $v3Mitigated $Case $WarmCache $null $v3Project -Offline
+        $onlineOutput = Join-Path $onlineProject "uv.lock"
         $v2Output = Join-Path $v2Project "uv.lock"
         $v3Output = Join-Path $v3Project "uv.lock"
     }
 
+    $onlineHash = (Get-FileHash -Algorithm SHA256 $onlineOutput).Hash
     $v2Hash = (Get-FileHash -Algorithm SHA256 $v2Output).Hash
     $v3Hash = (Get-FileHash -Algorithm SHA256 $v3Output).Hash
-    if ($v2Hash -ne $v3Hash) {
-        throw "$($Case.Name) produced different v2 and v3 outputs during validation"
+    if ($onlineHash -ne $v2Hash -or $v2Hash -ne $v3Hash) {
+        throw "$($Case.Name) produced different outputs during validation"
     }
     return $v2Hash
 }
@@ -346,6 +410,7 @@ function Invoke-Blocks {
         [int]$CaseIndex,
         [string]$CaseRoot,
         [string]$WarmCache,
+        [string]$ExpectedOutputSha256,
         [string]$CacheState,
         [string]$Phase,
         [int]$BlockCount,
@@ -356,9 +421,9 @@ function Invoke-Blocks {
     for ($blockIndex = 0; $blockIndex -lt $schedules.Count; $blockIndex++) {
         $sequenceName = $schedules[$blockIndex]
         $variants = if ($sequenceName -eq "ABBA") {
-            @("v2", "v3", "v3", "v2")
+            @("v2", "v3-mitigated", "v3-mitigated", "v2")
         } else {
-            @("v3", "v2", "v2", "v3")
+            @("v3-mitigated", "v2", "v2", "v3-mitigated")
         }
 
         $blockNumber = $blockIndex + 1
@@ -373,7 +438,7 @@ function Invoke-Blocks {
         for ($positionIndex = 0; $positionIndex -lt 4; $positionIndex++) {
             $position = $positionIndex + 1
             $variant = $variants[$positionIndex]
-            $binary = if ($variant -eq "v2") { $v2 } else { $v3 }
+            $binary = if ($variant -eq "v2") { $v2 } else { $v3Mitigated }
             $cacheDir = if ($CacheState -like "warm-*") {
                 $WarmCache
             } else {
@@ -458,6 +523,10 @@ function Invoke-Blocks {
         }
         if (@($hashes | Sort-Object -Unique).Count -ne 1) {
             throw "$($Case.Name) produced different outputs in $CacheState $Phase block $blockNumber"
+        }
+        if ($hashes[0] -ne $ExpectedOutputSha256) {
+            throw "$($Case.Name) output changed after validation in " +
+                "$CacheState $Phase block $blockNumber"
         }
         $scheduleRows.Add([pscustomobject]@{
             replica = $replica
@@ -567,6 +636,7 @@ try {
             -CaseIndex $caseIndex `
             -CaseRoot $caseRoot `
             -WarmCache $warmCache `
+            -ExpectedOutputSha256 $validatedHash `
             -CacheState "warm-online" `
             -Phase "warmup" `
             -BlockCount $warmOnlineWarmupBlocks `
@@ -576,6 +646,7 @@ try {
             -CaseIndex $caseIndex `
             -CaseRoot $caseRoot `
             -WarmCache $warmCache `
+            -ExpectedOutputSha256 $validatedHash `
             -CacheState "warm-online" `
             -Phase "measured" `
             -BlockCount $warmOnlineMeasuredBlocks `
@@ -585,6 +656,7 @@ try {
             -CaseIndex $caseIndex `
             -CaseRoot $caseRoot `
             -WarmCache $warmCache `
+            -ExpectedOutputSha256 $validatedHash `
             -CacheState "warm-offline" `
             -Phase "warmup" `
             -BlockCount $warmOfflineWarmupBlocks `
@@ -594,6 +666,7 @@ try {
             -CaseIndex $caseIndex `
             -CaseRoot $caseRoot `
             -WarmCache $warmCache `
+            -ExpectedOutputSha256 $validatedHash `
             -CacheState "warm-offline" `
             -Phase "measured" `
             -BlockCount $warmOfflineMeasuredBlocks `
@@ -603,6 +676,7 @@ try {
             -CaseIndex $caseIndex `
             -CaseRoot $caseRoot `
             -WarmCache $warmCache `
+            -ExpectedOutputSha256 $validatedHash `
             -CacheState "cold-online" `
             -Phase "warmup" `
             -BlockCount $coldWarmupBlocks `
@@ -612,6 +686,7 @@ try {
             -CaseIndex $caseIndex `
             -CaseRoot $caseRoot `
             -WarmCache $warmCache `
+            -ExpectedOutputSha256 $validatedHash `
             -CacheState "cold-online" `
             -Phase "measured" `
             -BlockCount $coldMeasuredBlocks `
@@ -633,3 +708,38 @@ try {
         throw "The machine telemetry collector did not cover the complete benchmark"
     }
 }
+
+$blocksPerFixture =
+    $warmOnlineWarmupBlocks +
+    $warmOnlineMeasuredBlocks +
+    $warmOfflineWarmupBlocks +
+    $warmOfflineMeasuredBlocks +
+    $coldWarmupBlocks +
+    $coldMeasuredBlocks
+$measuredBlocksPerFixture =
+    $warmOnlineMeasuredBlocks +
+    $warmOfflineMeasuredBlocks +
+    $coldMeasuredBlocks
+$expectedRows = $corpus.Count * $blocksPerFixture * 4
+$expectedMeasuredRows = $corpus.Count * $measuredBlocksPerFixture * 4
+$expectedScheduleRows = $corpus.Count * $blocksPerFixture
+$measuredRows = @($rows | Where-Object phase -eq "measured")
+if ($rows.Count -ne $expectedRows) {
+    throw "Expected $expectedRows observations, found $($rows.Count)"
+}
+if ($measuredRows.Count -ne $expectedMeasuredRows) {
+    throw "Expected $expectedMeasuredRows measured observations, " +
+        "found $($measuredRows.Count)"
+}
+if ($scheduleRows.Count -ne $expectedScheduleRows) {
+    throw "Expected $expectedScheduleRows schedule rows, found $($scheduleRows.Count)"
+}
+
+[pscustomobject]@{
+    replica = $replica
+    fixtures = $corpus.Count
+    observations = $rows.Count
+    measuredObservations = $expectedMeasuredRows
+    scheduleRows = $scheduleRows.Count
+    completedAtUtc = (Get-Date).ToUniversalTime().ToString("O")
+} | ConvertTo-Json | Set-Content (Join-Path $results "complete.json")
