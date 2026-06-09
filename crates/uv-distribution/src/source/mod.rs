@@ -1934,6 +1934,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.build_context.locations(),
             self.build_context.sources(),
             true,
+            self.build_context.cache(),
             self.build_context.workspace_cache(),
             credentials_cache,
         )
