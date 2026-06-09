@@ -57,4 +57,6 @@ toolchain_bin="$(dirname "$cargo_wrapper")"
     echo "RUSTUP_TOOLCHAIN=${toolchain}"
     echo "SRS_CARGO_ARTIFACT_CACHE_MAX_SIZE=4GiB"
 } >> "$GITHUB_ENV"
+# Rustup injects the toolchain library tree into LD_LIBRARY_PATH on Linux,
+# which disables srs artifact-cache admission due to its nested shared objects.
 echo "$toolchain_bin" >> "$GITHUB_PATH"
