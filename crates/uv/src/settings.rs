@@ -1477,6 +1477,7 @@ pub(crate) struct PythonUpgradeSettings {
     pub(crate) default: bool,
     pub(crate) bin: Option<bool>,
     pub(crate) compile_bytecode: bool,
+    pub(crate) uninstall: bool,
 }
 
 impl PythonUpgradeSettings {
@@ -1520,6 +1521,7 @@ impl PythonUpgradeSettings {
             reinstall,
             python_downloads_json_url: _,
             compile_bytecode,
+            uninstall,
         } = args;
 
         Self {
@@ -1539,6 +1541,7 @@ impl PythonUpgradeSettings {
                 "compile-bytecode",
             )
             .unwrap_or_default(),
+            uninstall,
         }
     }
 }
@@ -1549,6 +1552,7 @@ pub(crate) struct PythonUninstallSettings {
     pub(crate) install_dir: Option<PathBuf>,
     pub(crate) targets: Vec<String>,
     pub(crate) all: bool,
+    pub(crate) outdated: bool,
 }
 
 impl PythonUninstallSettings {
@@ -1561,12 +1565,14 @@ impl PythonUninstallSettings {
             install_dir,
             targets,
             all,
+            outdated,
         } = args;
 
         Self {
             install_dir,
             targets,
             all,
+            outdated,
         }
     }
 }
