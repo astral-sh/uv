@@ -98,16 +98,16 @@ jobs:
     name: "simulated"
     runs-on: depot-ubuntu-24.04-4
     if: ${{ github.repository == 'astral-sh/uv' }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: "Checkout Branch"
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
+      - name: "Setup SRS"
+        id: srs
+        uses: ./.github/actions/setup-srs
 
       - name: "Install Rust toolchain"
         run: rustup show
