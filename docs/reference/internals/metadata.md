@@ -142,6 +142,11 @@ Here is a human-readable annotated example:
 	},
 	// The directory the uv.lock can be found in
 	"workspace_root": "/workspace",
+	// Information about the environment synchronized by `--sync`; omitted otherwise
+	"environment": {
+		// The absolute path to the environment root
+		"root": "/workspace/.venv"
+	},
 	// Any requirements on the python version this workspace has
   //
   // `marker` fields all have this as an implicit constraint that is omitted for cleanliness
