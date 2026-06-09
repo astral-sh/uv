@@ -515,9 +515,7 @@ pub(crate) fn create(
                     escape_posix_for_single_quotes(location.simplified().to_str().unwrap())
                 )
             }
-            (true, "activate.xsh") => {
-                r#"dirname(dirname(realpath(__xonsh__.env["XONSH_SOURCE"])))"#.to_string()
-            }
+            (true, "activate.xsh") => r"dirname(dirname(realpath(__file__)))".to_string(),
             (false, "activate.xsh") => {
                 python_string_literal(location.simplified().to_str().unwrap())
             }
