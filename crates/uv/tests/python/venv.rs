@@ -1856,7 +1856,7 @@ fn verify_pyvenv_cfg_relocatable() {
     let activate_xsh = scripts.child("activate.xsh");
     activate_xsh.assert(predicates::path::is_file());
     activate_xsh.assert(predicates::str::contains(
-        r#"__xonsh__.env["XONSH_SOURCE"]"#,
+        r"dirname(dirname(realpath(__file__)))",
     ));
 }
 
