@@ -6,10 +6,9 @@ on:
       mode:
         description: Benchmark metric to collect
         required: true
-        default: timing
+        default: rss-smoke
         type: choice
         options:
-          - timing
           - rss-smoke
           - rss
 
@@ -55,58 +54,8 @@ jobs:
           compression-level: 0
           retention-days: 7
 
-  benchmark:
-    name: benchmark replica ${{ matrix.replica }}
-    if: inputs.mode == 'timing'
-    needs: build
-    runs-on: namespace-profile-windows-2022-x86-64-4
-    timeout-minutes: 180
-    strategy:
-      fail-fast: false
-      max-parallel: 5
-      matrix:
-        replica: [1, 2, 3, 4, 5]
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Setup Dev Drive
-        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
-
-      - name: Copy Git repository to Dev Drive
-        run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
-
-      - name: Download benchmark binaries
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: mimalloc-binaries
-          path: ${{ runner.temp }}/mimalloc-binaries
-
-      - name: Install hyperfine
-        uses: taiki-e/install-action@e49978b799e49ff429d162b7a30601a569ab6538 # v2.81.1
-        with:
-          tool: hyperfine
-
-      - name: Run benchmark
-        shell: pwsh
-        working-directory: ${{ env.UV_WORKSPACE }}
-        env:
-          BENCH_REPLICA: ${{ matrix.replica }}
-        run: ./.github/scripts/mimalloc-high-confidence-benchmark.ps1
-
-      - name: Upload results
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: mimalloc-timing-replica-${{ matrix.replica }}
-          path: ${{ runner.temp }}/mimalloc-bench/results
-          if-no-files-found: warn
-          retention-days: 7
-
   rss:
-    name: rss replica ${{ matrix.replica }}
+    name: purge-policy RSS replica ${{ matrix.replica }}
     if: startsWith(inputs.mode, 'rss')
     needs: build
     runs-on: namespace-profile-windows-2022-x86-64-4

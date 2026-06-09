@@ -11,6 +11,61 @@ $smoke = $env:BENCH_SMOKE -eq "1"
 
 New-Item -ItemType Directory -Force $results | Out-Null
 
+$treatments = @(
+    [pscustomobject]@{
+        Code = "A"
+        Name = "v2-v2-policy"
+        Variant = "v2"
+        Policy = "v2"
+        Binary = $v2
+        PurgeDelay = "10"
+        ArenaPurgeMult = "10"
+        EnvironmentOverride = $false
+    }
+    [pscustomobject]@{
+        Code = "B"
+        Name = "v2-v3-policy"
+        Variant = "v2"
+        Policy = "v3"
+        Binary = $v2
+        PurgeDelay = "1000"
+        ArenaPurgeMult = "1"
+        EnvironmentOverride = $true
+    }
+    [pscustomobject]@{
+        Code = "C"
+        Name = "v3-v2-policy"
+        Variant = "v3"
+        Policy = "v2"
+        Binary = $v3
+        PurgeDelay = "10"
+        ArenaPurgeMult = "10"
+        EnvironmentOverride = $true
+    }
+    [pscustomobject]@{
+        Code = "D"
+        Name = "v3-v3-policy"
+        Variant = "v3"
+        Policy = "v3"
+        Binary = $v3
+        PurgeDelay = "1000"
+        ArenaPurgeMult = "1"
+        EnvironmentOverride = $false
+    }
+)
+
+function Set-MimallocTreatmentEnvironment {
+    param([pscustomobject]$Treatment)
+
+    Remove-Item Env:MIMALLOC_PURGE_DELAY -ErrorAction SilentlyContinue
+    Remove-Item Env:MIMALLOC_ARENA_PURGE_MULT -ErrorAction SilentlyContinue
+    if ($Treatment.EnvironmentOverride) {
+        $env:MIMALLOC_PURGE_DELAY = $Treatment.PurgeDelay
+        $env:MIMALLOC_ARENA_PURGE_MULT = $Treatment.ArenaPurgeMult
+    }
+    $env:MIMALLOC_PURGE_DECOMMITS = "1"
+}
+
 foreach ($binary in @($v2, $v3)) {
     if (-not (Test-Path $binary)) {
         throw "Missing benchmark binary: $binary"
@@ -20,6 +75,18 @@ foreach ($binary in @($v2, $v3)) {
         throw "The benchmark binary failed to start: $binary"
     }
 }
+
+foreach ($treatment in $treatments) {
+    Set-MimallocTreatmentEnvironment $treatment
+    $env:MIMALLOC_VERBOSE = "1"
+    $binary = $treatment.Binary
+    & $binary --version 2>&1 |
+        Set-Content (Join-Path $results "mimalloc-options-$($treatment.Code).txt")
+    if ($LASTEXITCODE -ne 0) {
+        throw "The policy probe failed for $($treatment.Name)"
+    }
+}
+Remove-Item Env:MIMALLOC_VERBOSE
 
 function Get-CommandOutput {
     param([scriptblock]$Command)
@@ -158,29 +225,26 @@ $corpus = @(
     New-LockCase "saleor" "test/ecosystem/saleor"
 )
 
-$warmOnlineWarmupBlocks = 4
-$warmOnlineMeasuredBlocks = 16
-$coldOnlineWarmupBlocks = 2
-$coldOnlineMeasuredBlocks = 4
+$coldOnlineWarmupBlocks = 4
+$coldOnlineMeasuredBlocks = 8
 if ($smoke) {
     $corpus = @($corpus | Select-Object -First 1)
-    $warmOnlineWarmupBlocks = 2
-    $warmOnlineMeasuredBlocks = 2
-    $coldOnlineWarmupBlocks = 2
-    $coldOnlineMeasuredBlocks = 2
+    $coldOnlineWarmupBlocks = 4
+    $coldOnlineMeasuredBlocks = 4
 }
 
 [pscustomobject]@{
-    design = "balanced ABBA/BAAB four-observation blocks"
+    design = "four-treatment Williams crossover: ABDC, BCAD, CDBA, DACB"
     smoke = $smoke
     metric = "per-process PeakWorkingSetSize from GetProcessMemoryInfo"
     launcher = "CreateProcessW suspended, then ResumeThread and retain process handle"
-    warmOnline = "populated per-fixture uv cache, fresh output or project, online"
     coldOnline = "empty per-observation uv cache, fresh output or project, online"
-    warmOnlineWarmupBlocks = $warmOnlineWarmupBlocks
-    warmOnlineMeasuredBlocks = $warmOnlineMeasuredBlocks
     coldOnlineWarmupBlocks = $coldOnlineWarmupBlocks
     coldOnlineMeasuredBlocks = $coldOnlineMeasuredBlocks
+    purgeDecommits = 1
+    treatments = @($treatments |
+        Select-Object Code, Name, Variant, Policy, PurgeDelay, ArenaPurgeMult,
+            EnvironmentOverride)
     corpus = $corpus
 } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $results "protocol.json")
 
@@ -207,13 +271,15 @@ function New-BlockSchedule {
         [int]$Seed
     )
 
-    if ($Count % 2 -ne 0) {
-        throw "Balanced block counts must be even"
+    if ($Count % 4 -ne 0) {
+        throw "Williams crossover block counts must be divisible by four"
     }
     $sequences = @()
-    for ($index = 0; $index -lt ($Count / 2); $index++) {
-        $sequences += "ABBA"
-        $sequences += "BAAB"
+    for ($index = 0; $index -lt ($Count / 4); $index++) {
+        $sequences += "ABDC"
+        $sequences += "BCAD"
+        $sequences += "CDBA"
+        $sequences += "DACB"
     }
     return (Shuffle-Array $sequences $Seed)
 }
@@ -252,7 +318,7 @@ function New-UvArguments {
 function Invoke-Uv {
     param(
         [string]$Name,
-        [string]$Binary,
+        [pscustomobject]$Treatment,
         [pscustomobject]$Case,
         [string]$CacheDir,
         [string]$OutputPath,
@@ -264,7 +330,9 @@ function Invoke-Uv {
         -CacheDir $CacheDir `
         -OutputPath $OutputPath `
         -ProjectDir $ProjectDir
-    & $Binary @arguments | Out-Null
+    Set-MimallocTreatmentEnvironment $Treatment
+    $binary = $Treatment.Binary
+    & $binary @arguments | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "$Name failed with exit code $LASTEXITCODE"
     }
@@ -296,36 +364,37 @@ function Prime-Case {
 
     if ($Case.Kind -eq "pip-compile") {
         $primeOutput = Join-Path $primeRoot "prime.txt"
-        $v2Output = Join-Path $primeRoot "v2.txt"
-        $v3Output = Join-Path $primeRoot "v3.txt"
-        Invoke-Uv "$($Case.Name) cache prime" $v2 $Case $WarmCache $primeOutput $null
-        Invoke-Uv "$($Case.Name) v2 warm validation" `
-            $v2 $Case $WarmCache $v2Output $null
-        Invoke-Uv "$($Case.Name) v3 warm validation" `
-            $v3 $Case $WarmCache $v3Output $null
+        Invoke-Uv "$($Case.Name) cache prime" `
+            $treatments[0] $Case $WarmCache $primeOutput $null
+        $validationOutputs = @()
+        foreach ($treatment in $treatments) {
+            $output = Join-Path $primeRoot "$($treatment.Code).txt"
+            Invoke-Uv "$($Case.Name) $($treatment.Name) warm validation" `
+                $treatment $Case $WarmCache $output $null
+            $validationOutputs += $output
+        }
     } else {
         $primeProject = Join-Path $primeRoot "prime"
-        $v2Project = Join-Path $primeRoot "v2"
-        $v3Project = Join-Path $primeRoot "v3"
         New-ProjectCopy $Case $primeProject
-        New-ProjectCopy $Case $v2Project
-        New-ProjectCopy $Case $v3Project
         Invoke-Uv "$($Case.Name) cache prime" `
-            $v2 $Case $WarmCache $null $primeProject
-        Invoke-Uv "$($Case.Name) v2 warm validation" `
-            $v2 $Case $WarmCache $null $v2Project
-        Invoke-Uv "$($Case.Name) v3 warm validation" `
-            $v3 $Case $WarmCache $null $v3Project
-        $v2Output = Join-Path $v2Project "uv.lock"
-        $v3Output = Join-Path $v3Project "uv.lock"
+            $treatments[0] $Case $WarmCache $null $primeProject
+        $validationOutputs = @()
+        foreach ($treatment in $treatments) {
+            $project = Join-Path $primeRoot $treatment.Code
+            New-ProjectCopy $Case $project
+            Invoke-Uv "$($Case.Name) $($treatment.Name) warm validation" `
+                $treatment $Case $WarmCache $null $project
+            $validationOutputs += (Join-Path $project "uv.lock")
+        }
     }
 
-    $v2Hash = (Get-FileHash -Algorithm SHA256 $v2Output).Hash
-    $v3Hash = (Get-FileHash -Algorithm SHA256 $v3Output).Hash
-    if ($v2Hash -ne $v3Hash) {
-        throw "$($Case.Name) produced different v2 and v3 outputs during validation"
+    $hashes = @($validationOutputs | ForEach-Object {
+        (Get-FileHash -Algorithm SHA256 $_).Hash
+    } | Sort-Object -Unique)
+    if ($hashes.Count -ne 1) {
+        throw "$($Case.Name) produced different treatment outputs during validation"
     }
-    return $v2Hash
+    return $hashes[0]
 }
 
 Add-Type -TypeDefinition @'
@@ -605,12 +674,6 @@ function Invoke-RssBlocks {
     $schedules = New-BlockSchedule $BlockCount $Seed
     for ($blockIndex = 0; $blockIndex -lt $schedules.Count; $blockIndex++) {
         $sequenceName = $schedules[$blockIndex]
-        $variants = if ($sequenceName -eq "ABBA") {
-            @("v2", "v3", "v3", "v2")
-        } else {
-            @("v3", "v2", "v2", "v3")
-        }
-
         $blockNumber = $blockIndex + 1
         $blockRoot = Join-Path `
             $CaseRoot `
@@ -622,8 +685,13 @@ function Invoke-RssBlocks {
         $hashes = @()
         for ($positionIndex = 0; $positionIndex -lt 4; $positionIndex++) {
             $position = $positionIndex + 1
-            $variant = $variants[$positionIndex]
-            $binary = if ($variant -eq "v2") { $v2 } else { $v3 }
+            $treatmentCode = [string]$sequenceName[$positionIndex]
+            $treatment = $treatments |
+                Where-Object Code -eq $treatmentCode |
+                Select-Object -First 1
+            if (-not $treatment) {
+                throw "Unknown treatment code: $treatmentCode"
+            }
             $cacheDir = if ($CacheState -eq "warm-online") {
                 $WarmCache
             } else {
@@ -644,13 +712,15 @@ function Invoke-RssBlocks {
                 -CacheDir $cacheDir `
                 -OutputPath $outputPath `
                 -ProjectDir $projectDir
+            Set-MimallocTreatmentEnvironment $treatment
             $measurement = [SuspendedProcessMemory]::Run(
-                $binary,
+                $treatment.Binary,
                 $arguments,
                 $repo
             )
             if ($measurement.ExitCode -ne 0) {
-                throw "$variant failed with exit code $($measurement.ExitCode) for " +
+                throw "$($treatment.Name) failed with exit code " +
+                    "$($measurement.ExitCode) for " +
                     "$($Case.Name) $CacheState $Phase block $blockNumber position $position"
             }
             if (-not $measurement.FinalMemoryQuerySucceeded) {
@@ -673,7 +743,14 @@ function Invoke-RssBlocks {
                 block = $blockNumber
                 sequence = $sequenceName
                 position = $position
-                variant = $variant
+                treatment = $treatment.Name
+                treatmentCode = $treatment.Code
+                variant = $treatment.Variant
+                policy = $treatment.Policy
+                purgeDelayMs = $treatment.PurgeDelay
+                arenaPurgeMult = $treatment.ArenaPurgeMult
+                purgeDecommits = 1
+                environmentOverride = $treatment.EnvironmentOverride
                 peakWorkingSetBytes = $measurement.PeakWorkingSetBytes
                 peakWorkingSetMiB = $measurement.PeakWorkingSetBytes / 1MB
                 memoryQueryCount = $measurement.MemoryQueryCount
@@ -736,30 +813,10 @@ for ($caseIndex = 0; $caseIndex -lt $orderedCorpus.Count; $caseIndex++) {
         -CaseRoot $caseRoot `
         -WarmCache $warmCache `
         -ExpectedOutputSha256 $validatedHash `
-        -CacheState "warm-online" `
-        -Phase "warmup" `
-        -BlockCount $warmOnlineWarmupBlocks `
-        -Seed (982000 + ($replica * 1000) + $caseIndex)
-    Invoke-RssBlocks `
-        -Case $case `
-        -CaseIndex $caseIndex `
-        -CaseRoot $caseRoot `
-        -WarmCache $warmCache `
-        -ExpectedOutputSha256 $validatedHash `
-        -CacheState "warm-online" `
-        -Phase "measured" `
-        -BlockCount $warmOnlineMeasuredBlocks `
-        -Seed (983000 + ($replica * 1000) + $caseIndex)
-    Invoke-RssBlocks `
-        -Case $case `
-        -CaseIndex $caseIndex `
-        -CaseRoot $caseRoot `
-        -WarmCache $warmCache `
-        -ExpectedOutputSha256 $validatedHash `
         -CacheState "cold-online" `
         -Phase "warmup" `
         -BlockCount $coldOnlineWarmupBlocks `
-        -Seed (984000 + ($replica * 1000) + $caseIndex)
+        -Seed (982000 + ($replica * 1000) + $caseIndex)
     Invoke-RssBlocks `
         -Case $case `
         -CaseIndex $caseIndex `
@@ -769,6 +826,6 @@ for ($caseIndex = 0; $caseIndex -lt $orderedCorpus.Count; $caseIndex++) {
         -CacheState "cold-online" `
         -Phase "measured" `
         -BlockCount $coldOnlineMeasuredBlocks `
-        -Seed (985000 + ($replica * 1000) + $caseIndex)
+        -Seed (983000 + ($replica * 1000) + $caseIndex)
     Write-Host "::endgroup::"
 }
