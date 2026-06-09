@@ -8,11 +8,11 @@ use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun};
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_resolver::Metadata;
+use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_resolver::{Lock, Metadata};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::{LockMode, LockOperation};
@@ -24,7 +24,7 @@ use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
-use super::module_owners::collect_module_owners;
+use super::module_owners::{collect_module_owners, find_module_owners};
 
 /// Display metadata about the workspace.
 pub(crate) async fn metadata(
@@ -129,43 +129,43 @@ pub(crate) async fn metadata(
     {
         Ok(lock) => {
             let lock = lock.into_lock();
-            let mut export = Metadata::from_lock(virtual_project.workspace(), &lock)?;
-            if sync {
-                let environment = ProjectEnvironment::get_or_init(
-                    virtual_project.workspace(),
-                    &groups,
-                    python.as_deref().map(PythonRequest::parse),
-                    &install_mirrors,
-                    &client_builder,
-                    python_preference,
-                    python_downloads,
-                    false,
-                    no_config,
-                    Some(false),
-                    cache,
-                    DryRun::Disabled,
-                    printer,
+            let environment = if sync {
+                Some(
+                    ProjectEnvironment::get_or_init(
+                        virtual_project.workspace(),
+                        &groups,
+                        python.as_deref().map(PythonRequest::parse),
+                        &install_mirrors,
+                        &client_builder,
+                        python_preference,
+                        python_downloads,
+                        false,
+                        no_config,
+                        Some(false),
+                        cache,
+                        DryRun::Disabled,
+                        printer,
+                    )
+                    .await?,
                 )
-                .await?;
-                let module_owners = collect_module_owners(
-                    virtual_project.workspace(),
-                    &lock,
-                    &environment,
-                    &settings,
-                    &client_builder,
-                    &state,
-                    &concurrency,
-                    cache,
-                    workspace_cache,
-                    preview,
-                    &malware_settings,
-                )
-                .await
-                .context("Failed to collect module owners")?;
-                export = export
-                    .with_environment_root(environment.root())
-                    .with_module_owners(module_owners);
-            }
+            } else {
+                None
+            };
+            let export = export_metadata(
+                virtual_project.workspace(),
+                &lock,
+                environment.as_deref(),
+                true,
+                &settings,
+                &client_builder,
+                &state,
+                &concurrency,
+                cache,
+                workspace_cache,
+                preview,
+                &malware_settings,
+            )
+            .await?;
 
             print_metadata(&export, printer)
         }
@@ -180,6 +180,50 @@ pub(crate) async fn metadata(
         }
         Err(err) => Err(err.into()),
     }
+}
+
+/// Build the metadata exported by `uv workspace metadata` from an existing lock and environment.
+pub(crate) async fn export_metadata(
+    workspace: &Workspace,
+    lock: &Lock,
+    environment: Option<&PythonEnvironment>,
+    sync_module_owners: bool,
+    settings: &ResolverSettings,
+    client_builder: &BaseClientBuilder<'_>,
+    state: &UniversalState,
+    concurrency: &Concurrency,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+    preview: Preview,
+    malware_settings: &MalwareCheckSettings,
+) -> Result<Metadata> {
+    let mut export = Metadata::from_lock(workspace, lock)?;
+    if let Some(environment) = environment {
+        let module_owners = if sync_module_owners {
+            collect_module_owners(
+                workspace,
+                lock,
+                environment,
+                settings,
+                client_builder,
+                state,
+                concurrency,
+                cache,
+                workspace_cache,
+                preview,
+                malware_settings,
+            )
+            .await
+        } else {
+            find_module_owners(workspace, lock, environment, settings)
+        }
+        .context("Failed to collect module owners")?;
+        export = export
+            .with_environment_root(environment.root())
+            .with_module_owners(module_owners);
+    }
+
+    Ok(export)
 }
 
 fn print_metadata(export: &Metadata, printer: Printer) -> Result<ExitStatus> {

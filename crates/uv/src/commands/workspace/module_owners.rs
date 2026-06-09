@@ -45,31 +45,8 @@ pub(crate) async fn collect_module_owners(
     malware_settings: &MalwareCheckSettings,
 ) -> Result<BTreeMap<ModuleName, Vec<String>>> {
     let target = InstallTarget::Workspace { workspace, lock };
-    let marker_env = resolution_markers(None, None, venv.interpreter());
-    let tags = resolution_tags(None, None, venv.interpreter())?;
     let extras = ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default());
     let groups = DependencyGroups::from_all_groups().with_defaults(DefaultGroups::default());
-
-    let resolution = target.to_resolution(
-        &marker_env,
-        &tags,
-        &extras,
-        &groups,
-        &settings.build_options,
-        &InstallOptions::default(),
-    )?;
-    if resolution.is_empty() {
-        return Ok(BTreeMap::new());
-    }
-
-    let workspace_root = PortablePathBuf::from(workspace.install_path().as_path());
-    let mut package_ids = BTreeMap::<PackageName, String>::new();
-    for dist in resolution.distributions().filter(|dist| !is_virtual(dist)) {
-        package_ids.insert(
-            dist.name().clone(),
-            Metadata::package_node_id(&workspace_root, dist)?,
-        );
-    }
 
     let reinstall = Reinstall::None;
     let installer_settings = InstallerSettingsRef {
@@ -113,6 +90,43 @@ pub(crate) async fn collect_module_owners(
         malware_settings,
     )
     .await?;
+
+    find_module_owners(workspace, lock, venv, settings)
+}
+
+/// Map the modules in an existing environment to package IDs from the lockfile.
+pub(crate) fn find_module_owners(
+    workspace: &Workspace,
+    lock: &Lock,
+    venv: &PythonEnvironment,
+    settings: &ResolverSettings,
+) -> Result<BTreeMap<ModuleName, Vec<String>>> {
+    let target = InstallTarget::Workspace { workspace, lock };
+    let marker_env = resolution_markers(None, None, venv.interpreter());
+    let tags = resolution_tags(None, None, venv.interpreter())?;
+    let extras = ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default());
+    let groups = DependencyGroups::from_all_groups().with_defaults(DefaultGroups::default());
+
+    let resolution = target.to_resolution(
+        &marker_env,
+        &tags,
+        &extras,
+        &groups,
+        &settings.build_options,
+        &InstallOptions::default(),
+    )?;
+    if resolution.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+
+    let workspace_root = PortablePathBuf::from(workspace.install_path().as_path());
+    let mut package_ids = BTreeMap::<PackageName, String>::new();
+    for dist in resolution.distributions().filter(|dist| !is_virtual(dist)) {
+        package_ids.insert(
+            dist.name().clone(),
+            Metadata::package_node_id(&workspace_root, dist)?,
+        );
+    }
 
     let mut owners = BTreeMap::<ModuleName, BTreeSet<String>>::new();
     for dist in SitePackages::from_environment(venv)?.iter() {

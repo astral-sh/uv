@@ -1,7 +1,9 @@
 use std::path::Path;
+use std::process::Stdio;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
+use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tracing::debug;
 
@@ -19,6 +21,7 @@ pub(super) async fn run(
     version: Option<String>,
     target_dir: &Path,
     venv_path: Option<&Path>,
+    workspace_metadata: Option<String>,
     exclude_newer: Option<jiff::Timestamp>,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
@@ -103,6 +106,30 @@ pub(super) async fn run(
         command.env("VIRTUAL_ENV", venv_path);
     }
 
-    let handle = command.spawn().context("Failed to spawn `ty check`")?;
-    run_to_completion(handle).await
+    if workspace_metadata.is_some() {
+        command.stdin(Stdio::piped());
+    }
+
+    let mut handle = command.spawn().context("Failed to spawn `ty check`")?;
+    let writer = if let Some(workspace_metadata) = workspace_metadata {
+        debug!("Passing workspace metadata to `ty check` via stdin");
+        let mut stdin = handle
+            .stdin
+            .take()
+            .context("Failed to open stdin for `ty check`")?;
+        Some(tokio::spawn(async move {
+            stdin.write_all(workspace_metadata.as_bytes()).await
+        }))
+    } else {
+        None
+    };
+
+    let status = run_to_completion(handle).await;
+    if let Some(writer) = writer
+        && let Err(err) = writer.await?
+        && err.kind() != std::io::ErrorKind::BrokenPipe
+    {
+        return Err(err).context("Failed to write workspace metadata to `ty check`");
+    }
+    status
 }
