@@ -24,7 +24,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Setup SRS"
+      - name: "Setup srs"
         id: srs
         uses: ./.github/actions/setup-srs
 
@@ -146,7 +146,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Setup SRS"
+      - name: "Setup srs"
         id: srs
         uses: ./.github/actions/setup-srs
         with:
@@ -163,7 +163,7 @@ jobs:
             ./target/no-debug/uvx
           retention-days: 1
 
-      - name: "Save SRS build cache"
+      - name: "Save srs build cache"
         if: ${{ inputs.save-rust-cache == 'true' }}
         uses: ./.github/actions/save-srs-cache
         with:

@@ -1,5 +1,5 @@
-name: "Setup SRS"
-description: "Install SRS and restore its Cargo build cache"
+name: "Setup srs"
+description: "Install srs and restore its Cargo build cache"
 
 inputs:
   target-path:
@@ -9,10 +9,10 @@ inputs:
 
 outputs:
   artifact-cache-hit:
-    description: "Whether the primary SRS artifact cache key was restored"
+    description: "Whether the primary srs artifact cache key was restored"
     value: ${{ steps.artifact-cache.outputs.cache-hit }}
   artifact-cache-primary-key:
-    description: "Primary SRS artifact cache key to use when saving"
+    description: "Primary srs artifact cache key to use when saving"
     value: ${{ steps.artifact-cache.outputs.cache-primary-key }}
   target-cache-hit:
     description: "Whether the primary Cargo target cache key was restored"
@@ -24,7 +24,7 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: "Restore SRS artifact cache"
+    - name: "Restore srs artifact cache"
       id: artifact-cache
       uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
@@ -49,6 +49,6 @@ runs:
           srs-target-v1-2026.06.09-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/rust-toolchain.toml', '.cargo/**') }}-
           srs-target-v1-2026.06.09-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-
 
-    - name: "Install SRS"
+    - name: "Install srs"
       shell: bash
       run: bash "$GITHUB_ACTION_PATH/install.sh"

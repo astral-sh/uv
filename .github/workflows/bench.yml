@@ -105,7 +105,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Setup SRS"
+      - name: "Setup srs"
         id: srs
         uses: ./.github/actions/setup-srs
 

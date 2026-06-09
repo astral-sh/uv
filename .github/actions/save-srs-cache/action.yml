@@ -1,17 +1,17 @@
-name: "Save SRS cache"
-description: "Save the SRS Cargo build cache"
+name: "Save srs cache"
+description: "Save the srs Cargo build cache"
 
 inputs:
   artifact-cache-hit:
-    description: "Whether setup-srs restored the primary SRS artifact cache key"
+    description: "Whether setup-srs restored the primary srs artifact cache key"
     required: false
     default: "false"
   artifact-cache-primary-key:
-    description: "Primary SRS artifact cache key from setup-srs"
+    description: "Primary srs artifact cache key from setup-srs"
     required: false
     default: ""
   save-artifact-cache:
-    description: "Whether this job is the designated SRS artifact cache writer"
+    description: "Whether this job is the designated srs artifact cache writer"
     required: false
     default: "false"
   target-cache-hit:
@@ -30,7 +30,7 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: "Save SRS artifact cache"
+    - name: "Save srs artifact cache"
       if: ${{ inputs.save-artifact-cache == 'true' && inputs.artifact-cache-hit != 'true' }}
       uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
