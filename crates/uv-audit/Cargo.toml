@@ -38,6 +38,7 @@ serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+itertools.workspace = true
 
 [dev-dependencies]
 insta = { workspace = true }

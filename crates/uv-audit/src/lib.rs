@@ -7,5 +7,6 @@ pub use types::{
     AdverseStatus, Dependency, Finding, ProjectStatus, Vulnerability, VulnerabilityID,
 };
 
+pub mod fix;
 mod service;
 mod types;
