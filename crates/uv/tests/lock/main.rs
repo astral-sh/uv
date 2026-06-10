@@ -1,8 +1,7 @@
-//! Integration tests for `uv pip compile`.
+//! Integration tests for `uv lock`.
 
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
 use uv_test::pypi_proxy;
 
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
-#[path = "it/pip_compile.rs"]
-mod pip_compile;
+mod lock;
