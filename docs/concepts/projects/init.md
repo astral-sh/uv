@@ -24,12 +24,13 @@ Applications are the default target for `uv init`, but can also be specified wit
 $ uv init example-app
 ```
 
-The project includes a `pyproject.toml`, a sample file (`main.py`), a readme, and a Python version
-pin file (`.python-version`).
+The project includes a `pyproject.toml`, a sample file (`main.py`), a readme, a Python version pin
+file (`.python-version`), and a Git repository with a `.gitignore`:
 
-```console
-$ tree example-app
+```text
 example-app/
+├── .git/
+├── .gitignore
 ├── .python-version
 ├── README.md
 ├── main.py
@@ -86,9 +87,10 @@ $ uv init --package example-pkg
 
 The source code is moved into a `src` directory with a module directory and an `__init__.py` file:
 
-```console
-$ tree example-pkg
+```text
 example-pkg/
+├── .git/
+├── .gitignore
 ├── .python-version
 ├── README.md
 ├── pyproject.toml
@@ -166,9 +168,10 @@ $ uv init --lib example-lib
 As with a [packaged application](#packaged-applications), a `src` layout is used. A `py.typed`
 marker is included to indicate to consumers that types can be read from the library:
 
-```console
-$ tree example-lib
+```text
 example-lib/
+├── .git/
+├── .gitignore
 ├── .python-version
 ├── README.md
 ├── pyproject.toml
@@ -248,9 +251,10 @@ $ uv init --build-backend maturin example-ext
 The project contains a `Cargo.toml` and a `lib.rs` file in addition to the typical Python project
 files:
 
-```console
-$ tree example-ext
+```text
 example-ext/
+├── .git/
+├── .gitignore
 ├── .python-version
 ├── Cargo.toml
 ├── README.md
@@ -317,8 +321,7 @@ $ uv init example-bare --bare
 uv will skip creating a Python version pin file, a README, and any source directories or files.
 Additionally, uv will not initialize a version control system (i.e., `git`).
 
-```console
-$ tree example-bare
+```text
 example-bare
 └── pyproject.toml
 ```
