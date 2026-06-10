@@ -36,11 +36,11 @@ async fn native_store_enumerates_many_credentials_in_one_realm()
     ))?;
     entries.push((
         case_collision_url.clone(),
-        Credentials::basic(Some("aaa".to_string()), Some("first".to_string())),
+        Credentials::basic(Some("aa".to_string()), Some("first".to_string())),
     ));
     entries.push((
         case_collision_url,
-        Credentials::basic(Some("aaG".to_string()), Some("second".to_string())),
+        Credentials::basic(Some("aG".to_string()), Some("second".to_string())),
     ));
 
     entries.push((
@@ -59,7 +59,7 @@ async fn native_store_enumerates_many_credentials_in_one_realm()
     let realm = Realm::from(&*entries[0].0);
     let malformed = uv_keyring::Entry::new_with_credential(Box::new(WinCredential {
         username: "malformed".to_string(),
-        target_name: format!("uv:native-auth:v2:{realm}:malformed"),
+        target_name: format!("uv:native-auth:v2:{realm}:{}", "0".repeat(64)),
         target_alias: String::new(),
         comment: "uv native authentication credential".to_string(),
     }));
