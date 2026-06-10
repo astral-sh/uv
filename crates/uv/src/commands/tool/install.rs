@@ -747,8 +747,8 @@ async fn install_inner(
                 .is_some_and(|environment| environment.environment().uses(&selected.interpreter));
             if !reuses_existing_environment {
                 existing_environment = None;
-                registry_resolution = Some(selected.resolution);
             }
+            registry_resolution = Some(selected.resolution);
             interpreter = selected.interpreter;
         }
     }
@@ -758,29 +758,48 @@ async fn install_inner(
     // entrypoints always contain an absolute path to the relevant Python interpreter, which would
     // be invalidated by moving the environment.
     let environment = if let Some(environment) = existing_environment {
-        let environment = update_environment(
-            environment.into_environment(),
-            spec,
-            Modifications::Exact,
-            python_platform.as_ref(),
-            SourceTreeEditablePolicy::Tool,
-            Constraints::from_requirements(build_constraints.iter().cloned()),
-            ExtraBuildRequires::default(),
-            &settings,
-            &client_builder,
-            &state,
-            Box::new(DefaultResolveLogger),
-            Box::new(DefaultInstallLogger),
-            installer_metadata,
-            &concurrency,
-            &cache,
-            workspace_cache,
-            DryRun::Disabled,
-            printer,
-            preview,
-        )
-        .await
-        .map(super::super::project::EnvironmentUpdate::into_environment);
+        let environment = if let Some(resolution) = registry_resolution.take() {
+            sync_environment(
+                environment.into_environment(),
+                &resolution,
+                Modifications::Exact,
+                Constraints::from_requirements(build_constraints.iter().cloned()),
+                (&settings).into(),
+                &client_builder,
+                &state,
+                Box::new(DefaultInstallLogger),
+                installer_metadata,
+                &concurrency,
+                &cache,
+                printer,
+                preview,
+            )
+            .await
+        } else {
+            update_environment(
+                environment.into_environment(),
+                spec,
+                Modifications::Exact,
+                python_platform.as_ref(),
+                SourceTreeEditablePolicy::Tool,
+                Constraints::from_requirements(build_constraints.iter().cloned()),
+                ExtraBuildRequires::default(),
+                &settings,
+                &client_builder,
+                &state,
+                Box::new(DefaultResolveLogger),
+                Box::new(DefaultInstallLogger),
+                installer_metadata,
+                &concurrency,
+                &cache,
+                workspace_cache,
+                DryRun::Disabled,
+                printer,
+                preview,
+            )
+            .await
+            .map(super::super::project::EnvironmentUpdate::into_environment)
+        };
         let environment = match environment {
             Ok(environment) => environment,
             Err(ProjectError::Operation(err)) => {
