@@ -29,7 +29,7 @@ use serde_json::json;
 
 const PYX_TEST_TOKEN: &str = "pyx-test-token";
 
-pub(crate) fn pyx_test_token() -> &'static str {
+pub fn pyx_test_token() -> &'static str {
     PYX_TEST_TOKEN
 }
 
@@ -313,24 +313,24 @@ fn build_simple_api_response_relative(
 }
 
 /// A running mock PyPI proxy server. Returned by [`start`].
-pub(crate) struct PypiProxy {
+pub struct PypiProxy {
     server: wiremock::MockServer,
 }
 
 impl PypiProxy {
     /// The base URI of the mock server (e.g., `http://127.0.0.1:PORT`).
-    pub(crate) fn uri(&self) -> String {
+    pub fn uri(&self) -> String {
         self.server.uri()
     }
 
     /// The host portion of the mock server address (e.g., `127.0.0.1`).
-    pub(crate) fn host(&self) -> String {
+    pub fn host(&self) -> String {
         let url = url::Url::parse(&self.server.uri()).expect("valid URL");
         url.host_str().expect("has host").to_string()
     }
 
     /// The host:port portion of the mock server address (e.g., `127.0.0.1:PORT`).
-    pub(crate) fn host_port(&self) -> String {
+    pub fn host_port(&self) -> String {
         self.server
             .uri()
             .strip_prefix("http://")
@@ -339,22 +339,22 @@ impl PypiProxy {
     }
 
     /// Build a URL with embedded credentials: `http://user:pass@host:port{path}`.
-    pub(crate) fn authenticated_url(&self, username: &str, password: &str, path: &str) -> String {
+    pub fn authenticated_url(&self, username: &str, password: &str, path: &str) -> String {
         format!("http://{username}:{password}@{}{path}", self.host_port())
     }
 
     /// Build a base URI with embedded credentials: `http://user:pass@host:port` (no path).
-    pub(crate) fn authenticated_uri(&self, username: &str, password: &str) -> String {
+    pub fn authenticated_uri(&self, username: &str, password: &str) -> String {
         format!("http://{username}:{password}@{}", self.host_port())
     }
 
     /// Build a URL with only a username: `http://user@host:port{path}`.
-    pub(crate) fn username_url(&self, username: &str, path: &str) -> String {
+    pub fn username_url(&self, username: &str, path: &str) -> String {
         format!("http://{username}@{}{path}", self.host_port())
     }
 
     /// Build an unauthenticated URL: `http://host:port{path}`.
-    pub(crate) fn url(&self, path: &str) -> String {
+    pub fn url(&self, path: &str) -> String {
         format!("{}{path}", self.uri())
     }
 }
@@ -373,7 +373,7 @@ impl PypiProxy {
 /// - `/basic-auth/files/…` — authenticated file redirect (public:heron)
 /// - `/basic-auth-heron/files/…` — authenticated file redirect (public:heron)
 /// - `/basic-auth-eagle/files/…` — authenticated file redirect (public:eagle)
-pub(crate) async fn start() -> PypiProxy {
+pub async fn start() -> PypiProxy {
     use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
     let server = MockServer::start().await;
