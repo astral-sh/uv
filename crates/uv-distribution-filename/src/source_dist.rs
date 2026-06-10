@@ -45,16 +45,31 @@ impl SourceDistFilename {
             });
         }
 
-        let stem = &filename[..(filename.len() - (extension.name().len() + 1))];
+        let Some(stem) = filename.get(..filename.len() - (extension.name().len() + 1)) else {
+            return Err(SourceDistFilenameError {
+                filename: filename.to_string(),
+                kind: SourceDistFilenameErrorKind::Extension,
+            });
+        };
 
-        if stem.len() <= package_name.as_ref().len() + "-".len() {
+        let package_name_len = package_name.as_ref().len();
+        if stem.len() <= package_name_len + "-".len() {
             return Err(SourceDistFilenameError {
                 filename: filename.to_string(),
                 kind: SourceDistFilenameErrorKind::Filename(package_name.clone()),
             });
         }
-        let actual_package_name = PackageName::from_str(&stem[..package_name.as_ref().len()])
-            .map_err(|err| SourceDistFilenameError {
+        let (Some(actual_package_name), Some(version)) = (
+            stem.get(..package_name_len),
+            stem.get(package_name_len + "-".len()..),
+        ) else {
+            return Err(SourceDistFilenameError {
+                filename: filename.to_string(),
+                kind: SourceDistFilenameErrorKind::Filename(package_name.clone()),
+            });
+        };
+        let actual_package_name =
+            PackageName::from_str(actual_package_name).map_err(|err| SourceDistFilenameError {
                 filename: filename.to_string(),
                 kind: SourceDistFilenameErrorKind::PackageName(err),
             })?;
@@ -65,14 +80,10 @@ impl SourceDistFilename {
             });
         }
 
-        // We checked the length above
-        let version =
-            Version::from_str(&stem[package_name.as_ref().len() + "-".len()..]).map_err(|err| {
-                SourceDistFilenameError {
-                    filename: filename.to_string(),
-                    kind: SourceDistFilenameErrorKind::Version(err),
-                }
-            })?;
+        let version = Version::from_str(version).map_err(|err| SourceDistFilenameError {
+            filename: filename.to_string(),
+            kind: SourceDistFilenameErrorKind::Version(err),
+        })?;
 
         Ok(Self {
             name: package_name.clone(),
@@ -221,6 +232,18 @@ mod tests {
                 SourceDistFilename::parse(invalid, ext, &PackageName::from_str("a").unwrap())
                     .is_err()
             );
+        }
+    }
+
+    #[test]
+    fn malformed_non_ascii() {
+        let package_name = PackageName::from_str("a").unwrap();
+        for (filename, extension) in [
+            ("é-1.2.3.zip", SourceDistExtension::Zip),
+            ("aé1.2.3.zip", SourceDistExtension::Zip),
+            ("é-1.zip", SourceDistExtension::TarGz),
+        ] {
+            assert!(SourceDistFilename::parse(filename, extension, &package_name).is_err());
         }
     }
 
