@@ -3010,12 +3010,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             } else {
                 debug!("Reusing existing build environment for: {source}");
 
+                let install_path = subdirectory.map(|subdirectory| source_root.join(subdirectory));
+                let install_path = install_path.as_deref().unwrap_or(source_root);
+
+                let stop_discovery_at = if matches!(
+                    source,
+                    BuildableSource::Dist(SourceDist::GitDirectory(_))
+                        | BuildableSource::Url(SourceUrl::GitDirectory(_))
+                ) {
+                    source_root.parent()
+                } else {
+                    None
+                };
+
                 let builder = self
                     .build_context
                     .setup_build(
                         source_root,
                         subdirectory,
-                        source_root,
+                        install_path,
+                        stop_discovery_at,
                         Some(&source.to_string()),
                         source.as_dist(),
                         &no_sources,
@@ -3134,13 +3148,27 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             BuildKind::Wheel
         };
 
+        let install_path = subdirectory.map(|subdirectory| source_root.join(subdirectory));
+        let install_path = install_path.as_deref().unwrap_or(source_root);
+
+        let stop_discovery_at = if matches!(
+            source,
+            BuildableSource::Dist(SourceDist::GitDirectory(_))
+                | BuildableSource::Url(SourceUrl::GitDirectory(_))
+        ) {
+            source_root.parent()
+        } else {
+            None
+        };
+
         // Set up the builder.
         let mut builder = self
             .build_context
             .setup_build(
                 source_root,
                 subdirectory,
-                source_root,
+                install_path,
+                stop_discovery_at,
                 Some(&source.to_string()),
                 source.as_dist(),
                 &no_sources,
