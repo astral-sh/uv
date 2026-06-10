@@ -438,7 +438,7 @@ impl KeyringProvider {
                 "Stored credentials for {}@{service} in Windows Credential Manager",
                 username.as_deref().unwrap_or_default()
             );
-            return Ok(());
+            Ok(())
         }
 
         #[cfg(any(not(target_os = "windows"), test))]
@@ -524,8 +524,8 @@ impl KeyringProvider {
         let realm = Realm::from(service.url());
         let _lock = native_credential_lock(&realm, NativeCredentialLockMode::Write).await?;
 
-        let removed_from_realm = self.remove_native_realm_entry(service, username).await?;
         let removed_from_legacy = self.remove_native_legacy(service.url(), username).await?;
+        let removed_from_realm = self.remove_native_realm_entry(service, username).await?;
 
         if removed_from_realm || removed_from_legacy {
             Ok(())
@@ -1176,7 +1176,7 @@ impl KeyringProvider {
 mod tests {
     use std::{
         any::Any,
-        collections::HashMap,
+        collections::{HashMap, HashSet},
         sync::{Arc, LazyLock, Mutex},
     };
 
@@ -1202,6 +1202,7 @@ mod tests {
     struct InMemoryCredential {
         key: InMemoryCredentialKey,
         entries: Arc<Mutex<HashMap<InMemoryCredentialKey, Vec<u8>>>>,
+        delete_failures: Arc<Mutex<HashSet<InMemoryCredentialKey>>>,
     }
 
     #[async_trait::async_trait]
@@ -1221,6 +1222,11 @@ mod tests {
         }
 
         async fn delete_credential(&self) -> uv_keyring::Result<()> {
+            if self.delete_failures.lock().unwrap().remove(&self.key) {
+                return Err(uv_keyring::Error::PlatformFailure(Box::new(
+                    std::io::Error::other("injected delete failure"),
+                )));
+            }
             let mut entries = self.entries.lock().unwrap();
             if entries.remove(&self.key).is_some() {
                 Ok(())
@@ -1237,6 +1243,7 @@ mod tests {
     #[derive(Debug)]
     struct InMemoryCredentialBuilder {
         entries: Arc<Mutex<HashMap<InMemoryCredentialKey, Vec<u8>>>>,
+        delete_failures: Arc<Mutex<HashSet<InMemoryCredentialKey>>>,
     }
 
     impl CredentialBuilderApi for InMemoryCredentialBuilder {
@@ -1253,6 +1260,7 @@ mod tests {
                     user: user.to_string(),
                 },
                 entries: Arc::clone(&self.entries),
+                delete_failures: Arc::clone(&self.delete_failures),
             }))
         }
 
@@ -1267,16 +1275,22 @@ mod tests {
 
     struct NativeTestKeyring {
         _guard: AsyncMutexGuard<'static, ()>,
+        delete_failures: Arc<Mutex<HashSet<InMemoryCredentialKey>>>,
     }
 
     impl NativeTestKeyring {
         async fn install() -> Self {
             let guard = NATIVE_KEYRING_TEST_LOCK.lock().await;
             let entries = Arc::new(Mutex::new(HashMap::new()));
+            let delete_failures = Arc::new(Mutex::new(HashSet::new()));
             uv_keyring::set_default_credential_builder(Box::new(InMemoryCredentialBuilder {
                 entries,
+                delete_failures: Arc::clone(&delete_failures),
             }));
-            Self { _guard: guard }
+            Self {
+                _guard: guard,
+                delete_failures,
+            }
         }
 
         async fn insert_legacy(&self, service_name: &str, username: &str, password: &str) {
@@ -1313,6 +1327,17 @@ mod tests {
                 uv_keyring::Entry::new(&format!("{UV_SERVICE_PREFIX}{service_name}"), username)
                     .unwrap();
             assert_eq!(entry.get_password().await.unwrap(), expected_password);
+        }
+
+        fn fail_next_delete(&self, service_name: &str, username: &str) {
+            self.delete_failures
+                .lock()
+                .unwrap()
+                .insert(InMemoryCredentialKey {
+                    target: None,
+                    service: format!("{UV_SERVICE_PREFIX}{service_name}"),
+                    user: username.to_string(),
+                });
         }
     }
 
@@ -1640,6 +1665,25 @@ mod tests {
         assert!(provider.remove(&child_url, "user").await.is_err());
         assert_eq!(
             provider.fetch(&root_url, Some("user")).await.unwrap(),
+            Some(credentials)
+        );
+    }
+
+    #[tokio::test]
+    async fn native_remove_keeps_current_credential_when_legacy_cleanup_fails() {
+        let keyring = NativeTestKeyring::install().await;
+        let provider = KeyringProvider::native();
+        let url = DisplaySafeUrl::parse("https://example.com/path").unwrap();
+        let username = "user";
+        let credentials =
+            Credentials::basic(Some(username.to_string()), Some("password".to_string()));
+
+        assert!(provider.store(&url, &credentials).await.unwrap());
+        keyring.fail_next_delete(&legacy_service_names(&url)[0], username);
+
+        assert!(provider.remove(&url, username).await.is_err());
+        assert_eq!(
+            provider.fetch(&url, Some(username)).await.unwrap(),
             Some(credentials)
         );
     }
