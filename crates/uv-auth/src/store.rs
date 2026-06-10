@@ -366,6 +366,7 @@ impl TextCredentialStore {
 
         // If that fails, iterate through to find a prefix match
         let mut best: Option<(usize, &Service, &Credentials)> = None;
+        let mut best_is_ambiguous = false;
 
         for ((service, stored_username), credential) in &self.credentials {
             // Check if this credential matches and get its specificity
@@ -375,16 +376,20 @@ impl TextCredentialStore {
                 // Update our best matching credential based on prefix length.
                 if best.is_none_or(|(best_specificity, _, _)| specificity > best_specificity) {
                     best = Some((specificity, service, credential));
+                    best_is_ambiguous = false;
                 } else if best
                     .is_some_and(|(best_specificity, _, _)| specificity == best_specificity)
                 {
-                    return Err(LookupError::AmbiguousUsername(url.clone()));
+                    best_is_ambiguous = true;
                 }
             }
         }
 
         // Return the most specific match
         if let Some((_, _, credential)) = best {
+            if best_is_ambiguous {
+                return Err(LookupError::AmbiguousUsername(url.clone()));
+            }
             return Ok(Some(credential));
         }
 
@@ -625,6 +630,30 @@ password = "pass2"
         let url = DisplaySafeUrl::parse("https://example.com/api/v2").unwrap();
         let cred = store.get_credentials(&url, None).unwrap().unwrap();
         assert_eq!(cred.username(), Some("general"));
+    }
+
+    #[test]
+    fn test_more_specific_match_wins_over_less_specific_ambiguity() {
+        let mut store = TextCredentialStore::default();
+        let root_service = Service::from_str("https://example.com").unwrap();
+        let api_service = Service::from_str("https://example.com/api").unwrap();
+
+        store.insert(
+            root_service.clone(),
+            Credentials::basic(Some("root-a".to_string()), Some("pass-a".to_string())),
+        );
+        store.insert(
+            root_service,
+            Credentials::basic(Some("root-b".to_string()), Some("pass-b".to_string())),
+        );
+        store.insert(
+            api_service,
+            Credentials::basic(Some("api".to_string()), Some("api-pass".to_string())),
+        );
+
+        let url = DisplaySafeUrl::parse("https://example.com/api/child").unwrap();
+        let credentials = store.get_credentials(&url, None).unwrap().unwrap();
+        assert_eq!(credentials.username(), Some("api"));
     }
 
     #[test]
