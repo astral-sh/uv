@@ -101,6 +101,7 @@ jobs:
           persist-credentials: false
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Check uv_build dependencies"
         uses: EmbarkStudios/cargo-deny-action@bb137d7af7e4fb67e5f82a49c4fce4fad40782fe # v2.0.20
@@ -110,7 +111,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup component add clippy
       - name: "Clippy"
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features --locked --profile no-opt -- -D warnings
 
   clippy-windows:
     name: "clippy on windows"
@@ -132,6 +133,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           workspaces: ${{ env.UV_WORKSPACE }}
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
@@ -140,7 +142,7 @@ jobs:
 
       - name: "Clippy"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features --locked --profile no-opt -- -D warnings
 
   shear:
     name: "cargo shear"

@@ -66,7 +66,8 @@ used when NASM is found, you can guarantee this behavior by setting `AWS_LC_SYS_
 
 ## Testing
 
-For running tests, we recommend [nextest](https://nexte.st/).
+For running tests, we recommend [nextest](https://nexte.st/). Tests inherit uv's lightly optimized
+development profile by default.
 
 To run a specific test by name:
 
@@ -141,6 +142,13 @@ You can invoke your development version of uv with `cargo run -- <args>`. For ex
 ```shell
 cargo run -- venv
 cargo run -- pip install requests
+```
+
+The default development profile skips debuginfo to keep local iteration lean. If you need a
+symbol-rich build for debugging, use the explicit `dev-debug` profile:
+
+```shell
+cargo run --profile dev-debug -- <args>
 ```
 
 ## Formatting
