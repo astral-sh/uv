@@ -5,10 +5,10 @@ use std::process;
 use std::str::FromStr;
 use std::time::Duration;
 
+use anyhow::{Result, bail};
 use rustc_hash::FxHashSet;
-use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
 
-use crate::commands::{PythonUpgrade, PythonUpgradeSource};
+use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
 use uv_auth::Service;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
@@ -47,7 +47,7 @@ use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerTree, RequirementOrigin};
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::SupportedEnvironments;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_redacted::DisplaySafeUrl;
@@ -66,8 +66,10 @@ use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, ExtraBuildDependencies};
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
-use crate::commands::ToolRunCommand;
-use crate::commands::{InitKind, InitProjectKind, pip::operations::Modifications};
+use crate::commands::pip::operations::Modifications;
+use crate::commands::{
+    InitKind, InitProjectKind, PythonUpgrade, PythonUpgradeSource, ToolRunCommand,
+};
 
 /// The default publish URL.
 const PYPI_PUBLISH_URL: &str = "https://upload.pypi.org/legacy/";
@@ -441,7 +443,8 @@ impl InitSettings {
         args: InitArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
-    ) -> Self {
+        preview: Preview,
+    ) -> Result<Self> {
         let InitArgs {
             path,
             name,
@@ -465,21 +468,6 @@ impl InitSettings {
             ..
         } = args;
 
-        let kind = match (app, lib, script) {
-            (true, false, false) => InitKind::Project(InitProjectKind::Application),
-            (false, true, false) => InitKind::Project(InitProjectKind::Library),
-            (false, false, true) => InitKind::Script,
-            (false, false, false) => InitKind::default(),
-            (_, _, _) => unreachable!("`app`, `lib`, and `script` are mutually exclusive"),
-        };
-
-        let package = flag(
-            package || build_backend.is_some(),
-            no_package || r#virtual,
-            "virtual",
-        )
-        .unwrap_or(kind.packaged_by_default());
-
         let bare = resolve_flag(bare, "bare", environment.init_bare).is_enabled();
 
         let filesystem_install_mirrors = filesystem
@@ -488,7 +476,91 @@ impl InitSettings {
 
         let no_description = no_description || (bare && description.is_none());
 
-        Self {
+        let (kind, package) = if preview.is_enabled(PreviewFeature::PackagedInit) {
+            if r#virtual && lib {
+                bail!("`--virtual` and `--lib` are mutually exclusive");
+            }
+            if r#virtual && build_backend.is_some() {
+                bail!("`--virtual` and `--build-backend` are mutually exclusive");
+            }
+
+            let package_flag = flag(
+                package || build_backend.is_some(),
+                no_package || r#virtual,
+                "virtual",
+            );
+
+            let kind = if script {
+                InitKind::Script
+            } else if bare {
+                if package_flag == Some(true) || lib {
+                    InitKind::Project(InitProjectKind::BareWithBuildSystem)
+                } else {
+                    InitKind::Project(InitProjectKind::Bare)
+                }
+            } else {
+                // Merge `--app` and `--lib`.
+                let app_lib_kind = match (app, lib) {
+                    (false, false) => InitProjectKind::ApplicationWithLibrary,
+                    (true, false) => InitProjectKind::Application,
+                    (false, true) => InitProjectKind::Library,
+                    (true, true) => bail!("`app` and `lib` are mutually exclusive"),
+                };
+
+                // Apply overrides from `--package`/`--no-package`.
+                let app_lib_kind = match (app_lib_kind, package_flag) {
+                    (InitProjectKind::ApplicationWithLibrary, None | Some(true)) => {
+                        InitProjectKind::ApplicationWithLibrary
+                    }
+                    (InitProjectKind::ApplicationWithLibrary, Some(false)) => {
+                        InitProjectKind::Application
+                    }
+                    // The user specifically asked for `--app`, so no library.
+                    (InitProjectKind::Application, None | Some(false)) => {
+                        InitProjectKind::Application
+                    }
+                    (InitProjectKind::Application, Some(true)) => {
+                        InitProjectKind::ApplicationWithLibrary
+                    }
+                    (InitProjectKind::Library, None | Some(true)) => InitProjectKind::Library,
+                    (InitProjectKind::Library, Some(false)) => {
+                        bail!("`lib` and `no_package` are mutually exclusive");
+                    }
+                    (InitProjectKind::Bare | InitProjectKind::BareWithBuildSystem, _) => {
+                        unreachable!()
+                    }
+                    (InitProjectKind::ApplicationOld | InitProjectKind::LibraryOld, _) => {
+                        unreachable!()
+                    }
+                };
+                InitKind::Project(app_lib_kind)
+            };
+
+            // Packaging is encoded in `kind`; `package` is only consumed by the old paths.
+            (kind, false)
+        } else {
+            // TODO(konsti): Remove when stabilizing packaged-init.
+            let kind = match (app, lib, script) {
+                (true, false, false) => InitKind::Project(InitProjectKind::ApplicationOld),
+                (false, true, false) => InitKind::Project(InitProjectKind::LibraryOld),
+                (false, false, true) => InitKind::Script,
+                (false, false, false) => InitKind::Project(InitProjectKind::ApplicationOld),
+                (_, _, _) => bail!("`app`, `lib`, and `script` are mutually exclusive"),
+            };
+
+            let package = flag(
+                package || build_backend.is_some(),
+                no_package || r#virtual,
+                "virtual",
+            )
+            .unwrap_or(matches!(
+                kind,
+                InitKind::Project(InitProjectKind::LibraryOld)
+            ));
+            (kind, package)
+        };
+
+        Ok(Self {
             path,
             name,
             package,
@@ -506,7 +578,7 @@ impl InitSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
-        }
+        })
     }
 }
 
