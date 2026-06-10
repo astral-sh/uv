@@ -43,7 +43,7 @@ fn lock_wheel_registry() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -175,7 +175,7 @@ fn lock_sdist_registry() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -273,7 +273,7 @@ fn lock_sdist_git() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -363,7 +363,7 @@ fn lock_sdist_git() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -421,7 +421,7 @@ fn lock_sdist_git() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -478,7 +478,7 @@ fn lock_sdist_git() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -540,7 +540,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -634,7 +634,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -698,7 +698,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -753,7 +753,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -807,7 +807,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -872,7 +872,7 @@ fn lock_sdist_git_short_rev() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -984,7 +984,7 @@ fn lock_sdist_git_archive() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r###"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1143,7 +1143,7 @@ fn lock_wheel_git_archive() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r###"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1296,7 +1296,7 @@ fn lock_wheel_url() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1450,7 +1450,7 @@ fn lock_sdist_url() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1605,7 +1605,7 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1739,7 +1739,7 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1876,7 +1876,7 @@ fn lock_project_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -2164,7 +2164,7 @@ fn lock_project_with_excludes() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -2585,7 +2585,7 @@ fn lock_dependency_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -2784,17 +2784,27 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.7"
-        resolution-markers = [
-            "python_full_version >= '3.10'",
-            "python_full_version >= '3.8' and python_full_version < '3.10'",
-            "python_full_version < '3.8'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.10'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.8' and python_full_version < '3.10'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.8'" }
 
         [[package]]
         name = "certifi"
@@ -2960,8 +2970,8 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         name = "urllib3"
         version = "2.0.7"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version < '3.8'",
+        selectors = [
+            { target = "runtime:2" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/af/47/b215df9f71b4fdba1025fc05a77db2ad243fa0926755a52c5e71659f4e3c/urllib3-2.0.7.tar.gz", hash = "sha256:c97dfde1f7bd43a71c8d2a58e369e9b2bf692d1334ea9f9cae55add7d0dd0f84", size = 282546, upload-time = "2023-10-17T17:46:50.542Z" }
         wheels = [
@@ -2972,9 +2982,9 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         name = "urllib3"
         version = "2.2.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.10'",
-            "python_full_version >= '3.8' and python_full_version < '3.10'",
+        selectors = [
+            { target = "runtime:0" },
+            { target = "runtime:1" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/7a/50/7fd50a27caa0652cd4caf224aa87741ea41d3265ad13f010886167cfcc79/urllib3-2.2.1.tar.gz", hash = "sha256:d0570876c61ab9e520d776c38acbbb5b05a776d3f9ff98a5c8fd5162a444cf19", size = 291020, upload-time = "2024-02-18T03:55:57.539Z" }
         wheels = [
@@ -3082,7 +3092,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -3315,7 +3325,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -3331,7 +3341,11 @@ fn lock_conflicting_project_basic1() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-7-project'" },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "project" } },
+        ] },
+        ] } } },
         ]
 
         [package.dev-dependencies]
@@ -3497,7 +3511,7 @@ fn lock_conflicting_workspace_members() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -3519,7 +3533,11 @@ fn lock_conflicting_workspace_members() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-7-example'" },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "example" } },
+        ] },
+        ] } } },
         ]
 
         [package.metadata]
@@ -3548,7 +3566,11 @@ fn lock_conflicting_workspace_members() -> Result<()> {
         version = "0.1.0"
         source = { editable = "subexample" }
         dependencies = [
-            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-10-subexample'" },
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "subexample" } },
+        ] },
+        ] } } },
         ]
 
         [package.metadata]
@@ -3764,7 +3786,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -3787,7 +3809,14 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-example-foo' or extra == 'project-7-example'" },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "example", extra = "foo" } },
+        ] },
+            { all-of = [
+            { active = { package = "example" } },
+        ] },
+        ] } } },
         ]
 
         [package.metadata]
@@ -3820,7 +3849,15 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
         version = "0.1.0"
         source = { editable = "subexample" }
         dependencies = [
-            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-10-subexample' or (extra == 'extra-7-example-foo' and extra == 'project-7-example')" },
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "subexample" } },
+        ] },
+            { all-of = [
+            { active = { package = "example", extra = "foo" } },
+            { active = { package = "example" } },
+        ] },
+        ] } } },
         ]
 
         [package.metadata]
@@ -4082,7 +4119,7 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -4105,8 +4142,16 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "indirection", extra = ["foo"], marker = "extra == 'project-7-example'" },
-            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-7-example'" },
+            { name = "indirection", extra = ["foo"], selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "example" } },
+        ] },
+        ] } } },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "example" } },
+        ] },
+        ] } } },
         ]
 
         [package.metadata]
@@ -4122,7 +4167,11 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
 
         [package.optional-dependencies]
         foo = [
-            { name = "subexample", marker = "extra == 'project-10-subexample'" },
+            { name = "subexample", selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "subexample" } },
+        ] },
+        ] } } },
         ]
 
         [package.metadata]
@@ -4152,7 +4201,11 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
         version = "0.1.0"
         source = { editable = "subexample" }
         dependencies = [
-            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-10-subexample'" },
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "subexample" } },
+        ] },
+        ] } } },
         ]
 
         [package.metadata]
@@ -4260,7 +4313,7 @@ fn lock_conflicting_project_basic2() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -4289,8 +4342,16 @@ fn lock_conflicting_project_basic2() -> Result<()> {
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "idna", marker = "extra == 'project-7-example'" },
-            { name = "sniffio", marker = "extra == 'project-7-example'" },
+            { name = "idna", selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "example" } },
+        ] },
+        ] } } },
+            { name = "sniffio", selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "example" } },
+        ] },
+        ] } } },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
         wheels = [
@@ -4302,7 +4363,11 @@ fn lock_conflicting_project_basic2() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "anyio", version = "4.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-7-example'" },
+            { name = "anyio", version = "4.3.0", source = { registry = "https://pypi.org/simple" }, selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "example" } },
+        ] },
+        ] } } },
         ]
 
         [package.dev-dependencies]
@@ -4478,7 +4543,7 @@ fn lock_conflicting_mixed() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -4629,7 +4694,7 @@ fn lock_upgrade_log() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -4711,7 +4776,7 @@ fn lock_upgrade_log() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -4799,23 +4864,29 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform != 'win32'",
-            "sys_platform == 'win32'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'win32'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'win32'" }
 
         [[package]]
         name = "markupsafe"
         version = "1.1.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "sys_platform != 'win32'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/64db92e53b86efccfaea71321f597fa2e1b2bd3853d8ce658568f7a13094/MarkupSafe-1.1.1.tar.gz", hash = "sha256:29872e92839765e546828bb7754a68c418d927cd064fd4708fab9fe9c8bb116b", size = 19151, upload-time = "2019-02-24T01:05:32.989Z" }
 
@@ -4823,8 +4894,8 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         name = "markupsafe"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "sys_platform == 'win32'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/67/6a/5b3ed5c122e20c33d2562df06faf895a6b91b0a6b96a4626440ffe1d5c8e/MarkupSafe-2.0.0.tar.gz", hash = "sha256:4fae0677f712ee090721d8b17f412f1cbceefbf0dc180fe91bab3232f38b4527", size = 18466, upload-time = "2021-05-11T19:47:18.499Z" }
 
@@ -4885,7 +4956,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -5043,7 +5114,7 @@ fn lock_check_refresh_workspace_conflicts() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -5111,10 +5182,36 @@ fn lock_check_refresh_workspace_conflicts() -> Result<()> {
 
         [package.optional-dependencies]
         non-prod = [
-            { name = "package-a", extra = ["non-prod"], marker = "(extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-14-workspace-demo-prod') or (extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-9-package-a-non-prod') or (extra == 'extra-9-package-a-non-prod' and extra == 'extra-9-package-a-prod')" },
+            { name = "package-a", extra = ["non-prod"], selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "workspace-demo", extra = "non-prod" } },
+            { active = { package = "workspace-demo", extra = "prod" } },
+        ] },
+            { all-of = [
+            { active = { package = "workspace-demo", extra = "non-prod" } },
+            { active = { package = "package-a", extra = "non-prod" } },
+        ] },
+            { all-of = [
+            { active = { package = "package-a", extra = "non-prod" } },
+            { active = { package = "package-a", extra = "prod" } },
+        ] },
+        ] } } },
         ]
         prod = [
-            { name = "package-a", extra = ["prod"], marker = "(extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-14-workspace-demo-prod') or (extra == 'extra-14-workspace-demo-prod' and extra == 'extra-9-package-a-prod') or (extra == 'extra-9-package-a-non-prod' and extra == 'extra-9-package-a-prod')" },
+            { name = "package-a", extra = ["prod"], selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "workspace-demo", extra = "non-prod" } },
+            { active = { package = "workspace-demo", extra = "prod" } },
+        ] },
+            { all-of = [
+            { active = { package = "workspace-demo", extra = "prod" } },
+            { active = { package = "package-a", extra = "prod" } },
+        ] },
+            { all-of = [
+            { active = { package = "package-a", extra = "non-prod" } },
+            { active = { package = "package-a", extra = "prod" } },
+        ] },
+        ] } } },
         ]
 
         [package.metadata]
@@ -5175,7 +5272,7 @@ fn lock_preference() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -5235,7 +5332,7 @@ fn lock_preference() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -5282,7 +5379,7 @@ fn lock_preference() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -5351,7 +5448,7 @@ fn lock_git_plus_prefix() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -5437,23 +5534,29 @@ fn lock_partial_git() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10"
-        resolution-markers = [
-            "python_full_version >= '3.12'",
-            "python_full_version < '3.12'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.12'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.12'" }
 
         [[package]]
         name = "anyio"
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.12'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         dependencies = [
             { name = "idna", marker = "python_full_version >= '3.12'" },
@@ -5468,8 +5571,8 @@ fn lock_partial_git() -> Result<()> {
         name = "anyio"
         version = "4.6.2"
         source = { git = "https://github.com/agronholm/anyio?rev=4.6.2#c4844254e6db0cb804c240ba07405db73d810e0b" }
-        resolution-markers = [
-            "python_full_version < '3.12'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
@@ -5577,7 +5680,7 @@ fn lock_unsupported_tag() -> Result<()> {
 
     let lock = context.temp_dir.child("uv.lock");
     lock.write_str(r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12.0"
 
@@ -5664,7 +5767,7 @@ fn lock_git_sha() -> Result<()> {
     // the latest.
     let lock = context.temp_dir.child("uv.lock");
     lock.write_str(r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -5730,7 +5833,7 @@ fn lock_git_sha() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -5830,18 +5933,32 @@ fn lock_requires_python() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.7"
-        resolution-markers = [
-            "python_full_version >= '3.8'",
-            "python_full_version >= '3.7.9' and python_full_version < '3.8'",
-            "python_full_version >= '3.7.4' and python_full_version < '3.7.9'",
-            "python_full_version < '3.7.4'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.8'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.7.9' and python_full_version < '3.8'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.7.4' and python_full_version < '3.7.9'" }
+
+        [[resolution]]
+        id = "runtime:3"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.7.4'" }
 
         [[package]]
         name = "attrs"
@@ -5859,10 +5976,10 @@ fn lock_requires_python() -> Result<()> {
         name = "cattrs"
         version = "23.1.2"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.7.9' and python_full_version < '3.8'",
-            "python_full_version >= '3.7.4' and python_full_version < '3.7.9'",
-            "python_full_version < '3.7.4'",
+        selectors = [
+            { target = "runtime:1" },
+            { target = "runtime:2" },
+            { target = "runtime:3" },
         ]
         dependencies = [
             { name = "attrs", marker = "python_full_version < '3.8'" },
@@ -5878,8 +5995,8 @@ fn lock_requires_python() -> Result<()> {
         name = "cattrs"
         version = "23.2.3"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.8'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         dependencies = [
             { name = "attrs", marker = "python_full_version >= '3.8'" },
@@ -5917,8 +6034,8 @@ fn lock_requires_python() -> Result<()> {
         name = "lsprotocol"
         version = "2023.0.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.7.9' and python_full_version < '3.8'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "attrs", marker = "python_full_version >= '3.7.9' and python_full_version < '3.8'" },
@@ -5933,10 +6050,10 @@ fn lock_requires_python() -> Result<()> {
         name = "lsprotocol"
         version = "2023.0.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.8'",
-            "python_full_version >= '3.7.4' and python_full_version < '3.7.9'",
-            "python_full_version < '3.7.4'",
+        selectors = [
+            { target = "runtime:0" },
+            { target = "runtime:2" },
+            { target = "runtime:3" },
         ]
         dependencies = [
             { name = "attrs", marker = "python_full_version < '3.7.9' or python_full_version >= '3.8'" },
@@ -5966,8 +6083,8 @@ fn lock_requires_python() -> Result<()> {
         name = "pygls"
         version = "1.0.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version < '3.7.4'",
+        selectors = [
+            { target = "runtime:3" },
         ]
         dependencies = [
             { name = "lsprotocol", version = "2023.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.7.4'" },
@@ -5982,8 +6099,8 @@ fn lock_requires_python() -> Result<()> {
         name = "pygls"
         version = "1.0.2"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.7.4' and python_full_version < '3.7.9'",
+        selectors = [
+            { target = "runtime:2" },
         ]
         dependencies = [
             { name = "lsprotocol", version = "2023.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.7.4' and python_full_version < '3.7.9'" },
@@ -5998,8 +6115,8 @@ fn lock_requires_python() -> Result<()> {
         name = "pygls"
         version = "1.2.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.7.9' and python_full_version < '3.8'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "lsprotocol", version = "2023.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.7.9' and python_full_version < '3.8'" },
@@ -6013,8 +6130,8 @@ fn lock_requires_python() -> Result<()> {
         name = "pygls"
         version = "1.3.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.8'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         dependencies = [
             { name = "cattrs", version = "23.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.8'" },
@@ -6029,8 +6146,8 @@ fn lock_requires_python() -> Result<()> {
         name = "typeguard"
         version = "2.13.3"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version < '3.7.4'",
+        selectors = [
+            { target = "runtime:3" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/3a/38/c61bfcf62a7b572b5e9363a802ff92559cb427ee963048e1442e3aef7490/typeguard-2.13.3.tar.gz", hash = "sha256:00edaa8da3a133674796cf5ea87d9f4b4c367d77476e185e80251cc13dfbb8c4", size = 40604, upload-time = "2021-12-10T21:09:39.158Z" }
         wheels = [
@@ -6041,8 +6158,8 @@ fn lock_requires_python() -> Result<()> {
         name = "typeguard"
         version = "3.0.2"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.7.4' and python_full_version < '3.7.9'",
+        selectors = [
+            { target = "runtime:2" },
         ]
         dependencies = [
             { name = "importlib-metadata", marker = "python_full_version >= '3.7.4' and python_full_version < '3.7.9'" },
@@ -6057,10 +6174,10 @@ fn lock_requires_python() -> Result<()> {
         name = "typing-extensions"
         version = "4.7.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.7.9' and python_full_version < '3.8'",
-            "python_full_version >= '3.7.4' and python_full_version < '3.7.9'",
-            "python_full_version < '3.7.4'",
+        selectors = [
+            { target = "runtime:1" },
+            { target = "runtime:2" },
+            { target = "runtime:3" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/3c/8b/0111dd7d6c1478bf83baa1cab85c686426c7a6274119aceb2bd9d35395ad/typing_extensions-4.7.1.tar.gz", hash = "sha256:b75ddc264f0ba5615db7ba217daeb99701ad295353c45f9e95963337ceeeffb2", size = 72876, upload-time = "2023-07-02T14:20:55.045Z" }
         wheels = [
@@ -6071,8 +6188,8 @@ fn lock_requires_python() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.8'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
         wheels = [
@@ -6121,16 +6238,22 @@ fn lock_requires_python() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.7.9"
-        resolution-markers = [
-            "python_full_version >= '3.8'",
-            "python_full_version < '3.8'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.8'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.8'" }
 
         [[package]]
         name = "attrs"
@@ -6148,8 +6271,8 @@ fn lock_requires_python() -> Result<()> {
         name = "cattrs"
         version = "23.1.2"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version < '3.8'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "attrs", marker = "python_full_version < '3.8'" },
@@ -6165,8 +6288,8 @@ fn lock_requires_python() -> Result<()> {
         name = "cattrs"
         version = "23.2.3"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.8'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         dependencies = [
             { name = "attrs", marker = "python_full_version >= '3.8'" },
@@ -6204,8 +6327,8 @@ fn lock_requires_python() -> Result<()> {
         name = "lsprotocol"
         version = "2023.0.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version < '3.8'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "attrs", marker = "python_full_version < '3.8'" },
@@ -6220,8 +6343,8 @@ fn lock_requires_python() -> Result<()> {
         name = "lsprotocol"
         version = "2023.0.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.8'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         dependencies = [
             { name = "attrs", marker = "python_full_version >= '3.8'" },
@@ -6248,8 +6371,8 @@ fn lock_requires_python() -> Result<()> {
         name = "pygls"
         version = "1.2.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version < '3.8'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "lsprotocol", version = "2023.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.8'" },
@@ -6263,8 +6386,8 @@ fn lock_requires_python() -> Result<()> {
         name = "pygls"
         version = "1.3.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.8'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         dependencies = [
             { name = "cattrs", version = "23.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.8'" },
@@ -6279,8 +6402,8 @@ fn lock_requires_python() -> Result<()> {
         name = "typing-extensions"
         version = "4.7.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version < '3.8'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/3c/8b/0111dd7d6c1478bf83baa1cab85c686426c7a6274119aceb2bd9d35395ad/typing_extensions-4.7.1.tar.gz", hash = "sha256:b75ddc264f0ba5615db7ba217daeb99701ad295353c45f9e95963337ceeeffb2", size = 72876, upload-time = "2023-07-02T14:20:55.045Z" }
         wheels = [
@@ -6291,8 +6414,8 @@ fn lock_requires_python() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.8'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
         wheels = [
@@ -6341,7 +6464,7 @@ fn lock_requires_python() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -6480,7 +6603,7 @@ fn lock_requires_python_upper() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.11.*"
 
@@ -6605,7 +6728,7 @@ fn lock_requires_python_exact() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.13"
 
@@ -6747,7 +6870,7 @@ fn lock_requires_python_fork() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.9"
 
@@ -6842,7 +6965,7 @@ fn lock_requires_python_wheels() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.12.*"
 
@@ -6927,7 +7050,7 @@ fn lock_requires_python_wheels() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.11.*"
 
@@ -7021,7 +7144,7 @@ fn lock_requires_python_star() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.11.*"
 
@@ -7143,7 +7266,7 @@ fn lock_requires_python_not_equal() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">3.10, !=3.10.9, !=3.10.10, !=3.11.*, <3.13"
 
@@ -7222,7 +7345,7 @@ fn lock_requires_python_pre() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
 
@@ -7344,23 +7467,29 @@ fn lock_requires_python_unbounded() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "<=3.12"
-        resolution-markers = [
-            "python_full_version >= '3.7'",
-            "python_full_version < '3.7'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.7'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.7'" }
 
         [[package]]
         name = "iniconfig"
         version = "1.1.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version < '3.7'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/23/a2/97899f6bd0e873fed3a7e67ae8d3a08b21799430fb4da15cfedf10d6e2c2/iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32", size = 8104, upload-time = "2020-10-14T10:20:18.572Z" }
         wheels = [
@@ -7371,8 +7500,8 @@ fn lock_requires_python_unbounded() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.7'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
@@ -7485,23 +7614,29 @@ fn lock_requires_python_maximum_version() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.8"
-        resolution-markers = [
-            "python_full_version >= '3.9'",
-            "python_full_version < '3.9'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.9'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.9'" }
 
         [[package]]
         name = "numpy"
         version = "1.24.4"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version < '3.9'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/a4/9b/027bec52c633f6556dba6b722d9a0befb40498b9ceddd29cbe67a45a127c/numpy-1.24.4.tar.gz", hash = "sha256:80f5e3a4e498641401868df4208b74581206afbee7cf7b8329daae82676d9463", size = 10911229, upload-time = "2023-06-26T13:39:33.218Z" }
         wheels = [
@@ -7538,8 +7673,8 @@ fn lock_requires_python_maximum_version() -> Result<()> {
         name = "numpy"
         version = "1.26.4"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.9'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/65/6e/09db70a523a96d25e115e71cc56a6f9031e7b8cd166c1ac8438307c14058/numpy-1.26.4.tar.gz", hash = "sha256:2a02aba9ed12e4ac4eb3ea9421c420301a0c6460d9830d74a9df87efa4912010", size = 15786129, upload-time = "2024-02-06T00:26:44.495Z" }
         wheels = [
@@ -7644,7 +7779,7 @@ fn lock_requires_python_fewest_versions() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.8"
 
@@ -7761,18 +7896,32 @@ fn lock_python_version_marker_complement() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.8"
-        resolution-markers = [
-            "python_full_version >= '3.11'",
-            "python_full_version > '3.10' and python_full_version < '3.11'",
-            "python_full_version == '3.10'",
-            "python_full_version < '3.10'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.11'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version > '3.10' and python_full_version < '3.11'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "python_full_version == '3.10'" }
+
+        [[resolution]]
+        id = "runtime:3"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.10'" }
 
         [[package]]
         name = "attrs"
@@ -7873,7 +8022,7 @@ fn lock_dev() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -7990,7 +8139,7 @@ fn lock_conditional_unconditional() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -8068,7 +8217,7 @@ fn lock_multiple_markers() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -8184,7 +8333,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11, <3.13"
 
@@ -8297,7 +8446,7 @@ fn lock_pep508_urls_with_vars() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11, <3.13"
 
@@ -8411,7 +8560,7 @@ fn lock_constraint_dependency_absolute_path() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -8531,7 +8680,7 @@ fn lock_index_absolute_path_from_config() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -8595,7 +8744,7 @@ fn lock_cycles() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -8798,7 +8947,7 @@ fn lock_new_extras() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -8923,7 +9072,7 @@ fn lock_new_extras() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -9058,7 +9207,7 @@ fn lock_invalid_hash() -> Result<()> {
     let lock = context.temp_dir.child("uv.lock");
 
     lock.write_str(r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -9233,7 +9382,7 @@ fn lock_mixed_hashes() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.13"
 
@@ -9315,7 +9464,7 @@ fn lock_mixed_hashes() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.13"
 
@@ -9457,7 +9606,7 @@ async fn lock_zstd_wheel() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.13"
 
@@ -9517,7 +9666,7 @@ fn lock_resolution_mode() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -9598,7 +9747,7 @@ fn lock_resolution_mode() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -9760,23 +9909,29 @@ fn lock_same_version_multiple_urls() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-            "sys_platform != 'darwin'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin'" }
 
         [[package]]
         name = "anyio"
         version = "3.0.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "sys_platform != 'darwin'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "idna", marker = "sys_platform != 'darwin'" },
@@ -9791,8 +9946,8 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         name = "anyio"
         version = "3.7.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "sys_platform == 'darwin'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         dependencies = [
             { name = "idna", marker = "sys_platform == 'darwin'" },
@@ -9807,8 +9962,8 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         name = "dependency"
         version = "0.0.1"
         source = { directory = "[TEMP_DIR]/v1" }
-        resolution-markers = [
-            "sys_platform == 'darwin'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         dependencies = [
             { name = "anyio", version = "3.7.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
@@ -9821,8 +9976,8 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         name = "dependency"
         version = "0.0.1"
         source = { directory = "[TEMP_DIR]/v2" }
-        resolution-markers = [
-            "sys_platform != 'darwin'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "anyio", version = "3.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin'" },
@@ -9982,7 +10137,7 @@ fn lock_exclusion() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -10083,7 +10238,7 @@ fn lock_relative_lock_deserialization() -> Result<()> {
     // trigger the bug.
     child.child("uv.lock").write_str(
         r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -10288,7 +10443,7 @@ fn lock_peer_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -10413,7 +10568,7 @@ async fn lock_index_workspace_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -10566,7 +10721,7 @@ fn lock_dev_transitive() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -10700,7 +10855,7 @@ async fn lock_redact_http() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -10965,7 +11120,7 @@ fn lock_redact_git_pep508() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11053,7 +11208,7 @@ fn lock_redact_git_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11139,7 +11294,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11225,7 +11380,7 @@ async fn lock_redact_index_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11314,7 +11469,7 @@ async fn lock_redact_url_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11424,7 +11579,7 @@ async fn lock_env_credentials() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11591,7 +11746,7 @@ async fn lock_relative_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11704,7 +11859,7 @@ fn lock_no_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11795,7 +11950,7 @@ fn lock_no_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -11898,7 +12053,7 @@ fn lock_migrate() -> Result<()> {
     let lock = context.temp_dir.child("uv.lock");
     lock.write_str(
         r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -11966,7 +12121,7 @@ fn lock_migrate() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -12065,7 +12220,7 @@ fn lock_upgrade_package() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -12161,7 +12316,7 @@ fn lock_upgrade_package() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -12245,7 +12400,7 @@ fn lock_upgrade_package() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -12557,7 +12712,8 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
         .assert()
         .success();
     let lock = context.read("uv.lock");
-    assert!(lock.contains("resolution-markers"));
+    assert!(lock.contains("[[resolution]]"));
+    assert!(lock.contains("kind = \"runtime\""));
 
     // Remove the bound and lock with `--upgrade`.
     pyproject_toml.write_str(&requirements.replace("foo==1", "foo"))?;
@@ -12570,6 +12726,7 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
         .assert()
         .success();
     let lock = context.read("uv.lock");
+    assert!(!lock.contains("[[resolution]]"));
     assert!(!lock.contains("resolution-markers"));
     Ok(())
 }
@@ -12662,7 +12819,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -12783,7 +12940,7 @@ fn lock_find_links_ignore_explicit_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -12900,7 +13057,7 @@ fn lock_find_links_relative_url() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -13013,7 +13170,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -13105,7 +13262,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -13197,7 +13354,7 @@ fn lock_find_links_http_sdist() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -13315,7 +13472,7 @@ fn lock_find_links_explicit_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -13417,7 +13574,7 @@ fn lock_find_links_higher_priority_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -13512,7 +13669,7 @@ fn lock_find_links_lower_priority_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -13648,7 +13805,7 @@ fn lock_local_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.13"
 
@@ -13736,7 +13893,7 @@ fn lock_sources_url() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -13941,7 +14098,7 @@ fn lock_sources_archive() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -14091,7 +14248,7 @@ fn lock_sources_source_tree() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -14228,7 +14385,7 @@ fn lock_editable() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -14411,7 +14568,7 @@ fn lock_mixed_extras() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -14608,7 +14765,7 @@ fn lock_transitive_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -14760,7 +14917,7 @@ fn lock_mismatched_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -14804,7 +14961,7 @@ fn lock_mismatched_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -14872,7 +15029,7 @@ fn lock_mismatched_versions() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -14964,7 +15121,7 @@ fn lock_no_sources_package() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -15071,7 +15228,7 @@ fn lock_no_sources_package_multiple() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -15188,7 +15345,7 @@ fn lock_no_sources_with_no_sources_package() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -15297,7 +15454,7 @@ fn lock_no_sources_package_env_var() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -15546,7 +15703,7 @@ fn normalize_false_marker_dependency_groups() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
 
@@ -15614,7 +15771,7 @@ fn normalize_false_marker_requires_dist() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
 
@@ -15668,7 +15825,7 @@ async fn lock_change_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -15715,7 +15872,7 @@ async fn lock_change_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -15809,7 +15966,7 @@ fn lock_remove_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -15933,7 +16090,7 @@ fn lock_remove_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16039,7 +16196,7 @@ fn lock_remove_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16097,7 +16254,7 @@ fn lock_add_member_with_build_system() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16208,7 +16365,7 @@ fn lock_add_member_with_build_system() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16309,7 +16466,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16416,7 +16573,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16535,7 +16692,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16645,7 +16802,7 @@ fn lock_redundant_add_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16750,7 +16907,7 @@ fn lock_redundant_add_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16842,7 +16999,7 @@ fn lock_new_constraints() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -16949,7 +17106,7 @@ fn lock_new_constraints() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -17054,7 +17211,7 @@ fn lock_remove_member_non_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -17163,7 +17320,7 @@ fn lock_remove_member_non_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -17210,7 +17367,7 @@ fn lock_rename_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -17291,7 +17448,7 @@ fn lock_rename_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -17344,7 +17501,7 @@ fn lock_missing_metadata() -> Result<()> {
 
     // Write a lockfile with a missing `[package.metadata]` section.
     lock.write_str(r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -17408,7 +17565,7 @@ fn lock_missing_metadata() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -17489,7 +17646,7 @@ fn lock_dev_dependencies_alias() -> Result<()> {
 
     // Write a lockfile with `[package.dev-dependencies]`.
     lock.write_str(r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -17562,7 +17719,7 @@ fn lock_dev_dependencies_alias() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -17645,7 +17802,7 @@ fn lock_reorder() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -17795,18 +17952,20 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.7, <4"
-        resolution-markers = [
-            "python_full_version >= '3.10'",
-        ]
         supported-markers = [
             "python_full_version >= '3.10'",
         ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.10'" }
 
         [[package]]
         name = "dependency"
@@ -17906,17 +18065,27 @@ fn lock_narrowed_python_version() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.7"
-        resolution-markers = [
-            "python_full_version >= '3.11'",
-            "python_full_version >= '3.9' and python_full_version < '3.11'",
-            "python_full_version < '3.9'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.11'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.9' and python_full_version < '3.11'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.9'" }
 
         [[package]]
         name = "dependency"
@@ -18006,16 +18175,22 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-            "sys_platform != 'darwin'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin'" }
 
         [[package]]
         name = "anyio"
@@ -18114,18 +18289,20 @@ fn lock_constrained_environment() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform != 'win32'",
-        ]
         supported-markers = [
             "sys_platform != 'win32'",
         ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'win32'" }
 
         [[package]]
         name = "black"
@@ -18292,7 +18469,7 @@ fn lock_constrained_environment() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -18438,12 +18615,9 @@ fn lock_constrained_environment_non_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform != 'win32'",
-        ]
         supported-markers = [
             "sys_platform != 'win32'",
         ]
@@ -18455,6 +18629,11 @@ fn lock_constrained_environment_non_project() -> Result<()> {
         members = [
             "child",
         ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'win32'" }
 
         [[package]]
         name = "black"
@@ -18627,13 +18806,9 @@ fn lock_non_project_fork() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10"
-        resolution-markers = [
-            "python_full_version >= '3.11'",
-            "python_full_version < '3.11'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -18646,12 +18821,22 @@ fn lock_non_project_fork() -> Result<()> {
             { name = "anyio", marker = "python_full_version >= '3.11'", specifier = "<3" },
         ]
 
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.11'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.11'" }
+
         [[package]]
         name = "anyio"
         version = "2.2.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.11'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         dependencies = [
             { name = "idna", marker = "python_full_version >= '3.11'" },
@@ -18666,8 +18851,8 @@ fn lock_non_project_fork() -> Result<()> {
         name = "anyio"
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version < '3.11'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
@@ -18820,7 +19005,7 @@ fn lock_non_project_conditional() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -18929,7 +19114,7 @@ fn lock_non_project_group() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10"
 
@@ -19069,7 +19254,7 @@ fn lock_non_project_group_standard() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10"
 
@@ -19165,7 +19350,7 @@ fn lock_non_project_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -19302,7 +19487,7 @@ fn lock_non_project_member_conflicts() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
@@ -19324,7 +19509,11 @@ fn lock_non_project_member_conflicts() -> Result<()> {
         version = "0.1.0"
         source = { editable = "member-a" }
         dependencies = [
-            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-8-member-a'" },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "member-a" } },
+        ] },
+        ] } } },
         ]
 
         [package.metadata]
@@ -19335,7 +19524,11 @@ fn lock_non_project_member_conflicts() -> Result<()> {
         version = "0.1.0"
         source = { editable = "member-b" }
         dependencies = [
-            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-8-member-b'" },
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, selector = { target = { any-of = [
+            { all-of = [
+            { active = { package = "member-b" } },
+        ] },
+        ] } } },
         ]
 
         [package.metadata]
@@ -19469,7 +19662,7 @@ fn lock_dropped_dev_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -19587,7 +19780,7 @@ fn lock_empty_dev_dependencies() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -19694,7 +19887,7 @@ fn lock_empty_dependency_group() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -19795,7 +19988,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -19877,7 +20070,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -19959,7 +20152,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -20037,7 +20230,7 @@ fn lock_trailing_slash_index_url() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -20213,7 +20406,7 @@ fn lock_explicit_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -20321,7 +20514,7 @@ fn lock_explicit_default_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -20412,7 +20605,7 @@ fn lock_explicit_default_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -20582,7 +20775,7 @@ async fn lock_named_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -20651,7 +20844,7 @@ fn lock_default_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -20714,7 +20907,7 @@ fn lock_default_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -20794,7 +20987,7 @@ fn lock_named_index_cli() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -21090,7 +21283,7 @@ fn lock_repeat_named_index_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -21179,7 +21372,7 @@ fn lock_unique_named_index() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -21253,7 +21446,7 @@ fn lock_repeat_named_index_cli() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -21321,7 +21514,7 @@ fn lock_repeat_named_index_cli() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -21420,16 +21613,22 @@ fn lock_named_index_overlap() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'linux'",
-            "sys_platform != 'linux'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'linux'" }
 
         [[package]]
         name = "iniconfig"
@@ -21503,7 +21702,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -21725,7 +21924,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -21956,7 +22155,7 @@ fn lock_implicit_package_path() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -22140,13 +22339,9 @@ fn lock_split_python_environment() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.7"
-        resolution-markers = [
-            "python_full_version < '3.8'",
-            "python_full_version >= '3.8'",
-        ]
         supported-markers = [
             "python_full_version < '3.8'",
             "python_full_version >= '3.8'",
@@ -22154,6 +22349,16 @@ fn lock_split_python_environment() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.8'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.8'" }
 
         [[package]]
         name = "foo"
@@ -22251,17 +22456,27 @@ fn lock_python_upper_bound() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.8"
-        resolution-markers = [
-            "python_full_version >= '3.9' and python_full_version < '3.13'",
-            "python_full_version < '3.9'",
-            "python_full_version >= '3.13'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.9' and python_full_version < '3.13'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.9'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.13'" }
 
         [[package]]
         name = "click"
@@ -22348,8 +22563,8 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "numpy"
         version = "1.24.4"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version < '3.9'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/a4/9b/027bec52c633f6556dba6b722d9a0befb40498b9ceddd29cbe67a45a127c/numpy-1.24.4.tar.gz", hash = "sha256:80f5e3a4e498641401868df4208b74581206afbee7cf7b8329daae82676d9463", size = 10911229, upload-time = "2023-06-26T13:39:33.218Z" }
         wheels = [
@@ -22386,8 +22601,8 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "numpy"
         version = "1.26.4"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.9' and python_full_version < '3.13'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/65/6e/09db70a523a96d25e115e71cc56a6f9031e7b8cd166c1ac8438307c14058/numpy-1.26.4.tar.gz", hash = "sha256:2a02aba9ed12e4ac4eb3ea9421c420301a0c6460d9830d74a9df87efa4912010", size = 15786129, upload-time = "2024-02-06T00:26:44.495Z" }
         wheels = [
@@ -22623,13 +22838,9 @@ fn lock_simplified_environments() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.11.*"
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-            "sys_platform != 'darwin'",
-        ]
         supported-markers = [
             "sys_platform == 'darwin'",
             "sys_platform != 'darwin'",
@@ -22637,6 +22848,16 @@ fn lock_simplified_environments() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin'" }
 
         [[package]]
         name = "iniconfig"
@@ -22733,7 +22954,7 @@ fn lock_dependency_metadata() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -22975,7 +23196,7 @@ fn lock_dependency_metadata_git() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -23088,7 +23309,7 @@ fn lock_strip_fragment() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -23380,7 +23601,7 @@ fn lock_unsupported_version() -> Result<()> {
     // Validate schema, invalid version.
     context.temp_dir.child("uv.lock").write_str(
         r#"
-        version = 2
+        version = 3
         requires-python = ">=3.12"
 
         [options]
@@ -23414,13 +23635,13 @@ fn lock_unsupported_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The lockfile at `uv.lock` uses an unsupported schema version (v2, but only v1 is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
+    error: The lockfile at `uv.lock` uses an unsupported schema version (v3, but the maximum supported version is v2). Upgrade uv, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
     ");
 
     // Invalid schema (`iniconfig` is referenced, but missing), invalid version.
     context.temp_dir.child("uv.lock").write_str(
         r#"
-        version = 2
+        version = 3
         requires-python = ">=3.12"
 
         [options]
@@ -23445,7 +23666,7 @@ fn lock_unsupported_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `uv.lock`, which uses an unsupported schema version (v2, but only v1 is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
+    error: Failed to parse `uv.lock`, which uses an unsupported schema version (v3, but the maximum supported version is v2). Upgrade uv, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
       Caused by: Dependency `iniconfig` has missing `source` field but has more than one matching package
     ");
 
@@ -23487,23 +23708,29 @@ fn lock_change_requires_python() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "python_full_version >= '3.13'",
-            "python_full_version < '3.13'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.13'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.13'" }
 
         [[package]]
         name = "anyio"
         version = "2.2.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version < '3.13'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "idna", marker = "python_full_version < '3.13'" },
@@ -23518,8 +23745,8 @@ fn lock_change_requires_python() -> Result<()> {
         name = "anyio"
         version = "3.7.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.13'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         dependencies = [
             { name = "idna", marker = "python_full_version >= '3.13'" },
@@ -23597,24 +23824,34 @@ fn lock_change_requires_python() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10"
-        resolution-markers = [
-            "python_full_version >= '3.13'",
-            "python_full_version == '3.12.*'",
-            "python_full_version < '3.12'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.13'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version == '3.12.*'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.12'" }
 
         [[package]]
         name = "anyio"
         version = "2.2.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version == '3.12.*'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "idna", marker = "python_full_version == '3.12.*'" },
@@ -23629,8 +23866,8 @@ fn lock_change_requires_python() -> Result<()> {
         name = "anyio"
         version = "3.7.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.13'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         dependencies = [
             { name = "idna", marker = "python_full_version >= '3.13'" },
@@ -23744,7 +23981,7 @@ async fn lock_keyring_credentials() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -23938,7 +24175,7 @@ async fn lock_keyring_credentials_always_authenticate_fetches_username() -> Resu
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -24067,23 +24304,29 @@ fn lock_multiple_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform != 'win32'",
-            "sys_platform == 'win32'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'win32'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'win32'" }
 
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
         source = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz" }
-        resolution-markers = [
-            "sys_platform == 'win32'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         sdist = { hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" }
 
@@ -24091,8 +24334,8 @@ fn lock_multiple_sources() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
-        resolution-markers = [
-            "sys_platform != 'win32'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
@@ -24249,13 +24492,9 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'win32'",
-            "sys_platform != 'win32'",
-        ]
 
         [options]
         exclude-newer = "2025-01-30T00:00:00Z"
@@ -24263,12 +24502,22 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
 
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'win32'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'win32'" }
+
         [[package]]
         name = "jinja2"
         version = "3.1.3"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
-        resolution-markers = [
-            "sys_platform == 'win32'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         dependencies = [
             { name = "markupsafe", marker = "sys_platform == 'win32'" },
@@ -24281,8 +24530,8 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
         name = "jinja2"
         version = "3.1.3"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
-        resolution-markers = [
-            "sys_platform != 'win32'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "markupsafe", marker = "sys_platform != 'win32'" },
@@ -24380,13 +24629,9 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'win32'",
-            "sys_platform != 'win32'",
-        ]
 
         [options]
         exclude-newer = "2025-01-30T00:00:00Z"
@@ -24394,12 +24639,22 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
 
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'win32'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'win32'" }
+
         [[package]]
         name = "jinja2"
         version = "3.1.3"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
-        resolution-markers = [
-            "sys_platform == 'win32'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         dependencies = [
             { name = "markupsafe", marker = "sys_platform == 'win32'" },
@@ -24412,8 +24667,8 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
         name = "jinja2"
         version = "3.1.4"
         source = { url = "https://files.pythonhosted.org/packages/31/80/3a54838c3fb461f6fec263ebf3a3a41771bd05190238de3486aae8540c36/jinja2-3.1.4-py3-none-any.whl" }
-        resolution-markers = [
-            "sys_platform != 'win32'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "markupsafe", marker = "sys_platform != 'win32'" },
@@ -24514,16 +24769,22 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'win32'",
-            "sys_platform != 'win32'",
-        ]
 
         [options]
         exclude-newer = "2025-01-30T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'win32'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'win32'" }
 
         [[package]]
         name = "jinja2"
@@ -24615,23 +24876,29 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'win32'",
-            "sys_platform != 'win32'",
-        ]
 
         [options]
         exclude-newer = "2025-01-30T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'win32'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'win32'" }
 
         [[package]]
         name = "jinja2"
         version = "3.1.4"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "sys_platform != 'win32'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "markupsafe", marker = "sys_platform != 'win32'" },
@@ -24645,8 +24912,8 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
         name = "jinja2"
         version = "3.1.4"
         source = { registry = "https://test.pypi.org/simple" }
-        resolution-markers = [
-            "sys_platform == 'win32'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         dependencies = [
             { name = "markupsafe", marker = "sys_platform == 'win32'" },
@@ -24761,23 +25028,29 @@ fn lock_multiple_sources_non_total() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-            "sys_platform != 'darwin'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin'" }
 
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "sys_platform != 'darwin'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
@@ -24788,8 +25061,8 @@ fn lock_multiple_sources_non_total() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
-        resolution-markers = [
-            "sys_platform == 'darwin'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
@@ -24862,7 +25135,7 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -24944,7 +25217,7 @@ fn lock_multiple_sources_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -25374,7 +25647,7 @@ fn lock_group_include() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -25561,16 +25834,22 @@ fn lock_group_requires_python() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "python_full_version >= '3.13'",
-            "python_full_version < '3.13'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.13'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.13'" }
 
         [[package]]
         name = "idna"
@@ -25683,18 +25962,32 @@ fn lock_group_includes_requires_python() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "python_full_version >= '3.13.1'",
-            "python_full_version >= '3.13' and python_full_version < '3.13.1'",
-            "python_full_version >= '3.12.[X]' and python_full_version < '3.13'",
-            "python_full_version < '3.12.[X]'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.13.1'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.13' and python_full_version < '3.13.1'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.12.[X]' and python_full_version < '3.13'" }
+
+        [[resolution]]
+        id = "runtime:3"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.12.[X]'" }
 
         [[package]]
         name = "idna"
@@ -25899,16 +26192,22 @@ fn lock_group_includes_requires_python_contradiction() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "python_full_version >= '3.13'",
-            "python_full_version < '3.13'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.13'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.13'" }
 
         [[package]]
         name = "idna"
@@ -26362,7 +26661,7 @@ fn lock_group_workspace() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -26553,7 +26852,7 @@ fn lock_transitive_git() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -26716,7 +27015,7 @@ fn lock_dynamic_version() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -26755,7 +27054,7 @@ fn lock_dynamic_version() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -26826,7 +27125,7 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -26865,7 +27164,7 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -26924,7 +27223,7 @@ fn lock_dynamic_version_no_build() -> Result<()> {
 
     context.temp_dir.child("uv.lock").write_str(indoc::indoc! {
     r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -27022,7 +27321,7 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -27092,7 +27391,7 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -27210,7 +27509,7 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -27274,7 +27573,7 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -27374,7 +27673,7 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -27534,7 +27833,7 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -27686,7 +27985,7 @@ fn lock_dynamic_built_cache() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -27733,7 +28032,7 @@ fn lock_dynamic_built_cache() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -27808,23 +28107,29 @@ fn lock_shared_build_dependency() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.8"
-        resolution-markers = [
-            "python_full_version >= '3.9'",
-            "python_full_version < '3.9'",
-        ]
 
         [options]
         exclude-newer = "2025-01-28T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.9'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.9'" }
 
         [[package]]
         name = "libcst"
         version = "1.1.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version < '3.9'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "pyyaml", marker = "python_full_version < '3.9'" },
@@ -27869,8 +28174,8 @@ fn lock_shared_build_dependency() -> Result<()> {
         name = "libcst"
         version = "1.6.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.9'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         dependencies = [
             { name = "pyyaml", marker = "python_full_version >= '3.9'" },
@@ -28087,7 +28392,7 @@ fn lock_dynamic_to_static() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -28144,7 +28449,7 @@ fn lock_dynamic_to_static() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -28198,7 +28503,7 @@ fn lock_static_to_dynamic() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -28275,7 +28580,7 @@ fn lock_static_to_dynamic() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -28323,7 +28628,7 @@ fn lock_bump_static_version() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -28377,7 +28682,7 @@ fn lock_bump_static_version() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -28716,7 +29021,7 @@ fn lock_relative_project() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -28818,7 +29123,7 @@ fn lock_recursive_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -28957,7 +29262,7 @@ fn lock_no_build_static_metadata() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -29082,7 +29387,7 @@ fn lock_self_compatible() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -29182,7 +29487,7 @@ fn lock_self_exact() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -29315,7 +29620,7 @@ fn lock_self_extra_to_extra_compatible() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -29486,7 +29791,7 @@ fn lock_self_extra_compatible() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -29620,7 +29925,7 @@ fn lock_self_marker_compatible() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -29755,19 +30060,25 @@ fn lock_split_on_windows() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform != 'win32'",
-            "sys_platform == 'win32'",
-        ]
         required-markers = [
             "sys_platform == 'win32'",
         ]
 
         [options]
         exclude-newer = "2024-12-18T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'win32'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'win32'" }
 
         [[package]]
         name = "project"
@@ -29785,8 +30096,8 @@ fn lock_split_on_windows() -> Result<()> {
         name = "pyqt5-qt5"
         version = "5.15.2"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "sys_platform == 'win32'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/1c/7e/ce7c66a541a105fa98b41d6405fe84940564695e29fc7dccf6d9e8c5f898/PyQt5_Qt5-5.15.2-py3-none-win32.whl", hash = "sha256:9cc7a768b1921f4b982ebc00a318ccb38578e44e45316c7a4a850e953e1dd327", size = 43447358, upload-time = "2021-03-10T14:01:17.827Z" },
@@ -29797,8 +30108,8 @@ fn lock_split_on_windows() -> Result<()> {
         name = "pyqt5-qt5"
         version = "5.15.15"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "sys_platform != 'win32'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/4a/6e/a5789bac6310208756fc6a36fd7e01caa86ea6ae7abbb5922dcea003a215/PyQt5_Qt5-5.15.15-py3-none-macosx_10_13_x86_64.whl", hash = "sha256:eb74072935958a830887115b1de1ff26341fc2d5881b28129de39612b10a260e", size = 39147807, upload-time = "2024-09-11T08:35:47.411Z" },
@@ -29879,18 +30190,20 @@ fn lock_arm() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "platform_machine == 'arm64'",
-        ]
         supported-markers = [
             "platform_machine == 'arm64'",
         ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "platform_machine == 'arm64'" }
 
         [[package]]
         name = "numpy"
@@ -29954,18 +30267,20 @@ fn lock_x86_64() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "platform_machine == 'x86_64'",
-        ]
         supported-markers = [
             "platform_machine == 'x86_64'",
         ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "platform_machine == 'x86_64'" }
 
         [[package]]
         name = "numpy"
@@ -30030,18 +30345,20 @@ fn lock_x86() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "platform_machine == 'i686'",
-        ]
         supported-markers = [
             "platform_machine == 'i686'",
         ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "platform_machine == 'i686'" }
 
         [[package]]
         name = "numpy"
@@ -30102,7 +30419,7 @@ fn lock_script() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
 
@@ -30239,7 +30556,7 @@ fn lock_script_path() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
 
@@ -30375,7 +30692,7 @@ fn lock_script_editable_path_dependency_change() -> Result<()> {
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
 
@@ -30459,7 +30776,7 @@ fn lock_script_editable_path_dependency_change() -> Result<()> {
         assert_snapshot!(
             lock,
             @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
 
@@ -30531,7 +30848,7 @@ fn lock_script_initialize() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -30639,16 +30956,9 @@ fn lock_pytorch_cpu() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12.[X]"
-        resolution-markers = [
-            "(python_full_version >= '3.13' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')",
-            "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124'",
-            "(python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124')",
-            "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124')",
-            "extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124'",
-        ]
         conflicts = [[
             { package = "project", extra = "cpu" },
             { package = "project", extra = "cu124" },
@@ -30684,6 +30994,100 @@ fn lock_pytorch_cpu() -> Result<()> {
             { name = "triton", specifier = "<=3.1.0" },
             { name = "typing-extensions", specifier = "<=4.12.2" },
         ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { any-of = [
+            { all-of = [
+            { marker = "python_full_version >= '3.13'" },
+            { inactive = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_machine != 'aarch64'" },
+            { inactive = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_python_implementation != 'CPython'" },
+            { inactive = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform != 'linux'" },
+            { inactive = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+        ] }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'", active = [
+            { package = "project", extra = "cu124" },
+        ], inactive = [
+            { package = "project", extra = "cpu" },
+        ] }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { any-of = [
+            { all-of = [
+            { marker = "python_full_version >= '3.13'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+            { inactive = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_machine != 'aarch64'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+            { inactive = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_python_implementation != 'CPython'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+            { inactive = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform != 'darwin'" },
+            { marker = "sys_platform != 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+            { inactive = { package = "project", extra = "cu124" } },
+        ] },
+        ] }
+
+        [[resolution]]
+        id = "runtime:3"
+        kind = "runtime"
+        target = { any-of = [
+            { all-of = [
+            { marker = "python_full_version < '3.13'" },
+            { marker = "platform_machine == 'aarch64'" },
+            { marker = "platform_python_implementation == 'CPython'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+            { inactive = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform == 'darwin'" },
+            { active = { package = "project", extra = "cpu" } },
+            { inactive = { package = "project", extra = "cu124" } },
+        ] },
+        ] }
+
+        [[resolution]]
+        id = "runtime:4"
+        kind = "runtime"
+        target = { any-of = [
+            { all-of = [
+            { inactive = { package = "project", extra = "cpu" } },
+            { inactive = { package = "project", extra = "cu124" } },
+        ] },
+        ] }
 
         [[package]]
         name = "filelock"
@@ -30989,16 +31393,244 @@ fn lock_pytorch_cpu() -> Result<()> {
 
         [package.optional-dependencies]
         cpu = [
-            { name = "torch", version = "2.5.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (python_full_version >= '3.13' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-            { name = "torch", version = "2.5.1+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (python_full_version < '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-            { name = "torchvision", version = "0.20.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (python_full_version >= '3.13' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-            { name = "torchvision", version = "0.20.1+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (python_full_version < '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
+            { name = "torch", version = "2.5.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, selector = { target = { any-of = [
+            { all-of = [
+            { marker = "python_full_version < '3.13'" },
+            { marker = "platform_machine == 'aarch64'" },
+            { marker = "platform_python_implementation == 'CPython'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { marker = "python_full_version >= '3.13'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_machine != 'aarch64'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_python_implementation != 'CPython'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform == 'darwin'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform != 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+        ] } } },
+            { name = "torch", version = "2.5.1+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, selector = { target = { any-of = [
+            { all-of = [
+            { marker = "python_full_version >= '3.13'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { marker = "python_full_version < '3.13'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_machine != 'aarch64'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { marker = "platform_python_implementation != 'CPython'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform != 'darwin'" },
+            { marker = "sys_platform != 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform == 'darwin'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+        ] } } },
+            { name = "torchvision", version = "0.20.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, selector = { target = { any-of = [
+            { all-of = [
+            { marker = "python_full_version < '3.13'" },
+            { marker = "platform_machine == 'aarch64'" },
+            { marker = "platform_python_implementation == 'CPython'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { marker = "python_full_version >= '3.13'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_machine != 'aarch64'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_python_implementation != 'CPython'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform == 'darwin'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform != 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+        ] } } },
+            { name = "torchvision", version = "0.20.1+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, selector = { target = { any-of = [
+            { all-of = [
+            { marker = "python_full_version >= '3.13'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { marker = "python_full_version < '3.13'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_machine != 'aarch64'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { marker = "platform_python_implementation != 'CPython'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform != 'darwin'" },
+            { marker = "sys_platform != 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform == 'darwin'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+        ] } } },
         ]
         cu124 = [
-            { name = "torch", version = "2.5.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cu124') or (python_full_version >= '3.13' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-            { name = "torch", version = "2.5.1+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version >= '3.13' and extra == 'extra-7-project-cu124') or (python_full_version < '3.13' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra == 'extra-7-project-cu124')" },
-            { name = "torchvision", version = "0.20.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cu124') or (python_full_version >= '3.13' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-            { name = "torchvision", version = "0.20.1+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version >= '3.13' and extra == 'extra-7-project-cu124') or (python_full_version < '3.13' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra == 'extra-7-project-cu124')" },
+            { name = "torch", version = "2.5.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, selector = { target = { any-of = [
+            { all-of = [
+            { marker = "python_full_version < '3.13'" },
+            { marker = "platform_machine == 'aarch64'" },
+            { marker = "platform_python_implementation == 'CPython'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "python_full_version >= '3.13'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_machine != 'aarch64'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_python_implementation != 'CPython'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform != 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+        ] } } },
+            { name = "torch", version = "2.5.1+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, selector = { target = { any-of = [
+            { all-of = [
+            { marker = "python_full_version >= '3.13'" },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "python_full_version < '3.13'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_machine != 'aarch64'" },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_python_implementation != 'CPython'" },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform != 'linux'" },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+        ] } } },
+            { name = "torchvision", version = "0.20.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, selector = { target = { any-of = [
+            { all-of = [
+            { marker = "python_full_version < '3.13'" },
+            { marker = "platform_machine == 'aarch64'" },
+            { marker = "platform_python_implementation == 'CPython'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "python_full_version >= '3.13'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_machine != 'aarch64'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_python_implementation != 'CPython'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform != 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+        ] } } },
+            { name = "torchvision", version = "0.20.1+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, selector = { target = { any-of = [
+            { all-of = [
+            { marker = "python_full_version >= '3.13'" },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "python_full_version < '3.13'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_machine != 'aarch64'" },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "platform_python_implementation != 'CPython'" },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform != 'linux'" },
+            { active = { package = "project", extra = "cu124" } },
+        ] },
+        ] } } },
         ]
 
         [package.metadata]
@@ -31037,8 +31669,8 @@ fn lock_pytorch_cpu() -> Result<()> {
         name = "torch"
         version = "2.5.1"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
-        resolution-markers = [
-            "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'",
+        selectors = [
+            { target = { marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'" } },
         ]
         dependencies = [
             { name = "filelock", marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'" },
@@ -31058,8 +31690,8 @@ fn lock_pytorch_cpu() -> Result<()> {
         name = "torch"
         version = "2.5.1"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
-        resolution-markers = [
-            "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
+        selectors = [
+            { target = { marker = "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" } },
         ]
         dependencies = [
             { name = "filelock", marker = "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
@@ -31078,8 +31710,8 @@ fn lock_pytorch_cpu() -> Result<()> {
         name = "torch"
         version = "2.5.1+cpu"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
-        resolution-markers = [
-            "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
+        selectors = [
+            { target = { marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" } },
         ]
         dependencies = [
             { name = "filelock", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
@@ -31100,8 +31732,8 @@ fn lock_pytorch_cpu() -> Result<()> {
         name = "torch"
         version = "2.5.1+cu124"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
-        resolution-markers = [
-            "python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'",
+        selectors = [
+            { target = { marker = "python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'" } },
         ]
         dependencies = [
             { name = "filelock", marker = "python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'" },
@@ -31135,8 +31767,8 @@ fn lock_pytorch_cpu() -> Result<()> {
         name = "torchvision"
         version = "0.20.1"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
-        resolution-markers = [
-            "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'",
+        selectors = [
+            { target = { marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'" } },
         ]
         dependencies = [
             { name = "numpy", marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'" },
@@ -31152,8 +31784,8 @@ fn lock_pytorch_cpu() -> Result<()> {
         name = "torchvision"
         version = "0.20.1"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
-        resolution-markers = [
-            "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
+        selectors = [
+            { target = { marker = "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" } },
         ]
         dependencies = [
             { name = "numpy", marker = "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
@@ -31168,8 +31800,8 @@ fn lock_pytorch_cpu() -> Result<()> {
         name = "torchvision"
         version = "0.20.1+cpu"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
-        resolution-markers = [
-            "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
+        selectors = [
+            { target = { marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" } },
         ]
         dependencies = [
             { name = "numpy", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
@@ -31185,8 +31817,8 @@ fn lock_pytorch_cpu() -> Result<()> {
         name = "torchvision"
         version = "0.20.1+cu124"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
-        resolution-markers = [
-            "python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'",
+        selectors = [
+            { target = { marker = "python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'" } },
         ]
         dependencies = [
             { name = "numpy", marker = "python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'" },
@@ -31292,17 +31924,9 @@ fn lock_pytorch_index_preferences() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10.0"
-        resolution-markers = [
-            "sys_platform != 'darwin' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu118'",
-            "sys_platform == 'darwin' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu118'",
-            "(python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118')",
-            "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118'",
-            "sys_platform == 'darwin' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118'",
-            "extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu118'",
-        ]
         conflicts = [[
             { package = "project", extra = "cpu" },
             { package = "project", extra = "cu118" },
@@ -31310,6 +31934,88 @@ fn lock_pytorch_index_preferences() -> Result<()> {
 
         [options]
         exclude-newer = "2025-01-30T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { any-of = [
+            { all-of = [
+            { marker = "sys_platform != 'darwin'" },
+            { inactive = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu118" } },
+        ] },
+        ] }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { any-of = [
+            { all-of = [
+            { marker = "sys_platform == 'darwin'" },
+            { inactive = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu118" } },
+        ] },
+        ] }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { any-of = [
+            { all-of = [
+            { marker = "python_full_version >= '3.13'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+            { inactive = { package = "project", extra = "cu118" } },
+        ] },
+            { all-of = [
+            { marker = "platform_machine != 'aarch64'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+            { inactive = { package = "project", extra = "cu118" } },
+        ] },
+            { all-of = [
+            { marker = "platform_python_implementation != 'CPython'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+            { inactive = { package = "project", extra = "cu118" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform != 'darwin'" },
+            { marker = "sys_platform != 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+            { inactive = { package = "project", extra = "cu118" } },
+        ] },
+        ] }
+
+        [[resolution]]
+        id = "runtime:3"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'", active = [
+            { package = "project", extra = "cpu" },
+        ], inactive = [
+            { package = "project", extra = "cu118" },
+        ] }
+
+        [[resolution]]
+        id = "runtime:4"
+        kind = "runtime"
+        target = { any-of = [
+            { all-of = [
+            { marker = "sys_platform == 'darwin'" },
+            { active = { package = "project", extra = "cpu" } },
+            { inactive = { package = "project", extra = "cu118" } },
+        ] },
+        ] }
+
+        [[resolution]]
+        id = "runtime:5"
+        kind = "runtime"
+        target = { any-of = [
+            { all-of = [
+            { inactive = { package = "project", extra = "cpu" } },
+            { inactive = { package = "project", extra = "cu118" } },
+        ] },
+        ] }
 
         [[package]]
         name = "filelock"
@@ -31545,13 +32251,100 @@ fn lock_pytorch_index_preferences() -> Result<()> {
 
         [package.optional-dependencies]
         cpu = [
-            { name = "torch", version = "2.2.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (python_full_version >= '3.13' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118') or (sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118')" },
-            { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118')" },
-            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (python_full_version < '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118')" },
+            { name = "torch", version = "2.2.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, selector = { target = { any-of = [
+            { all-of = [
+            { marker = "python_full_version < '3.13'" },
+            { marker = "platform_machine == 'aarch64'" },
+            { marker = "platform_python_implementation == 'CPython'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { marker = "python_full_version >= '3.13'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu118" } },
+        ] },
+            { all-of = [
+            { marker = "platform_machine != 'aarch64'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu118" } },
+        ] },
+            { all-of = [
+            { marker = "platform_python_implementation != 'CPython'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu118" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform != 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu118" } },
+        ] },
+        ] } } },
+            { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, selector = { target = { any-of = [
+            { all-of = [
+            { marker = "sys_platform == 'darwin'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu118" } },
+        ] },
+        ] } } },
+            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, selector = { target = { any-of = [
+            { all-of = [
+            { marker = "python_full_version >= '3.13'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { marker = "python_full_version < '3.13'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu118" } },
+        ] },
+            { all-of = [
+            { marker = "platform_machine != 'aarch64'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { marker = "platform_python_implementation != 'CPython'" },
+            { marker = "sys_platform == 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform != 'darwin'" },
+            { marker = "sys_platform != 'linux'" },
+            { active = { package = "project", extra = "cpu" } },
+        ] },
+            { all-of = [
+            { marker = "sys_platform == 'darwin'" },
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu118" } },
+        ] },
+        ] } } },
         ]
         cu118 = [
-            { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cu118') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118')" },
-            { name = "torch", version = "2.2.2+cu118", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "(sys_platform != 'darwin' and extra == 'extra-7-project-cu118') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118')" },
+            { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, selector = { target = { any-of = [
+            { all-of = [
+            { marker = "sys_platform == 'darwin'" },
+            { active = { package = "project", extra = "cu118" } },
+        ] },
+            { all-of = [
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu118" } },
+        ] },
+        ] } } },
+            { name = "torch", version = "2.2.2+cu118", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, selector = { target = { any-of = [
+            { all-of = [
+            { marker = "sys_platform != 'darwin'" },
+            { active = { package = "project", extra = "cu118" } },
+        ] },
+            { all-of = [
+            { active = { package = "project", extra = "cpu" } },
+            { active = { package = "project", extra = "cu118" } },
+        ] },
+        ] } } },
         ]
 
         [package.metadata]
@@ -31579,8 +32372,8 @@ fn lock_pytorch_index_preferences() -> Result<()> {
         name = "torch"
         version = "2.2.2"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
-        resolution-markers = [
-            "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
+        selectors = [
+            { target = { marker = "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" } },
         ]
         dependencies = [
             { name = "filelock", marker = "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
@@ -31606,8 +32399,8 @@ fn lock_pytorch_index_preferences() -> Result<()> {
         name = "torch"
         version = "2.2.2"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "sys_platform == 'darwin'",
+        selectors = [
+            { target = { marker = "sys_platform == 'darwin'" } },
         ]
         dependencies = [
             { name = "filelock", marker = "sys_platform == 'darwin'" },
@@ -31639,8 +32432,8 @@ fn lock_pytorch_index_preferences() -> Result<()> {
         name = "torch"
         version = "2.2.2+cpu"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
-        resolution-markers = [
-            "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
+        selectors = [
+            { target = { marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" } },
         ]
         dependencies = [
             { name = "filelock", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
@@ -31663,8 +32456,8 @@ fn lock_pytorch_index_preferences() -> Result<()> {
         name = "torch"
         version = "2.2.2+cu118"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
-        resolution-markers = [
-            "sys_platform != 'darwin'",
+        selectors = [
+            { target = { marker = "sys_platform != 'darwin'" } },
         ]
         dependencies = [
             { name = "filelock", marker = "sys_platform != 'darwin'" },
@@ -31759,20 +32552,30 @@ fn lock_intel_mac() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
-        resolution-markers = [
-            "(python_full_version >= '3.12' and platform_machine != 'x86_64') or (python_full_version >= '3.12' and sys_platform != 'darwin')",
-            "(python_full_version < '3.12' and platform_machine != 'x86_64') or (python_full_version < '3.12' and sys_platform != 'darwin')",
-            "platform_machine == 'x86_64' and sys_platform == 'darwin'",
-        ]
         required-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'darwin'",
         ]
 
         [options]
         exclude-newer = "2024-12-18T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "(python_full_version >= '3.12' and platform_machine != 'x86_64') or (python_full_version >= '3.12' and sys_platform != 'darwin')" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "(python_full_version < '3.12' and platform_machine != 'x86_64') or (python_full_version < '3.12' and sys_platform != 'darwin')" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" }
 
         [[package]]
         name = "filelock"
@@ -32017,8 +32820,8 @@ fn lock_intel_mac() -> Result<()> {
         name = "torch"
         version = "2.2.2"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "platform_machine == 'x86_64' and sys_platform == 'darwin'",
+        selectors = [
+            { target = "runtime:2" },
         ]
         dependencies = [
             { name = "filelock", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
@@ -32037,9 +32840,9 @@ fn lock_intel_mac() -> Result<()> {
         name = "torch"
         version = "2.5.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "(python_full_version >= '3.12' and platform_machine != 'x86_64') or (python_full_version >= '3.12' and sys_platform != 'darwin')",
-            "(python_full_version < '3.12' and platform_machine != 'x86_64') or (python_full_version < '3.12' and sys_platform != 'darwin')",
+        selectors = [
+            { target = "runtime:0" },
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "filelock", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
@@ -32150,13 +32953,9 @@ fn lock_pytorch_local_preference() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12.[X]"
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-            "sys_platform != 'darwin'",
-        ]
         supported-markers = [
             "sys_platform == 'darwin'",
             "sys_platform != 'darwin'",
@@ -32164,6 +32963,16 @@ fn lock_pytorch_local_preference() -> Result<()> {
 
         [options]
         exclude-newer = "2025-01-30T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin'" }
 
         [[package]]
         name = "filelock"
@@ -32368,8 +33177,8 @@ fn lock_pytorch_local_preference() -> Result<()> {
         name = "torch"
         version = "2.6.0"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
-        resolution-markers = [
-            "sys_platform == 'darwin'",
+        selectors = [
+            { target = "runtime:0" },
         ]
         dependencies = [
             { name = "filelock", marker = "sys_platform == 'darwin'" },
@@ -32389,8 +33198,8 @@ fn lock_pytorch_local_preference() -> Result<()> {
         name = "torch"
         version = "2.6.0+cpu"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
-        resolution-markers = [
-            "sys_platform != 'darwin'",
+        selectors = [
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "filelock", marker = "sys_platform != 'darwin'" },
@@ -32485,13 +33294,9 @@ fn windows_arm() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.12.*"
-        resolution-markers = [
-            "platform_machine == 'x86_64' and sys_platform == 'linux'",
-            "platform_machine == 'AMD64' and sys_platform == 'win32'",
-        ]
         supported-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
             "platform_machine == 'AMD64' and sys_platform == 'win32'",
@@ -32499,6 +33304,16 @@ fn windows_arm() -> Result<()> {
 
         [options]
         exclude-newer = "2025-01-30T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "platform_machine == 'AMD64' and sys_platform == 'win32'" }
 
         [[package]]
         name = "pywin32"
@@ -32562,7 +33377,7 @@ fn windows_amd64_required() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.12.*"
         required-markers = [
@@ -32636,7 +33451,7 @@ fn windows_arm64_required() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.12.*"
         required-markers = [
@@ -32704,7 +33519,7 @@ fn lock_empty_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -32811,7 +33626,7 @@ fn lock_empty_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -32882,7 +33697,7 @@ fn lock_invalid_fork_markers() -> Result<()> {
 
     context.temp_dir.child("uv.lock").write_str(
         r#"
-        version = 1
+        version = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "python_full_version >= '3.10' and platform_python_implementation == 'CPython'",
@@ -32974,7 +33789,7 @@ fn lock_omit_wheels_exclude_newer() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -33127,7 +33942,7 @@ fn lock_requires_python_empty_lock_file() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.13.0"
         resolution-markers = [
@@ -33203,7 +34018,7 @@ fn lock_requires_python_empty_lock_file() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = "==3.13.2"
         resolution-markers = [
@@ -33385,7 +34200,7 @@ async fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Resu
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -33478,7 +34293,7 @@ async fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()>
 
     let lock = context.temp_dir.child("uv.lock");
     lock.write_str(&format!(r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -33571,7 +34386,7 @@ async fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result
 
     let lock = context.temp_dir.child("uv.lock");
     lock.write_str(&format!(r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -33664,7 +34479,7 @@ async fn lock_trailing_slash_index_url_in_lockfile_and_pyproject_toml() -> Resul
 
     let lock = context.temp_dir.child("uv.lock");
     lock.write_str(&format!(r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -33760,7 +34575,7 @@ fn lock_trailing_slash_find_links() -> Result<()> {
     }, {
             assert_snapshot!(
                 lock, @r#"
-            version = 1
+            version = 2
             revision = 3
             requires-python = ">=3.12"
 
@@ -33841,7 +34656,7 @@ fn lock_trailing_slash_find_links() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -33972,7 +34787,7 @@ fn lock_exclude_newer_package_disable() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -34060,7 +34875,7 @@ fn lock_exclude_newer_package() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -35054,18 +35869,20 @@ fn lock_android() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'android'",
-        ]
         supported-markers = [
             "sys_platform == 'android'",
         ]
 
         [options]
         exclude-newer = "2025-06-01T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'android'" }
 
         [[package]]
         name = "deltachat-rpc-server"
@@ -35154,13 +35971,9 @@ fn lock_required_intersection() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "platform_machine == 'x86_64' and sys_platform == 'linux'",
-            "platform_machine == 'arm64' and sys_platform == 'darwin'",
-        ]
         supported-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
             "platform_machine == 'arm64' and sys_platform == 'darwin'",
@@ -35168,6 +35981,16 @@ fn lock_required_intersection() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" }
 
         [[package]]
         name = "numpy"
@@ -35245,7 +36068,7 @@ fn lock_refresh() -> Result<()> {
     // Write a `uv.lock` that accidentally omits the `anyio` wheel, and uses an outdated revision.
     context.temp_dir.child("uv.lock").write_str(
         r#"
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -35312,7 +36135,7 @@ fn lock_refresh() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
 
-        version = 1
+        version = 2
         revision = 2
         requires-python = ">=3.12"
 
@@ -35379,7 +36202,7 @@ fn lock_refresh() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -35828,18 +36651,20 @@ fn lock_supported_environment_abi3_wheel() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
-        ]
         supported-markers = [
             "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
         ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'" }
 
         [[package]]
         name = "abi3-package"

@@ -26,7 +26,7 @@ fn write_audit_json_project(context: &uv_test::TestContext, index_url: &str) {
     let lockfile = context.temp_dir.child("uv.lock");
     lockfile
         .write_str(&formatdoc! {r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1550,7 +1550,7 @@ async fn audit_script_no_vulnerabilities() {
     let lockfile = context.temp_dir.child("script.py.lock");
     lockfile
         .write_str(indoc! {r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1620,7 +1620,7 @@ async fn audit_script_vulnerability_found() {
     let lockfile = context.temp_dir.child("script.py.lock");
     lockfile
         .write_str(indoc! {r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1722,7 +1722,7 @@ async fn audit_script_no_dependencies() {
     let lockfile = context.temp_dir.child("script.py.lock");
     lockfile
         .write_str(indoc! {r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1815,7 +1815,7 @@ async fn audit_script_multiple_dependencies() {
     let lockfile = context.temp_dir.child("script.py.lock");
     lockfile
         .write_str(indoc! {r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1901,7 +1901,7 @@ async fn audit_script_extras() {
     let lockfile = context.temp_dir.child("script.py.lock");
     lockfile
         .write_str(indoc! {r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1952,6 +1952,7 @@ async fn audit_script_extras() {
         .audit()
         .arg("--preview-features")
         .arg("audit")
+        .arg("--frozen")
         .arg("--script")
         .arg("script.py")
         .arg("--service-url")
@@ -1961,7 +1962,6 @@ async fn audit_script_extras() {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 2 packages
     ");
 }

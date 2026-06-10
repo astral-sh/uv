@@ -119,9 +119,9 @@ pub struct PyProjectToml {
     #[serde(skip)]
     pub raw: String,
 
-    /// Used to determine whether a `build-system` section is present.
+    /// The `[build-system]` table, as specified in PEP 518.
     #[serde(default, skip_serializing)]
-    build_system: Option<serde::de::IgnoredAny>,
+    pub build_system: Option<BuildSystem>,
 }
 
 impl PyProjectToml {
@@ -210,6 +210,81 @@ impl Eq for PyProjectToml {}
 impl AsRef<[u8]> for PyProjectToml {
     fn as_ref(&self) -> &[u8] {
         self.raw.as_bytes()
+    }
+}
+
+/// The `[build-system]` table as specified in PEP 518.
+///
+/// See <https://peps.python.org/pep-0518/>.
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
+#[serde(rename_all = "kebab-case")]
+pub struct BuildSystem {
+    /// PEP 508 dependencies required to execute the build system.
+    pub requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
+    /// A string naming a Python object that will be used to perform the build.
+    #[cfg_attr(test, serde(skip_serializing_if = "Option::is_none"))]
+    pub build_backend: Option<String>,
+    /// A list of directories containing the in-tree build backend.
+    #[cfg_attr(test, serde(skip_serializing_if = "Option::is_none"))]
+    pub backend_path: Option<BackendPath>,
+}
+
+/// The `backend-path` field in a `[build-system]` table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
+pub struct BackendPath(Vec<String>);
+
+impl BackendPath {
+    /// Return an iterator over the backend paths.
+    pub fn iter(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(String::as_str)
+    }
+
+    /// Return the backend paths.
+    pub fn into_inner(self) -> Vec<String> {
+        self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for BackendPath {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct StringOrVec;
+
+        impl<'de> serde::de::Visitor<'de> for StringOrVec {
+            type Value = Vec<String>;
+
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                formatter.write_str("list of strings")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                // Allow exactly `backend-path = "."`, as used in `flit_core==2.3.0`.
+                if value == "." {
+                    Ok(vec![".".to_string()])
+                } else {
+                    Err(serde::de::Error::invalid_value(
+                        serde::de::Unexpected::Str(value),
+                        &self,
+                    ))
+                }
+            }
+
+            fn visit_seq<S>(self, sequence: S) -> Result<Self::Value, S::Error>
+            where
+                S: SeqAccess<'de>,
+            {
+                Deserialize::deserialize(serde::de::value::SeqAccessDeserializer::new(sequence))
+            }
+        }
+
+        deserializer.deserialize_any(StringOrVec).map(BackendPath)
     }
 }
 

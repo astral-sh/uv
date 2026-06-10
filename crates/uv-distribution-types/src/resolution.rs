@@ -79,6 +79,29 @@ impl Resolution {
         &self.diagnostics
     }
 
+    /// Add installable distributions from another resolution, deduplicating by package name.
+    ///
+    /// Concrete resolutions contain at most one selected distribution per package name.
+    pub fn extend(&mut self, other: &Self) {
+        for node in other.graph.node_weights() {
+            let Node::Dist {
+                dist,
+                install: true,
+                ..
+            } = node
+            else {
+                continue;
+            };
+            if self
+                .distributions()
+                .any(|existing| existing.name() == dist.name())
+            {
+                continue;
+            }
+            self.graph.add_node(node.clone());
+        }
+    }
+
     /// Filter the resolution to only include packages that match the given predicate.
     #[must_use]
     pub fn filter(mut self, predicate: impl Fn(&ResolvedDist) -> bool) -> Self {

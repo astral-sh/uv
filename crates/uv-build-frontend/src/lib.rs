@@ -7,7 +7,6 @@ mod pipreqs;
 
 use std::borrow::Cow;
 use std::ffi::OsString;
-use std::fmt::Formatter;
 use std::fmt::Write;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -20,8 +19,8 @@ use fs_err as fs;
 use indoc::formatdoc;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
-use serde::de::{self, IntoDeserializer, SeqAccess, Visitor, value};
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
+use serde::de::{self, IntoDeserializer};
 use tempfile::TempDir;
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
@@ -34,6 +33,7 @@ use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
+    SourceDist,
 };
 use uv_fs::{LockedFile, LockedFileMode};
 use uv_fs::{PythonExt, Simplified};
@@ -43,10 +43,12 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{
-    AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, ResolvedRequirements, SourceBuildTrait,
+    AnyErrorBuild, BuildContext, BuildIsolation, BuildPackageKey, BuildStack, ResolvedRequirements,
+    SourceBuildTrait,
 };
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
+use uv_workspace::pyproject::BackendPath;
 
 pub use crate::error::{Error, MissingHeaderCause};
 
@@ -111,54 +113,6 @@ struct ToolUv {
     workspace: Option<de::IgnoredAny>,
     /// To warn users about ignored build backend settings.
     build_backend: Option<de::IgnoredAny>,
-}
-
-impl BackendPath {
-    /// Return an iterator over the paths in the backend path.
-    fn iter(&self) -> impl Iterator<Item = &str> {
-        self.0.iter().map(String::as_str)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct BackendPath(Vec<String>);
-
-impl<'de> Deserialize<'de> for BackendPath {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct StringOrVec;
-
-        impl<'de> Visitor<'de> for StringOrVec {
-            type Value = Vec<String>;
-
-            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-                formatter.write_str("list of strings")
-            }
-
-            fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                // Allow exactly `backend-path = "."`, as used in `flit_core==2.3.0`.
-                if s == "." {
-                    Ok(vec![".".to_string()])
-                } else {
-                    Err(de::Error::invalid_value(de::Unexpected::Str(s), &self))
-                }
-            }
-
-            fn visit_seq<S>(self, seq: S) -> Result<Self::Value, S::Error>
-            where
-                S: SeqAccess<'de>,
-            {
-                Deserialize::deserialize(value::SeqAccessDeserializer::new(seq))
-            }
-        }
-
-        deserializer.deserialize_any(StringOrVec).map(BackendPath)
-    }
 }
 
 /// `[build-backend]` from pyproject.toml
@@ -289,6 +243,7 @@ impl SourceBuild {
         source: &Path,
         subdirectory: Option<&Path>,
         install_path: &Path,
+        source_dist: Option<&SourceDist>,
         fallback_package_name: Option<&PackageName>,
         fallback_package_version: Option<&Version>,
         interpreter: &Interpreter,
@@ -339,6 +294,9 @@ impl SourceBuild {
             .and_then(|project| project.version.as_ref())
             .or(fallback_package_version)
             .cloned();
+        let package_key = package_name.clone().map(|name| {
+            BuildPackageKey::from_source_dist(name, package_version.clone(), source_dist)
+        });
 
         let extra_build_dependencies = package_name
             .as_ref()
@@ -396,7 +354,8 @@ impl SourceBuild {
                 build_context,
                 source_build_context.clone(),
                 &pep517_backend,
-                extra_build_dependencies,
+                extra_build_dependencies.clone(),
+                package_key.as_ref(),
                 build_stack,
             )
             .await?;
@@ -452,9 +411,11 @@ impl SourceBuild {
                 install_path,
                 &venv,
                 &pep517_backend,
+                &extra_build_dependencies,
                 build_context,
                 package_name.as_ref(),
                 package_version.as_ref(),
+                package_key.as_ref(),
                 version_id,
                 locations,
                 no_sources,
@@ -524,6 +485,7 @@ impl SourceBuild {
         source_build_context: SourceBuildContext,
         pep517_backend: &Pep517Backend,
         extra_build_dependencies: Vec<Requirement>,
+        package: Option<&BuildPackageKey>,
         build_stack: &BuildStack,
     ) -> Result<ResolvedRequirements, Error> {
         Ok(
@@ -532,10 +494,23 @@ impl SourceBuild {
             {
                 let mut resolution = source_build_context.default_resolution.lock().await;
                 if let Some(resolved_requirements) = &*resolution {
-                    resolved_requirements.clone()
+                    if Self::can_reuse_cached_default_resolution(resolved_requirements, package) {
+                        resolved_requirements.clone()
+                    } else {
+                        // A graph captured for another source package can have different
+                        // marker reachability. Recording it unchanged would attribute the
+                        // first package's marker region to later builds.
+                        drop(resolution);
+                        build_context
+                            .resolve(&DEFAULT_BACKEND.requirements, package, build_stack, None)
+                            .await
+                            .map_err(|err| {
+                                Error::RequirementsResolve("`setup.py` build", err.into())
+                            })?
+                    }
                 } else {
                     let resolved_requirements = build_context
-                        .resolve(&DEFAULT_BACKEND.requirements, build_stack)
+                        .resolve(&DEFAULT_BACKEND.requirements, package, build_stack, None)
                         .await
                         .map_err(|err| {
                             Error::RequirementsResolve("`setup.py` build", err.into())
@@ -560,11 +535,18 @@ impl SourceBuild {
                     )
                 };
                 build_context
-                    .resolve(&requirements, build_stack)
+                    .resolve(&requirements, package, build_stack, None)
                     .await
                     .map_err(|err| Error::RequirementsResolve(dependency_sources, err.into()))?
             },
         )
+    }
+
+    fn can_reuse_cached_default_resolution(
+        resolution: &ResolvedRequirements,
+        package: Option<&BuildPackageKey>,
+    ) -> bool {
+        package.is_none() || resolution.build_resolution_graph().is_none()
     }
 
     /// Extract the PEP 517 backend from the `pyproject.toml` or `setup.py` file.
@@ -992,9 +974,11 @@ async fn create_pep517_build_environment(
     install_path: &Path,
     venv: &PythonEnvironment,
     pep517_backend: &Pep517Backend,
+    extra_build_dependencies: &[Requirement],
     build_context: &impl BuildContext,
     package_name: Option<&PackageName>,
     package_version: Option<&Version>,
+    package_key: Option<&BuildPackageKey>,
     version_id: Option<&str>,
     locations: &IndexLocations,
     no_sources: NoSources,
@@ -1126,10 +1110,16 @@ async fn create_pep517_build_environment(
             .requirements
             .iter()
             .cloned()
-            .chain(extra_requires)
+            .chain(extra_build_dependencies.iter().cloned())
+            .chain(extra_requires.iter().cloned())
             .collect();
         let resolution = build_context
-            .resolve(&requirements, build_stack)
+            .resolve(
+                &requirements,
+                package_key,
+                build_stack,
+                Some(&extra_requires),
+            )
             .await
             .map_err(|err| {
                 Error::RequirementsResolve("`build-system.requires`", AnyErrorBuild::from(err))
@@ -1295,6 +1285,38 @@ impl Write for Printer {
             }
             Self::Quiet => {}
         }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use uv_distribution_types::Resolution;
+    use uv_types::{BuildResolutionGraph, HashStrategy};
+
+    use super::*;
+
+    #[test]
+    fn marker_restricted_default_resolution_is_not_reused_for_another_package()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let package = BuildPackageKey::new(PackageName::from_str("dep")?, None);
+        let resolution = ResolvedRequirements::new(Resolution::default(), HashStrategy::default())
+            .with_build_resolution_graph(BuildResolutionGraph::default());
+        let graphless_resolution =
+            ResolvedRequirements::new(Resolution::default(), HashStrategy::default());
+
+        assert!(!SourceBuild::can_reuse_cached_default_resolution(
+            &resolution,
+            Some(&package)
+        ));
+        assert!(SourceBuild::can_reuse_cached_default_resolution(
+            &graphless_resolution,
+            Some(&package)
+        ));
+        assert!(SourceBuild::can_reuse_cached_default_resolution(
+            &resolution,
+            None
+        ));
         Ok(())
     }
 }

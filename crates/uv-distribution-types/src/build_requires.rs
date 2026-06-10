@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_key::{CacheKey, CacheKeyHasher};
 use uv_normalize::PackageName;
+use uv_pep508::MarkerTree;
 
 use crate::{Name, Requirement, RequirementSource, Resolution};
 
@@ -82,13 +83,29 @@ impl CacheKey for ExtraBuildRequirement {
 impl ExtraBuildRequires {
     /// Apply runtime constraints from a resolution to the extra build requirements.
     pub fn match_runtime(self, resolution: &Resolution) -> Result<Self, ExtraBuildRequiresError> {
+        let mut sources: BTreeMap<PackageName, Vec<(RequirementSource, MarkerTree)>> =
+            BTreeMap::new();
+        for dist in resolution.distributions() {
+            sources
+                .entry(dist.name().clone())
+                .or_default()
+                .push((RequirementSource::from(dist), MarkerTree::TRUE));
+        }
+        self.match_runtime_sources(&sources)
+    }
+
+    /// Apply runtime constraints from resolved package sources to the extra build requirements.
+    pub fn match_runtime_sources(
+        self,
+        sources: &BTreeMap<PackageName, Vec<(RequirementSource, MarkerTree)>>,
+    ) -> Result<Self, ExtraBuildRequiresError> {
         self.into_iter()
             .filter(|(_, requirements)| !requirements.is_empty())
-            .filter(|(name, _)| resolution.distributions().any(|dist| dist.name() == name))
+            .filter(|(name, _)| sources.contains_key(name))
             .map(|(name, requirements)| {
-                let requirements = requirements
-                    .into_iter()
-                    .map(|requirement| match requirement {
+                let mut matched_requirements = Vec::new();
+                for requirement in requirements {
+                    match requirement {
                         ExtraBuildRequirement {
                             requirement,
                             match_runtime: true,
@@ -113,25 +130,26 @@ impl ExtraBuildRequires {
                                 ));
                             }
 
-                            let dist = resolution
-                                .distributions()
-                                .find(|dist| dist.name() == &requirement.name)
-                                .ok_or_else(|| {
+                            let runtime_sources =
+                                sources.get(&requirement.name).ok_or_else(|| {
                                     ExtraBuildRequiresError::NotFound(requirement.name.clone())
                                 })?;
-                            let requirement = Requirement {
-                                source: RequirementSource::from(dist),
-                                ..requirement
-                            };
-                            Ok::<_, ExtraBuildRequiresError>(ExtraBuildRequirement {
-                                requirement,
-                                match_runtime: true,
-                            })
+                            for (source, marker) in runtime_sources {
+                                let mut requirement = Requirement {
+                                    source: source.clone(),
+                                    ..requirement.clone()
+                                };
+                                requirement.marker.and(*marker);
+                                matched_requirements.push(ExtraBuildRequirement {
+                                    requirement,
+                                    match_runtime: true,
+                                });
+                            }
                         }
-                        requirement => Ok(requirement),
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok::<_, ExtraBuildRequiresError>((name, requirements))
+                        requirement => matched_requirements.push(requirement),
+                    }
+                }
+                Ok::<_, ExtraBuildRequiresError>((name, matched_requirements))
             })
             .collect::<Result<Self, _>>()
     }

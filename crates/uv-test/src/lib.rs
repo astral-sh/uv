@@ -112,6 +112,15 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
         r"uv(-.*)? \d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?( \([^)]*\))?",
         r"uv [VERSION] ([COMMIT] DATE)",
     ),
+    // Build resolution identities include host-specific executor context.
+    (
+        r#"build:([A-Za-z0-9_.-]+):wheel:([A-Za-z0-9_.-]+):[a-f0-9]{16}"#,
+        r#"build:$1:wheel:$2:[BUILD-ID]"#,
+    ),
+    (
+        r#"executor = \{ marker = "[^"]*", python = "[^"]*" \}"#,
+        r#"executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }"#,
+    ),
     // Trim end-of-line whitespaces, to allow removing them on save.
     (r"([^\s])[ \t]+(\r?\n)", "$1$2"),
     // Filter SSL certificate loading debug messages (environment-dependent)

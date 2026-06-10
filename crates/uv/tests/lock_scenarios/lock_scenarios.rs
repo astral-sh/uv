@@ -120,7 +120,7 @@ fn wrong_backtracking_basic() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -286,7 +286,7 @@ fn wrong_backtracking_indirect() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -428,14 +428,24 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-            "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
 
         [[package]]
         name = "a"
@@ -543,7 +553,7 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -643,14 +653,24 @@ fn fork_basic() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-            "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
 
         [[package]]
         name = "a"
@@ -931,14 +951,24 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'linux'",
-            "sys_platform == 'darwin'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
 
         [[package]]
         name = "a"
@@ -1110,7 +1140,7 @@ fn fork_upgrade() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1231,14 +1261,24 @@ fn fork_incomplete_markers() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "python_full_version >= '3.14'",
-            "python_full_version == '3.13.*'",
-            "python_full_version < '3.13'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.14'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version == '3.13.*'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.13'" }
 
         [[package]]
         name = "a"
@@ -1385,7 +1425,7 @@ fn fork_marker_accrue() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -1589,16 +1629,34 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "implementation_name == 'pypy' and sys_platform == 'darwin'",
-            "implementation_name == 'cpython' and sys_platform == 'darwin'",
-            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
-            "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:3"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:4"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
 
         [[package]]
         name = "a"
@@ -1770,16 +1828,34 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "implementation_name == 'pypy' and sys_platform == 'darwin'",
-            "implementation_name == 'cpython' and sys_platform == 'darwin'",
-            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
-            "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:3"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:4"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
 
         [[package]]
         name = "a"
@@ -1940,16 +2016,34 @@ fn fork_marker_inherit_combined() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "implementation_name == 'pypy' and sys_platform == 'darwin'",
-            "implementation_name == 'cpython' and sys_platform == 'darwin'",
-            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
-            "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:3"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:4"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
 
         [[package]]
         name = "a"
@@ -2103,14 +2197,24 @@ fn fork_marker_inherit_isolated() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-            "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
 
         [[package]]
         name = "a"
@@ -2252,14 +2356,24 @@ fn fork_marker_inherit_transitive() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-            "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
 
         [[package]]
         name = "a"
@@ -2409,14 +2523,24 @@ fn fork_marker_inherit() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-            "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
 
         [[package]]
         name = "a"
@@ -2548,14 +2672,24 @@ fn fork_marker_limited_inherit() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-            "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
 
         [[package]]
         name = "a"
@@ -2704,14 +2838,24 @@ fn fork_marker_selection() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-            "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
 
         [[package]]
         name = "a"
@@ -2859,14 +3003,24 @@ fn fork_marker_track() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-            "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
 
         [[package]]
         name = "a"
@@ -3012,7 +3166,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -3308,14 +3462,24 @@ fn fork_overlapping_markers_basic() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "python_full_version >= '3.14'",
-            "python_full_version == '3.13.*'",
-            "python_full_version < '3.13'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "python_full_version >= '3.14'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "python_full_version == '3.13.*'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "python_full_version < '3.13'" }
 
         [[package]]
         name = "a"
@@ -3476,13 +3640,19 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'linux'",
-            "sys_platform != 'linux'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'linux'" }
 
         [[package]]
         name = "cleaver"
@@ -3855,13 +4025,19 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'linux'",
-            "sys_platform != 'linux'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'linux'" }
 
         [[package]]
         name = "bar"
@@ -4139,13 +4315,19 @@ fn preferences_dependent_forking() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'linux'",
-            "sys_platform != 'linux'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'linux'" }
 
         [[package]]
         name = "bar"
@@ -4314,16 +4496,34 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "os_name == 'darwin' and sys_platform == 'illumos'",
-            "os_name == 'linux' and sys_platform == 'illumos'",
-            "os_name != 'darwin' and os_name != 'linux' and sys_platform == 'illumos'",
-            "sys_platform == 'windows'",
-            "sys_platform != 'illumos' and sys_platform != 'windows'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "os_name == 'darwin' and sys_platform == 'illumos'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "os_name == 'linux' and sys_platform == 'illumos'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "os_name != 'darwin' and os_name != 'linux' and sys_platform == 'illumos'" }
+
+        [[resolution]]
+        id = "runtime:3"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'windows'" }
+
+        [[resolution]]
+        id = "runtime:4"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'illumos' and sys_platform != 'windows'" }
 
         [[package]]
         name = "a"
@@ -4466,7 +4666,7 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10"
 
@@ -4550,7 +4750,7 @@ fn fork_requires_python_full() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10"
 
@@ -4639,7 +4839,7 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10.1"
 
@@ -4732,7 +4932,7 @@ fn fork_requires_python() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10"
 
@@ -4812,7 +5012,7 @@ fn requires_python_wheels() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.10"
 
@@ -4908,7 +5108,7 @@ fn unreachable_package() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -5009,7 +5209,7 @@ fn unreachable_wheels() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -5139,13 +5339,19 @@ fn marker_variants_have_different_extras() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "platform_python_implementation != 'PyPy'",
-            "platform_python_implementation == 'PyPy'",
-        ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "platform_python_implementation != 'PyPy'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "platform_python_implementation == 'PyPy'" }
 
         [[package]]
         name = "project"
@@ -5276,7 +5482,7 @@ fn virtual_package_extra_priorities() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -5388,7 +5594,7 @@ fn requires_python_subset() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
         required-markers = [
@@ -5494,7 +5700,7 @@ fn specific_architecture() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 

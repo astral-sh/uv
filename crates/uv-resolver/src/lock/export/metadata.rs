@@ -751,7 +751,7 @@ impl Metadata {
         let mut members = Vec::new();
         let workspace_root = PortablePathBuf::from(workspace.install_path().as_path());
 
-        for lock_package in lock.packages() {
+        for lock_package in lock.runtime_packages() {
             let mut meta_package = MetadataNode::from_package_id(
                 &workspace_root,
                 &lock_package.id,
@@ -760,6 +760,9 @@ impl Metadata {
 
             // Direct dependencies go on the package node
             for dependency in &lock_package.dependencies {
+                if !dependency.is_runtime_edge() {
+                    continue;
+                }
                 meta_package.add_dependency(&workspace_root, dependency);
             }
 
@@ -776,6 +779,9 @@ impl Metadata {
                     marker: None,
                 });
                 for dependency in dependencies {
+                    if !dependency.is_runtime_edge() {
+                        continue;
+                    }
                     meta_extra.add_dependency(&workspace_root, dependency);
                 }
 
@@ -796,6 +802,9 @@ impl Metadata {
                 );
                 // Groups *do not* depend on the base package, so don't add that
                 for dependency in dependencies {
+                    if !dependency.is_runtime_edge() {
+                        continue;
+                    }
                     meta_group.add_dependency(&workspace_root, dependency);
                 }
 

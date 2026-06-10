@@ -19,7 +19,7 @@ use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
 
-use crate::{BuildArena, BuildIsolation, ResolvedRequirements};
+use crate::{BuildArena, BuildIsolation, BuildPackageKey, ResolvedRequirements};
 
 /// Controls how source tree requirements influence workspace-member editability during lowering.
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
@@ -147,10 +147,19 @@ pub trait BuildContext {
     fn extra_build_variables(&self) -> &ExtraBuildVariables;
 
     /// Resolve the given requirements into a ready-to-install set of package versions.
+    ///
+    /// If a package key is provided, the resolver may use previously stored
+    /// build dependency preferences for that package to speed up resolution.
+    /// If `validate_locked_requirements` is provided, a stored locked resolution
+    /// may only be reused when it satisfies those requirements. This is used for
+    /// requirements returned by a backend hook, which can change after a lock is
+    /// generated.
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
+        package: Option<&'a BuildPackageKey>,
         build_stack: &'a BuildStack,
+        validate_locked_requirements: Option<&'a [Requirement]>,
     ) -> impl Future<Output = Result<ResolvedRequirements, impl IsBuildBackendError>> + 'a;
 
     /// Install the given set of package versions into the virtual environment. The environment must

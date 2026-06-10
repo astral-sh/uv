@@ -300,7 +300,7 @@ impl<'lock> LockTarget<'lock> {
                 match result {
                     Ok(lock) => {
                         // If the lockfile uses an unsupported version, raise an error.
-                        if lock.version() != VERSION {
+                        if lock.version() > VERSION {
                             return Err(ProjectError::UnsupportedLockVersion(
                                 VERSION,
                                 lock.version(),
@@ -312,7 +312,7 @@ impl<'lock> LockTarget<'lock> {
                         // If we failed to parse the lockfile, determine whether it's a supported
                         // version.
                         if let Ok(lock) = toml::from_str::<LockVersion>(&encoded) {
-                            if lock.version() != VERSION {
+                            if lock.version() > VERSION {
                                 return Err(ProjectError::UnparsableLockVersion(
                                     VERSION,
                                     lock.version(),

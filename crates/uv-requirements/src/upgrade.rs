@@ -83,7 +83,7 @@ pub fn read_lock_requirements(
     let mut preferences = Vec::new();
     let mut git = Vec::new();
 
-    for package in lock.packages() {
+    for package in lock.runtime_packages() {
         // Skip the distribution if it's included in the upgrade strategy (either by explicit
         // package name or via a dependency group).
         if upgrade_packages.contains(package.name()) {
