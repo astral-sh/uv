@@ -8,7 +8,7 @@ use std::{
 };
 
 #[cfg(all(target_os = "windows", not(test)))]
-use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD};
+use sha2::{Digest, Sha256};
 use tokio::{
     process::Command,
     sync::{OwnedRwLockReadGuard, OwnedRwLockWriteGuard, RwLock as AsyncRwLock},
@@ -170,14 +170,11 @@ fn windows_native_target_prefix(realm: &Realm) -> String {
 #[cfg(all(target_os = "windows", not(test)))]
 fn windows_native_target(service: &Service, username: &Username) -> String {
     let realm = Realm::from(service.url());
-    let service = service.to_string();
+    let service = service.url().as_str();
     let username = username.as_deref().unwrap_or_default();
     let identity = format!("{}:{service}{username}", service.len());
-    format!(
-        "{}{}",
-        windows_native_target_prefix(&realm),
-        BASE64_URL_SAFE_NO_PAD.encode(identity)
-    )
+    let identity_digest = format!("{:x}", Sha256::digest(identity.as_bytes()));
+    format!("{}{identity_digest}", windows_native_target_prefix(&realm))
 }
 
 #[cfg(all(target_os = "windows", not(test)))]
@@ -831,16 +828,32 @@ impl KeyringProvider {
             let mut credentials_list = Vec::with_capacity(credentials.len());
 
             for credential in credentials {
+                let target_name = credential.target_name.clone();
                 let entry = uv_keyring::Entry::new_with_credential(Box::new(credential));
                 let json_data = match entry.get_secret().await {
                     Ok(json_data) => json_data,
                     Err(uv_keyring::Error::NoEntry) => continue,
                     Err(err) => return Err(Error::Keyring(err)),
                 };
-                let credential = serde_json::from_slice::<PersistentCredential>(&json_data)
-                    .map_err(Error::CorruptStoredCredentials)?;
+                let credential = match serde_json::from_slice::<PersistentCredential>(&json_data) {
+                    Ok(credential) => credential,
+                    Err(err) => {
+                        warn!("Ignoring corrupt native credential in realm {realm}: {err}");
+                        continue;
+                    }
+                };
                 if Realm::from(credential.service.url()) == *realm {
-                    credentials_list.push(credential);
+                    let expected_target = windows_native_target(
+                        &credential.service,
+                        &credential.credentials.to_username(),
+                    );
+                    if target_name.eq_ignore_ascii_case(&expected_target) {
+                        credentials_list.push(credential);
+                    } else {
+                        warn!(
+                            "Ignoring native credential stored under the wrong target in realm {realm}"
+                        );
+                    }
                 } else {
                     warn!(
                         "Ignoring native credential for {} stored under the wrong realm",
