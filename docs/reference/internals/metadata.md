@@ -135,19 +135,24 @@ Here is a human-readable annotated example:
 
 ```js
 {
-	// Information about the schema of this output
-	"schema": {
-		// The version of this output, currently "preview"
-		"version": "preview"
-	},
-	// The directory the uv.lock can be found in
-	"workspace_root": "/workspace",
-	// Any requirements on the python version this workspace has
+  // Information about the schema of this output
+  "schema": {
+    // The version of this output, currently "preview"
+    "version": "preview"
+  },
+  // The directory the uv.lock can be found in
+  "workspace_root": "/workspace",
+  // Information about the environment, currently only available with `--sync`
+  "environment": {
+    // The absolute path to the environment root
+    "root": "/workspace/.venv"
+  },
+  // Any requirements on the python version this workspace has
   //
   // `marker` fields all have this as an implicit constraint that is omitted for cleanliness
-	"requires_python": ">=3.12",
-	// A list of workspace members
-	"members": [
+  "requires_python": ">=3.12",
+  // A list of workspace members
+  "members": [
     {
       // The name of the package
       "name": "mypackage",
@@ -156,7 +161,7 @@ Here is a human-readable annotated example:
       // The id of this package's info in the `resolution` map below
       "id": "mypackage==0.1.0@editable+/workspace/packages/mypackage"
     },
-	],
+  ],
   // A list-of-sets of workspace items that are mutually-exclusive to install,
   // presumably because they need to install different versions of the same package.
   //

@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt::Display;
+use std::path::Path;
 
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{Name, RequiresPython, ResolvedDist, UrlString};
@@ -62,6 +63,9 @@ pub struct Metadata {
     /// Ideally absolute paths to things that are found in subdirs of this should have exactly
     /// this as a prefix so it can be stripped to get relative paths if one wants.
     workspace_root: PortablePathBuf,
+    /// Information about the synchronized environment, when `--sync` was used.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    environment: Option<MetadataEnvironment>,
     /// The version of python required by the workspace
     ///
     /// Every `marker` we emit implicitly assumes this constraint to keep things clean
@@ -95,6 +99,13 @@ enum SchemaVersion {
 struct SchemaReport {
     /// The version of the schema.
     version: SchemaVersion,
+}
+
+/// Information about the environment synchronized for the workspace.
+#[derive(Debug, serde::Serialize)]
+struct MetadataEnvironment {
+    /// Absolute path to the environment root.
+    root: PortablePathBuf,
 }
 
 /// Info for looking up workspace members, most information is stored in the node behind `id`
@@ -830,6 +841,7 @@ impl Metadata {
                 version: SchemaVersion::Preview,
             },
             conflicts,
+            environment: None,
             module_owners: BTreeMap::new(),
             workspace_root,
             requires_python: lock.requires_python.clone(),
@@ -850,6 +862,14 @@ impl Metadata {
             kind: MetadataNodeKind::Package,
         }
         .to_flat())
+    }
+
+    #[must_use]
+    pub fn with_environment_root(mut self, environment_root: &Path) -> Self {
+        self.environment = Some(MetadataEnvironment {
+            root: PortablePathBuf::from(environment_root),
+        });
+        self
     }
 
     #[must_use]
