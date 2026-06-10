@@ -163,7 +163,7 @@ fn compare_exclude_newer_value(
                 *span,
             ))
         }
-        (None, None) if this.timestamp() != other.timestamp() => Some(
+        (None, None) if other.timestamp() < this.timestamp() => Some(
             ExcludeNewerValueChange::AbsoluteTimestampChanged(this.timestamp(), other.timestamp()),
         ),
         (Some(_), Some(_)) | (None, None) => None,
@@ -498,6 +498,10 @@ impl ExcludeNewer {
         self.global.is_none() && self.package.is_empty()
     }
 
+    /// Compare against current configuration when deciding whether a lockfile may be reused.
+    ///
+    /// A later absolute timestamp permits every artifact in an existing lockfile, so it does not
+    /// invalidate that lockfile. It will be recorded when another change triggers a resolution.
     pub fn compare(&self, other: &Self) -> Option<ExcludeNewerChange> {
         match (&self.global, &other.global) {
             (Some(self_global), Some(other_global)) => {
