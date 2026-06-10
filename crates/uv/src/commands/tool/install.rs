@@ -14,7 +14,7 @@ use uv_configuration::{
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    RequirementSource, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -42,19 +42,13 @@ use crate::commands::project::{
     sync_environment, update_environment,
 };
 use crate::commands::tool::common::{
-    ToolPython, can_infer_registry_requires_python, finalize_tool_install, refine_interpreter,
-    remove_entrypoints,
+    ToolPython, finalize_tool_install, refine_interpreter, remove_entrypoints,
+    resolve_registry_tool,
 };
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverSettings};
-
-#[derive(Debug, Clone, Copy)]
-enum RegistryPythonInference {
-    DeferUntilReuseCheck,
-    Enabled { removed_invalid_tool_receipt: bool },
-}
 
 /// Install a tool.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -87,7 +81,7 @@ pub(crate) async fn install(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    Box::pin(install_with_registry_python_inference(
+    Box::pin(install_inner(
         package,
         editable,
         from,
@@ -111,16 +105,16 @@ pub(crate) async fn install(
         concurrency,
         no_config,
         cache,
+        refresh,
         workspace_cache,
         printer,
         preview,
-        RegistryPythonInference::DeferUntilReuseCheck,
     ))
     .await
 }
 
 #[expect(clippy::fn_params_excessive_bools)]
-async fn install_with_registry_python_inference(
+async fn install_inner(
     package: String,
     editable: bool,
     from: Option<String>,
@@ -144,10 +138,10 @@ async fn install_with_registry_python_inference(
     concurrency: Concurrency,
     no_config: bool,
     cache: Cache,
+    refresh: Refresh,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
-    registry_python_inference: RegistryPythonInference,
 ) -> Result<ExitStatus> {
     if settings.resolver.torch_backend.is_some() {
         warn_user_once!(
@@ -163,17 +157,13 @@ async fn install_with_registry_python_inference(
     // Parse the input requirement.
     let request = ToolRequest::parse(&package, from.as_deref())?;
 
-    // If the user passed, e.g., `ruff@latest`, refresh the cache before reading metadata.
-    let cache = if request.is_latest() {
-        cache.with_refresh(Refresh::All(Timestamp::now()))
+    // If the user passed, e.g., `ruff@latest`, refresh the cache.
+    let refresh = if request.is_latest() {
+        refresh.combine(Refresh::All(Timestamp::now()))
     } else {
-        cache
+        refresh
     };
-
-    let registry_target_requirement = match &request {
-        ToolRequest::Package { target, .. } => target.registry_requirement(),
-        ToolRequest::Python { .. } => None,
-    };
+    let cache = cache.with_refresh(refresh.clone());
 
     let unresolved_target_requirements = match &request {
         ToolRequest::Package {
@@ -193,8 +183,15 @@ async fn install_with_registry_python_inference(
         }
         _ => None,
     };
-    let has_registry_target = registry_target_requirement.is_some()
-        || unresolved_target_requirements
+    let has_registry_target = match &request {
+        ToolRequest::Package {
+            target: Target::Version(..) | Target::Latest(..),
+            ..
+        } => true,
+        ToolRequest::Package {
+            target: Target::Unspecified(_),
+            ..
+        } => unresolved_target_requirements
             .as_ref()
             .is_some_and(|requirements| {
                 requirements.first().is_some_and(|requirement| {
@@ -204,26 +201,8 @@ async fn install_with_registry_python_inference(
                             if matches!(&requirement.source, RequirementSource::Registry { .. })
                     )
                 })
-            });
-    let defer_registry_requires_python = matches!(
-        registry_python_inference,
-        RegistryPythonInference::DeferUntilReuseCheck
-    ) && python.is_none()
-        && has_registry_target
-        && can_infer_registry_requires_python(&client_builder, &settings)
-        && !force
-        && settings.reinstall.is_none()
-        && constraints.is_empty()
-        && overrides.is_empty();
-    let require_selected_interpreter = matches!(
-        registry_python_inference,
-        RegistryPythonInference::Enabled { .. }
-    );
-    let removed_invalid_tool_receipt = match registry_python_inference {
-        RegistryPythonInference::DeferUntilReuseCheck => false,
-        RegistryPythonInference::Enabled {
-            removed_invalid_tool_receipt,
-        } => removed_invalid_tool_receipt,
+            }),
+        ToolRequest::Python { .. } => false,
     };
 
     let tool_python = ToolPython::from_request(
@@ -232,14 +211,10 @@ async fn install_with_registry_python_inference(
             .as_ref()
             .and_then(|requirements| requirements.first())
             .map(|requirement| &requirement.requirement),
-        registry_target_requirement.as_ref(),
-        !defer_registry_requires_python && constraints.is_empty() && overrides.is_empty(),
         no_config,
         lfs,
         state.git(),
         &client_builder,
-        &settings,
-        &concurrency,
         &cache,
     )
     .await?;
@@ -248,7 +223,7 @@ async fn install_with_registry_python_inference(
 
     // Pre-emptively identify a Python interpreter. We need an interpreter to resolve any unnamed
     // requirements, even if we end up using a different interpreter for the tool install itself.
-    let interpreter = PythonInstallation::find_or_download(
+    let mut interpreter = PythonInstallation::find_or_download(
         python_request.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
@@ -472,11 +447,6 @@ async fn install_with_registry_python_inference(
     )
     .await?;
 
-    let constraint_sources = constraints;
-    let override_sources = overrides;
-    let exclude_sources = excludes;
-    let build_constraint_sources = build_constraints;
-
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
         let mut requirements = Vec::with_capacity(1 + with.len());
@@ -558,7 +528,7 @@ async fn install_with_registry_python_inference(
 
     // Resolve the build constraints.
     let build_constraints: Vec<Requirement> =
-        operations::read_constraints(build_constraint_sources, &client_builder)
+        operations::read_constraints(build_constraints, &client_builder)
             .await?
             .into_iter()
             .map(|constraint| constraint.requirement)
@@ -602,9 +572,7 @@ async fn install_with_registry_python_inference(
                 (None, true)
             }
         };
-    let invalid_tool_receipt = invalid_tool_receipt || removed_invalid_tool_receipt;
-
-    let existing_environment = if force {
+    let mut existing_environment = if force {
         None
     } else {
         installed_tools
@@ -615,7 +583,6 @@ async fn install_with_registry_python_inference(
                     &interpreter,
                     package_name,
                     explicit_python_request,
-                    require_selected_interpreter,
                     &settings,
                     existing_tool_receipt.as_ref(),
                     printer,
@@ -705,42 +672,6 @@ async fn install_with_registry_python_inference(
         }
     }
 
-    if defer_registry_requires_python && (existing_environment.is_none() || request.is_latest()) {
-        drop(_lock);
-        return Box::pin(install_with_registry_python_inference(
-            package.clone(),
-            editable,
-            from.clone(),
-            with,
-            constraint_sources,
-            override_sources,
-            exclude_sources,
-            build_constraint_sources,
-            entrypoints,
-            lfs,
-            python.clone(),
-            python_platform,
-            install_mirrors,
-            force,
-            options,
-            settings.clone(),
-            client_builder,
-            python_preference,
-            python_downloads,
-            installer_metadata,
-            concurrency,
-            no_config,
-            cache,
-            workspace_cache,
-            printer,
-            preview,
-            RegistryPythonInference::Enabled {
-                removed_invalid_tool_receipt: invalid_tool_receipt,
-            },
-        ))
-        .await;
-    }
-
     // Create a `RequirementsSpecification` from the resolved requirements, to avoid re-resolving.
     let spec = RequirementsSpecification {
         requirements: requirements
@@ -762,12 +693,72 @@ async fn install_with_registry_python_inference(
         ..spec
     };
 
+    let mut registry_resolution = None;
+    if has_registry_target
+        && !explicit_python_request
+        && (existing_environment.is_none()
+            || request.is_latest()
+            || !settings.resolver.upgrade.is_none())
+    {
+        // Prefer the existing tool interpreter when multiple Python targets produce the same
+        // solution. This preserves the established update-in-place behavior while still allowing
+        // a higher tool version to select a different interpreter.
+        let registry_interpreter = existing_environment
+            .as_ref()
+            .map(|environment| environment.environment().interpreter())
+            .unwrap_or(&interpreter)
+            .clone();
+        let selected = match Box::pin(resolve_registry_tool(
+            package_name,
+            EnvironmentSpecification::from(spec.clone()),
+            &registry_interpreter,
+            python_platform.as_ref(),
+            SourceTreeEditablePolicy::Tool,
+            Constraints::from_requirements(build_constraints.iter().cloned()),
+            &settings,
+            &client_builder,
+            &state,
+            &reporter,
+            &install_mirrors,
+            python_preference,
+            python_downloads,
+            &concurrency,
+            &cache,
+            workspace_cache,
+            Box::new(DefaultResolveLogger),
+            printer,
+            preview,
+        ))
+        .await
+        {
+            Ok(selected) => selected,
+            Err(ProjectError::Operation(err)) => {
+                return diagnostics::OperationDiagnostic::with_system_certs(
+                    client_builder.system_certs(),
+                )
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            }
+            Err(err) => return Err(err.into()),
+        };
+        if let Some(selected) = selected {
+            let reuses_existing_environment = existing_environment
+                .as_ref()
+                .is_some_and(|environment| environment.environment().uses(&selected.interpreter));
+            if !reuses_existing_environment {
+                existing_environment = None;
+                registry_resolution = Some(selected.resolution);
+            }
+            interpreter = selected.interpreter;
+        }
+    }
+
     // TODO(zanieb): Build the environment in the cache directory then copy into the tool directory.
     // This lets us confirm the environment is valid before removing an existing install. However,
     // entrypoints always contain an absolute path to the relevant Python interpreter, which would
     // be invalidated by moving the environment.
     let environment = if let Some(environment) = existing_environment {
-        let environment = match update_environment(
+        let environment = update_environment(
             environment.into_environment(),
             spec,
             Modifications::Exact,
@@ -789,8 +780,9 @@ async fn install_with_registry_python_inference(
             preview,
         )
         .await
-        {
-            Ok(update) => update.into_environment(),
+        .map(super::super::project::EnvironmentUpdate::into_environment);
+        let environment = match environment {
+            Ok(environment) => environment,
             Err(ProjectError::Operation(err)) => {
                 return diagnostics::OperationDiagnostic::with_system_certs(
                     client_builder.system_certs(),
@@ -813,23 +805,28 @@ async fn install_with_registry_python_inference(
 
         // If we're creating a new environment, ensure that we can resolve the requirements prior
         // to removing any existing tools.
-        let resolution = resolve_environment(
-            spec.clone(),
-            &interpreter,
-            python_platform.as_ref(),
-            SourceTreeEditablePolicy::Tool,
-            Constraints::from_requirements(build_constraints.iter().cloned()),
-            &settings.resolver,
-            &client_builder,
-            &state,
-            Box::new(DefaultResolveLogger),
-            &concurrency,
-            &cache,
-            workspace_cache,
-            printer,
-            preview,
-        )
-        .await;
+        let resolution = if let Some(resolution) = registry_resolution.take() {
+            Ok(resolution)
+        } else {
+            resolve_environment(
+                spec.clone(),
+                &interpreter,
+                python_platform.as_ref(),
+                SourceTreeEditablePolicy::Tool,
+                Constraints::from_requirements(build_constraints.iter().cloned()),
+                &settings.resolver,
+                &client_builder,
+                &state,
+                Box::new(DefaultResolveLogger),
+                &concurrency,
+                &cache,
+                workspace_cache,
+                printer,
+                preview,
+            )
+            .await
+            .map(Resolution::from)
+        };
 
         // If the resolution failed, retry with the inferred `requires-python` constraint.
         let (resolution, interpreter) = match resolution {
@@ -887,7 +884,7 @@ async fn install_with_registry_python_inference(
                     )
                     .await
                     {
-                        Ok(resolution) => (resolution, interpreter),
+                        Ok(resolution) => (Resolution::from(resolution), interpreter),
                         Err(ProjectError::Operation(err)) => {
                             return diagnostics::OperationDiagnostic::with_system_certs(
                                 client_builder.system_certs(),
@@ -913,7 +910,7 @@ async fn install_with_registry_python_inference(
         // Sync the environment with the resolved requirements.
         match sync_environment(
             environment,
-            &resolution.into(),
+            &resolution,
             Modifications::Exact,
             Constraints::from_requirements(build_constraints.iter().cloned()),
             (&settings).into(),
@@ -973,7 +970,6 @@ fn existing_environment_usable(
     interpreter: &Interpreter,
     package_name: &PackageName,
     explicit_python_request: bool,
-    require_selected_interpreter: bool,
     settings: &ResolverInstallerSettings,
     existing_tool_receipt: Option<&uv_tool::Tool>,
     printer: Printer,
@@ -986,17 +982,6 @@ fn existing_environment_usable(
             environment.interpreter().sys_executable().display()
         );
         return true;
-    }
-
-    // After registry metadata causes an install to select a different interpreter, do not update
-    // an existing environment in place with that incompatible interpreter.
-    if require_selected_interpreter {
-        trace!(
-            "Existing interpreter does not match the selected interpreter for `{}`: {}",
-            package_name,
-            environment.interpreter().sys_executable().display()
-        );
-        return false;
     }
 
     // If there was an explicit Python request that does not match, we'll invalidate the

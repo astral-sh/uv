@@ -34,7 +34,7 @@ use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_r
 use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
 };
-use uv_platform_tags::{IncompatibleTag, Tags};
+use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
 use uv_static::EnvVars;
 use uv_torch::TorchStrategy;
@@ -345,6 +345,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let mut preferences = self.preferences.clone();
         let mut forked_states = self.env.initial_forked_states(state)?;
         let mut resolutions = vec![];
+        let mut alternative_error = None;
 
         'FORK: while let Some(mut state) = forked_states.pop() {
             if let Some(split) = state.env.end_user_fork_display() {
@@ -364,15 +365,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         let result = state.pubgrub.unit_propagation(state.next);
                         match result {
                             Err(err) => {
+                                let alternative = state.env.alternative();
                                 // If unit propagation failed, there is no solution.
-                                return Err(self.convert_no_solution_err(
+                                let err = self.convert_no_solution_err(
                                     err,
                                     state.fork_urls,
                                     state.fork_indexes,
                                     state.env,
                                     self.current_environment.clone(),
                                     &visited,
-                                ));
+                                );
+                                if alternative.is_some() {
+                                    alternative_error.get_or_insert(err);
+                                    continue 'FORK;
+                                }
+                                return Err(err);
                             }
                             Ok(conflicts) => {
                                 for (affected, incompatibility) in conflicts {
@@ -438,10 +445,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             // direct or transitive, skip preferences, as we risk adding a preference from
                             // one fork (in which it's a transitive dependency) to another fork (in which
                             // it's direct).
-                            if matches!(
-                                self.options.resolution_mode,
-                                ResolutionMode::Lowest | ResolutionMode::Highest
-                            ) {
+                            if !self.env.are_alternatives()
+                                && matches!(
+                                    self.options.resolution_mode,
+                                    ResolutionMode::Lowest | ResolutionMode::Highest
+                                )
+                            {
                                 for (package, version) in &resolution.nodes {
                                     preferences.insert(
                                         package.name.clone(),
@@ -636,7 +645,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                     ForkedDependencies::Unforked(dependencies) => {
                         // Enrich the state with any URLs, etc.
-                        state
+                        let result = state
                             .visit_package_version_dependencies(
                                 next_id,
                                 &version,
@@ -649,7 +658,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             )
                             .map_err(|err| {
                                 enrich_dependency_error(err, next_id, &version, &state.pubgrub)
-                            })?;
+                            });
+                        if let Err(err) = result {
+                            if is_alternative_local_error(&err) && state.env.alternative().is_some()
+                            {
+                                alternative_error.get_or_insert(err);
+                                continue 'FORK;
+                            }
+                            return Err(err);
+                        }
 
                         // Emit a request to fetch the metadata for each registry package.
                         self.visit_dependencies(&dependencies, &state, request_sink)
@@ -692,19 +709,34 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }
                         }
 
-                        for new_fork_state in self.forks_to_fork_states(
+                        let alternative = state.env.alternative();
+                        for result in self.forks_to_fork_states(
                             state,
                             &version,
                             forks,
                             request_sink,
                             &diverging_packages,
                         ) {
-                            forked_states.push(new_fork_state?);
+                            match result {
+                                Ok(new_fork_state) => forked_states.push(new_fork_state),
+                                Err(err) => {
+                                    if is_alternative_local_error(&err) && alternative.is_some() {
+                                        alternative_error.get_or_insert(err);
+                                        continue;
+                                    }
+                                    return Err(err);
+                                }
+                            }
                         }
                         continue 'FORK;
                     }
                 }
             }
+        }
+        if resolutions.is_empty()
+            && let Some(err) = alternative_error
+        {
+            return Err(err);
         }
         if resolutions.len() > 1 {
             info!(
@@ -1218,12 +1250,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
 
-            // If the wheel's Python tag doesn't match the target Python, it's incompatible.
-            if !python_requirement.target().matches_wheel_tag(filename) {
+            // If the wheel's tags don't match the target, it's incompatible.
+            let incompatible_tag = if let Some(tags) = env.tags().or(self.tags.as_ref()) {
+                match filename.compatibility(tags) {
+                    TagCompatibility::Compatible(_) => None,
+                    TagCompatibility::Incompatible(tag) => Some(tag),
+                }
+            } else if python_requirement.target().matches_wheel_tag(filename) {
+                None
+            } else {
+                Some(IncompatibleTag::AbiPythonVersion)
+            };
+            if let Some(incompatible_tag) = incompatible_tag {
                 return Ok(Some(ResolverVersion::Unavailable(
                     filename.version.clone(),
                     UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
-                        IncompatibleWheel::Tag(IncompatibleTag::AbiPythonVersion),
+                        IncompatibleWheel::Tag(incompatible_tag),
                     )),
                 )));
             }
@@ -1311,7 +1353,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.exclusions,
             index,
             env,
-            self.tags.as_ref(),
+            env.tags().or(self.tags.as_ref()),
         ) else {
             // Short circuit: we couldn't find _any_ versions for a package.
             return Ok(None);
@@ -1446,8 +1488,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         pins: &mut FilePins,
         request_sink: &Sender<Request>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
-        // This only applies to universal resolutions.
-        if env.marker_environment().is_some() {
+        // This only applies when resolving across multiple artifact targets.
+        if env.marker_environment().is_some() || env.tags().is_some() {
             return Ok(None);
         }
 
@@ -1529,7 +1571,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.exclusions,
             index,
             env,
-            self.tags.as_ref(),
+            env.tags().or(self.tags.as_ref()),
         ) else {
             return Ok(None);
         };
@@ -2822,6 +2864,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
+        let tags = env.tags().cloned().or_else(|| self.tags.clone());
         ResolveError::NoSolution(Box::new(NoSolutionError::new(
             err,
             self.index.clone(),
@@ -2838,7 +2881,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             fork_indexes,
             env,
             current_environment,
-            self.tags.clone(),
+            tags,
             self.workspace_members.clone(),
             self.options.clone(),
         )))
@@ -3593,14 +3636,9 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
             ResolvedDistRef::InstallableRegistryBuiltDist {
                 wheel, prioritized, ..
             } => {
-                assert_eq!(
-                    Some(&wheel.filename),
-                    prioritized.best_wheel().map(|(wheel, _)| &wheel.filename),
-                    "expected chosen wheel to match best wheel"
-                );
-                // This is okay because we're only here if the prioritized dist
-                // has at least one wheel, so this always succeeds.
-                let built = prioritized.built_dist().expect("at least one wheel");
+                let built = prioritized
+                    .built_dist_for(wheel)
+                    .expect("the chosen wheel belongs to the prioritized distribution");
                 Self::Dist(Dist::Built(BuiltDist::Registry(built)))
             }
             ResolvedDistRef::Installed { dist } => Self::Installed(dist.clone()),
@@ -4174,6 +4212,17 @@ fn enrich_dependency_error(
     ResolveError::Dependencies(Box::new(error), name.clone(), version.clone(), chain)
 }
 
+/// Returns `true` if the error is caused by source requirements within a resolver fork.
+fn is_alternative_local_error(error: &ResolveError) -> bool {
+    match error {
+        ResolveError::Dependencies(error, ..) => is_alternative_local_error(error),
+        ResolveError::ConflictingUrls { .. }
+        | ResolveError::ConflictingIndexesForEnvironment { .. }
+        | ResolveError::DisallowedUrl { .. } => true,
+        _ => false,
+    }
+}
+
 /// Compute the set of markers for which a package is known to be relevant.
 fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>) -> MarkerTree {
     let package = &state.package_store[id];
@@ -4266,4 +4315,43 @@ struct ConflictTracker {
     ///
     /// Distilled from `culprit` for fast checking in the hot loop.
     deprioritize: Vec<Id<PubGrubPackage>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn alternative_local_error_classification() -> Result<(), uv_normalize::InvalidNameError> {
+        let package_name = PackageName::from_str("demo")?;
+        let local_error = ResolveError::ConflictingIndexesForEnvironment {
+            package_name: package_name.clone(),
+            indexes: Vec::new(),
+            env: ResolverEnvironment::universal(Vec::new()),
+        };
+        assert!(is_alternative_local_error(&local_error));
+
+        let wrapped_local_error = ResolveError::Dependencies(
+            Box::new(local_error),
+            package_name.clone(),
+            Version::new([1]),
+            DerivationChain::default(),
+        );
+        assert!(is_alternative_local_error(&wrapped_local_error));
+
+        let disallowed_url = ResolveError::DisallowedUrl {
+            name: package_name.clone(),
+            url: "https://example.com/demo.whl".into(),
+        };
+        assert!(is_alternative_local_error(&disallowed_url));
+
+        let global_error =
+            ResolveError::ConflictingIndexes(package_name, "first".into(), "second".into());
+        assert!(!is_alternative_local_error(&global_error));
+        assert!(!is_alternative_local_error(&ResolveError::ChannelClosed));
+
+        Ok(())
+    }
 }

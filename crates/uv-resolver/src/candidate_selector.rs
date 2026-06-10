@@ -85,7 +85,7 @@ impl CandidateSelector {
         exclusions: &'a Exclusions,
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
-        tags: Option<&'a Tags>,
+        tags: Option<&Tags>,
     ) -> Option<Candidate<'a>> {
         let reinstall = exclusions.reinstall(package_name);
         let upgrade = exclusions.upgrade(package_name);
@@ -179,7 +179,7 @@ impl CandidateSelector {
         reinstall: bool,
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
-        tags: Option<&'a Tags>,
+        tags: Option<&Tags>,
     ) -> Option<Candidate<'a>> {
         let preferences = preferences.get(package_name);
 
@@ -347,6 +347,7 @@ impl CandidateSelector {
                                 local,
                                 dist,
                                 VersionChoiceKind::Preference,
+                                env.tags(),
                             ));
                         }
                     }
@@ -357,6 +358,7 @@ impl CandidateSelector {
                     version,
                     file,
                     VersionChoiceKind::Preference,
+                    env.tags(),
                 ));
             }
         }
@@ -368,7 +370,7 @@ impl CandidateSelector {
         package_name: &'a PackageName,
         range: &Range<Version>,
         installed_packages: &'a InstalledPackages,
-        tags: Option<&'a Tags>,
+        tags: Option<&Tags>,
     ) -> Option<Candidate<'a>> {
         let installed_dists = installed_packages.get_packages(package_name);
         match installed_dists.as_slice() {
@@ -424,6 +426,7 @@ impl CandidateSelector {
             version_maps.iter().map(VersionMap::len).sum::<usize>(),
         );
         let highest = self.use_highest_version(package_name, env);
+        let tags = env.tags();
 
         let allow_prerelease = match self.prerelease_strategy.allows(package_name, env) {
             AllowPrerelease::Yes => true,
@@ -457,6 +460,7 @@ impl CandidateSelector {
                     package_name,
                     range,
                     allow_prerelease,
+                    tags,
                 )
             } else {
                 Self::select_candidate(
@@ -479,6 +483,7 @@ impl CandidateSelector {
                     package_name,
                     range,
                     allow_prerelease,
+                    tags,
                 )
             }
         } else {
@@ -489,6 +494,7 @@ impl CandidateSelector {
                         package_name,
                         range,
                         allow_prerelease,
+                        tags,
                     )
                 })
             } else {
@@ -498,6 +504,7 @@ impl CandidateSelector {
                         package_name,
                         range,
                         allow_prerelease,
+                        tags,
                     )
                 })
             }
@@ -531,6 +538,7 @@ impl CandidateSelector {
         package_name: &'a PackageName,
         range: &Range<Version>,
         allow_prerelease: bool,
+        tags: Option<&Tags>,
     ) -> Option<Candidate<'a>> {
         let mut steps = 0usize;
         let mut incompatible: Option<Candidate> = None;
@@ -561,7 +569,13 @@ impl CandidateSelector {
                 trace!(
                     "Found candidate for package {package_name} with range {range} after {steps} steps: {version} version"
                 );
-                Candidate::new(package_name, version, dist, VersionChoiceKind::Compatible)
+                Candidate::new(
+                    package_name,
+                    version,
+                    dist,
+                    VersionChoiceKind::Compatible,
+                    tags,
+                )
             };
 
             // If candidate is not compatible due to exclude newer, continue searching.
@@ -653,9 +667,9 @@ impl CandidateDist<'_> {
     }
 }
 
-impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
-    fn from(value: &'a PrioritizedDist) -> Self {
-        if let Some(dist) = value.get() {
+impl<'a> CandidateDist<'a> {
+    fn from_prioritized(value: &'a PrioritizedDist, tags: Option<&Tags>) -> Self {
+        if let Some(dist) = value.get_for_tags(tags) {
             CandidateDist::Compatible(dist)
         } else {
             // TODO(zanieb)
@@ -664,8 +678,8 @@ impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
             // why neither distribution kind can be used.
             let dist = if let Some(incompatibility) = value.incompatible_source() {
                 IncompatibleDist::Source(incompatibility.clone())
-            } else if let Some(incompatibility) = value.incompatible_wheel() {
-                IncompatibleDist::Wheel(incompatibility.clone())
+            } else if let Some(incompatibility) = value.incompatible_wheel_for_tags(tags) {
+                IncompatibleDist::Wheel(incompatibility)
             } else {
                 IncompatibleDist::Unavailable
             };
@@ -717,11 +731,12 @@ impl<'a> Candidate<'a> {
         version: &'a Version,
         dist: &'a PrioritizedDist,
         choice_kind: VersionChoiceKind,
+        tags: Option<&Tags>,
     ) -> Self {
         Self {
             name,
             version,
-            dist: CandidateDist::from(dist),
+            dist: CandidateDist::from_prioritized(dist, tags),
             choice_kind,
         }
     }

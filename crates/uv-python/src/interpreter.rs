@@ -202,7 +202,7 @@ impl Interpreter {
     }
 
     /// Returns the [`PythonInstallationKey`] for this interpreter.
-    pub(crate) fn key(&self) -> PythonInstallationKey {
+    pub fn key(&self) -> PythonInstallationKey {
         PythonInstallationKey::new(
             LenientImplementationName::from(self.implementation_name()),
             self.python_major(),

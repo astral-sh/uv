@@ -122,14 +122,9 @@ impl ResolvedDistRef<'_> {
             Self::InstallableRegistryBuiltDist {
                 wheel, prioritized, ..
             } => {
-                assert_eq!(
-                    Some(&wheel.filename),
-                    prioritized.best_wheel().map(|(wheel, _)| &wheel.filename),
-                    "expected chosen wheel to match best wheel"
-                );
-                // This is okay because we're only here if the prioritized dist
-                // has at least one wheel, so this always succeeds.
-                let built = prioritized.built_dist().expect("at least one wheel");
+                let built = prioritized
+                    .built_dist_for(wheel)
+                    .expect("the chosen wheel belongs to the prioritized distribution");
                 ResolvedDist::Installable {
                     dist: Arc::new(Dist::Built(BuiltDist::Registry(built))),
                     version: Some(wheel.filename.version.clone()),

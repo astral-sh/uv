@@ -2102,7 +2102,7 @@ fn tool_run_latest() {
 }
 
 #[tokio::test]
-async fn tool_run_registry_inference_preserves_installed_tool() -> Result<()> {
+async fn tool_run_registry_resolution_preserves_installed_tool() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.11"]).with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
@@ -2226,11 +2226,11 @@ async fn tool_run_registry_inference_preserves_installed_tool() -> Result<()> {
 }
 
 #[tokio::test]
-async fn tool_run_latest_infers_registry_requires_python() -> Result<()> {
+async fn tool_run_latest_selects_compatible_registry_python() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12", "3.11"]).with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
-    let server = simple_launcher_registry(&context, Some(">=3.12,<4.0")).await?;
+    let server = simple_launcher_registry(&context, Some(">=3.12,<4.0"), None).await?;
 
     context
         .python_pin()
@@ -2264,11 +2264,49 @@ async fn tool_run_latest_infers_registry_requires_python() -> Result<()> {
 }
 
 #[tokio::test]
-async fn tool_run_latest_infers_requires_python_from_wheel_metadata() -> Result<()> {
+async fn tool_run_exact_selects_compatible_registry_python() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12", "3.11"]).with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
-    let server = simple_launcher_registry(&context, None).await?;
+    let server = simple_launcher_registry(&context, Some(">=3.12,<4.0"), None).await?;
+
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--index-url")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--from")
+        .arg("simple-launcher@0.1.0")
+        .arg("python")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + simple-launcher==0.1.0
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn tool_run_latest_selects_python_from_wheel_metadata() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let server = simple_launcher_registry(&context, None, None).await?;
 
     context
         .python_pin()
@@ -2302,7 +2340,7 @@ async fn tool_run_latest_infers_requires_python_from_wheel_metadata() -> Result<
 }
 
 #[tokio::test]
-async fn tool_run_constraints_skip_registry_requires_python_inference() -> Result<()> {
+async fn tool_run_registry_resolution_honors_constraints() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.13", "3.12"]).with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
@@ -2344,11 +2382,243 @@ async fn tool_run_constraints_skip_registry_requires_python_inference() -> Resul
 }
 
 #[tokio::test]
-async fn tool_run_explicit_python_skips_deferred_registry_inference_pass() -> Result<()> {
+async fn tool_run_registry_resolution_falls_back_without_python_downloads() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"]).with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
-    let server = simple_launcher_registry(&context, Some(">=3.12,<4.0")).await?;
+    let server = simple_launcher_registry_with_newer_release(&context).await?;
+
+    context
+        .python_pin()
+        .arg("3.12")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--no-python-downloads")
+        .arg("--index-url")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--from")
+        .arg("simple-launcher")
+        .arg("python")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + simple-launcher==0.1.0
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn tool_run_registry_resolution_constrains_target_markers() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let irrelevant_platform = if cfg!(windows) { "linux" } else { "win32" };
+    let requires_dist = format!("missing-package; sys_platform in '{irrelevant_platform}'");
+    let server =
+        simple_launcher_registry(&context, Some(">=3.12,<4.0"), Some(&requires_dist)).await?;
+
+    context
+        .python_pin()
+        .arg("3.12")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--index-url")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--from")
+        .arg("simple-launcher")
+        .arg("python")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + simple-launcher==0.1.0
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn tool_run_registry_resolution_preserves_current_patch_compatible_python() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.13", "3.12"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let server = simple_launcher_registry(&context, Some(">=3.12.5,<4.0"), None).await?;
+
+    context
+        .python_pin()
+        .arg("3.12")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--index-url")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--from")
+        .arg("simple-launcher")
+        .arg("python")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + simple-launcher==0.1.0
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn tool_run_registry_resolution_excludes_automatic_prerelease_python() -> Result<()> {
+    let context =
+        uv_test::test_context_with_versions!(&["3.15", "3.14", "3.11"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let server = simple_launcher_registry(&context, Some(">=3.12,<4.0"), None).await?;
+
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--index-url")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--from")
+        .arg("simple-launcher")
+        .arg("python")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.14.[X]
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + simple-launcher==0.1.0
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn tool_run_registry_resolution_preserves_selected_prerelease_python() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.15"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let server = simple_launcher_registry(&context, Some(">=3.15.0b1,<4.0"), None).await?;
+
+    context
+        .python_pin()
+        .arg("3.15")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--index-url")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--from")
+        .arg("simple-launcher")
+        .arg("python")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.15.[X]b1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + simple-launcher==0.1.0
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn tool_run_latest_does_not_downgrade_without_python_downloads() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let server = simple_launcher_registry_with_newer_release(&context).await?;
+
+    context
+        .python_pin()
+        .arg("3.12")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--no-python-downloads")
+        .arg("--index-url")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--from")
+        .arg("simple-launcher@latest")
+        .arg("python")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving tool dependencies:
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13,<4.0 and simple-launcher==0.2.0 depends on Python>=3.13,<4.0, we can conclude that simple-launcher==0.2.0 cannot be used.
+          And because you require simple-launcher==0.2.0, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn tool_run_registry_resolution_preserves_explicit_python() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let server = simple_launcher_registry(&context, Some(">=3.12,<4.0"), None).await?;
 
     let output = context
         .tool_run()
@@ -2383,6 +2653,7 @@ async fn tool_run_explicit_python_skips_deferred_registry_inference_pass() -> Re
 async fn simple_launcher_registry(
     context: &TestContext,
     requires_python: Option<&str>,
+    requires_dist: Option<&str>,
 ) -> Result<MockServer> {
     let server = MockServer::start().await;
     let wheel_filename = "simple_launcher-0.1.0-py3-none-any.whl";
@@ -2394,6 +2665,9 @@ async fn simple_launcher_registry(
     )?;
     let requires_python = requires_python
         .map(|requires_python| format!(r#""requires-python": "{requires_python}","#))
+        .unwrap_or_default();
+    let requires_dist = requires_dist
+        .map(|requires_dist| format!("Requires-Dist: {requires_dist}\n"))
         .unwrap_or_default();
     let body = format!(
         r#"{{
@@ -2424,9 +2698,9 @@ async fn simple_launcher_registry(
         .await;
     Mock::given(method("GET"))
         .and(path(format!("/files/{wheel_filename}.metadata")))
-        .respond_with(ResponseTemplate::new(200).set_body_string(
-            "Metadata-Version: 2.1\nName: simple-launcher\nVersion: 0.1.0\nRequires-Python: >=3.12,<4.0\n",
-        ))
+        .respond_with(ResponseTemplate::new(200).set_body_string(format!(
+            "Metadata-Version: 2.1\nName: simple-launcher\nVersion: 0.1.0\nRequires-Python: >=3.12,<4.0\n{requires_dist}",
+        )))
         .mount(&server)
         .await;
 
@@ -2457,6 +2731,7 @@ async fn simple_launcher_registry_with_newer_release(context: &TestContext) -> R
                     "filename": "simple_launcher-0.2.0-py3-none-any.whl",
                     "url": "{}/files/simple_launcher-0.2.0-py3-none-any.whl",
                     "hashes": {{}},
+                    "core-metadata": true,
                     "requires-python": ">=3.13,<4.0",
                     "upload-time": "2024-01-02T00:00:00Z"
                 }}
@@ -2476,6 +2751,15 @@ async fn simple_launcher_registry_with_newer_release(context: &TestContext) -> R
     Mock::given(method("GET"))
         .and(path(format!("/files/{wheel_filename}")))
         .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(
+            "/files/simple_launcher-0.2.0-py3-none-any.whl.metadata",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_string(
+            "Metadata-Version: 2.1\nName: simple-launcher\nVersion: 0.2.0\nRequires-Python: >=3.13,<4.0\n",
+        ))
         .mount(&server)
         .await;
 

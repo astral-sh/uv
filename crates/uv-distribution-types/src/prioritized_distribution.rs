@@ -7,7 +7,9 @@ use tracing::debug;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
-use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags};
+use uv_platform_tags::{
+    AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
+};
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
@@ -425,8 +427,35 @@ impl PrioritizedDist {
 
     /// Return the highest-priority distribution for the package version, if any.
     pub fn get(&self) -> Option<CompatibleDist<'_>> {
-        let best_wheel = self.0.best_wheel_index.map(|i| &self.0.wheels[i]);
-        match (&best_wheel, &self.0.source) {
+        self.get_with_best_wheel(
+            self.0
+                .best_wheel_index
+                .map(|i| (&self.0.wheels[i].0, &self.0.wheels[i].1)),
+        )
+    }
+
+    /// Return the highest-priority distribution for the package version after refining wheel
+    /// compatibility for the given tags.
+    ///
+    /// This only further restricts wheels that survived the compatibility checks used to build
+    /// the prioritized distribution. It never makes an otherwise incompatible wheel compatible.
+    pub fn get_for_tags(&self, tags: Option<&Tags>) -> Option<CompatibleDist<'_>> {
+        let Some(tags) = tags else {
+            return self.get();
+        };
+        let best_wheel = self.best_wheel_for_tags(tags);
+        self.get_with_best_wheel(
+            best_wheel
+                .as_ref()
+                .map(|(wheel, compatibility)| (*wheel, compatibility)),
+        )
+    }
+
+    fn get_with_best_wheel<'a>(
+        &'a self,
+        best_wheel: Option<(&'a RegistryBuiltWheel, &WheelCompatibility)>,
+    ) -> Option<CompatibleDist<'a>> {
+        match (best_wheel, &self.0.source) {
             // If both are compatible, break ties based on the hash outcome. For example, prefer a
             // source distribution with a matching hash over a wheel with a mismatched hash. When
             // the outcomes are equivalent (e.g., both have a matching hash), prefer the wheel.
@@ -481,6 +510,22 @@ impl PrioritizedDist {
         }
     }
 
+    fn best_wheel_for_tags<'a>(
+        &'a self,
+        tags: &Tags,
+    ) -> Option<(&'a RegistryBuiltWheel, WheelCompatibility)> {
+        let mut best_wheel = None;
+        for (wheel, compatibility) in &self.0.wheels {
+            let compatibility = compatibility.for_tags(&wheel.filename, tags);
+            if best_wheel.as_ref().is_none_or(|(_, best_compatibility)| {
+                compatibility.is_more_compatible(best_compatibility)
+            }) {
+                best_wheel = Some((wheel, compatibility));
+            }
+        }
+        best_wheel
+    }
+
     /// Return the incompatibility for the best source distribution, if any.
     pub fn incompatible_source(&self) -> Option<&IncompatibleSource> {
         self.0
@@ -503,6 +548,19 @@ impl PrioritizedDist {
             })
     }
 
+    /// Return the incompatibility for the best wheel after refining wheel compatibility for the
+    /// given tags.
+    pub fn incompatible_wheel_for_tags(&self, tags: Option<&Tags>) -> Option<IncompatibleWheel> {
+        let Some(tags) = tags else {
+            return self.incompatible_wheel().cloned();
+        };
+        self.best_wheel_for_tags(tags)
+            .and_then(|(_, compatibility)| match compatibility {
+                WheelCompatibility::Compatible(_, _, _) => None,
+                WheelCompatibility::Incompatible(incompatibility) => Some(incompatibility),
+            })
+    }
+
     /// Return the hashes for each distribution.
     pub fn hashes(&self) -> &[HashDigest] {
         &self.0.hashes
@@ -517,18 +575,23 @@ impl PrioritizedDist {
     /// If this prioritized dist has at least one wheel, then this creates
     /// a built distribution with the best wheel in this prioritized dist.
     pub fn built_dist(&self) -> Option<RegistryBuiltDist> {
-        let best_wheel_index = self.0.best_wheel_index?;
+        let best_wheel = &self.0.wheels[self.0.best_wheel_index?].0;
+        self.built_dist_for(best_wheel)
+    }
 
+    /// If the selected wheel belongs to this prioritized distribution, create a built
+    /// distribution that uses it as the best wheel.
+    pub fn built_dist_for(&self, selected: &RegistryBuiltWheel) -> Option<RegistryBuiltDist> {
         // Remove any excluded wheels from the list of wheels, and adjust the wheel index to be
         // relative to the filtered list.
         let mut adjusted_wheels = Vec::with_capacity(self.0.wheels.len());
-        let mut adjusted_best_index = 0;
-        for (i, (wheel, compatibility)) in self.0.wheels.iter().enumerate() {
+        let mut adjusted_best_index = None;
+        for (wheel, compatibility) in &self.0.wheels {
             if compatibility.is_excluded() {
                 continue;
             }
-            if i == best_wheel_index {
-                adjusted_best_index = adjusted_wheels.len();
+            if std::ptr::eq(wheel, selected) {
+                adjusted_best_index = Some(adjusted_wheels.len());
             }
             adjusted_wheels.push(wheel.clone());
         }
@@ -536,7 +599,7 @@ impl PrioritizedDist {
         let sdist = self.0.source.as_ref().map(|(sdist, _)| sdist.clone());
         Some(RegistryBuiltDist {
             wheels: adjusted_wheels,
-            best_wheel_index: adjusted_best_index,
+            best_wheel_index: adjusted_best_index?,
             sdist,
         })
     }
@@ -694,6 +757,19 @@ impl WheelCompatibility {
             (Self::Incompatible(incompatibility), Self::Incompatible(other_incompatibility)) => {
                 incompatibility.is_more_compatible(other_incompatibility)
             }
+        }
+    }
+
+    /// Refine an otherwise compatible wheel against an exact set of tags.
+    fn for_tags(&self, filename: &WheelFilename, tags: &Tags) -> Self {
+        let Self::Compatible(hash, _, build_tag) = self else {
+            return self.clone();
+        };
+        match filename.compatibility(tags) {
+            TagCompatibility::Compatible(priority) => {
+                Self::Compatible(*hash, Some(priority), build_tag.clone())
+            }
+            TagCompatibility::Incompatible(tag) => Self::Incompatible(IncompatibleWheel::Tag(tag)),
         }
     }
 }
@@ -1036,7 +1112,90 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
 mod tests {
     use std::str::FromStr;
 
+    use uv_platform_tags::{Arch, Os, Platform, TagsOptions};
+    use uv_pypi_types::HashDigests;
+    use uv_redacted::DisplaySafeUrl;
+    use uv_small_str::SmallString;
+
     use super::*;
+    use crate::{FileLocation, IndexUrl, UrlString};
+
+    fn registry_wheel(filename: &str) -> RegistryBuiltWheel {
+        let filename = WheelFilename::from_str(filename).expect("valid wheel filename");
+        RegistryBuiltWheel {
+            file: Box::new(File {
+                dist_info_metadata: false,
+                filename: SmallString::from(filename.to_string()),
+                hashes: HashDigests::empty(),
+                requires_python: None,
+                size: None,
+                upload_time_utc_ms: None,
+                url: FileLocation::AbsoluteUrl(UrlString::from(
+                    DisplaySafeUrl::from_str("https://example.com/wheel.whl")
+                        .expect("valid wheel URL"),
+                )),
+                yanked: None,
+                zstd: None,
+            }),
+            filename,
+            index: IndexUrl::from_str("https://example.com/simple").expect("valid index URL"),
+        }
+    }
+
+    fn cpython_313_tags(gil_disabled: bool) -> Tags {
+        Tags::from_env(
+            &Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 17,
+                },
+                Arch::X86_64,
+            ),
+            (3, 13),
+            "cpython",
+            (3, 13),
+            TagsOptions {
+                manylinux_compatible: true,
+                gil_disabled,
+                ..TagsOptions::default()
+            },
+        )
+        .expect("valid tags")
+    }
+
+    #[test]
+    fn exact_tags_select_and_preserve_best_wheel() {
+        let free_threaded = registry_wheel("example-1.0-cp313-cp313t-linux_x86_64.whl");
+        let free_threaded_filename = free_threaded.filename.clone();
+        let gil_enabled = registry_wheel("example-1.0-cp313-cp313-linux_x86_64.whl");
+        let gil_enabled_filename = gil_enabled.filename.clone();
+        let compatibility = WheelCompatibility::Compatible(HashComparison::Matched, None, None);
+        let mut prioritized =
+            PrioritizedDist::from_built(free_threaded, vec![], compatibility.clone());
+        prioritized.insert_built(gil_enabled, vec![], compatibility);
+
+        let selected = prioritized
+            .get_for_tags(Some(&cpython_313_tags(false)))
+            .expect("a compatible GIL-enabled wheel");
+        let selected_wheel = selected.wheel().expect("a selected wheel");
+        assert_eq!(selected_wheel.filename, gil_enabled_filename);
+
+        let built = prioritized
+            .built_dist_for(selected_wheel)
+            .expect("the selected wheel belongs to the prioritized distribution");
+        assert_eq!(built.best_wheel().filename, gil_enabled_filename);
+
+        let selected = prioritized
+            .get_for_tags(Some(&cpython_313_tags(true)))
+            .expect("a compatible free-threaded wheel");
+        let selected_wheel = selected.wheel().expect("a selected wheel");
+        assert_eq!(selected_wheel.filename, free_threaded_filename);
+
+        let built = prioritized
+            .built_dist_for(selected_wheel)
+            .expect("the selected wheel belongs to the prioritized distribution");
+        assert_eq!(built.best_wheel().filename, free_threaded_filename);
+    }
 
     #[track_caller]
     fn assert_platform_markers(filename: &str, expected: &str) {
