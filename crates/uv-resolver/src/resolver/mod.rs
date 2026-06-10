@@ -1250,8 +1250,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
 
-            // If the wheel's tags don't match the target, it's incompatible.
-            let incompatible_tag = if let Some(tags) = env.tags().or(self.tags.as_ref()) {
+            // If the wheel's tags don't match the alternative target, it's incompatible.
+            //
+            // For ordinary resolutions, preserve the existing behavior of checking only the
+            // Python tag here. Full platform and ABI compatibility is validated when constructing
+            // the installation plan.
+            let incompatible_tag = if let Some(tags) = env.tags() {
                 match filename.compatibility(tags) {
                     TagCompatibility::Compatible(_) => None,
                     TagCompatibility::Incompatible(tag) => Some(tag),
