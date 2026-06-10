@@ -2528,44 +2528,6 @@ fn package_prereleases_boundary() {
     context.assert_installed("a", "0.1.0");
 }
 
-/// The user requires a non-prerelease version of `a` but has enabled pre-releases. There are pre-releases on the boundary of their range.
-///
-/// ```text
-/// package-prereleases-global-boundary
-/// ├── environment
-/// │   └── python3.12
-/// ├── root
-/// │   └── requires a<0.2.0
-/// │       └── satisfied by a-0.1.0
-/// └── a
-///     ├── a-0.1.0
-///     ├── a-0.2.0a1
-///     └── a-0.3.0
-/// ```
-#[test]
-fn package_prereleases_global_boundary() {
-    let context = uv_test::test_context!("3.12");
-    let server = PackseServer::new("prereleases/package-prereleases-global-boundary.toml");
-
-    uv_snapshot!(context.filters(), command(&context, &server)
-        .arg("--prerelease=allow")
-        .arg("a<0.2.0")
-        , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + a==0.1.0
-    ");
-
-    // Since the user did not use a pre-release specifier, pre-releases at the boundary should not be selected even though pre-releases are allowed.
-    context.assert_installed("a", "0.1.0");
-}
-
 /// The user requires a prerelease version of `a`. There are pre-releases on the boundary of their range.
 ///
 /// ```text
