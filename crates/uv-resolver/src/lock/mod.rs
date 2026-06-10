@@ -2277,7 +2277,7 @@ impl Lock {
                 .map_or(package.build_dependencies.as_slice(), |resolution| {
                     resolution.dependencies.as_slice()
                 });
-            if build_dependencies.is_empty() {
+            if build_resolution_record.is_none() && build_dependencies.is_empty() {
                 continue;
             }
 
