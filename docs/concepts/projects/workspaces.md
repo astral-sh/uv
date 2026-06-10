@@ -56,6 +56,9 @@ By default, `uv run` and `uv sync` operates on the workspace root. For example, 
 example, `uv run` and `uv run --package albatross` would be equivalent, while
 `uv run --package bird-feeder` would run the command in the `bird-feeder` package.
 
+Use `--all-packages` with commands like `uv run`, `uv sync`, and `uv export` to operate on all
+workspace members instead of just the root package.
+
 ## Workspace sources
 
 Within a workspace, dependencies on workspace members are facilitated via
