@@ -20,7 +20,9 @@ use uv_resolver::MetadataResponse;
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::pyproject::Source;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
+use uv_workspace::{
+    DiscoveryOptions, ProjectWorkspace, VirtualProject, WorkspaceCache, WorkspaceErrorKind,
+};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::{LockEvent, LockMode, LockOperation, LockResult};
@@ -68,95 +70,9 @@ pub(crate) async fn upgrade(
         Err(err) => return Err(err.into()),
     };
 
-    if project.workspace().packages().len() != 1 {
-        bail!("`uv upgrade` does not support workspaces with multiple members yet");
-    }
+    let requirement = select_requirement(&project, &package)?;
 
-    let dependencies = project
-        .current_project()
-        .project()
-        .dependencies
-        .as_deref()
-        .unwrap_or_default();
-    let mut matching = Vec::new();
-    for dependency in dependencies {
-        let requirement =
-            Requirement::<VerbatimParsedUrl>::from_str(dependency).with_context(|| {
-                format!("Failed to parse dependency `{dependency}` in `project.dependencies`")
-            })?;
-        if requirement.name == package {
-            matching.push(requirement);
-        }
-    }
-
-    let requirement = match matching.as_slice() {
-        [] => bail!("Dependency `{package}` was not found in `project.dependencies`"),
-        [requirement] => requirement,
-        _ => bail!("Dependency `{package}` is declared multiple times in `project.dependencies`"),
-    };
-
-    if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-        bail!("Dependency `{package}` is a direct URL requirement and cannot be upgraded");
-    }
-
-    if &requirement.name == project.project_name() {
-        bail!("Dependency `{package}` refers to the current project and cannot be upgraded");
-    }
-
-    let sources = project
-        .current_project()
-        .pyproject_toml()
-        .tool
-        .as_ref()
-        .and_then(|tool| tool.uv.as_ref())
-        .and_then(|uv| uv.sources.as_ref())
-        .and_then(|sources| sources.inner().get(&package))
-        .or_else(|| project.workspace().sources().get(&package));
-    if sources.is_some_and(|sources| {
-        sources.iter().any(|source| {
-            source_is_applicable(source, requirement.marker)
-                && matches!(source, Source::Git { rev: Some(_), .. })
-        })
-    }) {
-        bail!(
-            "Dependency `{package}` is pinned to a Git revision and cannot be upgraded commit-to-commit"
-        );
-    }
-    if sources.is_some_and(|sources| {
-        sources.iter().any(|source| {
-            source_is_applicable(source, requirement.marker)
-                && !matches!(source, Source::Registry { .. })
-        })
-    }) {
-        bail!(
-            "Dependency `{package}` uses a non-registry source in `tool.uv.sources` and cannot be upgraded"
-        );
-    }
-
-    let relaxed_requirement = relax_requirement(requirement);
-    let Requirement {
-        name,
-        extras,
-        version_or_url,
-        marker,
-        origin,
-    } = relaxed_requirement;
-    let version_or_url = match version_or_url {
-        Some(VersionOrUrl::VersionSpecifier(specifiers)) => {
-            Some(VersionOrUrl::VersionSpecifier(specifiers))
-        }
-        Some(VersionOrUrl::Url(_)) => {
-            bail!("Dependency `{package}` is a direct URL requirement and cannot be upgraded");
-        }
-        None => None,
-    };
-    let relaxed_requirement = Requirement::<VerbatimUrl> {
-        name,
-        extras,
-        version_or_url,
-        marker,
-        origin,
-    };
+    let relaxed_requirement = into_verbatim_requirement(relax_requirement(&requirement), &package)?;
 
     let mut pyproject = PyProjectTomlMut::from_toml(
         &project.current_project().pyproject_toml().raw,
@@ -275,6 +191,83 @@ pub(crate) async fn upgrade(
     Ok(ExitStatus::Success)
 }
 
+/// Select the single production dependency declaration targeted by `uv upgrade`.
+fn select_requirement(
+    project: &ProjectWorkspace,
+    package: &PackageName,
+) -> Result<Requirement<VerbatimParsedUrl>> {
+    if project.workspace().packages().len() != 1 {
+        bail!("`uv upgrade` does not support workspaces with multiple members yet");
+    }
+
+    let dependencies = project
+        .current_project()
+        .project()
+        .dependencies
+        .as_deref()
+        .unwrap_or_default();
+    let pyproject_path = project.project_root().join("pyproject.toml");
+    let mut matching = Vec::new();
+    for dependency in dependencies {
+        let requirement =
+            Requirement::<VerbatimParsedUrl>::from_str(dependency).with_context(|| {
+                format!(
+                    "Failed to parse dependency `{dependency}` from `project.dependencies` in `{}`",
+                    pyproject_path.display()
+                )
+            })?;
+        if requirement.name == *package {
+            matching.push(requirement);
+        }
+    }
+
+    let requirement = match matching.as_slice() {
+        [] => bail!("Dependency `{package}` was not found in `project.dependencies`"),
+        [requirement] => requirement.clone(),
+        _ => bail!("Dependency `{package}` is declared multiple times in `project.dependencies`"),
+    };
+
+    if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+        bail!("Dependency `{package}` is a direct URL requirement and cannot be upgraded");
+    }
+
+    if requirement.name == *project.project_name() {
+        bail!("Dependency `{package}` refers to the current project and cannot be upgraded");
+    }
+
+    let sources = project
+        .current_project()
+        .pyproject_toml()
+        .tool
+        .as_ref()
+        .and_then(|tool| tool.uv.as_ref())
+        .and_then(|uv| uv.sources.as_ref())
+        .and_then(|sources| sources.inner().get(package))
+        .or_else(|| project.workspace().sources().get(package));
+    if sources.is_some_and(|sources| {
+        sources.iter().any(|source| {
+            source_is_applicable(source, requirement.marker)
+                && matches!(source, Source::Git { rev: Some(_), .. })
+        })
+    }) {
+        bail!(
+            "Dependency `{package}` is pinned to a Git revision and cannot be upgraded commit-to-commit"
+        );
+    }
+    if sources.is_some_and(|sources| {
+        sources.iter().any(|source| {
+            source_is_applicable(source, requirement.marker)
+                && !matches!(source, Source::Registry { .. })
+        })
+    }) {
+        bail!(
+            "Dependency `{package}` uses a non-registry source in `tool.uv.sources` and cannot be upgraded"
+        );
+    }
+
+    Ok(requirement)
+}
+
 fn source_is_applicable(source: &Source, requirement_marker: MarkerTree) -> bool {
     let extra = requirement_marker.top_level_extra_name();
     source
@@ -282,6 +275,36 @@ fn source_is_applicable(source: &Source, requirement_marker: MarkerTree) -> bool
         .is_none_or(|target| extra.as_deref() == Some(target))
         && source.group().is_none()
         && !source.marker().is_disjoint(requirement_marker)
+}
+
+/// Convert a parsed requirement into the representation used by the mutable manifest.
+fn into_verbatim_requirement(
+    requirement: Requirement<VerbatimParsedUrl>,
+    package: &PackageName,
+) -> Result<Requirement<VerbatimUrl>> {
+    let Requirement {
+        name,
+        extras,
+        version_or_url,
+        marker,
+        origin,
+    } = requirement;
+    let version_or_url = match version_or_url {
+        Some(VersionOrUrl::VersionSpecifier(specifiers)) => {
+            Some(VersionOrUrl::VersionSpecifier(specifiers))
+        }
+        Some(VersionOrUrl::Url(_)) => {
+            bail!("Dependency `{package}` is a direct URL requirement and cannot be upgraded");
+        }
+        None => None,
+    };
+    Ok(Requirement::<VerbatimUrl> {
+        name,
+        extras,
+        version_or_url,
+        marker,
+        origin,
+    })
 }
 
 fn relax_requirement(
