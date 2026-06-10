@@ -5665,7 +5665,6 @@ dependencies = [
  "astral_async_zip",
  "axoupdater",
  "backon",
- "base64",
  "byteorder",
  "bytes",
  "clap",
