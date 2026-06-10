@@ -14,7 +14,7 @@ use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
-    GitLfsSetting, Reinstall, TargetTriple, Upgrade,
+    GitLfsSetting, Reinstall, TargetTriple,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -27,13 +27,13 @@ use uv_git::ResolvedRepositoryReference;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
-use uv_pep508::MarkerTreeContents;
+use uv_pep508::{MarkerTree, MarkerTreeContents};
 use uv_preview::Preview;
-use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
+use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts, SupportedEnvironments};
 use uv_python::{
     BrokenLink, EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads,
     PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonSource,
-    PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
+    PythonVariant, PythonVersion, PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::{
     LockedRequirements, NamedRequirementsResolver, RequirementsSpecification,
@@ -2045,6 +2045,83 @@ pub(crate) async fn resolve_environment(
     printer: Printer,
     preview: Preview,
 ) -> Result<ResolverOutput, ProjectError> {
+    resolve_environment_inner(
+        spec,
+        interpreter,
+        None,
+        python_platform,
+        source_tree_editable_policy,
+        build_constraints,
+        settings,
+        client_builder,
+        state,
+        logger,
+        concurrency,
+        cache,
+        workspace_cache,
+        printer,
+        preview,
+    )
+    .await
+}
+
+/// Run dependency resolution once across a finite set of alternative Python version forks.
+pub(crate) async fn resolve_with_python_alternatives(
+    spec: EnvironmentSpecification<'_>,
+    interpreter: &Interpreter,
+    python_alternatives: Vec<(PythonVersion, MarkerTree)>,
+    python_requirement: PythonRequirement,
+    python_platform: Option<&TargetTriple>,
+    source_tree_editable_policy: SourceTreeEditablePolicy,
+    build_constraints: Constraints,
+    settings: &ResolverSettings,
+    client_builder: &BaseClientBuilder<'_>,
+    state: &PlatformState,
+    logger: Box<dyn ResolveLogger>,
+    concurrency: &Concurrency,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+    printer: Printer,
+    preview: Preview,
+) -> Result<ResolverOutput, ProjectError> {
+    resolve_environment_inner(
+        spec,
+        interpreter,
+        Some((python_alternatives, python_requirement)),
+        python_platform,
+        source_tree_editable_policy,
+        build_constraints,
+        settings,
+        client_builder,
+        state,
+        logger,
+        concurrency,
+        cache,
+        workspace_cache,
+        printer,
+        preview,
+    )
+    .await
+}
+
+/// Run dependency resolution, using `interpreter` to build source distributions when necessary.
+async fn resolve_environment_inner(
+    spec: EnvironmentSpecification<'_>,
+    interpreter: &Interpreter,
+    alternative_python_forks: Option<(Vec<(PythonVersion, MarkerTree)>, PythonRequirement)>,
+    python_platform: Option<&TargetTriple>,
+    source_tree_editable_policy: SourceTreeEditablePolicy,
+    build_constraints: Constraints,
+    settings: &ResolverSettings,
+    client_builder: &BaseClientBuilder<'_>,
+    state: &PlatformState,
+    logger: Box<dyn ResolveLogger>,
+    concurrency: &Concurrency,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+    printer: Printer,
+    preview: Preview,
+) -> Result<ResolverOutput, ProjectError> {
     warn_on_requirements_txt_setting(&spec.requirements, settings);
 
     let ResolverSettings {
@@ -2062,7 +2139,7 @@ pub(crate) async fn resolve_environment(
         extra_build_variables,
         exclude_newer,
         link_mode,
-        upgrade: _,
+        upgrade,
         build_options,
         sources,
         torch_backend,
@@ -2083,10 +2160,43 @@ pub(crate) async fn resolve_environment(
 
     let client_builder = client_builder.clone().keyring(*keyring_provider);
 
-    // Determine the tags, markers, and interpreter to use for resolution.
-    let tags = pip::resolution_tags(None, python_platform, interpreter)?;
-    let marker_env = pip::resolution_markers(None, python_platform, interpreter);
-    let python_requirement = PythonRequirement::from_interpreter(interpreter);
+    // Determine the targets and artifact constraints for resolution.
+    let (tags, resolver_env, python_requirement, artifact_coverage) =
+        if let Some((python_alternatives, python_requirement)) = alternative_python_forks {
+            let artifact_coverage = SupportedEnvironments::from_markers(
+                python_alternatives
+                    .iter()
+                    .map(|(_, markers)| *markers)
+                    .collect(),
+            );
+            let alternatives = python_alternatives
+                .into_iter()
+                .map(|(python_version, markers)| {
+                    // The marker identifies the minor fork; the representative version only
+                    // determines exact artifact compatibility for that fork.
+                    Ok((
+                        markers,
+                        pip::resolution_tags(Some(&python_version), python_platform, interpreter)?
+                            .into_owned(),
+                    ))
+                })
+                .collect::<Result<Vec<_>, ProjectError>>()?;
+            (
+                None,
+                ResolverEnvironment::alternatives(alternatives),
+                python_requirement,
+                artifact_coverage,
+            )
+        } else {
+            let tags = pip::resolution_tags(None, python_platform, interpreter)?;
+            let marker_env = pip::resolution_markers(None, python_platform, interpreter);
+            (
+                Some(tags),
+                ResolverEnvironment::specific(marker_env),
+                PythonRequirement::from_interpreter(interpreter),
+                SupportedEnvironments::default(),
+            )
+        };
 
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
@@ -2142,6 +2252,7 @@ pub(crate) async fn resolve_environment(
         .exclude_newer(exclude_newer.clone())
         .index_strategy(*index_strategy)
         .build_options(build_options.clone())
+        .artifact_environments(artifact_coverage)
         .build();
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
@@ -2151,16 +2262,15 @@ pub(crate) async fn resolve_environment(
     let hasher = HashStrategy::default();
     let build_hasher = HashStrategy::default();
 
-    // When resolving from an interpreter, we assume an empty environment, so reinstalls and
-    // upgrades aren't relevant.
+    // When resolving from an interpreter, reinstalls aren't relevant because the environment is
+    // empty. Upgrade package constraints still restrict the selected solution.
     let reinstall = Reinstall::default();
-    let upgrade = Upgrade::default();
 
     // If an existing lockfile exists, build up a set of preferences.
     let preferences = match spec.preferences {
         Some(PreferenceLocation::Lock { lock, install_path }) => {
             let LockedRequirements { preferences, git } =
-                read_lock_requirements(lock, install_path, &upgrade)?;
+                read_lock_requirements(lock, install_path, upgrade)?;
 
             // Populate the Git resolver.
             for ResolvedRepositoryReference { reference, sha } in git {
@@ -2180,7 +2290,7 @@ pub(crate) async fn resolve_environment(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, tags.as_deref(), &hasher, build_options)
     };
 
     // Lower the extra build dependencies, if any.
@@ -2230,9 +2340,9 @@ pub(crate) async fn resolve_environment(
         EmptyInstalledPackages,
         &hasher,
         &reinstall,
-        &upgrade,
-        Some(&tags),
-        ResolverEnvironment::specific(marker_env),
+        upgrade,
+        tags.as_deref(),
+        resolver_env,
         python_requirement,
         interpreter.markers(),
         Conflicts::empty(),

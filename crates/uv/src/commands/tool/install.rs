@@ -14,7 +14,7 @@ use uv_configuration::{
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirementSpecification,
+    RequirementSource, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -43,6 +43,7 @@ use crate::commands::project::{
 };
 use crate::commands::tool::common::{
     ToolPython, finalize_tool_install, refine_interpreter, remove_entrypoints,
+    resolve_registry_tool,
 };
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
@@ -52,6 +53,68 @@ use crate::settings::{ResolverInstallerSettings, ResolverSettings};
 /// Install a tool.
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
+    package: String,
+    editable: bool,
+    from: Option<String>,
+    with: &[RequirementsSource],
+    constraints: &[RequirementsSource],
+    overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
+    build_constraints: &[RequirementsSource],
+    entrypoints: &[PackageName],
+    lfs: GitLfsSetting,
+    python: Option<String>,
+    python_platform: Option<TargetTriple>,
+    install_mirrors: PythonInstallMirrors,
+    force: bool,
+    options: ResolverInstallerOptions,
+    settings: ResolverInstallerSettings,
+    client_builder: BaseClientBuilder<'_>,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    installer_metadata: bool,
+    concurrency: Concurrency,
+    no_config: bool,
+    cache: Cache,
+    refresh: Refresh,
+    workspace_cache: &WorkspaceCache,
+    printer: Printer,
+    preview: Preview,
+) -> Result<ExitStatus> {
+    Box::pin(install_inner(
+        package,
+        editable,
+        from,
+        with,
+        constraints,
+        overrides,
+        excludes,
+        build_constraints,
+        entrypoints,
+        lfs,
+        python,
+        python_platform,
+        install_mirrors,
+        force,
+        options,
+        settings,
+        client_builder,
+        python_preference,
+        python_downloads,
+        installer_metadata,
+        concurrency,
+        no_config,
+        cache,
+        refresh,
+        workspace_cache,
+        printer,
+        preview,
+    ))
+    .await
+}
+
+#[expect(clippy::fn_params_excessive_bools)]
+async fn install_inner(
     package: String,
     editable: bool,
     from: Option<String>,
@@ -94,6 +157,14 @@ pub(crate) async fn install(
     // Parse the input requirement.
     let request = ToolRequest::parse(&package, from.as_deref())?;
 
+    // If the user passed, e.g., `ruff@latest`, refresh the cache.
+    let refresh = if request.is_latest() {
+        refresh.combine(Refresh::All(Timestamp::now()))
+    } else {
+        refresh
+    };
+    let cache = cache.with_refresh(refresh.clone());
+
     let unresolved_target_requirements = match &request {
         ToolRequest::Package {
             target: Target::Unspecified(requirement),
@@ -111,6 +182,27 @@ pub(crate) async fn install(
             )
         }
         _ => None,
+    };
+    let has_registry_target = match &request {
+        ToolRequest::Package {
+            target: Target::Version(..) | Target::Latest(..),
+            ..
+        } => true,
+        ToolRequest::Package {
+            target: Target::Unspecified(_),
+            ..
+        } => unresolved_target_requirements
+            .as_ref()
+            .is_some_and(|requirements| {
+                requirements.first().is_some_and(|requirement| {
+                    matches!(
+                        &requirement.requirement,
+                        UnresolvedRequirement::Named(requirement)
+                            if matches!(&requirement.source, RequirementSource::Registry { .. })
+                    )
+                })
+            }),
+        ToolRequest::Python { .. } => false,
     };
 
     let tool_python = ToolPython::from_request(
@@ -131,7 +223,7 @@ pub(crate) async fn install(
 
     // Pre-emptively identify a Python interpreter. We need an interpreter to resolve any unnamed
     // requirements, even if we end up using a different interpreter for the tool install itself.
-    let interpreter = PythonInstallation::find_or_download(
+    let mut interpreter = PythonInstallation::find_or_download(
         python_request.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
@@ -145,14 +237,6 @@ pub(crate) async fn install(
     )
     .await?
     .into_interpreter();
-
-    // If the user passed, e.g., `ruff@latest`, refresh the cache.
-    let refresh = if request.is_latest() {
-        refresh.combine(Refresh::All(Timestamp::now()))
-    } else {
-        refresh
-    };
-    let cache = cache.with_refresh(refresh.clone());
 
     // Resolve the `--from` requirement.
     let requirement = match &request {
@@ -451,7 +535,7 @@ pub(crate) async fn install(
             .collect();
 
     // Convert to tool options.
-    let options = ToolOptions::from(options);
+    let tool_options = ToolOptions::from(options.clone());
 
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
@@ -488,8 +572,7 @@ pub(crate) async fn install(
                 (None, true)
             }
         };
-
-    let existing_environment = if force {
+    let mut existing_environment = if force {
         None
     } else {
         installed_tools
@@ -570,10 +653,10 @@ pub(crate) async fn install(
                     Ok(SatisfiesResult::Fresh { .. })
                 ) {
                     // Then we're done! Though we might need to update the receipt.
-                    if *tool_receipt.options() != options {
+                    if *tool_receipt.options() != tool_options {
                         installed_tools.add_tool_receipt(
                             package_name,
-                            tool_receipt.clone().with_options(options),
+                            tool_receipt.clone().with_options(tool_options),
                         )?;
                     }
 
@@ -610,35 +693,115 @@ pub(crate) async fn install(
         ..spec
     };
 
+    let mut registry_resolution = None;
+    if has_registry_target
+        && !explicit_python_request
+        && (existing_environment.is_none()
+            || request.is_latest()
+            || !settings.resolver.upgrade.is_none())
+    {
+        // Prefer the existing tool interpreter when multiple Python targets produce the same
+        // solution. This preserves the established update-in-place behavior while still allowing
+        // a higher tool version to select a different interpreter.
+        let registry_interpreter = existing_environment
+            .as_ref()
+            .map(|environment| environment.environment().interpreter())
+            .unwrap_or(&interpreter)
+            .clone();
+        let selected = match Box::pin(resolve_registry_tool(
+            package_name,
+            EnvironmentSpecification::from(spec.clone()),
+            &registry_interpreter,
+            python_platform.as_ref(),
+            SourceTreeEditablePolicy::Tool,
+            Constraints::from_requirements(build_constraints.iter().cloned()),
+            &settings,
+            &client_builder,
+            &state,
+            &reporter,
+            &install_mirrors,
+            python_preference,
+            python_downloads,
+            &concurrency,
+            &cache,
+            workspace_cache,
+            Box::new(DefaultResolveLogger),
+            printer,
+            preview,
+        ))
+        .await
+        {
+            Ok(selected) => selected,
+            Err(ProjectError::Operation(err)) => {
+                return diagnostics::OperationDiagnostic::with_system_certs(
+                    client_builder.system_certs(),
+                )
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            }
+            Err(err) => return Err(err.into()),
+        };
+        if let Some(selected) = selected {
+            let reuses_existing_environment = existing_environment
+                .as_ref()
+                .is_some_and(|environment| environment.environment().uses(&selected.interpreter));
+            if !reuses_existing_environment {
+                existing_environment = None;
+            }
+            registry_resolution = Some(selected.resolution);
+            interpreter = selected.interpreter;
+        }
+    }
+
     // TODO(zanieb): Build the environment in the cache directory then copy into the tool directory.
     // This lets us confirm the environment is valid before removing an existing install. However,
     // entrypoints always contain an absolute path to the relevant Python interpreter, which would
     // be invalidated by moving the environment.
     let environment = if let Some(environment) = existing_environment {
-        let environment = match update_environment(
-            environment.into_environment(),
-            spec,
-            Modifications::Exact,
-            python_platform.as_ref(),
-            SourceTreeEditablePolicy::Tool,
-            Constraints::from_requirements(build_constraints.iter().cloned()),
-            ExtraBuildRequires::default(),
-            &settings,
-            &client_builder,
-            &state,
-            Box::new(DefaultResolveLogger),
-            Box::new(DefaultInstallLogger),
-            installer_metadata,
-            &concurrency,
-            &cache,
-            workspace_cache,
-            DryRun::Disabled,
-            printer,
-            preview,
-        )
-        .await
-        {
-            Ok(update) => update.into_environment(),
+        let environment = if let Some(resolution) = registry_resolution.take() {
+            sync_environment(
+                environment.into_environment(),
+                &resolution,
+                Modifications::Exact,
+                Constraints::from_requirements(build_constraints.iter().cloned()),
+                (&settings).into(),
+                &client_builder,
+                &state,
+                Box::new(DefaultInstallLogger),
+                installer_metadata,
+                &concurrency,
+                &cache,
+                printer,
+                preview,
+            )
+            .await
+        } else {
+            update_environment(
+                environment.into_environment(),
+                spec,
+                Modifications::Exact,
+                python_platform.as_ref(),
+                SourceTreeEditablePolicy::Tool,
+                Constraints::from_requirements(build_constraints.iter().cloned()),
+                ExtraBuildRequires::default(),
+                &settings,
+                &client_builder,
+                &state,
+                Box::new(DefaultResolveLogger),
+                Box::new(DefaultInstallLogger),
+                installer_metadata,
+                &concurrency,
+                &cache,
+                workspace_cache,
+                DryRun::Disabled,
+                printer,
+                preview,
+            )
+            .await
+            .map(super::super::project::EnvironmentUpdate::into_environment)
+        };
+        let environment = match environment {
+            Ok(environment) => environment,
             Err(ProjectError::Operation(err)) => {
                 return diagnostics::OperationDiagnostic::with_system_certs(
                     client_builder.system_certs(),
@@ -661,23 +824,28 @@ pub(crate) async fn install(
 
         // If we're creating a new environment, ensure that we can resolve the requirements prior
         // to removing any existing tools.
-        let resolution = resolve_environment(
-            spec.clone(),
-            &interpreter,
-            python_platform.as_ref(),
-            SourceTreeEditablePolicy::Tool,
-            Constraints::from_requirements(build_constraints.iter().cloned()),
-            &settings.resolver,
-            &client_builder,
-            &state,
-            Box::new(DefaultResolveLogger),
-            &concurrency,
-            &cache,
-            workspace_cache,
-            printer,
-            preview,
-        )
-        .await;
+        let resolution = if let Some(resolution) = registry_resolution.take() {
+            Ok(resolution)
+        } else {
+            resolve_environment(
+                spec.clone(),
+                &interpreter,
+                python_platform.as_ref(),
+                SourceTreeEditablePolicy::Tool,
+                Constraints::from_requirements(build_constraints.iter().cloned()),
+                &settings.resolver,
+                &client_builder,
+                &state,
+                Box::new(DefaultResolveLogger),
+                &concurrency,
+                &cache,
+                workspace_cache,
+                printer,
+                preview,
+            )
+            .await
+            .map(Resolution::from)
+        };
 
         // If the resolution failed, retry with the inferred `requires-python` constraint.
         let (resolution, interpreter) = match resolution {
@@ -735,7 +903,7 @@ pub(crate) async fn install(
                     )
                     .await
                     {
-                        Ok(resolution) => (resolution, interpreter),
+                        Ok(resolution) => (Resolution::from(resolution), interpreter),
                         Err(ProjectError::Operation(err)) => {
                             return diagnostics::OperationDiagnostic::with_system_certs(
                                 client_builder.system_certs(),
@@ -761,7 +929,7 @@ pub(crate) async fn install(
         // Sync the environment with the resolved requirements.
         match sync_environment(
             environment,
-            &resolution.into(),
+            &resolution,
             Modifications::Exact,
             Constraints::from_requirements(build_constraints.iter().cloned()),
             (&settings).into(),
@@ -797,7 +965,7 @@ pub(crate) async fn install(
         package_name,
         entrypoints,
         &installed_tools,
-        &options,
+        &tool_options,
         force || invalid_tool_receipt,
         // Only persist the Python request if it was explicitly provided
         if explicit_python_request {

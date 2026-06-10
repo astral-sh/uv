@@ -7,6 +7,7 @@ use tracing::trace;
 use uv_distribution_types::{RequiresPython, RequiresPythonRange};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
+use uv_platform_tags::Tags;
 use uv_pypi_types::{
     ConflictItem, ConflictItemRef, ConflictKind, ConflictKindRef, ResolverMarkerEnvironment,
 };
@@ -70,6 +71,36 @@ pub struct ResolverEnvironment {
     kind: Kind,
 }
 
+/// An initial universal resolver fork.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct InitialFork {
+    /// The markers associated with this initial fork.
+    markers: MarkerTree,
+    /// The exact tags for this fork, if it is an alternative target.
+    tags: Option<AlternativeTags>,
+}
+
+/// The exact tags for an alternative target.
+///
+/// Tags do not implement equality, but resolver environments must remain comparable. Alternative
+/// tags are shared by every descendant fork, so shared identity is sufficient for equality.
+#[derive(Clone, Debug)]
+struct AlternativeTags(Arc<Tags>);
+
+impl AlternativeTags {
+    fn new(tags: Tags) -> Self {
+        Self(Arc::new(tags))
+    }
+}
+
+impl PartialEq for AlternativeTags {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for AlternativeTags {}
+
 /// The specific kind of resolver environment.
 ///
 /// Note that it is explicitly intended that this type remain unexported from
@@ -99,7 +130,13 @@ enum Kind {
         /// Note that this may be empty, which means resolution should begin
         /// with no forks. Or equivalently, a single fork whose marker
         /// expression matches all marker environments.
-        initial_forks: Arc<[MarkerTree]>,
+        initial_forks: Arc<[InitialFork]>,
+        /// Whether the initial forks are alternatives, any one of which may satisfy the resolution.
+        alternatives: bool,
+        /// The initial alternative that contains this resolver fork.
+        alternative: Option<usize>,
+        /// The exact tags for this alternative.
+        tags: Option<AlternativeTags>,
         /// The markers associated with this resolver fork.
         markers: MarkerTree,
         /// Conflicting group inclusions.
@@ -155,12 +192,89 @@ impl ResolverEnvironment {
     /// custom fork prioritization fails.
     pub fn universal(initial_forks: Vec<MarkerTree>) -> Self {
         let kind = Kind::Universal {
-            initial_forks: initial_forks.into(),
+            initial_forks: initial_forks
+                .into_iter()
+                .map(|markers| InitialFork {
+                    markers,
+                    tags: None,
+                })
+                .collect(),
+            alternatives: false,
+            alternative: None,
+            tags: None,
             markers: MarkerTree::TRUE,
             include: Arc::new(crate::FxHashbrownSet::default()),
             exclude: Arc::new(crate::FxHashbrownSet::default()),
         };
         Self { kind }
+    }
+
+    /// Create a universal resolver environment with a finite set of alternative initial forks.
+    ///
+    /// Unlike [`ResolverEnvironment::universal`], an unsatisfiable initial fork does not make the
+    /// entire resolution unsatisfiable, as long as another fork has a solution.
+    pub fn alternatives(initial_forks: Vec<(MarkerTree, Tags)>) -> Self {
+        let kind = Kind::Universal {
+            initial_forks: initial_forks
+                .into_iter()
+                .map(|(markers, tags)| InitialFork {
+                    markers,
+                    tags: Some(AlternativeTags::new(tags)),
+                })
+                .collect(),
+            alternatives: true,
+            alternative: None,
+            tags: None,
+            markers: MarkerTree::TRUE,
+            include: Arc::new(crate::FxHashbrownSet::default()),
+            exclude: Arc::new(crate::FxHashbrownSet::default()),
+        };
+        Self { kind }
+    }
+
+    /// Returns `true` when initial universal forks are alternatives.
+    pub(crate) fn are_alternatives(&self) -> bool {
+        matches!(
+            self.kind,
+            Kind::Universal {
+                alternatives: true,
+                ..
+            }
+        )
+    }
+
+    /// Return the initial alternative that contains this resolver fork.
+    pub(crate) fn alternative(&self) -> Option<usize> {
+        match self.kind {
+            Kind::Specific { .. } => None,
+            Kind::Universal { alternative, .. } => alternative,
+        }
+    }
+
+    /// Assign this resolver fork to an initial alternative.
+    fn with_alternative(
+        mut self,
+        initial_alternative: usize,
+        initial_tags: AlternativeTags,
+    ) -> Self {
+        if let Kind::Universal {
+            ref mut alternative,
+            ref mut tags,
+            ..
+        } = self.kind
+        {
+            *alternative = Some(initial_alternative);
+            *tags = Some(initial_tags);
+        }
+        self
+    }
+
+    /// Returns the exact tags for this alternative target.
+    pub(crate) fn tags(&self) -> Option<&Tags> {
+        match self.kind {
+            Kind::Specific { .. } => None,
+            Kind::Universal { ref tags, .. } => tags.as_ref().map(|tags| tags.0.as_ref()),
+        }
     }
 
     /// Returns the marker environment corresponding to this resolver
@@ -260,6 +374,9 @@ impl ResolverEnvironment {
             }
             Kind::Universal {
                 ref initial_forks,
+                alternatives,
+                alternative,
+                ref tags,
                 markers: ref lhs,
                 ref include,
                 ref exclude,
@@ -268,6 +385,9 @@ impl ResolverEnvironment {
                 markers.and(rhs);
                 let kind = Kind::Universal {
                     initial_forks: Arc::clone(initial_forks),
+                    alternatives,
+                    alternative,
+                    tags: tags.clone(),
                     markers,
                     include: Arc::clone(include),
                     exclude: Arc::clone(exclude),
@@ -306,6 +426,9 @@ impl ResolverEnvironment {
             }
             Kind::Universal {
                 ref initial_forks,
+                alternatives,
+                alternative,
+                ref tags,
                 ref markers,
                 ref include,
                 ref exclude,
@@ -330,6 +453,9 @@ impl ResolverEnvironment {
                 }
                 let kind = Kind::Universal {
                     initial_forks: Arc::clone(initial_forks),
+                    alternatives,
+                    alternative,
+                    tags: tags.clone(),
                     markers: *markers,
                     include: Arc::new(include),
                     exclude: Arc::new(exclude),
@@ -356,6 +482,9 @@ impl ResolverEnvironment {
             markers: ref _markers,
             include: ref _include,
             exclude: ref _exclude,
+            alternatives,
+            alternative: _,
+            tags: _,
         } = self.kind
         else {
             return Ok(vec![init]);
@@ -366,8 +495,9 @@ impl ResolverEnvironment {
         initial_forks
             .iter()
             .rev()
-            .filter_map(|&initial_fork| {
-                let combined = UniversalMarker::from_combined(initial_fork);
+            .enumerate()
+            .filter_map(|(alternative, initial_fork)| {
+                let combined = UniversalMarker::from_combined(initial_fork.markers);
                 let (include, exclude) = match combined.conflict().filter_rules() {
                     Ok(rules) => rules,
                     Err(err) => return Some(Err(err)),
@@ -379,6 +509,9 @@ impl ResolverEnvironment {
                         .chain(exclude.into_iter().map(Err)),
                 )?;
                 env = env.narrow_environment(combined.pep508());
+                if alternatives && let Some(tags) = initial_fork.tags.clone() {
+                    env = env.with_alternative(alternative, tags);
+                }
                 Some(Ok(init.clone().with_env(env)))
             })
             .collect()
@@ -414,10 +547,16 @@ impl ResolverEnvironment {
         match &self.kind {
             Kind::Specific { .. } => None,
             Kind::Universal {
+                alternatives: true, ..
+            } => None,
+            Kind::Universal {
                 initial_forks: _,
                 markers,
                 include,
                 exclude,
+                alternatives: false,
+                alternative: _,
+                tags: _,
             } => {
                 let format_conflict_item = |conflict_item: &ConflictItem| {
                     format!(
@@ -708,6 +847,7 @@ mod tests {
 
     use uv_pep440::{LowerBound, UpperBound, Version};
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
+    use uv_platform_tags::{Arch, Os, Platform, TagsOptions};
 
     use uv_distribution_types::{RequiresPython, RequiresPythonRange};
 
@@ -755,6 +895,23 @@ mod tests {
     fn python_requirement(python_version_greater_than_equal: &str) -> PythonRequirement {
         let requires_python = requires_python_lower(python_version_greater_than_equal);
         PythonRequirement::from_marker_environment(&MARKER_ENV, requires_python)
+    }
+
+    fn alternative_tags() -> Tags {
+        Tags::from_env(
+            &Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 17,
+                },
+                Arch::X86_64,
+            ),
+            (3, 11),
+            "cpython",
+            (3, 11),
+            TagsOptions::default(),
+        )
+        .expect("valid alternative tags")
     }
 
     /// Tests that narrowing a Python requirement when resolving for a
@@ -834,5 +991,47 @@ mod tests {
             resolver_env.narrow_python_requirement(&pyreq),
             Some(python_requirement("3.11")),
         );
+    }
+
+    #[test]
+    fn alternative_uses_only_fork_markers() {
+        let resolver_env = ResolverEnvironment::alternatives(vec![])
+            .with_alternative(1, AlternativeTags::new(alternative_tags()))
+            .narrow_environment(marker("sys_platform == 'darwin'"));
+
+        assert!(resolver_env.included_by_marker(marker("sys_platform == 'darwin'")));
+        assert!(!resolver_env.included_by_marker(marker("sys_platform == 'win32'")));
+        assert!(resolver_env.included_by_marker(marker("extra == 'foo'")));
+        assert_eq!(resolver_env.marker_environment(), None);
+        assert_eq!(resolver_env.tags().map(Tags::python_version), Some((3, 11)));
+    }
+
+    #[test]
+    fn alternative_is_preserved_when_narrowing() {
+        let resolver_env = ResolverEnvironment::alternatives(vec![])
+            .with_alternative(1, AlternativeTags::new(alternative_tags()));
+        let narrowed = resolver_env.narrow_environment(marker("python_version >= '3.10'"));
+
+        assert_eq!(narrowed.alternative(), Some(1));
+        assert_eq!(narrowed.marker_environment(), None);
+        assert_eq!(narrowed.tags().map(Tags::python_version), Some((3, 11)));
+    }
+
+    #[test]
+    fn alternative_can_create_descendant_forks() {
+        let resolver_env = ResolverEnvironment::alternatives(vec![])
+            .with_alternative(1, AlternativeTags::new(alternative_tags()))
+            .narrow_environment(marker("python_version >= '3.10'"));
+        let (darwin, not_darwin) =
+            fork_version_by_marker(&resolver_env, marker("sys_platform == 'darwin'"))
+                .expect("alternative can be forked");
+
+        for descendant in [&darwin, &not_darwin] {
+            assert_eq!(descendant.alternative(), Some(1));
+            assert_eq!(descendant.marker_environment(), None);
+            assert_eq!(descendant.tags().map(Tags::python_version), Some((3, 11)));
+        }
+        assert!(darwin.included_by_marker(marker("sys_platform == 'darwin'")));
+        assert!(!not_darwin.included_by_marker(marker("sys_platform == 'darwin'")));
     }
 }

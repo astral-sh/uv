@@ -1,5 +1,6 @@
 use std::{
-    collections::{BTreeSet, Bound},
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet, Bound},
     ffi::OsString,
     fmt::Write,
     path::Path,
@@ -12,10 +13,10 @@ use thiserror::Error;
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::GitLfsSetting;
+use uv_configuration::{BuildOptions, Concurrency, Constraints, GitLfsSetting, TargetTriple};
 use uv_distribution::StaticMetadataDatabase;
 use uv_distribution_types::{
-    InstalledDist, Name, Requirement, RequiresPython, UnresolvedRequirement,
+    InstalledDist, Name, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
 };
 use uv_errors::{ErrorWithHints, Hint, Hints};
 #[cfg(unix)]
@@ -25,17 +26,25 @@ use uv_git::GitResolver;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
+use uv_platform_tags::Os;
+use uv_preview::Preview;
+use uv_python::downloads::{ManagedPythonDownloadList, PythonDownloadRequest};
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
-    VersionRequest,
+    PythonPreference, PythonRequest, PythonVariant, PythonVersion, PythonVersionFile,
+    VersionFileDiscoveryOptions, VersionRequest, find_python_installations,
 };
+use uv_resolver::{PylockToml, PythonRequirement, ResolutionMode, ResolverOutput};
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
+use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user_once;
+use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip;
+use crate::commands::pip::loggers::ResolveLogger;
 
 /// An error raised when a tool package provides no executables.
 #[derive(Debug, Error)]
@@ -95,9 +104,13 @@ impl Hint for NoExecutablesError {
         hints
     }
 }
-use crate::commands::project::{ProjectError, PythonRequestSource};
+use crate::commands::project::{
+    EnvironmentSpecification, PlatformState, ProjectError, PythonRequestSource,
+    resolve_with_python_alternatives,
+};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
+use crate::settings::ResolverInstallerSettings;
 
 /// Return all packages which contain an executable with the given name.
 pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec<InstalledDist> {
@@ -144,7 +157,7 @@ pub(crate) struct ToolPython {
     /// The source of the Python request.
     source: PythonRequestSource,
     /// The selected Python request, computed by considering an explicit request, a global
-    /// version file, and static `requires-python` metadata from the source requirement.
+    /// version file, and static `requires-python` metadata from a source requirement.
     pub(crate) python_request: Option<PythonRequest>,
 }
 
@@ -159,7 +172,7 @@ impl ToolPython {
         client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
     ) -> Result<Self, ProjectError> {
-        let requires_python = if python_request.is_none() {
+        let source_requires_python = if python_request.is_none() {
             match requirement {
                 Some(requirement) => {
                     infer_requires_python_from_requirement(
@@ -177,33 +190,9 @@ impl ToolPython {
             None
         };
 
-        let (source, python_request) = if let Some(request) = python_request {
-            (PythonRequestSource::UserRequest, Some(request))
-        } else if let Some(file) = PythonVersionFile::discover(
-            &*CWD,
-            &VersionFileDiscoveryOptions::default()
-                .with_no_config(no_config)
-                .with_no_local(true),
-        )
-        .await?
-        .filter(|file| match (file.version(), requires_python.as_ref()) {
-            (Some(request), Some(requires_python)) => {
-                request.intersects_requires_python(requires_python)
-            }
-            _ => true,
-        }) {
-            (
-                PythonRequestSource::DotPythonVersion(file.clone()),
-                file.version().cloned(),
-            )
-        } else {
-            (
-                PythonRequestSource::RequiresPython,
-                requires_python
-                    .as_ref()
-                    .and_then(PythonRequest::from_requires_python),
-            )
-        };
+        let (source, python_request) =
+            Self::select_request(python_request, source_requires_python.as_ref(), no_config)
+                .await?;
 
         if let Some(python_request) = python_request.as_ref() {
             debug!(
@@ -216,6 +205,39 @@ impl ToolPython {
             source,
             python_request,
         })
+    }
+
+    async fn select_request(
+        python_request: Option<PythonRequest>,
+        requires_python: Option<&RequiresPython>,
+        no_config: bool,
+    ) -> Result<(PythonRequestSource, Option<PythonRequest>), ProjectError> {
+        let selected = if let Some(request) = python_request {
+            (PythonRequestSource::UserRequest, Some(request))
+        } else if let Some(file) = PythonVersionFile::discover(
+            &*CWD,
+            &VersionFileDiscoveryOptions::default()
+                .with_no_config(no_config)
+                .with_no_local(true),
+        )
+        .await?
+        .filter(|file| match (file.version(), requires_python) {
+            (Some(request), Some(requires_python)) => {
+                request.intersects_requires_python(requires_python)
+            }
+            _ => true,
+        }) {
+            (
+                PythonRequestSource::DotPythonVersion(file.clone()),
+                file.version().cloned(),
+            )
+        } else {
+            (
+                PythonRequestSource::RequiresPython,
+                requires_python.and_then(PythonRequest::from_requires_python),
+            )
+        };
+        Ok(selected)
     }
 
     /// Returns `true` if the selected request was explicitly provided by the user.
@@ -252,6 +274,526 @@ async fn infer_requires_python_from_requirement(
             None
         }
     }
+}
+
+/// A registry tool resolution narrowed to one concrete Python target.
+pub(crate) struct RegistryToolResolution {
+    pub(crate) interpreter: Interpreter,
+    pub(crate) resolution: Resolution,
+}
+
+#[derive(Clone)]
+struct RegistryToolPythonTarget {
+    version: PythonVersion,
+    interpreter: Option<Interpreter>,
+}
+
+struct RegistryToolPythonTargets {
+    /// One tag representative for every Python minor considered by the resolver.
+    alternatives: Vec<PythonVersion>,
+    /// Concrete Python installations or downloads that can be selected after resolution.
+    candidates: Vec<RegistryToolPythonTarget>,
+}
+
+/// Resolve a registry tool across discrete Python minor forks and select one concrete result.
+pub(crate) async fn resolve_registry_tool(
+    package_name: &PackageName,
+    spec: EnvironmentSpecification<'_>,
+    interpreter: &Interpreter,
+    python_platform: Option<&TargetTriple>,
+    source_tree_editable_policy: SourceTreeEditablePolicy,
+    build_constraints: Constraints,
+    settings: &ResolverInstallerSettings,
+    client_builder: &BaseClientBuilder<'_>,
+    state: &PlatformState,
+    reporter: &PythonDownloadReporter,
+    install_mirrors: &PythonInstallMirrors,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    concurrency: &Concurrency,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+    resolve_logger: Box<dyn ResolveLogger>,
+    printer: Printer,
+    preview: Preview,
+) -> Result<Option<RegistryToolResolution>, ProjectError> {
+    let python_targets = registry_tool_python_targets(
+        interpreter,
+        client_builder,
+        install_mirrors.python_downloads_json_url.as_deref(),
+        python_preference,
+        python_downloads,
+        cache,
+    )
+    .await?;
+
+    if python_targets.candidates.len() == 1 {
+        return Ok(None);
+    }
+
+    let Some(minimum_python_version) = python_targets
+        .candidates
+        .iter()
+        .map(|python_target| python_target.version.version())
+        .min()
+        .cloned()
+    else {
+        return Ok(None);
+    };
+    let python_requirement = PythonRequirement::from_requires_python(
+        interpreter,
+        RequiresPython::greater_than_equal_version(&minimum_python_version),
+    );
+    let python_alternatives = python_targets
+        .alternatives
+        .iter()
+        .cloned()
+        .map(|python_target| {
+            let markers = registry_tool_python_minor_marker(&python_target);
+            (python_target, markers)
+        })
+        .collect::<Vec<_>>();
+    let resolution = resolve_with_python_alternatives(
+        spec,
+        interpreter,
+        python_alternatives,
+        python_requirement,
+        python_platform,
+        source_tree_editable_policy,
+        build_constraints,
+        &settings.resolver,
+        client_builder,
+        state,
+        resolve_logger,
+        concurrency,
+        cache,
+        workspace_cache,
+        printer,
+        preview,
+    )
+    .await?;
+
+    let mut viable_candidates = Vec::new();
+    for python_target in python_targets.candidates {
+        let python_version = python_target
+            .interpreter
+            .is_none()
+            .then_some(&python_target.version);
+        let candidate_interpreter = python_target.interpreter.as_ref().unwrap_or(interpreter);
+        let Some((version, narrowed)) = narrow_registry_tool_resolution(
+            &resolution,
+            package_name,
+            python_version,
+            python_platform,
+            candidate_interpreter,
+            &settings.resolver.build_options,
+        )?
+        else {
+            continue;
+        };
+        viable_candidates.push((version, python_target, narrowed));
+    }
+
+    let current_python_version = interpreter.python_version();
+    let current_python_minor = interpreter.python_minor_version();
+    viable_candidates.sort_by(
+        |(left_version, left_target, _), (right_version, right_target, _)| {
+            registry_tool_candidate_order(
+                left_version,
+                left_target,
+                right_version,
+                right_target,
+                settings.resolver.resolution,
+                current_python_version,
+                &current_python_minor,
+            )
+        },
+    );
+
+    for (predicted_version, python_target, narrowed) in viable_candidates {
+        let python_minor = python_target.version.python_version();
+        let is_installed = python_target.interpreter.is_some();
+
+        let selected_python = if let Some(interpreter) = python_target.interpreter {
+            interpreter
+        } else {
+            let Some(request) = registry_tool_python_request(interpreter, &python_target.version)
+            else {
+                continue;
+            };
+            let candidate = match PythonInstallation::find_or_download(
+                Some(&request),
+                EnvironmentPreference::OnlySystem,
+                python_preference,
+                python_downloads,
+                client_builder,
+                cache,
+                Some(reporter),
+                install_mirrors.python_install_mirror.as_deref(),
+                install_mirrors.pypy_install_mirror.as_deref(),
+                install_mirrors.python_downloads_json_url.as_deref(),
+            )
+            .await
+            {
+                Ok(candidate) => candidate.into_interpreter(),
+                Err(uv_python::Error::MissingPython(..)) => {
+                    debug!("No Python {python_minor} interpreter is available for tool resolution");
+                    continue;
+                }
+                Err(err) => return Err(err.into()),
+            };
+            if !candidate.python_version().is_stable()
+                || candidate.python_version() != python_target.version.version()
+                || candidate.implementation_name() != interpreter.implementation_name()
+                || candidate.variant() != interpreter.variant()
+            {
+                debug!(
+                    "Discarding Python {} interpreter during tool resolution",
+                    candidate.python_version()
+                );
+                continue;
+            }
+            candidate
+        };
+
+        let narrowed = if selected_python.python_version() == python_target.version.version()
+            && is_installed
+        {
+            narrowed
+        } else {
+            let Some((actual_version, narrowed)) = narrow_registry_tool_resolution(
+                &resolution,
+                package_name,
+                None,
+                python_platform,
+                &selected_python,
+                &settings.resolver.build_options,
+            )?
+            else {
+                continue;
+            };
+            if actual_version != predicted_version {
+                debug!(
+                    "Discarding Python {python_minor} because its concrete resolution changed from {predicted_version} to {actual_version}"
+                );
+                continue;
+            }
+            narrowed
+        };
+
+        return Ok(Some(RegistryToolResolution {
+            interpreter: selected_python,
+            resolution: narrowed,
+        }));
+    }
+
+    Ok(None)
+}
+
+fn narrow_registry_tool_resolution(
+    resolution: &ResolverOutput,
+    package_name: &PackageName,
+    python_version: Option<&PythonVersion>,
+    python_platform: Option<&TargetTriple>,
+    interpreter: &Interpreter,
+    build_options: &BuildOptions,
+) -> Result<Option<(Version, Resolution)>, ProjectError> {
+    let markers = pip::resolution_markers(python_version, python_platform, interpreter);
+    let tags = pip::resolution_tags(python_version, python_platform, interpreter)?.into_owned();
+    let narrowed =
+        match PylockToml::from_resolution(resolution, &[], &CWD, Some(&tags), build_options) {
+            Ok(lock) => {
+                match lock.to_resolution(&CWD, markers.markers(), &[], &[], &tags, build_options) {
+                    Ok(narrowed) => narrowed,
+                    Err(err) => {
+                        debug!("Discarding Python target during tool resolution: {err}");
+                        return Ok(None);
+                    }
+                }
+            }
+            Err(err) => {
+                debug!("Discarding Python target during tool resolution: {err}");
+                return Ok(None);
+            }
+        };
+
+    let version = narrowed
+        .distributions()
+        .find(|distribution| distribution.name() == package_name)
+        .and_then(|distribution| distribution.version())
+        .cloned();
+    Ok(version.map(|version| (version, narrowed)))
+}
+
+fn registry_tool_candidate_order(
+    left_version: &Version,
+    left_target: &RegistryToolPythonTarget,
+    right_version: &Version,
+    right_target: &RegistryToolPythonTarget,
+    resolution_mode: ResolutionMode,
+    current_python_version: &Version,
+    current_python_minor: &Version,
+) -> Ordering {
+    let left_python_minor = left_target.version.python_version();
+    let right_python_minor = right_target.version.python_version();
+    registry_tool_version_order(left_version, right_version, resolution_mode)
+        .then_with(|| {
+            (left_target.version.version() != current_python_version)
+                .cmp(&(right_target.version.version() != current_python_version))
+        })
+        .then_with(|| {
+            (left_python_minor != *current_python_minor)
+                .cmp(&(right_python_minor != *current_python_minor))
+        })
+        .then_with(|| {
+            left_target
+                .interpreter
+                .is_none()
+                .cmp(&right_target.interpreter.is_none())
+        })
+        .then_with(|| right_python_minor.cmp(&left_python_minor))
+        .then_with(|| {
+            right_target
+                .version
+                .version()
+                .cmp(left_target.version.version())
+        })
+}
+
+fn registry_tool_version_order(
+    left: &Version,
+    right: &Version,
+    resolution_mode: ResolutionMode,
+) -> Ordering {
+    match resolution_mode {
+        ResolutionMode::Highest => right.cmp(left),
+        ResolutionMode::Lowest | ResolutionMode::LowestDirect => left.cmp(right),
+    }
+}
+
+async fn registry_tool_python_targets(
+    interpreter: &Interpreter,
+    client_builder: &BaseClientBuilder<'_>,
+    python_downloads_json_url: Option<&str>,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    cache: &Cache,
+) -> Result<RegistryToolPythonTargets, ProjectError> {
+    let current_python_version = PythonVersion::from(interpreter.python_full_version().clone());
+    // Alternative tags can be derived from a CPython language version and the current
+    // interpreter's variant. Other implementations have independent implementation versions, so
+    // their cross-minor tags cannot be inferred from [`PythonVersion`] alone. Pyodide reports
+    // itself as CPython, but its Emscripten targets also cannot be inferred this way.
+    if interpreter.implementation_name() != "cpython"
+        || matches!(
+            interpreter.platform().os(),
+            Os::Pyodide { .. } | Os::PyEmscripten { .. }
+        )
+    {
+        return Ok(RegistryToolPythonTargets {
+            alternatives: vec![current_python_version.clone()],
+            candidates: vec![RegistryToolPythonTarget {
+                version: current_python_version,
+                interpreter: Some(interpreter.clone()),
+            }],
+        });
+    }
+    let Ok(download_request) = PythonDownloadRequest::try_from(&interpreter.key()) else {
+        return Ok(RegistryToolPythonTargets {
+            alternatives: vec![current_python_version.clone()],
+            candidates: vec![RegistryToolPythonTarget {
+                version: current_python_version,
+                interpreter: Some(interpreter.clone()),
+            }],
+        });
+    };
+    let download_request = download_request
+        .with_version(VersionRequest::Major(
+            interpreter.python_major(),
+            interpreter.variant(),
+        ))
+        .with_prereleases(false);
+    let mut download_alternatives = BTreeMap::new();
+    let mut installed_alternatives = BTreeMap::new();
+    let mut candidates = BTreeMap::new();
+    let allow_download_targets = python_downloads.is_automatic()
+        && client_builder.connectivity.is_online()
+        && !matches!(python_preference, PythonPreference::OnlySystem);
+    if allow_download_targets {
+        let client = client_builder.build()?;
+        match ManagedPythonDownloadList::new(&client, python_downloads_json_url).await {
+            Ok(download_list) => {
+                for python_target in download_list
+                    .iter_matching(&download_request)
+                    .map(uv_python::downloads::ManagedPythonDownload::python_version)
+                {
+                    insert_registry_tool_python_alternative(
+                        &mut download_alternatives,
+                        python_target,
+                    );
+                }
+                for python_target in download_alternatives.values().cloned() {
+                    insert_registry_tool_python_candidate(&mut candidates, python_target, None);
+                }
+            }
+            Err(err) => {
+                debug!("Skipping managed Python downloads during tool target discovery: {err}");
+            }
+        }
+    }
+
+    let installed_request = PythonRequest::Key(download_request);
+    for result in find_python_installations(
+        &installed_request,
+        EnvironmentPreference::OnlySystem,
+        python_preference,
+        cache,
+    ) {
+        let installation = match result {
+            Ok(Ok(installation)) => installation,
+            Ok(Err(_)) => continue,
+            Err(err) => {
+                debug!("Skipping Python installation during tool target discovery: {err}");
+                continue;
+            }
+        };
+        let python_version =
+            PythonVersion::from(installation.interpreter().python_full_version().clone());
+        insert_registry_tool_python_alternative(
+            &mut installed_alternatives,
+            python_version.clone(),
+        );
+        insert_registry_tool_python_candidate(
+            &mut candidates,
+            python_version,
+            Some(installation.into_interpreter()),
+        );
+    }
+
+    let current_python_target = RegistryToolPythonTarget {
+        version: current_python_version.clone(),
+        interpreter: Some(interpreter.clone()),
+    };
+    let ordered_candidates =
+        order_registry_tool_python_candidates(candidates, current_python_target);
+
+    Ok(RegistryToolPythonTargets {
+        alternatives: merge_registry_tool_python_alternatives(
+            download_alternatives,
+            installed_alternatives,
+            current_python_version,
+        ),
+        candidates: ordered_candidates,
+    })
+}
+
+fn order_registry_tool_python_candidates(
+    mut candidates: BTreeMap<Version, RegistryToolPythonTarget>,
+    current_python_target: RegistryToolPythonTarget,
+) -> Vec<RegistryToolPythonTarget> {
+    let current_python_version = current_python_target.version.version().clone();
+    candidates.insert(
+        current_python_version.clone(),
+        current_python_target.clone(),
+    );
+
+    let mut ordered_candidates = Vec::with_capacity(candidates.len());
+    ordered_candidates.push(current_python_target);
+    ordered_candidates.extend(candidates.into_iter().rev().filter_map(
+        |(python_version, python_target)| {
+            (python_version != current_python_version).then_some(python_target)
+        },
+    ));
+    ordered_candidates
+}
+
+fn insert_registry_tool_python_alternative(
+    python_targets: &mut BTreeMap<Version, PythonVersion>,
+    version: PythonVersion,
+) {
+    if !version.is_stable() {
+        return;
+    }
+    let python_minor = version.python_version();
+    if python_targets
+        .get(&python_minor)
+        .is_none_or(|current| version.version() > current.version())
+    {
+        python_targets.insert(python_minor, version);
+    }
+}
+
+fn merge_registry_tool_python_alternatives(
+    mut download_targets: BTreeMap<Version, PythonVersion>,
+    installed_targets: BTreeMap<Version, PythonVersion>,
+    current_version: PythonVersion,
+) -> Vec<PythonVersion> {
+    for (python_minor, installed_target) in installed_targets {
+        download_targets
+            .entry(python_minor)
+            .or_insert(installed_target);
+    }
+
+    let current_python_minor = current_version.python_version();
+    download_targets.insert(current_python_minor.clone(), current_version);
+
+    let mut ordered_targets = Vec::with_capacity(download_targets.len());
+    if let Some(current_target) = download_targets.remove(&current_python_minor) {
+        ordered_targets.push(current_target);
+    }
+    ordered_targets.extend(download_targets.into_values().rev());
+    ordered_targets
+}
+
+fn insert_registry_tool_python_candidate(
+    python_targets: &mut BTreeMap<Version, RegistryToolPythonTarget>,
+    version: PythonVersion,
+    interpreter: Option<Interpreter>,
+) {
+    if !version.is_stable() {
+        return;
+    }
+    let python_version = version.version().clone();
+    let python_target = RegistryToolPythonTarget {
+        version,
+        interpreter,
+    };
+    if python_targets
+        .get(&python_version)
+        .is_none_or(|current| current.interpreter.is_none() && python_target.interpreter.is_some())
+    {
+        python_targets.insert(python_version, python_target);
+    }
+}
+
+fn registry_tool_python_request(
+    interpreter: &Interpreter,
+    python_target: &PythonVersion,
+) -> Option<PythonRequest> {
+    let release = python_target.release();
+    if release.len() != 3 || !python_target.is_stable() {
+        return None;
+    }
+    let major = release.first()?;
+    let minor = release.get(1)?;
+    let patch = release.get(2)?;
+    let request = PythonDownloadRequest::try_from(&interpreter.key())
+        .ok()?
+        .with_version(VersionRequest::MajorMinorPatch(
+            u8::try_from(*major).ok()?,
+            u8::try_from(*minor).ok()?,
+            u8::try_from(*patch).ok()?,
+            interpreter.variant(),
+        ))
+        .with_prereleases(false);
+    Some(PythonRequest::Key(request))
+}
+
+fn registry_tool_python_minor_marker(python_target: &PythonVersion) -> MarkerTree {
+    MarkerTree::expression(MarkerExpression::Version {
+        key: MarkerValueVersion::PythonVersion,
+        specifier: VersionSpecifier::equals_version(python_target.python_version()),
+    })
 }
 
 /// Given a no-solution error and the [`Interpreter`] that was used during the solve, attempt to
@@ -567,5 +1109,156 @@ fn warn_out_of_path(executable_directory: &Path) {
                 executable_directory.simplified_display().cyan(),
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn registry_tool_python_minor_marker_uses_python_version() {
+        let python_target = PythonVersion::from_str("3.15.0b1").expect("valid Python version");
+
+        assert_eq!(
+            registry_tool_python_minor_marker(&python_target)
+                .try_to_string()
+                .expect("serializable marker"),
+            "python_full_version == '3.15.*'"
+        );
+    }
+
+    #[test]
+    fn registry_tool_python_alternatives_select_latest_stable_patch() {
+        let mut targets = BTreeMap::new();
+        for version in ["3.14.1", "3.14.2", "3.15.0b1"] {
+            insert_registry_tool_python_alternative(
+                &mut targets,
+                PythonVersion::from_str(version).expect("valid Python version"),
+            );
+        }
+
+        assert_eq!(
+            targets
+                .into_values()
+                .map(|target| target.version.to_string())
+                .collect::<Vec<_>>(),
+            ["3.14.2"]
+        );
+    }
+
+    #[test]
+    fn registry_tool_python_alternatives_prefer_downloads_and_current() {
+        let mut download_targets = BTreeMap::new();
+        let mut installed_targets = BTreeMap::new();
+        for version in ["3.13.2", "3.14.2"] {
+            insert_registry_tool_python_alternative(
+                &mut download_targets,
+                PythonVersion::from_str(version).expect("valid Python version"),
+            );
+        }
+        for version in ["3.12.1", "3.12.2", "3.13.1", "3.14.3"] {
+            insert_registry_tool_python_alternative(
+                &mut installed_targets,
+                PythonVersion::from_str(version).expect("valid Python version"),
+            );
+        }
+
+        assert_eq!(
+            merge_registry_tool_python_alternatives(
+                download_targets,
+                installed_targets,
+                PythonVersion::from_str("3.14.1").expect("valid Python version"),
+            )
+            .into_iter()
+            .map(|target| target.version.to_string())
+            .collect::<Vec<_>>(),
+            ["3.14.1", "3.13.2", "3.12.2"]
+        );
+    }
+
+    #[test]
+    fn registry_tool_python_candidates_keep_same_minor_patches() {
+        let mut targets = BTreeMap::new();
+        for version in ["3.14.1", "3.14.2", "3.15.0b1"] {
+            insert_registry_tool_python_candidate(
+                &mut targets,
+                PythonVersion::from_str(version).expect("valid Python version"),
+                None,
+            );
+        }
+
+        assert_eq!(
+            targets
+                .into_values()
+                .map(|target| target.version.to_string())
+                .collect::<Vec<_>>(),
+            ["3.14.1", "3.14.2"]
+        );
+    }
+
+    #[test]
+    fn registry_tool_python_targets_exclude_automatic_prereleases() {
+        let mut alternatives = BTreeMap::new();
+        let mut candidates = BTreeMap::new();
+        for version in ["3.14.2", "3.15.0b1"] {
+            let version = PythonVersion::from_str(version).expect("valid Python version");
+            insert_registry_tool_python_alternative(&mut alternatives, version.clone());
+            insert_registry_tool_python_candidate(&mut candidates, version, None);
+        }
+
+        assert_eq!(
+            alternatives
+                .into_values()
+                .map(|target| target.version.to_string())
+                .collect::<Vec<_>>(),
+            ["3.14.2"]
+        );
+        assert_eq!(
+            candidates
+                .into_values()
+                .map(|target| target.version.to_string())
+                .collect::<Vec<_>>(),
+            ["3.14.2"]
+        );
+    }
+
+    #[test]
+    fn registry_tool_python_targets_preserve_current_prerelease() {
+        let current_version = PythonVersion::from_str("3.15.0b1").expect("valid Python version");
+        let current_target = RegistryToolPythonTarget {
+            version: current_version.clone(),
+            interpreter: None,
+        };
+        let mut candidates = BTreeMap::new();
+        insert_registry_tool_python_candidate(
+            &mut candidates,
+            PythonVersion::from_str("3.14.2").expect("valid Python version"),
+            None,
+        );
+
+        assert_eq!(
+            merge_registry_tool_python_alternatives(
+                BTreeMap::from([(
+                    Version::from_str("3.14").expect("valid Python minor"),
+                    PythonVersion::from_str("3.14.2").expect("valid Python version"),
+                )]),
+                BTreeMap::new(),
+                current_version,
+            )
+            .into_iter()
+            .map(|target| target.version.to_string())
+            .collect::<Vec<_>>(),
+            ["3.15.0b1", "3.14.2"]
+        );
+        assert_eq!(
+            order_registry_tool_python_candidates(candidates, current_target)
+                .into_iter()
+                .map(|target| target.version.to_string())
+                .collect::<Vec<_>>(),
+            ["3.15.0b1", "3.14.2"]
+        );
     }
 }

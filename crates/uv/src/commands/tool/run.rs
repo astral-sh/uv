@@ -37,6 +37,7 @@ use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_tool::{InstalledTools, entrypoint_paths};
+use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
@@ -53,7 +54,9 @@ use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
+use crate::commands::tool::common::{
+    ToolPython, matching_packages, refine_interpreter, resolve_registry_tool,
+};
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, project::environment::CachedEnvironment, read_env_files};
 use crate::printer::Printer;
@@ -675,9 +678,9 @@ impl std::fmt::Display for ToolRequirement {
 async fn get_or_create_environment(
     request: &ToolRequest<'_>,
     with: &[RequirementsSource],
-    constraints: &[RequirementsSource],
-    overrides: &[RequirementsSource],
-    build_constraints: &[RequirementsSource],
+    constraint_sources: &[RequirementsSource],
+    override_sources: &[RequirementsSource],
+    build_constraint_sources: &[RequirementsSource],
     show_resolution: bool,
     python: Option<&str>,
     python_platform: Option<TargetTriple>,
@@ -708,6 +711,25 @@ async fn get_or_create_environment(
         } => Some(RequirementsSpecification::parse_package(requirement)?),
         _ => None,
     };
+    let has_registry_target = match request {
+        ToolRequest::Package {
+            target: Target::Version(..) | Target::Latest(..),
+            ..
+        } => true,
+        ToolRequest::Package {
+            target: Target::Unspecified(_),
+            ..
+        } => unresolved_target_requirement
+            .as_ref()
+            .is_some_and(|requirement| {
+                matches!(
+                    &requirement.requirement,
+                    UnresolvedRequirement::Named(requirement)
+                        if matches!(&requirement.source, RequirementSource::Registry { .. })
+                )
+            }),
+        ToolRequest::Python { .. } => false,
+    };
 
     // Determine explicit Python version requests
     let explicit_python_request = python.map(PythonRequest::parse);
@@ -735,7 +757,7 @@ async fn get_or_create_environment(
         // e.g., `uvx python3.12`
         (None, Some(tool_request)) => Some(tool_request),
     };
-    let python_request = ToolPython::from_request(
+    let tool_python = ToolPython::from_request(
         python_request,
         unresolved_target_requirement
             .as_ref()
@@ -746,11 +768,12 @@ async fn get_or_create_environment(
         client_builder,
         cache,
     )
-    .await?
-    .python_request;
+    .await?;
+    let explicit_python_request = tool_python.is_explicit();
+    let python_request = tool_python.python_request;
 
     // Discover an interpreter.
-    let interpreter = PythonInstallation::find_or_download(
+    let mut interpreter = PythonInstallation::find_or_download(
         python_request.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
@@ -944,8 +967,8 @@ async fn get_or_create_environment(
     // Read the `--with` requirements.
     let spec = RequirementsSpecification::from_sources(
         with,
-        constraints,
-        overrides,
+        constraint_sources,
+        override_sources,
         &[],
         None,
         client_builder,
@@ -1022,7 +1045,7 @@ async fn get_or_create_environment(
                     .get_tool_receipt(&requirement.name)
                     .ok()
                     .flatten()
-                    .is_some_and(|receipt| ToolOptions::from(options) == *receipt.options())
+                    .is_some_and(|receipt| ToolOptions::from(options.clone()) == *receipt.options())
                 {
                     let ResolverInstallerSettings {
                         resolver:
@@ -1043,9 +1066,14 @@ async fn get_or_create_environment(
                     .into_inner();
 
                     // Determine the markers and tags to use for the resolution.
-                    let markers =
-                        pip::resolution_markers(None, python_platform.as_ref(), &interpreter);
-                    let tags = pip::resolution_tags(None, python_platform.as_ref(), &interpreter)?;
+                    let existing_interpreter = environment.environment().interpreter();
+                    let markers = pip::resolution_markers(
+                        None,
+                        python_platform.as_ref(),
+                        existing_interpreter,
+                    );
+                    let tags =
+                        pip::resolution_tags(None, python_platform.as_ref(), existing_interpreter)?;
 
                     // Check if the installed packages meet the requirements.
                     let site_packages = SitePackages::from_environment(environment.environment())?;
@@ -1092,41 +1120,98 @@ async fn get_or_create_environment(
 
     // Read the `--build-constraints` requirements.
     let build_constraints = Constraints::from_requirements(
-        operations::read_constraints(build_constraints, client_builder)
+        operations::read_constraints(build_constraint_sources, client_builder)
             .await?
             .into_iter()
             .map(|constraint| constraint.requirement),
     );
 
+    let mut registry_resolution = None;
+    if has_registry_target
+        && !explicit_python_request
+        && let ToolRequirement::Package { requirement, .. } = &from
+        && let Some(selected) = Box::pin(resolve_registry_tool(
+            &requirement.name,
+            spec.clone(),
+            &interpreter,
+            python_platform.as_ref(),
+            SourceTreeEditablePolicy::Project,
+            build_constraints.clone(),
+            settings,
+            client_builder,
+            &state,
+            &reporter,
+            &install_mirrors,
+            python_preference,
+            python_downloads,
+            concurrency,
+            cache,
+            workspace_cache,
+            if show_resolution {
+                Box::new(DefaultResolveLogger)
+            } else {
+                Box::new(SummaryResolveLogger)
+            },
+            printer,
+            preview,
+        ))
+        .await?
+    {
+        interpreter = selected.interpreter;
+        registry_resolution = Some(selected.resolution);
+    }
+
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
 
-    let result = CachedEnvironment::from_spec(
-        spec.clone(),
-        build_constraints.clone(),
-        &interpreter,
-        python_platform.as_ref(),
-        settings,
-        client_builder,
-        &state,
-        if show_resolution {
-            Box::new(DefaultResolveLogger)
-        } else {
-            Box::new(SummaryResolveLogger)
-        },
-        if show_resolution {
-            Box::new(DefaultInstallLogger)
-        } else {
-            Box::new(SummaryInstallLogger)
-        },
-        installer_metadata,
-        concurrency,
-        cache,
-        workspace_cache,
-        printer,
-        preview,
-    )
-    .await;
+    let result = if let Some(resolution) = registry_resolution.take() {
+        CachedEnvironment::from_resolution(
+            resolution,
+            build_constraints.clone(),
+            &interpreter,
+            settings,
+            client_builder,
+            &state,
+            if show_resolution {
+                Box::new(DefaultInstallLogger)
+            } else {
+                Box::new(SummaryInstallLogger)
+            },
+            installer_metadata,
+            concurrency,
+            cache,
+            printer,
+            preview,
+        )
+        .await
+    } else {
+        CachedEnvironment::from_spec(
+            spec.clone(),
+            build_constraints.clone(),
+            &interpreter,
+            python_platform.as_ref(),
+            settings,
+            client_builder,
+            &state,
+            if show_resolution {
+                Box::new(DefaultResolveLogger)
+            } else {
+                Box::new(SummaryResolveLogger)
+            },
+            if show_resolution {
+                Box::new(DefaultInstallLogger)
+            } else {
+                Box::new(SummaryInstallLogger)
+            },
+            installer_metadata,
+            concurrency,
+            cache,
+            workspace_cache,
+            printer,
+            preview,
+        )
+        .await
+    };
 
     let environment = match result {
         Ok(environment) => environment,

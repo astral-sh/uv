@@ -31,9 +31,10 @@ use uv_client::{
 use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
-    BuildInfo, BuildVariables, BuildableSource, ConfigSettings, DirectorySourceUrl,
-    ExtraBuildRequirement, GitDirectorySourceUrl, GitPathSourceUrl, HashPolicy, Hashed, IndexUrl,
-    PathSourceUrl, RequirementSource, RequiresPython, SourceDist, SourceUrl,
+    BuildInfo, BuildVariables, BuildableSource, BuiltDist, ConfigSettings, DirectorySourceUrl,
+    ExtraBuildRequirement, GitDirectorySourceUrl, GitPathSourceUrl, HashPolicy, Hashed,
+    IndexCapabilities, IndexUrl, PathSourceUrl, RequirementSource, RequiresPython, SourceDist,
+    SourceUrl,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry, write_atomic};
@@ -169,6 +170,22 @@ impl<'a, 'client> StaticMetadataDatabase<'a, 'client> {
             return Ok(None);
         };
         self.source_tree_requires_python(&source_tree).await
+    }
+
+    /// Read static [`RequiresPython`] from the metadata of a selected wheel.
+    pub async fn wheel_requires_python(
+        &self,
+        wheel: &BuiltDist,
+        client: &RegistryClient,
+        capabilities: &IndexCapabilities,
+    ) -> Result<Option<RequiresPython>, Error> {
+        let metadata = client
+            .wheel_metadata(wheel, self.git, capabilities, None)
+            .await?;
+        Ok(metadata
+            .requires_python
+            .as_ref()
+            .map(RequiresPython::from_specifiers))
     }
 }
 
