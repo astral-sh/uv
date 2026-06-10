@@ -674,18 +674,9 @@ async fn registry_tool_python_targets(
         version: current_python_version.clone(),
         interpreter: Some(interpreter.clone()),
     };
-    candidates.insert(
-        current_python_version.version().clone(),
-        current_python_target.clone(),
-    );
+    let ordered_candidates =
+        order_registry_tool_python_candidates(candidates, current_python_target);
 
-    let mut ordered_candidates = Vec::with_capacity(candidates.len());
-    ordered_candidates.push(current_python_target);
-    ordered_candidates.extend(candidates.into_iter().rev().filter_map(
-        |(python_version, python_target)| {
-            (python_version != *current_python_version.version()).then_some(python_target)
-        },
-    ));
     Ok(RegistryToolPythonTargets {
         alternatives: merge_registry_tool_python_alternatives(
             download_alternatives,
@@ -694,6 +685,26 @@ async fn registry_tool_python_targets(
         ),
         candidates: ordered_candidates,
     })
+}
+
+fn order_registry_tool_python_candidates(
+    mut candidates: BTreeMap<Version, RegistryToolPythonTarget>,
+    current_python_target: RegistryToolPythonTarget,
+) -> Vec<RegistryToolPythonTarget> {
+    let current_python_version = current_python_target.version.version().clone();
+    candidates.insert(
+        current_python_version.clone(),
+        current_python_target.clone(),
+    );
+
+    let mut ordered_candidates = Vec::with_capacity(candidates.len());
+    ordered_candidates.push(current_python_target);
+    ordered_candidates.extend(candidates.into_iter().rev().filter_map(
+        |(python_version, python_target)| {
+            (python_version != current_python_version).then_some(python_target)
+        },
+    ));
+    ordered_candidates
 }
 
 fn insert_registry_tool_python_alternative(
@@ -1185,6 +1196,69 @@ mod tests {
                 .map(|target| target.version.to_string())
                 .collect::<Vec<_>>(),
             ["3.14.1", "3.14.2"]
+        );
+    }
+
+    #[test]
+    fn registry_tool_python_targets_exclude_automatic_prereleases() {
+        let mut alternatives = BTreeMap::new();
+        let mut candidates = BTreeMap::new();
+        for version in ["3.14.2", "3.15.0b1"] {
+            let version = PythonVersion::from_str(version).expect("valid Python version");
+            insert_registry_tool_python_alternative(&mut alternatives, version.clone());
+            insert_registry_tool_python_candidate(&mut candidates, version, None);
+        }
+
+        assert_eq!(
+            alternatives
+                .into_values()
+                .map(|target| target.version.to_string())
+                .collect::<Vec<_>>(),
+            ["3.14.2"]
+        );
+        assert_eq!(
+            candidates
+                .into_values()
+                .map(|target| target.version.to_string())
+                .collect::<Vec<_>>(),
+            ["3.14.2"]
+        );
+    }
+
+    #[test]
+    fn registry_tool_python_targets_preserve_current_prerelease() {
+        let current_version = PythonVersion::from_str("3.15.0b1").expect("valid Python version");
+        let current_target = RegistryToolPythonTarget {
+            version: current_version.clone(),
+            interpreter: None,
+        };
+        let mut candidates = BTreeMap::new();
+        insert_registry_tool_python_candidate(
+            &mut candidates,
+            PythonVersion::from_str("3.14.2").expect("valid Python version"),
+            None,
+        );
+
+        assert_eq!(
+            merge_registry_tool_python_alternatives(
+                BTreeMap::from([(
+                    Version::from_str("3.14").expect("valid Python minor"),
+                    PythonVersion::from_str("3.14.2").expect("valid Python version"),
+                )]),
+                BTreeMap::new(),
+                current_version,
+            )
+            .into_iter()
+            .map(|target| target.version.to_string())
+            .collect::<Vec<_>>(),
+            ["3.15.0b1", "3.14.2"]
+        );
+        assert_eq!(
+            order_registry_tool_python_candidates(candidates, current_target)
+                .into_iter()
+                .map(|target| target.version.to_string())
+                .collect::<Vec<_>>(),
+            ["3.15.0b1", "3.14.2"]
         );
     }
 }
