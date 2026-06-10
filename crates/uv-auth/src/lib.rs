@@ -10,7 +10,7 @@ pub use pyx::{
 };
 pub use realm::{Realm, RealmRef};
 pub use service::{Service, ServiceParseError};
-pub use store::{AuthBackend, AuthScheme, TextCredentialStore, TomlCredentialError};
+pub use store::{AuthBackend, AuthScheme, LookupError, TextCredentialStore, TomlCredentialError};
 
 mod access_token;
 mod cache;
