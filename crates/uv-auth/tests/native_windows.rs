@@ -2,7 +2,8 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use uv_auth::{AuthBackend, Credentials};
+use uv_auth::{AuthBackend, Credentials, Realm};
+use uv_keyring::windows::WinCredential;
 use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
 
@@ -17,7 +18,7 @@ async fn native_store_enumerates_many_credentials_in_one_realm()
                 return Err(std::io::Error::other("expected native authentication backend").into());
             }
         };
-    let entries = (0..16)
+    let mut entries = (0..16)
         .map(|index| {
             let url = DisplaySafeUrl::parse(&format!(
                 "https://native-auth-{unique}.example.invalid/credential-{index}"
@@ -30,10 +31,44 @@ async fn native_store_enumerates_many_credentials_in_one_realm()
         })
         .collect::<Result<Vec<_>, _>>()?;
 
+    let case_collision_url = DisplaySafeUrl::parse(&format!(
+        "https://native-auth-{unique}.example.invalid/case-collision"
+    ))?;
+    entries.push((
+        case_collision_url.clone(),
+        Credentials::basic(Some("aaa".to_string()), Some("first".to_string())),
+    ));
+    entries.push((
+        case_collision_url,
+        Credentials::basic(Some("aaG".to_string()), Some("second".to_string())),
+    ));
+
+    entries.push((
+        DisplaySafeUrl::parse(&format!(
+            "https://native-auth-{unique}.example.invalid/signed?X-Amz-Signature=one"
+        ))?,
+        Credentials::basic(Some("signed".to_string()), Some("first".to_string())),
+    ));
+    entries.push((
+        DisplaySafeUrl::parse(&format!(
+            "https://native-auth-{unique}.example.invalid/signed?X-Amz-Signature=two"
+        ))?,
+        Credentials::basic(Some("signed".to_string()), Some("second".to_string())),
+    ));
+
+    let realm = Realm::from(&*entries[0].0);
+    let malformed = uv_keyring::Entry::new_with_credential(Box::new(WinCredential {
+        username: "malformed".to_string(),
+        target_name: format!("uv:native-auth:v2:{realm}:malformed"),
+        target_alias: String::new(),
+        comment: "uv native authentication credential".to_string(),
+    }));
+
     let result = async {
         for (url, credentials) in &entries {
             assert!(provider.store(url, credentials).await?);
         }
+        malformed.set_secret(b"not JSON").await?;
         for (url, credentials) in &entries {
             assert_eq!(
                 provider.fetch(url, credentials.username()).await?,
@@ -49,6 +84,7 @@ async fn native_store_enumerates_many_credentials_in_one_realm()
             let _ = provider.remove(url, username).await;
         }
     }
+    let _ = malformed.delete_credential().await;
 
     result?;
     Ok(())
