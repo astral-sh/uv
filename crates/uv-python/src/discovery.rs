@@ -1274,12 +1274,14 @@ pub fn find_all_python_installations(
                     source: PythonSource::ProvidedPath,
                     interpreter,
                 }]),
-                Err(InterpreterError::NotFound(_) | InterpreterError::BrokenLink(_)) => Ok(vec![]),
-                Err(err) => Err(Error::Query(
-                    Box::new(err),
-                    path.clone(),
-                    PythonSource::ProvidedPath,
-                )),
+                Err(err) => {
+                    let err = Error::Query(Box::new(err), path.clone(), PythonSource::ProvidedPath);
+                    if err.is_critical() {
+                        Err(err)
+                    } else {
+                        Ok(vec![])
+                    }
+                }
             }
         }
         PythonRequest::Directory(path) => {
@@ -1287,12 +1289,14 @@ pub fn find_all_python_installations(
             debug!("Checking for Python interpreter in {request}");
             match python_installation_from_directory(path, cache) {
                 Ok(installation) => Ok(vec![installation]),
-                Err(InterpreterError::NotFound(_) | InterpreterError::BrokenLink(_)) => Ok(vec![]),
-                Err(err) => Err(Error::Query(
-                    Box::new(err),
-                    path.clone(),
-                    PythonSource::ProvidedPath,
-                )),
+                Err(err) => {
+                    let err = Error::Query(Box::new(err), path.clone(), PythonSource::ProvidedPath);
+                    if err.is_critical() {
+                        Err(err)
+                    } else {
+                        Ok(vec![])
+                    }
+                }
             }
         }
         PythonRequest::ExecutableName(name) => {
