@@ -103,6 +103,111 @@ fn workspace_metadata_simple() {
 }
 
 #[test]
+#[cfg(feature = "test-pypi")]
+fn workspace_metadata_script() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let script = context.temp_dir.child("script.py");
+    script.write_str(
+        r#"# /// script
+# requires-python = ">=3.12"
+# dependencies = ["iniconfig"]
+# ///
+
+import iniconfig
+"#,
+    )?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .workspace_metadata()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--sync"),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "environment": {
+        "root": "[CACHE_DIR]/environments-v2/script-[HASH]"
+      },
+      "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
+      "module_owners": {
+        "iniconfig": [
+          {
+            "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+          }
+        ],
+        "iniconfig._parse": [
+          {
+            "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+          }
+        ],
+        "iniconfig._version": [
+          {
+            "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+          }
+        ],
+        "iniconfig.exceptions": [
+          {
+            "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+          }
+        ]
+      },
+      "resolution": {
+        "iniconfig==2.0.0@registry+https://pypi.org/simple": {
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [],
+          "sdist": {
+            "url": "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz",
+            "hashes": {
+              "sha256": "2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3"
+            },
+            "size": 4646,
+            "upload_time": "2023-01-07T11:08:11.254Z"
+          },
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl",
+              "hashes": {
+                "sha256": "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374"
+              },
+              "size": 5892,
+              "upload_time": "2023-01-07T11:08:09.864Z",
+              "filename": "iniconfig-2.0.0-py3-none-any.whl"
+            }
+          ]
+        }
+      }
+    }
+
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    Resolved 1 package in [TIME]
+    "#
+    );
+
+    assert!(!context.temp_dir.child("script.py.lock").exists());
+
+    Ok(())
+}
+
+#[test]
 fn workspace_metadata_module_owners_from_locked_wheels() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

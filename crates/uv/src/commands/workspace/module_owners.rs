@@ -14,9 +14,9 @@ use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_pypi_types::ModuleName;
 use uv_python::PythonEnvironment;
-use uv_resolver::{Installable, Lock, Metadata};
+use uv_resolver::{Installable, Metadata};
 use uv_settings::MalwareCheckSettings;
-use uv_workspace::{Workspace, WorkspaceCache};
+use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::DefaultInstallLogger;
 use crate::commands::pip::operations::Modifications;
@@ -33,8 +33,7 @@ use crate::settings::{InstallerSettingsRef, ResolverSettings};
 /// without removing unrelated packages from an existing environment. Only distributions in the
 /// selected resolution are assigned package IDs, so those unrelated packages are not reported.
 pub(crate) async fn collect_module_owners(
-    workspace: &Workspace,
-    lock: &Lock,
+    target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
@@ -45,9 +44,7 @@ pub(crate) async fn collect_module_owners(
     preview: Preview,
     malware_settings: &MalwareCheckSettings,
 ) -> Result<BTreeMap<ModuleName, Vec<String>>> {
-    let target = InstallTarget::Workspace { workspace, lock };
-    let extras = ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default());
-    let groups = DependencyGroups::from_all_groups().with_defaults(DefaultGroups::default());
+    let (extras, groups) = target_selection(target);
     let Some(package_ids) = selected_package_ids(target, venv, &extras, &groups, settings)? else {
         return Ok(BTreeMap::new());
     };
@@ -168,6 +165,27 @@ fn find_module_owners_in_environment(
         .into_iter()
         .map(|(module, owners)| (module, owners.into_iter().collect()))
         .collect())
+}
+
+fn target_selection(
+    target: InstallTarget<'_>,
+) -> (
+    ExtrasSpecificationWithDefaults,
+    DependencyGroupsWithDefaults,
+) {
+    match target {
+        InstallTarget::Script { .. } => (
+            ExtrasSpecification::default().with_defaults(DefaultExtras::default()),
+            DependencyGroups::default().with_defaults(DefaultGroups::default()),
+        ),
+        InstallTarget::Project { .. }
+        | InstallTarget::Projects { .. }
+        | InstallTarget::Workspace { .. }
+        | InstallTarget::NonProjectWorkspace { .. } => (
+            ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default()),
+            DependencyGroups::from_all_groups().with_defaults(DefaultGroups::default()),
+        ),
+    }
 }
 
 fn is_virtual(dist: &ResolvedDist) -> bool {

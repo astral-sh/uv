@@ -2093,6 +2093,8 @@ impl UpgradeSettings {
 /// The resolved settings to use for a `lock` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct MetadataSettings {
+    #[expect(dead_code)]
+    pub(crate) script: Option<PathBuf>,
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
     pub(crate) dry_run: DryRun,
@@ -2112,6 +2114,7 @@ impl MetadataSettings {
         environment: EnvironmentOptions,
     ) -> Self {
         let MetadataArgs {
+            script,
             locked,
             frozen,
             dry_run,
@@ -2137,6 +2140,7 @@ impl MetadataSettings {
         let malware_settings = MalwareCheckSettings::from(&environment);
 
         Self {
+            script,
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
             dry_run: DryRun::from_args(dry_run),
@@ -2652,7 +2656,7 @@ pub(crate) struct TreeSettings {
     pub(crate) invert: bool,
     pub(crate) outdated: bool,
     pub(crate) show_sizes: bool,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     pub(crate) script: Option<PathBuf>,
     pub(crate) python_version: Option<PythonVersion>,
     pub(crate) python_platform: Option<TargetTriple>,
@@ -2975,6 +2979,8 @@ impl FormatSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct CheckSettings {
     pub(crate) ty_path: Option<PathBuf>,
+    #[allow(dead_code)]
+    pub(crate) script: Option<PathBuf>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,
     pub(crate) lock_check: LockCheck,
@@ -2999,6 +3005,7 @@ impl CheckSettings {
         environment: EnvironmentOptions,
     ) -> Self {
         let CheckArgs {
+            script,
             extra,
             all_extras,
             no_extra,
@@ -3052,6 +3059,7 @@ impl CheckSettings {
 
         Self {
             ty_path: environment.ty_path,
+            script,
             extras: ExtrasSpecification::from_args(
                 extra.unwrap_or_default(),
                 no_extra,

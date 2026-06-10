@@ -40,6 +40,7 @@ pub(super) async fn run(
     version: Option<String>,
     ty_path: Option<PathBuf>,
     target_dir: &Path,
+    check_target: Option<&Path>,
     venv_path: Option<&Path>,
     workspace_metadata: Option<String>,
     exclude_newer: Option<jiff::Timestamp>,
@@ -145,6 +146,14 @@ pub(super) async fn run(
     let mut command = Command::new(&ty_path);
     command.current_dir(target_dir);
     command.arg("check");
+    if let Some(check_target) = check_target {
+        command.arg("--");
+        command.arg(
+            check_target
+                .strip_prefix(target_dir)
+                .unwrap_or(check_target),
+        );
+    }
     // Opt into ty querying uv for project metadata.
     command.env("TY_UV", "1");
 

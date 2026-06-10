@@ -362,6 +362,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             | ProjectCommand::Audit(uv_cli::AuditArgs {
                 script: Some(script),
                 ..
+            })
+            | ProjectCommand::Check(uv_cli::CheckArgs {
+                script: Some(script),
+                ..
             }) => match Pep723Script::read(script).await {
                 Ok(Some(script)) => Some(Pep723Item::Script(script)),
                 Ok(None) => {
@@ -381,6 +385,29 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 Err(err) => return Err(err.into()),
             },
             _ => None,
+        }
+    } else if let Commands::Workspace(WorkspaceNamespace {
+        command: WorkspaceCommand::Metadata(args),
+    }) = &*cli.command
+        && let Some(script) = args.script.as_ref()
+    {
+        match Pep723Script::read(script).await {
+            Ok(Some(script)) => Some(Pep723Item::Script(script)),
+            Ok(None) => {
+                bail!(
+                    "`{}` does not contain a PEP 723 metadata tag; run `{}` to initialize the script",
+                    script.user_display().cyan(),
+                    format!("uv init --script {}", script.user_display()).green()
+                )
+            }
+            Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                bail!(
+                    "Failed to read `{}` (not found); run `{}` to create a PEP 723 script",
+                    script.user_display().cyan(),
+                    format!("uv init --script {}", script.user_display()).green()
+                )
+            }
+            Err(err) => return Err(err.into()),
         }
     } else if let Commands::Python(uv_cli::PythonNamespace {
         command:
@@ -1995,6 +2022,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                         .combine(Refresh::from(args.settings.upgrade.clone())),
                 );
 
+                let script = script.and_then(|script| match script {
+                    Pep723Item::Script(script) => Some(script),
+                    Pep723Item::Remote(..) | Pep723Item::Stdin(..) => None,
+                });
+
                 Box::pin(commands::metadata(
                     &project_dir,
                     args.lock_check,
@@ -2007,6 +2039,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                     args.malware_settings,
                     args.settings,
                     client_builder.subcommand(vec!["workspace".to_owned(), "metadata".to_owned()]),
+                    script,
                     globals.python_preference,
                     globals.python_downloads,
                     globals.concurrency,
@@ -2783,6 +2816,11 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
+            let script = script.and_then(|script| match script {
+                Pep723Item::Script(script) => Some(script),
+                Pep723Item::Remote(..) | Pep723Item::Stdin(..) => None,
+            });
+
             Box::pin(commands::check(
                 project_dir,
                 args.ty_path,
@@ -2797,6 +2835,7 @@ async fn run_project(
                 args.settings,
                 args.ty_version,
                 args.show_version,
+                script,
                 client_builder.subcommand(vec!["check".to_owned()]),
                 globals.python_preference,
                 globals.python_downloads,

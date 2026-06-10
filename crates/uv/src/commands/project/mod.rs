@@ -867,7 +867,7 @@ impl ScriptInterpreter {
     }
 
     /// Consume the [`PythonInstallation`] and return the [`Interpreter`].
-    fn into_interpreter(self) -> Interpreter {
+    pub(crate) fn into_interpreter(self) -> Interpreter {
         match self {
             Self::Interpreter(interpreter) => interpreter,
             Self::Environment(venv) => venv.into_interpreter(),
@@ -1609,7 +1609,7 @@ impl ProjectEnvironment {
     ///
     /// Returns an error if the environment was created in `--dry-run` mode, as dropping the
     /// associated temporary directory could lead to errors downstream.
-    fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
+    pub(crate) fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
         match self {
             Self::Existing(environment) => Ok(environment),
             Self::Replaced(environment) => Ok(environment),
@@ -1644,7 +1644,7 @@ impl std::ops::Deref for ProjectEnvironment {
 
 /// The Python environment for a script.
 #[derive(Debug)]
-enum ScriptEnvironment {
+pub(crate) enum ScriptEnvironment {
     /// An existing [`PythonEnvironment`] was discovered, which satisfies the script's requirements.
     Existing(PythonEnvironment),
     /// An existing [`PythonEnvironment`] was discovered, but did not satisfy the script's
@@ -1671,7 +1671,7 @@ enum ScriptEnvironment {
 
 impl ScriptEnvironment {
     /// Initialize a virtual environment for a PEP 723 script.
-    async fn get_or_init(
+    pub(crate) async fn get_or_init(
         script: Pep723ItemRef<'_>,
         python_request: Option<PythonRequest>,
         client_builder: &BaseClientBuilder<'_>,
@@ -1796,7 +1796,7 @@ impl ScriptEnvironment {
     ///
     /// Returns an error if the environment was created in `--dry-run` mode, as dropping the
     /// associated temporary directory could lead to errors downstream.
-    fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
+    pub(crate) fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
         match self {
             Self::Existing(environment) => Ok(environment),
             Self::Replaced(environment) => Ok(environment),

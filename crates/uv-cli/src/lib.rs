@@ -5237,6 +5237,29 @@ pub struct FormatArgs {
 
 #[derive(Args)]
 pub struct CheckArgs {
+    /// Run checks for the specified PEP 723 Python script, rather than the current project.
+    ///
+    /// If provided, uv will use the dependencies based on the script's inline metadata table, in
+    /// adherence with PEP 723.
+    #[arg(
+        long,
+        conflicts_with = "extra",
+        conflicts_with = "all_extras",
+        conflicts_with = "no_extra",
+        conflicts_with = "no_all_extras",
+        conflicts_with = "dev",
+        conflicts_with = "no_dev",
+        conflicts_with = "only_dev",
+        conflicts_with = "group",
+        conflicts_with = "no_group",
+        conflicts_with = "no_default_groups",
+        conflicts_with = "only_group",
+        conflicts_with = "all_groups",
+        conflicts_with = "no_project",
+        value_hint = ValueHint::FilePath,
+    )]
+    pub script: Option<PathBuf>,
+
     /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
@@ -8255,6 +8278,13 @@ pub enum WorkspaceCommand {
 }
 #[derive(Args)]
 pub struct MetadataArgs {
+    /// View metadata for the specified PEP 723 Python script, rather than the current workspace.
+    ///
+    /// If provided, uv will resolve the dependencies based on the script's inline metadata table,
+    /// in adherence with PEP 723.
+    #[arg(long, value_hint = ValueHint::FilePath)]
+    pub script: Option<PathBuf>,
+
     /// Check if the lockfile is up-to-date [env: UV_LOCKED=]
     ///
     /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is

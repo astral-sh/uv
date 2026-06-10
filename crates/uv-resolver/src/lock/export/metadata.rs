@@ -745,11 +745,24 @@ impl MetadataConflictKind {
 }
 
 impl Metadata {
-    /// Construct a [`PylockToml`] from a uv lockfile.
+    /// Construct [`Metadata`] for a workspace from a uv lockfile.
     pub fn from_lock(workspace: &Workspace, lock: &Lock) -> Result<Self, MetadataError> {
+        Ok(Self::from_lock_target(
+            workspace.install_path(),
+            Some(workspace),
+            lock,
+        ))
+    }
+
+    /// Construct [`Metadata`] for a non-workspace target from a uv lockfile.
+    pub fn from_lock_root(workspace_root: &Path, lock: &Lock) -> Result<Self, MetadataError> {
+        Ok(Self::from_lock_target(workspace_root, None, lock))
+    }
+
+    fn from_lock_target(workspace_root: &Path, workspace: Option<&Workspace>, lock: &Lock) -> Self {
         let mut resolve = BTreeMap::new();
         let mut members = Vec::new();
-        let workspace_root = PortablePathBuf::from(workspace.install_path().as_path());
+        let workspace_root = PortablePathBuf::from(workspace_root);
 
         for lock_package in lock.packages() {
             let mut meta_package = MetadataNode::from_package_id(
@@ -808,7 +821,9 @@ impl Metadata {
             }
 
             // Register this package if it appears to be a workspace member
-            if let Some(workspace_package) = workspace.packages().get(lock_package.name()) {
+            if let Some(workspace_package) =
+                workspace.and_then(|workspace| workspace.packages().get(lock_package.name()))
+            {
                 let member = MetadataWorkspaceMember {
                     name: meta_package.id.name.clone(),
                     path: normalize_workspace_relative_path(
@@ -836,7 +851,7 @@ impl Metadata {
 
         let conflicts = MetadataConflicts::from_conflicts(&members, &resolve, &lock.conflicts);
 
-        Ok(Self {
+        Self {
             schema: SchemaReport {
                 version: SchemaVersion::Preview,
             },
@@ -847,7 +862,7 @@ impl Metadata {
             requires_python: lock.requires_python.clone(),
             members,
             resolution: resolve,
-        })
+        }
     }
 
     pub fn package_node_id(

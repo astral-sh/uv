@@ -560,6 +560,46 @@ fn check_uses_ty_from_environment() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "test-pypi")]
+fn check_script() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+
+    let script = context.temp_dir.child("-script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["iniconfig"]
+        # ///
+
+        import iniconfig
+
+        value: str = iniconfig.__name__
+    "#})?;
+    context
+        .temp_dir
+        .child("unrelated.py")
+        .write_str(indoc! {r#"
+        value: int = "wrong"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check().arg("--script").arg(script.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    ");
+
+    assert!(!context.temp_dir.child("-script.py.lock").exists());
+
+    Ok(())
+}
+
+#[test]
 fn check_passes_workspace_metadata_to_ty() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
