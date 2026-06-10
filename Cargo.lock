@@ -5878,6 +5878,7 @@ dependencies = [
  "uv-install-wheel",
  "uv-pep440",
  "uv-pep508",
+ "uv-performance-memory-allocator",
  "uv-platform-tags",
  "uv-preview",
  "uv-pypi-types",
