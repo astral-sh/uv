@@ -16,6 +16,66 @@ fn assert_project_unchanged(context: &TestContext, expected: &str) -> Result<()>
     Ok(())
 }
 
+/// Write path dependencies that deterministically force marker-exclusive `anyio` forks.
+///
+/// The target remains a single direct requirement because duplicate direct requirements are not
+/// supported by `uv upgrade` yet.
+fn write_forked_anyio_project(
+    context: &TestContext,
+    selected_requirement: &str,
+    darwin_requirement: &str,
+    other_requirement: &str,
+) -> Result<String> {
+    let darwin_dependency = context.temp_dir.child("darwin-dependency");
+    fs_err::create_dir_all(&darwin_dependency)?;
+    darwin_dependency
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["{darwin_requirement}"]
+        "#,
+        ))?;
+    let other_dependency = context.temp_dir.child("other-dependency");
+    fs_err::create_dir_all(&other_dependency)?;
+    other_dependency
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["{other_requirement}"]
+        "#,
+        ))?;
+
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "{selected_requirement}",
+            "dependency @ {} ; sys_platform == 'darwin'",
+            "dependency @ {} ; sys_platform != 'darwin'",
+        ]
+    "#,
+        Url::from_file_path(&darwin_dependency).map_err(|()| anyhow!("invalid dependency path"))?,
+        Url::from_file_path(&other_dependency).map_err(|()| anyhow!("invalid dependency path"))?
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+    Ok(pyproject_toml)
+}
+
 #[test]
 fn upgrade_help() {
     let context = uv_test::test_context_with_versions!(&[]);
@@ -108,10 +168,117 @@ fn upgrade_selects_normalized_production_dependency() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
     Add anyio v4.3.0
+    Would update requirement: anyio>=2,!=2.1,<3 ; python_full_version >= '3.12' -> anyio>=2,!=2.1,<5 ; python_full_version >= '3.12'
     "
     );
 
     assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_ignores_disjoint_fork_version_for_selected_requirement() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = write_forked_anyio_project(
+        &context,
+        "anyio>=3.7 ; sys_platform == 'darwin'",
+        "anyio>=3.7",
+        "anyio==3.0.0",
+    )?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.upgrade().arg("anyio"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 7 packages in [TIME]
+    Add anyio v3.0.0, v4.3.0
+    "
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)
+}
+
+#[test]
+fn upgrade_preserves_constraint_that_admits_multiple_fork_versions() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml =
+        write_forked_anyio_project(&context, "anyio>=3", "anyio==3.0.0", "anyio==4.3.0")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.upgrade().arg("anyio"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 7 packages in [TIME]
+    Add anyio v3.0.0, v4.3.0
+    "
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)
+}
+
+#[test]
+fn upgrade_preserves_inapplicable_marked_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio<3 ; python_version < '3.12'"]
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    No version change for anyio
+    ");
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_rejects_ambiguous_multiple_fork_versions() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml =
+        write_forked_anyio_project(&context, "anyio<4", "anyio==3.0.0", "anyio==4.3.0")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.upgrade().arg("anyio"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 7 packages in [TIME]
+    error: Dependency `anyio` resolves to multiple versions that require different constraints; this is not supported yet
+    "
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)
 }
 
 #[test]
@@ -171,6 +338,7 @@ fn upgrade_resolves_selected_dependency_without_mutation() -> Result<()> {
     Resolving despite existing lockfile due to change of exclude newer timestamp from `2021-01-01T00:00:00Z` to `2024-03-25T00:00:00Z`
     Resolved 4 packages in [TIME]
     Update anyio v2.0.0 -> v4.3.0
+    Would update requirement: anyio<=2 -> anyio<=4.3.0
     ");
 
     assert_eq!(
@@ -349,15 +517,15 @@ fn upgrade_requires_production_dependency() -> Result<()> {
 }
 
 #[test]
-fn upgrade_rejects_duplicate_production_dependencies() -> Result<()> {
+fn upgrade_rejects_duplicate_marked_production_dependencies() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let pyproject_toml = r#"
         [project]
         name = "example"
         version = "0.1.0"
         dependencies = [
-            "Requests>=2",
-            "requests<3",
+            "Requests>=2 ; sys_platform == 'darwin'",
+            "requests<3 ; sys_platform != 'darwin'",
         ]
     "#;
     context
@@ -604,6 +772,7 @@ fn upgrade_allows_registry_source() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
     Add idna v3.6
+    Would update requirement: idna>=2,<3 -> idna>=2,<4
     "
     );
 
@@ -644,6 +813,7 @@ fn upgrade_ignores_inapplicable_non_registry_source() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
     Add anyio v4.3.0
+    Would update requirement: anyio>=2,<3 ; python_full_version >= '3.12' -> anyio>=2,<5 ; python_full_version >= '3.12'
     "
     );
 
@@ -747,6 +917,7 @@ fn upgrade_resolves_nested_workspace_member_without_mutation() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
     Add anyio v4.3.0
+    Would update requirement: anyio<=2 -> anyio<=4.3.0
     "
     );
 

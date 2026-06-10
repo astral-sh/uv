@@ -3624,6 +3624,15 @@ impl Package {
         self.fork_markers.as_slice()
     }
 
+    /// Returns whether this package is included by the given PEP 508 marker.
+    pub fn is_included_by_marker(&self, marker: MarkerTree) -> bool {
+        self.fork_markers.is_empty()
+            || self
+                .fork_markers
+                .iter()
+                .any(|fork_marker| !fork_marker.pep508().is_disjoint(marker))
+    }
+
     /// Returns the [`IndexUrl`] for the package, if it is a registry source.
     pub fn index(&self, root: &Path) -> Result<Option<IndexUrl>, LockError> {
         match &self.id.source {
