@@ -228,54 +228,6 @@ jobs:
           target-cache-primary-key: ${{ steps.srs.outputs.target-cache-primary-key }}
           target-path: ${{ github.workspace }}/target/fast-build
 
-  cargo-test-macos-stable-control:
-    timeout-minutes: 30
-    if: ${{ inputs.test-macos == 'true' }}
-    runs-on: depot-macos-15
-    name: "cargo test on macos (Rust 1.96 control)"
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: "Install Rust toolchain"
-        run: rustup show
-
-      - name: "Create HFS+ disk image (no reflink support)"
-        run: |
-          hdiutil create -size 256m -fs HFS+ -volname NoReflink /tmp/noreflink.dmg
-          hdiutil attach /tmp/noreflink.dmg
-          echo "HFS_MOUNT=/Volumes/NoReflink" >> "$GITHUB_ENV"
-
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
-        with:
-          version: "0.11.19"
-
-      - name: "Install required Python versions"
-        run: uv python install
-
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@e49978b799e49ff429d162b7a30601a569ab6538 # v2.81.1
-        with:
-          tool: cargo-nextest
-
-      - name: "Cargo test"
-        env:
-          UV_HTTP_RETRIES: 5
-          RUST_BACKTRACE: 1
-          UV_INTERNAL__TEST_COW_FS: ${{ runner.temp }}
-          UV_INTERNAL__TEST_NOCOW_FS: ${{ env.HFS_MOUNT }}
-          UV_INTERNAL__TEST_ALT_FS: ${{ env.HFS_MOUNT }}
-          INSTA_UPDATE: new
-          INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
-        run: |
-          cargo nextest run \
-            --cargo-profile fast-build \
-            --no-default-features \
-            --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
-            --workspace \
-            --profile ci-macos
-
   cargo-test-windows:
     timeout-minutes: 15
     runs-on: namespace-profile-windows-2022-x86-64-16
