@@ -11,10 +11,10 @@ license = { workspace = true }
 
 [lib]
 doctest = false
-test = false
 
-[target.'cfg(all(target_os = "windows"))'.dependencies]
-mimalloc = { version = "0.1.52" }
+[build-dependencies]
+cc = "1.2.57"
+fs-err = { workspace = true }
 
 [target.'cfg(all(not(target_os = "windows"), not(target_os = "openbsd"), not(target_os = "freebsd"), any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "powerpc64")))'.dependencies]
 tikv-jemallocator = { version = "0.6.0" }
