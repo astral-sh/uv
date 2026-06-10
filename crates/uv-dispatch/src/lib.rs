@@ -620,8 +620,13 @@ impl BuildContext for BuildDispatch<'_> {
             && let Some(locked_resolution) = self.locked_build_resolutions.get(package)
         {
             let resolution = if let Some(requirements) = validate_locked_requirements {
-                self.locked_resolution_satisfies(locked_resolution, requirements)
-                    .then(|| locked_resolution.resolution().clone())
+                if !self.locked_resolution_satisfies(locked_resolution, requirements) {
+                    return Err(BuildDispatchError::Anyhow(anyhow::anyhow!(
+                        "The build requirements returned by the backend for `{}` do not match the locked build environment",
+                        package.name
+                    )));
+                }
+                Some(locked_resolution.resolution().clone())
             } else {
                 self.locked_initial_resolution(locked_resolution, requirements)
             };
@@ -634,10 +639,6 @@ impl BuildContext for BuildDispatch<'_> {
                     .map_err(anyhow::Error::from)?;
                 return Ok(ResolvedRequirements::new(resolution, hasher));
             }
-            debug!(
-                "Locked build resolution for `{}=={:?}` does not satisfy backend hook requirements",
-                package.name, package.version
-            );
         }
 
         let marker_env = self.interpreter.resolver_marker_environment();

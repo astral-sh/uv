@@ -3626,7 +3626,7 @@ def get_requires_for_build_wheel(config_settings=None):
     Ok(())
 }
 
-/// Verify that frozen builds do not reuse locked dependencies after a backend hook changes them.
+/// Verify that frozen builds reject backend hook requirements that differ from the lock.
 #[test]
 fn lock_build_dependencies_static_metadata_revalidates_hook_requirements() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -3644,34 +3644,39 @@ fn lock_build_dependencies_static_metadata_revalidates_hook_requirements() -> Re
         "0.2.0",
     )?;
 
-    let dep_dir = context.temp_dir.child("dep");
-    dep_dir.create_dir_all()?;
-    dep_dir.child("pyproject.toml").write_str(
-        r#"
-        [project]
-        name = "dep"
-        version = "0.1.0"
-        requires-python = ">=3.12"
+    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
+    let write_source_dist = || {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            br#"
+            [project]
+            name = "dep"
+            version = "0.1.0"
+            requires-python = ">=3.12"
 
-        [build-system]
-        requires = []
-        backend-path = ["."]
-        build-backend = "build_backend"
-        "#,
-    )?;
-
-    let write_backend = |helper_version: &str| {
-        dep_dir.child("build_backend.py").write_str(
-            &r#"
+            [build-system]
+            requires = []
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#,
+        ))?;
+        let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+        block_on(
+            zip.write_entry_whole(
+                entry,
+                r#"
+import os
 from importlib.metadata import version
 from pathlib import Path
 from zipfile import ZipFile
 
 def get_requires_for_build_wheel(config_settings=None):
-    return ["helper=={HELPER_VERSION}"]
+    return [f"helper=={os.environ['UV_TEST_HELPER_VERSION']}"]
 
 def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-    if version("helper") != "{HELPER_VERSION}":
+    if version("helper") != os.environ["UV_TEST_HELPER_VERSION"]:
         raise RuntimeError("unexpected helper version")
     filename = "dep-0.1.0-py3-none-any.whl"
     with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
@@ -3687,10 +3692,15 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
     return filename
 "#
-            .replace("{HELPER_VERSION}", helper_version),
-        )
+                .as_bytes(),
+            ),
+        )?;
+        let entry = ZipEntryBuilder::new("dep-0.1.0/dep/__init__.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+        Ok::<_, anyhow::Error>(())
     };
-    write_backend("0.1.0")?;
+    write_source_dist()?;
 
     context.temp_dir.child("pyproject.toml").write_str(
         r#"
@@ -3701,7 +3711,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         dependencies = ["dep"]
 
         [tool.uv.sources]
-        dep = { path = "dep" }
+        dep = { path = "dep-0.1.0.zip" }
         "#,
     )?;
 
@@ -3711,7 +3721,8 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         .arg(links_dir.path())
         .arg("--no-index")
         .arg("--preview-features")
-        .arg("lock-build-dependencies"), @"
+        .arg("lock-build-dependencies")
+        .env("UV_TEST_HELPER_VERSION", "0.1.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3727,8 +3738,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         "{dep}"
     );
 
-    write_backend("0.2.0")?;
-
     uv_snapshot!(context.filters(), context
         .sync()
         .arg("--find-links")
@@ -3736,15 +3745,18 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         .arg("--no-index")
         .arg("--frozen")
         .arg("--preview-features")
-        .arg("lock-build-dependencies"), @"
-    success: true
-    exit_code: 0
+        .arg("lock-build-dependencies")
+        .env("UV_TEST_HELPER_VERSION", "0.2.0"), @"
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+      × Failed to build `dep @ file://[TEMP_DIR]/dep-0.1.0.zip`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ╰─▶ The build requirements returned by the backend for `dep` do not match the locked build environment
+
+    hint: `dep` was included because `project` (v0.1.0) depends on `dep`
     ");
 
     Ok(())
