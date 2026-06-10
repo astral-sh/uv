@@ -1006,9 +1006,35 @@ mod test {
     use super::*;
     use insta::assert_snapshot;
     use std::path::Path;
+    use std::str::FromStr;
     use tempfile::TempDir;
+    use uv_distribution_filename::WheelFilename;
     use uv_fs::Simplified;
+    use uv_normalize::PackageName;
+    use uv_pep440::Version;
+    use uv_platform_tags::{AbiTag, PlatformTag};
     use walkdir::WalkDir;
+
+    #[test]
+    fn test_wheel() {
+        let filename = WheelFilename::new(
+            PackageName::from_str("foo").unwrap(),
+            Version::from_str("1.2.3").unwrap(),
+            LanguageTag::Python {
+                major: 3,
+                minor: None,
+            },
+            AbiTag::None,
+            PlatformTag::Any,
+        );
+
+        assert_snapshot!(WheelInfo::new(&filename, "1.0.0+test").to_string(), @"
+        Wheel-Version: 1.0
+        Generator: uv 1.0.0+test
+        Root-Is-Purelib: true
+        Tag: py3-none-any
+        ");
+    }
 
     #[test]
     fn test_record() {
