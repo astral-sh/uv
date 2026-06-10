@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::path::Path;
 
 use owo_colors::OwoColorize;
 use petgraph::visit::EdgeRef;
@@ -35,6 +36,10 @@ pub struct DisplayResolutionGraph<'a> {
     /// The style of annotation comments, used to indicate the dependencies that requested each
     /// package.
     annotation_style: AnnotationStyle,
+    /// The directory to which local paths in the output should be relative. Used to rewrite
+    /// editable paths discovered transitively, which would otherwise be emitted relative to the
+    /// `pyproject.toml` that declared them.
+    relative_to: &'a Path,
 }
 
 #[derive(Debug)]
@@ -61,6 +66,7 @@ impl<'a> DisplayResolutionGraph<'a> {
         include_annotations: bool,
         include_index_annotation: bool,
         annotation_style: AnnotationStyle,
+        relative_to: &'a Path,
     ) -> Self {
         for fork_marker in &underlying.fork_markers {
             assert!(
@@ -79,6 +85,7 @@ impl<'a> DisplayResolutionGraph<'a> {
             include_annotations,
             include_index_annotation,
             annotation_style,
+            relative_to,
         }
     }
 }
@@ -186,7 +193,11 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         for (index, node) in nodes {
             // Display the node itself.
             let mut line = node
-                .to_requirements_txt(&self.resolution.requires_python, self.include_markers)
+                .to_requirements_txt(
+                    &self.resolution.requires_python,
+                    self.include_markers,
+                    self.relative_to,
+                )
                 .to_string();
 
             // Display the distribution hashes, if any.
