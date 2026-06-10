@@ -6,7 +6,6 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 
-
 [[package]]
 name = "babel"
 version = "2.18.0"
@@ -973,7 +972,7 @@ wheels = [
 
 [[package]]
 name = "uv"
-version = "0.11.19"
+version = "0.11.20"
 source = { editable = "." }
 
 [package.dev-dependencies]
