@@ -70,8 +70,7 @@ pub(crate) async fn upgrade(
         }
         Err(err) => return Err(err.into()),
     };
-
-    let requirement = select_requirement(&project, &package)?;
+    let (requirement_text, requirement) = select_requirement(&project, &package)?;
 
     let relaxed_requirement = into_verbatim_requirement(relax_requirement(&requirement), &package)?;
 
@@ -191,6 +190,25 @@ pub(crate) async fn upgrade(
         }
     }
     let proposed_requirement = propose_requirement(&requirement, &resolved_versions)?;
+    let updated_requirement = if proposed_requirement == requirement {
+        None
+    } else {
+        let proposed_requirement = into_verbatim_requirement(proposed_requirement, &package)?;
+        let proposed_text = proposed_requirement.to_string();
+        let mut pyproject = PyProjectTomlMut::from_toml(
+            &project.current_project().pyproject_toml().raw,
+            DependencyTarget::PyProjectToml,
+        )?;
+        if pyproject
+            .replace_dependency(&proposed_requirement, false)?
+            .is_none()
+        {
+            bail!("Dependency `{package}` was not found in `project.dependencies`");
+        }
+        let pyproject_path = project.project_root().join("pyproject.toml");
+        fs_err::write(pyproject_path, pyproject.to_string())?;
+        Some(proposed_text)
+    };
 
     let event = match &result {
         LockResult::Changed(previous, lock) => {
@@ -204,10 +222,10 @@ pub(crate) async fn upgrade(
     } else {
         writeln!(printer.stderr(), "No version change for {package}")?;
     }
-    if proposed_requirement != requirement {
+    if let Some(proposed_text) = updated_requirement {
         writeln!(
             printer.stderr(),
-            "Would update requirement: {requirement} -> {proposed_requirement}"
+            "Updated requirement: `{requirement_text}` -> `{proposed_text}`"
         )?;
     }
 
@@ -218,7 +236,7 @@ pub(crate) async fn upgrade(
 fn select_requirement(
     project: &ProjectWorkspace,
     package: &PackageName,
-) -> Result<Requirement<VerbatimParsedUrl>> {
+) -> Result<(String, Requirement<VerbatimParsedUrl>)> {
     if project.workspace().packages().len() != 1 {
         bail!("`uv upgrade` does not support workspaces with multiple members yet");
     }
@@ -240,13 +258,13 @@ fn select_requirement(
                 )
             })?;
         if requirement.name == *package {
-            matching.push(requirement);
+            matching.push((dependency.clone(), requirement));
         }
     }
 
-    let requirement = match matching.as_slice() {
+    let (requirement_text, requirement) = match matching.as_slice() {
         [] => bail!("Dependency `{package}` was not found in `project.dependencies`"),
-        [requirement] => requirement.clone(),
+        [(requirement_text, requirement)] => (requirement_text.clone(), requirement.clone()),
         _ => bail!("Dependency `{package}` is declared multiple times in `project.dependencies`"),
     };
 
@@ -288,7 +306,7 @@ fn select_requirement(
         );
     }
 
-    Ok(requirement)
+    Ok((requirement_text, requirement))
 }
 
 /// Return whether a source applies to the selected requirement declaration.
