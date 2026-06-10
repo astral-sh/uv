@@ -178,6 +178,19 @@ fn windows_native_target(service: &Service, username: &Username) -> String {
 }
 
 #[cfg(all(target_os = "windows", not(test)))]
+fn windows_native_target_has_valid_shape(target_name: &str, target_prefix: &str) -> bool {
+    let Some(stored_prefix) = target_name.get(..target_prefix.len()) else {
+        return false;
+    };
+    let Some(identity_digest) = target_name.get(target_prefix.len()..) else {
+        return false;
+    };
+    stored_prefix.eq_ignore_ascii_case(target_prefix)
+        && identity_digest.len() == 64
+        && identity_digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+#[cfg(all(target_os = "windows", not(test)))]
 fn windows_native_entry(service: &Service, username: &Username) -> uv_keyring::Entry {
     let credential = uv_keyring::windows::WinCredential {
         username: username.as_deref().unwrap_or_default().to_string(),
@@ -828,8 +841,19 @@ impl KeyringProvider {
             let mut credentials_list = Vec::with_capacity(credentials.len());
 
             for credential in credentials {
-                let target_name = credential.target_name.clone();
-                let entry = uv_keyring::Entry::new_with_credential(Box::new(credential));
+                let target_name = credential.target_name;
+                if !windows_native_target_has_valid_shape(&target_name, &target_prefix) {
+                    warn!("Ignoring native credential with an invalid target in realm {realm}");
+                    continue;
+                }
+                let entry = uv_keyring::Entry::new_with_credential(Box::new(
+                    uv_keyring::windows::WinCredential {
+                        username: String::new(),
+                        target_name: target_name.clone(),
+                        target_alias: String::new(),
+                        comment: "uv native authentication credential".to_string(),
+                    },
+                ));
                 let json_data = match entry.get_secret().await {
                     Ok(json_data) => json_data,
                     Err(uv_keyring::Error::NoEntry) => continue,
