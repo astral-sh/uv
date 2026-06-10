@@ -273,7 +273,7 @@ fn upgrade_preserves_inapplicable_marked_dependency() -> Result<()> {
 }
 
 #[test]
-fn upgrade_rejects_ambiguous_multiple_fork_versions() -> Result<()> {
+fn upgrade_expands_constraint_for_multiple_fork_versions() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject_toml =
         write_forked_anyio_project(&context, "anyio<4", "anyio==3.0.0", "anyio==4.3.0")?;
@@ -282,18 +282,56 @@ fn upgrade_rejects_ambiguous_multiple_fork_versions() -> Result<()> {
         context.filters(),
         context.upgrade().arg("anyio"),
         @"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 7 packages in [TIME]
-    error: Dependency `anyio` resolves to multiple versions that require different constraints; this is not supported yet
+    Add anyio v3.0.0, v4.3.0
+    Updated requirement: `anyio<4` -> `anyio<5`
     "
     );
 
-    assert_project_unchanged(&context, &pyproject_toml)
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        pyproject_toml.replace("anyio<4", "anyio<5")
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_expands_compatible_constraint_for_multiple_fork_versions() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml =
+        write_forked_anyio_project(&context, "anyio~=3.0", "anyio==4.2.0", "anyio==4.3.0")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.upgrade().arg("anyio"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 7 packages in [TIME]
+    Add anyio v4.2.0, v4.3.0
+    Updated requirement: `anyio~=3.0` -> `anyio~=4.2`
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        pyproject_toml.replace("anyio~=3.0", "anyio~=4.2")
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
 }
 
 #[test]

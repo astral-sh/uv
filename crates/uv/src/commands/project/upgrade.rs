@@ -353,8 +353,9 @@ fn into_verbatim_requirement(
 ///
 /// For example, `foo>=1,<2` resolving to `2.4` becomes `foo>=1,<3`. Preserve
 /// [`VersionSpecifier`]s that already admit the resolution, and rewrite only the specifiers that
-/// exclude it. If a requirement resolves to multiple versions, preserve it when it admits all of
-/// them; otherwise, reject the ambiguous rewrite.
+/// exclude it. If a requirement resolves to multiple versions, rewrite each specifier using the
+/// appropriate version boundary for its operator, then verify that the result admits every
+/// resolved version.
 fn propose_requirement(
     requirement: &Requirement<VerbatimParsedUrl>,
     resolved_versions: &BTreeSet<Version>,
@@ -372,24 +373,38 @@ fn propose_requirement(
     {
         return Ok(requirement.clone());
     }
-    if resolved_versions.len() > 1 {
-        bail!(
-            "Dependency `{}` resolves to multiple versions that require different constraints; this is not supported yet",
-            requirement.name
-        );
-    }
-    let Some(resolved_version) = resolved_versions.first() else {
+    let Some(highest_resolved_version) = resolved_versions.last() else {
         return Ok(requirement.clone());
     };
 
     let specifiers = specifiers
         .iter()
         .cloned()
-        .map(|specifier| rewrite_specifier(specifier, resolved_version))
+        .map(|specifier| rewrite_specifier(specifier, resolved_versions))
         .collect::<Result<VersionSpecifiers>>()?;
-    if !specifiers.contains(resolved_version) {
+    if !resolved_versions
+        .iter()
+        .all(|version| specifiers.contains(version))
+    {
+        tracing::debug!(
+            dependency = %requirement.name,
+            resolved_versions = ?resolved_versions,
+            rewritten_specifiers = %specifiers,
+            "Rewritten dependency constraint does not admit every resolved version"
+        );
+        if resolved_versions.len() == 1 {
+            bail!(
+                "Dependency `{}` resolved to version `{highest_resolved_version}` which cannot be represented by the upgraded requirement; this is not supported yet",
+                requirement.name
+            );
+        }
+        let resolved_versions = resolved_versions
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("`, `");
         bail!(
-            "Dependency `{}` resolved to version `{resolved_version}` which cannot be represented by the upgraded requirement; this is not supported yet",
+            "Dependency `{}` resolved to versions `{resolved_versions}` which cannot be represented by the upgraded requirement; this is not supported yet",
             requirement.name
         );
     }
@@ -398,16 +413,23 @@ fn propose_requirement(
     Ok(proposed)
 }
 
-/// Rewrite a [`VersionSpecifier`] that excludes the resolved version according to its operator.
-///
-/// Return the specifier unchanged if it already admits the resolved version.
+/// Attempt to rewrite a [`VersionSpecifier`] to admit all resolved versions while preserving its
+/// operator.
 fn rewrite_specifier(
     specifier: VersionSpecifier,
-    resolved_version: &Version,
+    resolved_versions: &BTreeSet<Version>,
 ) -> Result<VersionSpecifier> {
-    if specifier.contains(resolved_version) {
+    if resolved_versions
+        .iter()
+        .all(|version| specifier.contains(version))
+    {
         return Ok(specifier);
     }
+    let (Some(lowest_resolved_version), Some(highest_resolved_version)) =
+        (resolved_versions.first(), resolved_versions.last())
+    else {
+        return Ok(specifier);
+    };
 
     Ok(match specifier.operator() {
         Operator::GreaterThan
@@ -416,24 +438,27 @@ fn rewrite_specifier(
         | Operator::NotEqualStar => specifier,
         Operator::TildeEqual => VersionSpecifier::from_version(
             Operator::TildeEqual,
-            compatible_version_at_precision(resolved_version, specifier.version().release().len())?,
+            compatible_version_at_precision(
+                lowest_resolved_version,
+                specifier.version().release().len(),
+            )?,
         )?,
-        Operator::Equal => VersionSpecifier::equals_version(resolved_version.clone()),
+        Operator::Equal => VersionSpecifier::equals_version(lowest_resolved_version.clone()),
         Operator::EqualStar => VersionSpecifier::equals_star_version(
-            resolved_version
+            lowest_resolved_version
                 .only_release_at_precision(specifier.version().release().len())
                 .context("Cannot rewrite a version constraint without a release segment")?,
         ),
         Operator::ExactEqual => {
-            VersionSpecifier::from_version(Operator::ExactEqual, resolved_version.clone())?
+            VersionSpecifier::from_version(Operator::ExactEqual, lowest_resolved_version.clone())?
         }
         Operator::LessThan => VersionSpecifier::less_than_version(increment_version_at_precision(
-            resolved_version,
+            highest_resolved_version,
             specifier.version().release().len(),
         )?),
         Operator::LessThanEqual => VersionSpecifier::from_version(
             Operator::LessThanEqual,
-            resolved_version.clone().without_local(),
+            highest_resolved_version.clone().without_local(),
         )?,
     })
 }
@@ -641,16 +666,38 @@ mod tests {
     }
 
     #[test]
-    fn propose_requirement_rejects_ambiguous_multiple_versions() {
+    fn propose_requirement_expands_upper_bound_for_multiple_versions() {
         let requirement =
             Requirement::<VerbatimParsedUrl>::from_str("requests<2").expect("valid requirement");
 
+        let proposed = propose_requirement(&requirement, &resolved_versions(&["1.5.0", "2.4.0"]))
+            .expect("upper bound can admit both versions");
+
+        assert_eq!(proposed.to_string(), "requests<3");
+    }
+
+    #[test]
+    fn propose_requirement_uses_lowest_compatible_version_for_multiple_versions() {
+        let requirement =
+            Requirement::<VerbatimParsedUrl>::from_str("requests~=1.2").expect("valid requirement");
+
+        let proposed = propose_requirement(&requirement, &resolved_versions(&["2.4", "2.5"]))
+            .expect("compatible release can admit both versions");
+
+        assert_eq!(proposed.to_string(), "requests~=2.4");
+    }
+
+    #[test]
+    fn propose_requirement_rejects_unrepresentable_multiple_versions() {
+        let requirement =
+            Requirement::<VerbatimParsedUrl>::from_str("requests==1.*").expect("valid requirement");
+
         let error = propose_requirement(&requirement, &resolved_versions(&["1.5.0", "2.4.0"]))
-            .expect_err("multiple versions cannot be rewritten yet");
+            .expect_err("wildcard cannot admit versions from different major lines");
 
         assert_eq!(
             error.to_string(),
-            "Dependency `requests` resolves to multiple versions that require different constraints; this is not supported yet"
+            "Dependency `requests` resolved to versions `1.5.0`, `2.4.0` which cannot be represented by the upgraded requirement; this is not supported yet"
         );
     }
 
