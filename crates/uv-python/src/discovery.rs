@@ -3589,6 +3589,17 @@ impl fmt::Display for PythonNotFound {
     }
 }
 
+impl uv_errors::Hint for PythonNotFound {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self.request {
+            PythonRequest::ExecutableName(_) => {
+                uv_errors::Hints::from("See `uv help python` to view supported request formats")
+            }
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 /// Join a series of items with `or` separators, making use of commas when necessary.
 fn disjunction(items: &[&str]) -> String {
     match items.len() {
