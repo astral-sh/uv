@@ -28,12 +28,6 @@ name = "workspace_discovery"
 path = "benches/workspace_discovery.rs"
 harness = false
 
-[dependencies]
-anyhow = { workspace = true }
-fs-err = { workspace = true }
-tempfile = { workspace = true }
-toml = { workspace = true }
-
 [dev-dependencies]
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
@@ -55,14 +49,18 @@ uv-resolver = { workspace = true }
 uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
+anyhow = { workspace = true }
 async_zip = { workspace = true }
 astral-tokio-tar = { workspace = true }
 criterion = { version = "4.0.3", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
 flate2 = { workspace = true }
+fs-err = { workspace = true }
 futures = { workspace = true }
 jiff = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+toml = { workspace = true }
 
 [features]
 static = ["uv-extract/static"]
