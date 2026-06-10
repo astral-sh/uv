@@ -3,6 +3,47 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.20
+
+Released on 2026-06-10.
+
+### Enhancements
+
+- Add `--emit-index-url` and `--emit-find-links` to `uv export` ([#18370](https://github.com/astral-sh/uv/pull/18370))
+- Add `--find-links` support for `uv pip list` ([#16103](https://github.com/astral-sh/uv/pull/16103))
+- Group executable install errors during `uv python install` ([#19691](https://github.com/astral-sh/uv/pull/19691))
+- Use ICF in macOS release builds to reduce binary sizes ([#19615](https://github.com/astral-sh/uv/pull/19615))
+
+### Preview features
+
+- Add initial hidden `uv upgrade` command ([#19678](https://github.com/astral-sh/uv/pull/19678))
+- Reject Git revisions in `uv upgrade` ([#19742](https://github.com/astral-sh/uv/pull/19742))
+
+### Configuration
+
+- Recognize `UV_NO_INSTALL_PROJECT`, `UV_NO_INSTALL_WORKSPACE`, `UV_NO_INSTALL_LOCAL` ([#19323](https://github.com/astral-sh/uv/pull/19323))
+
+### Performance
+
+- Speed up discovery of large workspaces ([#18311](https://github.com/astral-sh/uv/pull/18311))
+
+### Bug fixes
+
+- Allow unknown preview flags with a warning again ([#19669](https://github.com/astral-sh/uv/pull/19669))
+- Apply dependency exclusions to direct requirements ([#19699](https://github.com/astral-sh/uv/pull/19699))
+- Avoid following external symlinks during cache clean ([#19682](https://github.com/astral-sh/uv/pull/19682))
+- Avoid following symlinks during cache prune ([#19543](https://github.com/astral-sh/uv/pull/19543))
+- Fix Git cache keys for worktrees and packed refs ([#19706](https://github.com/astral-sh/uv/pull/19706))
+- Make resolver error handling iterative to avoid stack overflows ([#19695](https://github.com/astral-sh/uv/pull/19695))
+- Pass `VIRTUAL_ENV` through `cygpath` inside `fish` on Windows ([#19703](https://github.com/astral-sh/uv/pull/19703))
+- Rebuild explicit local directory tool installs ([#19591](https://github.com/astral-sh/uv/pull/19591))
+- Validate egg top-level entries as identifiers ([#19679](https://github.com/astral-sh/uv/pull/19679))
+
+### Documentation
+
+- Document `--find-links` caching behavior ([#19585](https://github.com/astral-sh/uv/pull/19585))
+- Add a small section for malware checks ([#19680](https://github.com/astral-sh/uv/pull/19680))
+
 ## 0.11.19
 
 Released on 2026-06-03.
