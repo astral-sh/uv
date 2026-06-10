@@ -241,21 +241,38 @@ fn native_credential_test_hook(_mode: NativeCredentialLockMode) -> std::future::
 fn legacy_service_names(url: &DisplaySafeUrl) -> Vec<String> {
     let mut service_names = vec![url.as_str().to_string()];
 
-    if let Some(host) = url.host_str() {
-        let host = if let Some(port) = url.port() {
-            format!("{host}:{port}")
-        } else {
-            host.to_string()
-        };
-        service_names.push(host.clone());
-
+    if let Some(host) = legacy_host_service_name(url) {
         if url.scheme() != "https" {
             service_names.push(format!("{}://{host}", url.scheme()));
         }
+        service_names.push(host);
     }
 
     service_names.dedup();
     service_names
+}
+
+fn legacy_host_service_name(url: &DisplaySafeUrl) -> Option<String> {
+    let host = url.host_str()?;
+    Some(if let Some(port) = url.port() {
+        format!("{host}:{port}")
+    } else {
+        host.to_string()
+    })
+}
+
+/// Return whether a legacy credential should be moved into the current storage format.
+///
+/// A bare-host credential may have been stored for HTTPS, so a non-HTTPS lookup must not
+/// permanently re-scope it into the requesting realm.
+fn should_migrate_legacy_service(url: &DisplaySafeUrl, service_name: &str) -> bool {
+    if service_name == url.as_str() {
+        return false;
+    }
+    if url.scheme() != "https" && legacy_host_service_name(url).as_deref() == Some(service_name) {
+        return false;
+    }
+    true
 }
 
 /// A backend for retrieving credentials from a keyring.
@@ -802,17 +819,17 @@ impl KeyringProvider {
                 if let Some((username, password)) =
                     self.fetch_native_legacy(&service_name, username).await?
                 {
-                    let exact_url_match = service_name == url.as_str();
-                    legacy_match = Some((service_name, username, password, exact_url_match));
+                    let should_migrate = should_migrate_legacy_service(url, &service_name);
+                    legacy_match = Some((service_name, username, password, should_migrate));
                     break;
                 }
             }
             legacy_match
         };
 
-        if let Some((service_name, username, password, exact_url_match)) = legacy_match {
+        if let Some((service_name, username, password, should_migrate)) = legacy_match {
             let credentials = Credentials::basic(Some(username), Some(password));
-            if !exact_url_match {
+            if should_migrate {
                 if let Err(err) = self
                     .migrate_native_legacy_credential(&request_realm, &service_name, &credentials)
                     .await
@@ -1828,6 +1845,67 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn native_fetch_prefers_legacy_scheme_host_for_http() {
+        let test_keyring = NativeTestKeyring::install().await;
+        let provider = KeyringProvider::native();
+        let url = DisplaySafeUrl::parse("http://localhost:8080/path").unwrap();
+        let host_service = "localhost:8080";
+        let scheme_host_service = "http://localhost:8080";
+        let username = "legacy-user";
+        let scheme_credentials =
+            Credentials::basic(Some(username.to_string()), Some("http-pass".to_string()));
+
+        test_keyring
+            .insert_legacy(host_service, username, "host-pass")
+            .await;
+        test_keyring
+            .insert_legacy(scheme_host_service, username, "http-pass")
+            .await;
+
+        assert_eq!(
+            provider.fetch(&url, Some(username)).await.unwrap(),
+            Some(scheme_credentials)
+        );
+        test_keyring
+            .assert_legacy_absent(scheme_host_service, username)
+            .await;
+        test_keyring
+            .assert_legacy_present(host_service, username, "host-pass")
+            .await;
+    }
+
+    #[tokio::test]
+    async fn native_fetch_does_not_migrate_legacy_host_entry_to_http() {
+        let test_keyring = NativeTestKeyring::install().await;
+        let provider = KeyringProvider::native();
+        let url = DisplaySafeUrl::parse("http://localhost:8080/path").unwrap();
+        let host_service = "localhost:8080";
+        let username = "legacy-user";
+        let credentials =
+            Credentials::basic(Some(username.to_string()), Some("legacy-pass".to_string()));
+
+        test_keyring
+            .insert_legacy(host_service, username, "legacy-pass")
+            .await;
+
+        assert_eq!(
+            provider.fetch(&url, Some(username)).await.unwrap(),
+            Some(credentials)
+        );
+        test_keyring
+            .assert_legacy_present(host_service, username, "legacy-pass")
+            .await;
+
+        assert!(
+            provider
+                .remove_native_legacy_entry(host_service, username)
+                .await
+                .unwrap()
+        );
+        assert_eq!(provider.fetch(&url, Some(username)).await.unwrap(), None);
+    }
+
+    #[tokio::test]
     async fn native_remove_removes_legacy_host_entry() {
         let test_keyring = NativeTestKeyring::install().await;
         let provider = KeyringProvider::native();
@@ -1898,8 +1976,8 @@ mod tests {
             legacy_service_names(&url),
             vec![
                 "http://127.0.0.1:8080/api".to_string(),
-                "127.0.0.1:8080".to_string(),
                 "http://127.0.0.1:8080".to_string(),
+                "127.0.0.1:8080".to_string(),
             ]
         );
     }
