@@ -11,7 +11,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::ExtrasSpecificationWithDefaults;
 use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOptions};
-use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
+use uv_distribution_types::{Edge, Node, Requirement, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::ResolverMarkerEnvironment;
@@ -20,16 +20,38 @@ use crate::lock::{Dependency, HashedDist, LockErrorKind, Package, TagPolicy};
 use crate::{Lock, LockError};
 
 fn newly_activated_extras<'lock>(
-    dep: &'lock Dependency,
+    package: &'lock PackageName,
+    extras: impl Iterator<Item = &'lock ExtraName>,
     activated_extras: &[(&'lock PackageName, &'lock ExtraName)],
 ) -> Vec<(&'lock PackageName, &'lock ExtraName)> {
-    dep.extra
-        .iter()
+    extras
         .filter_map(|extra| {
-            let key = (&dep.package_id.name, extra);
+            let key = (package, extra);
             (!activated_extras.contains(&key)).then_some(key)
         })
         .collect()
+}
+
+fn activated_requirement_extras<'lock>(
+    package: &'lock PackageName,
+    requirement: &'lock Requirement,
+    marker_env: &ResolverMarkerEnvironment,
+    activated_extras: &[(&'lock PackageName, &'lock ExtraName)],
+    next_activated_extras: &[(&'lock PackageName, &'lock ExtraName)],
+) -> Option<Vec<(&'lock PackageName, &'lock ExtraName)>> {
+    let package_extras = activated_extras
+        .iter()
+        .filter_map(|(candidate, extra)| (*candidate == package).then_some((*extra).clone()))
+        .collect::<Vec<_>>();
+    requirement
+        .evaluate_markers(Some(marker_env), &package_extras)
+        .then(|| {
+            newly_activated_extras(
+                &requirement.name,
+                requirement.extras.iter(),
+                next_activated_extras,
+            )
+        })
 }
 
 pub trait Installable<'lock> {
@@ -64,17 +86,20 @@ pub trait Installable<'lock> {
         let mut activated_projects: Vec<&PackageName> = vec![];
         let mut activated_extras: Vec<(&PackageName, &ExtraName)> = vec![];
         let mut activated_groups: Vec<(&PackageName, &GroupName)> = vec![];
+        let needs_activation_context = !self.lock().conflicts().is_empty()
+            || self.lock().packages.iter().any(|package| {
+                package
+                    .dependencies
+                    .iter()
+                    .chain(package.optional_dependencies.values().flatten())
+                    .chain(package.dependency_groups.values().flatten())
+                    .any(|dependency| !dependency.complexified_marker.conflict().is_true())
+            });
 
         let root = petgraph.add_node(Node::Root);
 
         // Determine the set of activated extras and groups, from the root.
-        //
-        // TODO(charlie): This isn't quite right. Below, when we add the dependency groups to the
-        // graph, we rely on the activated extras and dependency groups, to evaluate the conflict
-        // marker. But at that point, we don't know the full set of activated extras; this is only
-        // computed below. We somehow need to add the dependency groups _after_ we've computed all
-        // enabled extras, but the groups themselves could depend on the set of enabled extras.
-        if !self.lock().conflicts().is_empty() {
+        if needs_activation_context {
             for root_name in self.roots() {
                 let dist = self
                     .lock()
@@ -89,14 +114,14 @@ pub trait Installable<'lock> {
                 // Track the activated extras.
                 if groups.prod() {
                     activated_projects.push(&dist.id.name);
-                    for extra in extras.extra_names(dist.optional_dependencies.keys()) {
+                    for extra in extras.extra_names(dist.provides_extras().iter()) {
                         activated_extras.push((&dist.id.name, extra));
                     }
                 }
 
                 // Track the activated groups.
                 for group in dist
-                    .dependency_groups
+                    .dependency_groups()
                     .keys()
                     .filter(|group| groups.contains(group))
                 {
@@ -107,6 +132,8 @@ pub trait Installable<'lock> {
 
         // Initialize the workspace roots.
         let mut roots = vec![];
+        let mut group_dependencies: Vec<(_, &GroupName, &Dependency)> = vec![];
+        let mut group_requirements: Vec<(&PackageName, &Requirement)> = vec![];
         for root_name in self.roots() {
             let dist = self
                 .lock()
@@ -144,6 +171,16 @@ pub trait Installable<'lock> {
             }
 
             // Add any dev dependencies.
+            group_requirements.extend(
+                dist.dependency_groups()
+                    .iter()
+                    .filter(|(group, _)| groups.contains(group))
+                    .flat_map(|(_, requirements)| {
+                        requirements
+                            .iter()
+                            .map(|requirement| (&dist.id.name, requirement))
+                    }),
+            );
             for (group, dep) in dist
                 .dependency_groups
                 .iter()
@@ -156,72 +193,7 @@ pub trait Installable<'lock> {
                 })
                 .flatten()
             {
-                let additional_activated_extras = newly_activated_extras(dep, &activated_extras);
-                if !dep.complexified_marker.evaluate(
-                    marker_env,
-                    activated_projects.iter().copied(),
-                    activated_extras
-                        .iter()
-                        .chain(additional_activated_extras.iter())
-                        .copied(),
-                    activated_groups.iter().copied(),
-                ) {
-                    continue;
-                }
-
-                let dep_dist = self.lock().find_by_id(&dep.package_id);
-
-                // Add the package to the graph.
-                let dep_index = match inverse.entry(&dep.package_id) {
-                    Entry::Vacant(entry) => {
-                        let index = petgraph.add_node(self.package_to_node(
-                            dep_dist,
-                            tags,
-                            build_options,
-                            install_options,
-                            marker_env,
-                        )?);
-                        entry.insert(index);
-                        index
-                    }
-                    Entry::Occupied(entry) => {
-                        // Critically, if the package is already in the graph, then it's a workspace
-                        // member. If it was omitted due to, e.g., `--only-dev`, but is itself
-                        // referenced as a development dependency, then we need to re-enable it.
-                        let index = *entry.get();
-                        let node = &mut petgraph[index];
-                        if !groups.prod() {
-                            *node = self.package_to_node(
-                                dep_dist,
-                                tags,
-                                build_options,
-                                install_options,
-                                marker_env,
-                            )?;
-                        }
-                        index
-                    }
-                };
-
-                petgraph.add_edge(
-                    index,
-                    dep_index,
-                    // This is OK because we are resolving to a resolution for
-                    // a specific marker environment and set of extras/groups.
-                    // So at this point, we know the extras/groups have been
-                    // satisfied, so we can safely drop the conflict marker.
-                    Edge::Dev(group.clone()),
-                );
-
-                // Push its dependencies on the queue.
-                if seen.insert((&dep.package_id, None)) {
-                    queue.push_back((dep_dist, None));
-                }
-                for extra in &dep.extra {
-                    if seen.insert((&dep.package_id, Some(extra))) {
-                        queue.push_back((dep_dist, Some(extra)));
-                    }
-                }
+                group_dependencies.push((index, group, dep));
             }
         }
 
@@ -253,6 +225,12 @@ pub trait Installable<'lock> {
 
             // Add the edge.
             petgraph.add_edge(root, index, Edge::Prod);
+
+            activated_extras.extend(newly_activated_extras(
+                &dist.id.name,
+                dependency.extras.iter(),
+                &activated_extras,
+            ));
 
             // Push its dependencies on the queue.
             if seen.insert((&dist.id, None)) {
@@ -330,6 +308,12 @@ pub trait Installable<'lock> {
             // Add the edge.
             petgraph.add_edge(root, index, Edge::Dev(group.clone()));
 
+            activated_extras.extend(newly_activated_extras(
+                &dist.id.name,
+                dependency.extras.iter(),
+                &activated_extras,
+            ));
+
             // Push its dependencies on the queue.
             if seen.insert((&dist.id, None)) {
                 queue.push_back((dist, None));
@@ -342,12 +326,12 @@ pub trait Installable<'lock> {
         }
 
         // Below, we traverse the dependency graph in a breadth first manner
-        // twice. It's only in the second traversal that we actually build
-        // up our resolution graph. In the first traversal, we accumulate all
-        // activated extras. This includes the extras explicitly enabled on
-        // the CLI (which were gathered above) and the extras enabled via
-        // dependency specifications like `foo[extra]`. We need to do this
-        // to correctly support conflicting extras.
+        // until the activated extras stabilize. It's only in the final
+        // traversal that we actually build up our resolution graph. The
+        // activation traversal includes the extras explicitly enabled on the
+        // CLI (which were gathered above) and the extras enabled via dependency
+        // specifications like `foo[extra]`. We need to do this to correctly
+        // support conflicting extras and source-selection markers.
         //
         // In particular, the way conflicting extras works is by forking the
         // resolver based on the extras that are declared as conflicting. But
@@ -366,29 +350,37 @@ pub trait Installable<'lock> {
         // if it's enabled, we need to traverse the entire dependency graph
         // first to inspect which extras are enabled!
         //
-        // Of course, we don't need to do this at all if there aren't any
-        // conflicts. In which case, we skip all of this and just do the one
-        // traversal below.
-        if !self.lock().conflicts().is_empty() {
-            let mut activated_extras_set: BTreeSet<(&PackageName, &ExtraName)> =
-                activated_extras.iter().copied().collect();
-            let mut queue = queue.clone();
-            let mut seen = seen.clone();
-            while let Some((package, extra)) = queue.pop_front() {
-                let deps = if let Some(extra) = extra {
-                    Either::Left(
-                        package
-                            .optional_dependencies
-                            .get(extra)
-                            .into_iter()
-                            .flatten(),
-                    )
-                } else {
-                    Either::Right(package.dependencies.iter())
-                };
-                for dep in deps {
-                    let additional_activated_extras =
-                        newly_activated_extras(dep, &activated_extras);
+        if needs_activation_context {
+            let root_activated_extras = activated_extras.clone();
+            let mut seen_activation_contexts = FxHashSet::default();
+
+            loop {
+                let activation_context = activated_extras.iter().copied().collect::<BTreeSet<_>>();
+                if !seen_activation_contexts.insert(activation_context.clone()) {
+                    return Err(LockErrorKind::UnstableActivationContext.into());
+                }
+
+                let mut next_activated_extras = root_activated_extras.clone();
+                let mut queue = queue.clone();
+                let mut seen = seen.clone();
+                for (package, requirement) in &group_requirements {
+                    let Some(additional_activated_extras) = activated_requirement_extras(
+                        package,
+                        requirement,
+                        marker_env,
+                        &activated_extras,
+                        &next_activated_extras,
+                    ) else {
+                        continue;
+                    };
+                    next_activated_extras.extend(additional_activated_extras);
+                }
+                for (_, _, dep) in &group_dependencies {
+                    let additional_activated_extras = newly_activated_extras(
+                        &dep.package_id.name,
+                        dep.extra.iter(),
+                        &next_activated_extras,
+                    );
                     if !dep.complexified_marker.evaluate(
                         marker_env,
                         activated_projects.iter().copied(),
@@ -400,32 +392,9 @@ pub trait Installable<'lock> {
                     ) {
                         continue;
                     }
-                    // It is, I believe, possible to be here for a dependency that
-                    // will ultimately not be included in the final resolution.
-                    // Specifically, carrying on from the example in the comments
-                    // above, we might visit `torch` first and thus not know if
-                    // the `cpu` feature is enabled or not, and thus, the marker
-                    // evaluation above will pass.
-                    //
-                    // So is this a problem? Well, this is the main reason why we
-                    // do two graph traversals. On the second traversal below, we
-                    // will have seen all of the enabled extras, and so `torch`
-                    // will be excluded.
-                    //
-                    // But could this lead to a bigger list of activated extras
-                    // than we actually have? I believe that is indeed possible,
-                    // but I think it is only a problem if it leads to extras that
-                    // *conflict* with one another being simultaneously enabled.
-                    // However, after this first traversal, we check our set of
-                    // accumulated extras to ensure that there are no conflicts. If
-                    // there are, we raise an error. ---AG
+                    next_activated_extras.extend(additional_activated_extras);
 
-                    for key in additional_activated_extras {
-                        activated_extras_set.insert(key);
-                        activated_extras.push(key);
-                    }
                     let dep_dist = self.lock().find_by_id(&dep.package_id);
-                    // Push its dependencies on the queue.
                     if seen.insert((&dep.package_id, None)) {
                         queue.push_back((dep_dist, None));
                     }
@@ -435,7 +404,143 @@ pub trait Installable<'lock> {
                         }
                     }
                 }
+                while let Some((package, extra)) = queue.pop_front() {
+                    for requirement in package
+                        .requires_dist()
+                        .iter()
+                        .filter(|requirement| requirement.name == package.id.name)
+                    {
+                        let Some(additional_activated_extras) = activated_requirement_extras(
+                            &package.id.name,
+                            requirement,
+                            marker_env,
+                            &activated_extras,
+                            &next_activated_extras,
+                        ) else {
+                            continue;
+                        };
+                        next_activated_extras.extend(additional_activated_extras);
+                    }
+                    let deps = if let Some(extra) = extra {
+                        Either::Left(
+                            package
+                                .optional_dependencies
+                                .get(extra)
+                                .into_iter()
+                                .flatten(),
+                        )
+                    } else {
+                        Either::Right(package.dependencies.iter())
+                    };
+                    for dep in deps {
+                        let additional_activated_extras = newly_activated_extras(
+                            &dep.package_id.name,
+                            dep.extra.iter(),
+                            &next_activated_extras,
+                        );
+                        if !dep.complexified_marker.evaluate(
+                            marker_env,
+                            activated_projects.iter().copied(),
+                            activated_extras
+                                .iter()
+                                .chain(additional_activated_extras.iter())
+                                .copied(),
+                            activated_groups.iter().copied(),
+                        ) {
+                            continue;
+                        }
+
+                        for key in additional_activated_extras {
+                            next_activated_extras.push(key);
+                        }
+                        let dep_dist = self.lock().find_by_id(&dep.package_id);
+                        // Push its dependencies on the queue.
+                        if seen.insert((&dep.package_id, None)) {
+                            queue.push_back((dep_dist, None));
+                        }
+                        for extra in &dep.extra {
+                            if seen.insert((&dep.package_id, Some(extra))) {
+                                queue.push_back((dep_dist, Some(extra)));
+                            }
+                        }
+                    }
+                }
+
+                let next_activation_context = next_activated_extras
+                    .iter()
+                    .copied()
+                    .collect::<BTreeSet<_>>();
+                if next_activation_context == activation_context {
+                    activated_extras = next_activated_extras;
+                    break;
+                }
+                activated_extras = next_activated_extras;
             }
+        }
+
+        for (index, group, dep) in group_dependencies {
+            let additional_activated_extras =
+                newly_activated_extras(&dep.package_id.name, dep.extra.iter(), &activated_extras);
+            if !dep.complexified_marker.evaluate(
+                marker_env,
+                activated_projects.iter().copied(),
+                activated_extras
+                    .iter()
+                    .chain(additional_activated_extras.iter())
+                    .copied(),
+                activated_groups.iter().copied(),
+            ) {
+                continue;
+            }
+            activated_extras.extend(additional_activated_extras);
+
+            let dep_dist = self.lock().find_by_id(&dep.package_id);
+            let dep_index = match inverse.entry(&dep.package_id) {
+                Entry::Vacant(entry) => {
+                    let dep_index = petgraph.add_node(self.package_to_node(
+                        dep_dist,
+                        tags,
+                        build_options,
+                        install_options,
+                        marker_env,
+                    )?);
+                    entry.insert(dep_index);
+                    dep_index
+                }
+                Entry::Occupied(entry) => {
+                    // Critically, if the package is already in the graph, then it's a workspace
+                    // member. If it was omitted due to, e.g., `--only-dev`, but is itself
+                    // referenced as a development dependency, then we need to re-enable it.
+                    let dep_index = *entry.get();
+                    let node = &mut petgraph[dep_index];
+                    if !groups.prod() {
+                        *node = self.package_to_node(
+                            dep_dist,
+                            tags,
+                            build_options,
+                            install_options,
+                            marker_env,
+                        )?;
+                    }
+                    dep_index
+                }
+            };
+
+            petgraph.add_edge(index, dep_index, Edge::Dev(group.clone()));
+
+            if seen.insert((&dep.package_id, None)) {
+                queue.push_back((dep_dist, None));
+            }
+            for extra in &dep.extra {
+                if seen.insert((&dep.package_id, Some(extra))) {
+                    queue.push_back((dep_dist, Some(extra)));
+                }
+            }
+        }
+
+        if !self.lock().conflicts().is_empty() {
+            let activated_extras_set: BTreeSet<(&PackageName, &ExtraName)> =
+                activated_extras.iter().copied().collect();
             // At time of writing, it's somewhat expected that the set of
             // conflicting extras is pretty small. With that said, the
             // time complexity of the following routine is pretty gross.

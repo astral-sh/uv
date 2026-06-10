@@ -11,13 +11,283 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_console::human_readable_bytes;
+use uv_distribution_types::Requirement;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ResolverMarkerEnvironment;
 
-use crate::lock::{Package, PackageId};
+use crate::lock::{Dependency, LockErrorKind, Package, PackageId};
 use crate::{Lock, PackageMap};
+
+fn activate_dependency<'lock>(
+    dependency: &'lock Dependency,
+    markers: &ResolverMarkerEnvironment,
+    activated_extras: &BTreeSet<(&'lock PackageName, &'lock ExtraName)>,
+    activated_groups: &[(&'lock PackageName, &'lock GroupName)],
+    next_activated_extras: &mut BTreeSet<(&'lock PackageName, &'lock ExtraName)>,
+    queue: &mut VecDeque<(&'lock PackageId, Option<&'lock ExtraName>)>,
+    seen: &mut FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
+) {
+    let additional_activated_extras = dependency
+        .extra
+        .iter()
+        .filter_map(|extra| {
+            let key = (&dependency.package_id.name, extra);
+            (!next_activated_extras.contains(&key)).then_some(key)
+        })
+        .collect::<Vec<_>>();
+    if !dependency.complexified_marker.evaluate(
+        markers,
+        std::iter::empty::<&PackageName>(),
+        activated_extras
+            .iter()
+            .chain(additional_activated_extras.iter())
+            .copied(),
+        activated_groups.iter().copied(),
+    ) {
+        return;
+    }
+    next_activated_extras.extend(additional_activated_extras);
+
+    if seen.insert((&dependency.package_id, None)) {
+        queue.push_back((&dependency.package_id, None));
+    }
+    for extra in &dependency.extra {
+        if seen.insert((&dependency.package_id, Some(extra))) {
+            queue.push_back((&dependency.package_id, Some(extra)));
+        }
+    }
+}
+
+fn activate_requirement<'lock>(
+    package: Option<&'lock PackageName>,
+    requirement: &'lock Requirement,
+    markers: &ResolverMarkerEnvironment,
+    activated_extras: &BTreeSet<(&'lock PackageName, &'lock ExtraName)>,
+    next_activated_extras: &mut BTreeSet<(&'lock PackageName, &'lock ExtraName)>,
+) {
+    let package_extras = activated_extras
+        .iter()
+        .filter_map(|(candidate, extra)| {
+            package
+                .is_some_and(|package| *candidate == package)
+                .then_some((*extra).clone())
+        })
+        .collect::<Vec<_>>();
+    if requirement.evaluate_markers(Some(markers), &package_extras) {
+        next_activated_extras.extend(
+            requirement
+                .extras
+                .iter()
+                .map(|extra| (&requirement.name, extra)),
+        );
+    }
+}
+
+fn activated_extras<'lock>(
+    lock: &'lock Lock,
+    markers: Option<&ResolverMarkerEnvironment>,
+    members: &BTreeSet<&'lock PackageId>,
+    groups: &DependencyGroupsWithDefaults,
+    activated_groups: &[(&'lock PackageName, &'lock GroupName)],
+) -> Result<BTreeSet<(&'lock PackageName, &'lock ExtraName)>, crate::LockError> {
+    let Some(markers) = markers else {
+        return Ok(BTreeSet::default());
+    };
+
+    let mut root_queue = VecDeque::new();
+    let mut root_seen = FxHashSet::default();
+    let mut root_activated_extras = BTreeSet::default();
+    let mut group_dependencies = vec![];
+    let mut group_requirements = vec![];
+    for id in members {
+        let package = lock.find_by_id(id);
+        if groups.prod() {
+            if root_seen.insert((*id, None)) {
+                root_queue.push_back((*id, None));
+            }
+            for extra in package.optional_dependencies.keys() {
+                if root_seen.insert((*id, Some(extra))) {
+                    root_queue.push_back((*id, Some(extra)));
+                }
+            }
+            for extra in package.provides_extras() {
+                if !package.optional_dependencies.contains_key(extra) {
+                    root_activated_extras.insert((&id.name, extra));
+                }
+            }
+        }
+        group_dependencies.extend(
+            package
+                .dependency_groups
+                .iter()
+                .filter(|(group, _)| groups.contains(group))
+                .flat_map(|(_, dependencies)| dependencies),
+        );
+        group_requirements.extend(
+            package
+                .dependency_groups()
+                .iter()
+                .filter(|(group, _)| groups.contains(group))
+                .flat_map(|(_, requirements)| {
+                    requirements
+                        .iter()
+                        .map(|requirement| (Some(&id.name), requirement))
+                }),
+        );
+    }
+    for requirement in lock.requirements() {
+        for package in lock
+            .packages()
+            .iter()
+            .filter(|package| package.id.name == requirement.name)
+        {
+            let marker = if package.fork_markers.is_empty() {
+                requirement.marker
+            } else {
+                let mut combined = MarkerTree::FALSE;
+                for fork_marker in &package.fork_markers {
+                    combined.or(fork_marker.pep508());
+                }
+                combined.and(requirement.marker);
+                combined
+            };
+            if marker.is_false() || !marker.evaluate(markers, &[]) {
+                continue;
+            }
+
+            if root_seen.insert((&package.id, None)) {
+                root_queue.push_back((&package.id, None));
+            }
+            for extra in &requirement.extras {
+                root_activated_extras.insert((&package.id.name, extra));
+                if root_seen.insert((&package.id, Some(extra))) {
+                    root_queue.push_back((&package.id, Some(extra)));
+                }
+            }
+        }
+    }
+    for requirement in lock
+        .dependency_groups()
+        .iter()
+        .filter(|(group, _)| groups.contains(group))
+        .flat_map(|(_, requirements)| requirements)
+    {
+        for package in lock
+            .packages()
+            .iter()
+            .filter(|package| package.id.name == requirement.name)
+        {
+            let marker = if package.fork_markers.is_empty() {
+                requirement.marker
+            } else {
+                let mut combined = MarkerTree::FALSE;
+                for fork_marker in &package.fork_markers {
+                    combined.or(fork_marker.pep508());
+                }
+                combined.and(requirement.marker);
+                combined
+            };
+            if marker.is_false() || !marker.evaluate(markers, &[]) {
+                continue;
+            }
+
+            if root_seen.insert((&package.id, None)) {
+                root_queue.push_back((&package.id, None));
+            }
+            for extra in &requirement.extras {
+                root_activated_extras.insert((&package.id.name, extra));
+                if root_seen.insert((&package.id, Some(extra))) {
+                    root_queue.push_back((&package.id, Some(extra)));
+                }
+            }
+        }
+    }
+
+    let mut activated_extras = root_activated_extras.clone();
+    let mut seen_activation_contexts = FxHashSet::default();
+    loop {
+        if !seen_activation_contexts.insert(activated_extras.clone()) {
+            return Err(LockErrorKind::UnstableActivationContext.into());
+        }
+
+        let mut next_activated_extras = root_activated_extras.clone();
+        let mut queue = root_queue.clone();
+        let mut seen = root_seen.clone();
+        for (package, requirement) in &group_requirements {
+            activate_requirement(
+                *package,
+                requirement,
+                markers,
+                &activated_extras,
+                &mut next_activated_extras,
+            );
+        }
+        for dependency in &group_dependencies {
+            if !dependency.complexified_marker.evaluate(
+                markers,
+                std::iter::empty::<&PackageName>(),
+                activated_extras.iter().copied(),
+                activated_groups.iter().copied(),
+            ) {
+                continue;
+            }
+            if seen.insert((&dependency.package_id, None)) {
+                queue.push_back((&dependency.package_id, None));
+            }
+            for extra in &dependency.extra {
+                if seen.insert((&dependency.package_id, Some(extra))) {
+                    queue.push_back((&dependency.package_id, Some(extra)));
+                }
+            }
+        }
+
+        while let Some((id, extra)) = queue.pop_front() {
+            let package = lock.find_by_id(id);
+            for requirement in package
+                .requires_dist()
+                .iter()
+                .filter(|requirement| requirement.name == package.id.name)
+            {
+                activate_requirement(
+                    Some(&package.id.name),
+                    requirement,
+                    markers,
+                    &activated_extras,
+                    &mut next_activated_extras,
+                );
+            }
+            let dependencies = if let Some(extra) = extra {
+                Either::Left(
+                    package
+                        .optional_dependencies
+                        .get(extra)
+                        .into_iter()
+                        .flatten(),
+                )
+            } else {
+                Either::Right(package.dependencies.iter())
+            };
+            for dependency in dependencies {
+                activate_dependency(
+                    dependency,
+                    markers,
+                    &activated_extras,
+                    activated_groups,
+                    &mut next_activated_extras,
+                    &mut queue,
+                    &mut seen,
+                );
+            }
+        }
+
+        if next_activated_extras == activated_extras {
+            return Ok(next_activated_extras);
+        }
+        activated_extras = next_activated_extras;
+    }
+}
 
 #[derive(Debug)]
 pub struct TreeDisplay<'env> {
@@ -52,7 +322,7 @@ impl<'env> TreeDisplay<'env> {
         no_dedupe: bool,
         invert: bool,
         show_sizes: bool,
-    ) -> Self {
+    ) -> Result<Self, crate::LockError> {
         // Identify any workspace members.
         //
         // These include:
@@ -73,6 +343,32 @@ impl<'env> TreeDisplay<'env> {
                     }
                 })
                 .collect()
+        };
+
+        let activated_groups = members
+            .iter()
+            .flat_map(|id| {
+                lock.find_by_id(id)
+                    .dependency_groups()
+                    .keys()
+                    .filter(|group| groups.contains(group))
+                    .map(|group| (&id.name, group))
+            })
+            .collect::<Vec<_>>();
+        let activated_extras =
+            activated_extras(lock, markers, &members, groups, &activated_groups)?;
+        let evaluate_dependency = |id: &PackageId, extra: Option<&ExtraName>, dep: &Dependency| {
+            markers.is_none_or(|markers| {
+                dep.complexified_marker.evaluate(
+                    markers,
+                    std::iter::empty::<&PackageName>(),
+                    activated_extras
+                        .iter()
+                        .copied()
+                        .chain(extra.into_iter().map(|extra| (&id.name, extra))),
+                    activated_groups.iter().copied(),
+                )
+            })
         };
 
         // Create a graph.
@@ -134,9 +430,7 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
-                {
+                if !evaluate_dependency(id, None, dep) {
                     continue;
                 }
 
@@ -213,6 +507,11 @@ impl<'env> TreeDisplay<'env> {
                     if seen.insert((&package.id, None)) {
                         queue.push_back((&package.id, None));
                     }
+                    for extra in &requirement.extras {
+                        if seen.insert((&package.id, Some(extra))) {
+                            queue.push_back((&package.id, Some(extra)));
+                        }
+                    }
                 }
             }
 
@@ -250,6 +549,11 @@ impl<'env> TreeDisplay<'env> {
                         if seen.insert((&package.id, None)) {
                             queue.push_back((&package.id, None));
                         }
+                        for extra in &requirement.extras {
+                            if seen.insert((&package.id, Some(extra))) {
+                                queue.push_back((&package.id, Some(extra)));
+                            }
+                        }
                     }
                 }
             }
@@ -277,9 +581,7 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
-                {
+                if !evaluate_dependency(id, extra, dep) {
                     continue;
                 }
 
@@ -406,7 +708,7 @@ impl<'env> TreeDisplay<'env> {
             }
         };
 
-        Self {
+        Ok(Self {
             graph,
             roots,
             latest,
@@ -415,7 +717,7 @@ impl<'env> TreeDisplay<'env> {
             invert,
             lock,
             show_sizes,
-        }
+        })
     }
 
     /// Perform a depth-first traversal of the given package and its dependencies.

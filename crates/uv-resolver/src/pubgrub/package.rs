@@ -109,6 +109,19 @@ impl PubGrubPackage {
         // makes them two distinct packages. This results in PubGrub being
         // unable to unify version constraints across such packages.
         let marker = marker.simplify_extras_with(|_| true);
+        Self::from_package_with_marker(name, extra, group, marker)
+    }
+
+    /// Create a [`PubGrubPackage`] from a package name and an already-scoped marker.
+    ///
+    /// Unlike [`Self::from_package`], this preserves `extra` expressions because they encode
+    /// package-scoped source conditions rather than optional-dependency selection.
+    pub(crate) fn from_package_with_marker(
+        name: PackageName,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
+        marker: MarkerTree,
+    ) -> Self {
         if let Some(extra) = extra {
             Self(Arc::new(PubGrubPackageInner::Extra {
                 name,

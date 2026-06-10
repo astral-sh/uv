@@ -1,4 +1,6 @@
-pub(crate) use crate::pubgrub::dependencies::{DependencySource, PubGrubDependency};
+pub(crate) use crate::pubgrub::dependencies::{
+    DependencySource, DependencySourceContext, PubGrubDependency,
+};
 pub(crate) use crate::pubgrub::package::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 pub(crate) use crate::pubgrub::priority::{PubGrubPriorities, PubGrubPriority, PubGrubTiebreaker};
 pub use crate::pubgrub::report::PubGrubHint;

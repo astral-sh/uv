@@ -49,8 +49,8 @@ use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_pypi_types::{
-    ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
-    ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ConflictItem, ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes,
+    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
@@ -277,6 +277,8 @@ pub struct Lock {
     fork_markers: Vec<UniversalMarker>,
     /// The conflicting groups/extras specified by the user.
     conflicts: Conflicts,
+    /// Source-selection contexts encoded as degenerate conflict sets for older lockfile readers.
+    source_activation_contexts: BTreeSet<ConflictItem>,
     /// The list of supported environments specified by the user.
     supported_environments: Vec<MarkerTree>,
     /// The list of required platforms specified by the user.
@@ -458,6 +460,10 @@ impl Lock {
             }
         }
 
+        for package in packages.values_mut() {
+            package.add_source_variant_group_dependencies(&requires_python);
+        }
+
         let packages = packages.into_values().collect();
 
         let options = ResolverOptions {
@@ -480,6 +486,7 @@ impl Lock {
             options,
             ResolverManifest::default(),
             Conflicts::empty(),
+            BTreeSet::new(),
             supported_environments,
             vec![],
             fork_markers,
@@ -496,6 +503,7 @@ impl Lock {
         options: ResolverOptions,
         manifest: ResolverManifest,
         conflicts: Conflicts,
+        source_activation_contexts: BTreeSet<ConflictItem>,
         supported_environments: Vec<MarkerTree>,
         required_environments: Vec<MarkerTree>,
         fork_markers: Vec<UniversalMarker>,
@@ -561,7 +569,11 @@ impl Lock {
         // Build up a map from ID to extras.
         let mut extras_by_id = FxHashMap::default();
         for dist in &packages {
-            for extra in dist.optional_dependencies.keys() {
+            for extra in dist
+                .optional_dependencies
+                .keys()
+                .chain(dist.provides_extras())
+            {
                 extras_by_id
                     .entry(dist.id.clone())
                     .or_insert_with(FxHashSet::default)
@@ -645,6 +657,7 @@ impl Lock {
             revision,
             fork_markers,
             conflicts,
+            source_activation_contexts,
             supported_environments,
             required_environments,
             requires_python,
@@ -665,9 +678,205 @@ impl Lock {
 
     /// Record the conflicting groups that were used to generate this lock.
     #[must_use]
-    pub fn with_conflicts(mut self, conflicts: Conflicts) -> Self {
+    pub fn with_conflicts(mut self, conflicts: Conflicts, indexes: &IndexLocations) -> Self {
         self.conflicts = conflicts;
+        self.source_activation_contexts = self.expected_source_activation_contexts(Some(indexes));
         self
+    }
+
+    /// Return source-selection contexts that older lockfile readers must activate.
+    fn expected_source_activation_contexts(
+        &self,
+        indexes: Option<&IndexLocations>,
+    ) -> BTreeSet<ConflictItem> {
+        let mut contexts = BTreeSet::new();
+        for package in &self.packages {
+            Self::extend_source_activation_contexts_from_metadata(
+                &package.id.name,
+                package.metadata.requires_dist.iter(),
+                package
+                    .metadata
+                    .dependency_groups
+                    .iter()
+                    .flat_map(|(group, requirements)| {
+                        requirements
+                            .iter()
+                            .map(move |requirement| (group, requirement))
+                    }),
+                indexes,
+                &mut contexts,
+            );
+            self.extend_source_activation_contexts_from_edges(package, &mut contexts);
+        }
+        contexts
+    }
+
+    /// Add source activation contexts from package metadata.
+    fn extend_source_activation_contexts_from_metadata<'a>(
+        package: &PackageName,
+        requirements: impl IntoIterator<Item = &'a Requirement>,
+        group_requirements: impl IntoIterator<Item = (&'a GroupName, &'a Requirement)>,
+        indexes: Option<&IndexLocations>,
+        contexts: &mut BTreeSet<ConflictItem>,
+    ) {
+        let requirements = requirements.into_iter().collect::<Vec<_>>();
+        let production_requirements = requirements
+            .iter()
+            .copied()
+            .filter(|requirement| requirement.evaluate_markers(None, &[]))
+            .fold(
+                FxHashMap::<_, Vec<_>>::default(),
+                |mut requirements, requirement| {
+                    requirements
+                        .entry(&requirement.name)
+                        .or_default()
+                        .push(requirement);
+                    requirements
+                },
+            );
+        for requirement in requirements {
+            if production_requirements
+                .get(&requirement.name)
+                .is_some_and(|requirements| {
+                    Self::changes_production_source(requirement, requirements, indexes)
+                })
+            {
+                Self::extend_source_activation_contexts(package, requirement, contexts);
+            }
+        }
+        for (group, requirement) in group_requirements {
+            if production_requirements.get(&requirement.name).is_some_and(
+                |production_requirements| {
+                    Self::changes_production_source(requirement, production_requirements, indexes)
+                },
+            ) && Self::extend_source_activation_contexts(package, requirement, contexts)
+            {
+                contexts.insert(ConflictItem::from((package.clone(), group.clone())));
+            }
+        }
+    }
+
+    /// Add source activation contexts from locked dependency edges.
+    fn extend_source_activation_contexts_from_edges(
+        &self,
+        package: &Package,
+        contexts: &mut BTreeSet<ConflictItem>,
+    ) {
+        let dependencies = package
+            .dependencies
+            .iter()
+            .chain(package.optional_dependencies.values().flatten())
+            .chain(package.dependency_groups.values().flatten())
+            .collect::<Vec<_>>();
+        let packages = dependencies.iter().fold(
+            FxHashMap::<_, FxHashSet<_>>::default(),
+            |mut packages, dependency| {
+                packages
+                    .entry(&dependency.package_id.name)
+                    .or_default()
+                    .insert(&dependency.package_id);
+                packages
+            },
+        );
+
+        for dependency in dependencies {
+            if packages
+                .get(&dependency.package_id.name)
+                .is_none_or(|packages| packages.len() <= 1)
+            {
+                continue;
+            }
+            let Ok((included, excluded)) = dependency.complexified_marker.conflict().filter_rules()
+            else {
+                continue;
+            };
+            for context in included.into_iter().chain(excluded) {
+                if context.package() == &package.id.name
+                    && !self
+                        .conflicts
+                        .contains(context.package(), context.kind().as_ref())
+                {
+                    contexts.insert(context);
+                }
+            }
+        }
+    }
+
+    /// Return whether a requirement selects a source outside the marker space covered by
+    /// same-source production requirements.
+    fn changes_production_source(
+        requirement: &Requirement,
+        production_requirements: &[&Requirement],
+        indexes: Option<&IndexLocations>,
+    ) -> bool {
+        let same_source_marker = production_requirements
+            .iter()
+            .filter(|production_requirement| {
+                Self::same_source(&production_requirement.source, &requirement.source, indexes)
+            })
+            .fold(MarkerTree::FALSE, |mut marker, production_requirement| {
+                marker.or(production_requirement.marker);
+                marker
+            });
+        let mut uncovered_marker = requirement.marker;
+        uncovered_marker.and(same_source_marker.negate());
+        !uncovered_marker.is_false()
+    }
+
+    /// Return whether two requirements identify the same source, ignoring registry specifiers.
+    fn same_source(
+        left: &RequirementSource,
+        right: &RequirementSource,
+        indexes: Option<&IndexLocations>,
+    ) -> bool {
+        match (left, right) {
+            (
+                RequirementSource::Registry {
+                    index: left_index, ..
+                },
+                RequirementSource::Registry {
+                    index: right_index, ..
+                },
+            ) => match (left_index.as_ref(), right_index.as_ref()) {
+                (Some(left), Some(right)) => left == right,
+                (None, None) => true,
+                (Some(index), None) | (None, Some(index)) => indexes
+                    .and_then(IndexLocations::default_index)
+                    .is_some_and(|default| {
+                        index.url() == default.url() && index.format == default.format
+                    }),
+            },
+            _ => left == right,
+        }
+    }
+
+    /// Add activation contexts for a requirement with an explicit source.
+    fn extend_source_activation_contexts(
+        package: &PackageName,
+        requirement: &Requirement,
+        contexts: &mut BTreeSet<ConflictItem>,
+    ) -> bool {
+        let has_explicit_source = match &requirement.source {
+            RequirementSource::Registry {
+                index, conflict, ..
+            } => index.is_some() || conflict.is_some(),
+            _ => true,
+        };
+        if !has_explicit_source {
+            return false;
+        }
+
+        requirement.marker.visit_extras(|_, extra| {
+            contexts.insert(ConflictItem::from((package.clone(), extra.clone())));
+        });
+        if let RequirementSource::Registry {
+            conflict: Some(conflict),
+            ..
+        } = &requirement.source
+        {
+            contexts.insert(conflict.clone());
+        }
+        true
     }
 
     /// Record the required platforms that were used to generate this lock.
@@ -821,9 +1030,10 @@ impl Lock {
     /// The traversal is seeded from workspace members, lock-level requirements
     /// (e.g. PEP 723 scripts), and lock-level dependency groups, then follows
     /// each reachable dependency exactly once per `(package, extra)` pair,
-    /// respecting the provided extras and dependency-group filters. The same
-    /// package may be visited more than once if it is reached through multiple
-    /// extras — callers should deduplicate as appropriate.
+    /// respecting the provided extras, dependency-group filters, and
+    /// source-selection contexts. The same package may be visited more than once
+    /// if it is reached through multiple extras — callers should deduplicate as
+    /// appropriate.
     fn walk_auditable<'lock, F>(
         &'lock self,
         extras: &'lock ExtrasSpecificationWithDefaults,
@@ -833,18 +1043,204 @@ impl Lock {
     ) where
         F: FnMut(&'lock Package, &'lock Version),
     {
+        #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+        enum ActivationStatus {
+            Inactive,
+            Conditional,
+            Active,
+        }
+
+        impl ActivationStatus {
+            fn and(self, other: Self) -> Self {
+                self.min(other)
+            }
+        }
+
+        struct NextActivationContexts<'a> {
+            activated: &'a mut BTreeSet<ConflictItem>,
+            possible: &'a mut BTreeSet<ConflictItem>,
+        }
+
+        fn enqueue_package<'lock>(
+            seen: &mut FxHashMap<(&'lock PackageId, Option<&'lock ExtraName>), ActivationStatus>,
+            queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>, ActivationStatus)>,
+            package: &'lock Package,
+            extra: Option<&'lock ExtraName>,
+            status: ActivationStatus,
+        ) {
+            if status == ActivationStatus::Inactive {
+                return;
+            }
+            let key = (&package.id, extra);
+            if seen.get(&key).is_none_or(|previous| status > *previous) {
+                seen.insert(key, status);
+                queue.push_back((package, extra, status));
+            }
+        }
+
         // Enqueue a dependency for auditability checks: base package (no extra) first, then each activated extra.
         fn enqueue_dep<'lock>(
             lock: &'lock Lock,
-            seen: &mut FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
-            queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
+            seen: &mut FxHashMap<(&'lock PackageId, Option<&'lock ExtraName>), ActivationStatus>,
+            queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>, ActivationStatus)>,
             dep: &'lock Dependency,
+            status: ActivationStatus,
         ) {
             let dep_pkg = lock.find_by_id(&dep.package_id);
             for maybe_extra in std::iter::once(None).chain(dep.extra.iter().map(Some)) {
-                if seen.insert((&dep.package_id, maybe_extra)) {
-                    queue.push_back((dep_pkg, maybe_extra));
+                enqueue_package(seen, queue, dep_pkg, maybe_extra, status);
+            }
+        }
+
+        fn walk_dependencies<'lock, State>(
+            lock: &'lock Lock,
+            workspace_member_ids: &FxHashSet<&'lock PackageId>,
+            groups: &'lock DependencyGroupsWithDefaults,
+            mut queue: VecDeque<(&'lock Package, Option<&'lock ExtraName>, ActivationStatus)>,
+            mut seen: FxHashMap<(&'lock PackageId, Option<&'lock ExtraName>), ActivationStatus>,
+            state: &mut State,
+            mut dependency_status: impl FnMut(
+                &mut State,
+                &'lock Dependency,
+                ActivationStatus,
+            ) -> ActivationStatus,
+            mut visit: impl FnMut(
+                &mut State,
+                &'lock Package,
+                Option<&'lock ExtraName>,
+                ActivationStatus,
+            ),
+        ) {
+            while let Some((package, extra, package_status)) = queue.pop_front() {
+                let is_member = workspace_member_ids.contains(&package.id);
+                visit(state, package, extra, package_status);
+
+                if is_member && extra.is_none() {
+                    for dep in package
+                        .dependency_groups
+                        .iter()
+                        .filter(|(group, _)| groups.contains(group))
+                        .flat_map(|(_, deps)| deps)
+                    {
+                        let status = dependency_status(state, dep, package_status);
+                        enqueue_dep(lock, &mut seen, &mut queue, dep, status);
+                    }
                 }
+
+                let dependencies: &[Dependency] = match extra {
+                    Some(extra) => package
+                        .optional_dependencies
+                        .get(extra)
+                        .map(Vec::as_slice)
+                        .unwrap_or_default(),
+                    None if is_member && !groups.prod() => &[],
+                    None => &package.dependencies,
+                };
+
+                for dep in dependencies {
+                    let status = dependency_status(state, dep, package_status);
+                    enqueue_dep(lock, &mut seen, &mut queue, dep, status);
+                }
+            }
+        }
+
+        fn dependency_activation_contexts(dep: &Dependency) -> Vec<ConflictItem> {
+            std::iter::once(ConflictItem::from(dep.package_id.name.clone()))
+                .chain(
+                    dep.extra.iter().map(|extra| {
+                        ConflictItem::from((dep.package_id.name.clone(), extra.clone()))
+                    }),
+                )
+                .collect()
+        }
+
+        fn extend_activation_contexts(
+            status: ActivationStatus,
+            contexts: impl IntoIterator<Item = ConflictItem>,
+            activated_contexts: &mut BTreeSet<ConflictItem>,
+            possible_contexts: &mut BTreeSet<ConflictItem>,
+        ) {
+            for context in contexts {
+                match status {
+                    ActivationStatus::Inactive => {}
+                    ActivationStatus::Conditional => {
+                        if !activated_contexts.contains(&context) {
+                            possible_contexts.insert(context);
+                        }
+                    }
+                    ActivationStatus::Active => {
+                        possible_contexts.remove(&context);
+                        activated_contexts.insert(context);
+                    }
+                }
+            }
+        }
+
+        fn requirement_activation_contexts(
+            package: Option<&PackageName>,
+            requirement: &Requirement,
+            activated_contexts: &BTreeSet<ConflictItem>,
+            possible_contexts: &BTreeSet<ConflictItem>,
+        ) -> (ActivationStatus, Vec<ConflictItem>) {
+            let is_active = |extra: &ExtraName| {
+                activated_contexts.iter().any(|context| {
+                    package.is_some_and(|package| {
+                        context.package() == package && context.extra() == Some(extra)
+                    })
+                })
+            };
+            let is_possible = |extra: &ExtraName| {
+                possible_contexts.iter().any(|context| {
+                    package.is_some_and(|package| {
+                        context.package() == package && context.extra() == Some(extra)
+                    })
+                })
+            };
+            let marker = requirement
+                .marker
+                .simplify_extras_with(is_active)
+                .simplify_not_extras_with(|extra| !is_active(extra) && !is_possible(extra));
+            let status = if marker.is_false() {
+                ActivationStatus::Inactive
+            } else if marker.is_true() {
+                ActivationStatus::Active
+            } else {
+                ActivationStatus::Conditional
+            };
+            let contexts = requirement
+                .extras
+                .iter()
+                .map(|extra| ConflictItem::from((requirement.name.clone(), extra.clone())))
+                .collect();
+            (status, contexts)
+        }
+
+        fn source_edge_activation_status(
+            dep: &Dependency,
+            requires_python: &RequiresPython,
+            source_activation_contexts: &BTreeSet<ConflictItem>,
+            activated_contexts: &BTreeSet<ConflictItem>,
+            possible_contexts: &BTreeSet<ConflictItem>,
+            additional_contexts: &[ConflictItem],
+        ) -> ActivationStatus {
+            let mut marker = dep.complexified_marker;
+            for context in additional_contexts {
+                marker.assume_conflict_item(context);
+            }
+            for context in source_activation_contexts {
+                if activated_contexts.contains(context) {
+                    marker.assume_conflict_item(context);
+                } else if !possible_contexts.contains(context) {
+                    marker.assume_not_conflict_item(context);
+                }
+            }
+            let pep508 = requires_python.simplify_markers(marker.pep508());
+            if pep508.is_false() || marker.conflict().is_false() {
+                ActivationStatus::Inactive
+            } else if pep508.is_true() && marker.conflict().is_true() {
+                ActivationStatus::Active
+            } else {
+                ActivationStatus::Conditional
             }
         }
 
@@ -860,8 +1256,12 @@ impl Lock {
         };
 
         // Lockfile traversal state: (package, optional extra to activate on that package).
-        let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
-        let mut seen: FxHashSet<(&PackageId, Option<&ExtraName>)> = FxHashSet::default();
+        let mut queue: VecDeque<(&Package, Option<&ExtraName>, ActivationStatus)> = VecDeque::new();
+        let mut seen: FxHashMap<(&PackageId, Option<&ExtraName>), ActivationStatus> =
+            FxHashMap::default();
+        let mut root_activated_contexts = BTreeSet::new();
+        let mut root_possible_contexts = BTreeSet::new();
+        let mut group_requirements = Vec::new();
 
         // Seed from workspace members. Always queue with `None` so that we can traverse
         // their dependency groups; only queue extras when prod mode is active.
@@ -870,32 +1270,78 @@ impl Lock {
             .iter()
             .filter(|p| workspace_member_ids.contains(&p.id))
         {
-            if seen.insert((&package.id, None)) {
-                queue.push_back((package, None));
-            }
+            enqueue_package(
+                &mut seen,
+                &mut queue,
+                package,
+                None,
+                ActivationStatus::Active,
+            );
             if groups.prod() {
-                for extra in extras.extra_names(package.optional_dependencies.keys()) {
-                    if seen.insert((&package.id, Some(extra))) {
-                        queue.push_back((package, Some(extra)));
-                    }
+                root_activated_contexts.insert(ConflictItem::from(package.id.name.clone()));
+                for extra in extras.extra_names(package.provides_extras().iter()) {
+                    root_activated_contexts
+                        .insert(ConflictItem::from((package.id.name.clone(), extra.clone())));
+                    enqueue_package(
+                        &mut seen,
+                        &mut queue,
+                        package,
+                        Some(extra),
+                        ActivationStatus::Active,
+                    );
                 }
+            }
+            for group in package
+                .dependency_groups()
+                .keys()
+                .filter(|group| groups.contains(group))
+            {
+                root_activated_contexts
+                    .insert(ConflictItem::from((package.id.name.clone(), group.clone())));
+            }
+            for requirement in package
+                .dependency_groups()
+                .iter()
+                .filter(|(group, _)| groups.contains(group))
+                .flat_map(|(_, requirements)| requirements)
+            {
+                group_requirements.push((Some(&package.id.name), requirement));
             }
         }
 
         // Seed from requirements attached directly to the lock (e.g., PEP 723 scripts).
         for requirement in self.requirements() {
+            let (status, _) = requirement_activation_contexts(
+                None,
+                requirement,
+                &root_activated_contexts,
+                &root_possible_contexts,
+            );
+            if status == ActivationStatus::Inactive {
+                continue;
+            }
             for package in self
                 .packages
                 .iter()
                 .filter(|p| p.id.name == requirement.name)
             {
-                if seen.insert((&package.id, None)) {
-                    queue.push_back((package, None));
-                }
+                let package_context = ConflictItem::from(package.id.name.clone());
+                extend_activation_contexts(
+                    status,
+                    [package_context],
+                    &mut root_activated_contexts,
+                    &mut root_possible_contexts,
+                );
+                enqueue_package(&mut seen, &mut queue, package, None, status);
                 for extra in &*requirement.extras {
-                    if seen.insert((&package.id, Some(extra))) {
-                        queue.push_back((package, Some(extra)));
-                    }
+                    let context = ConflictItem::from((package.id.name.clone(), extra.clone()));
+                    extend_activation_contexts(
+                        status,
+                        [context],
+                        &mut root_activated_contexts,
+                        &mut root_possible_contexts,
+                    );
+                    enqueue_package(&mut seen, &mut queue, package, Some(extra), status);
                 }
             }
         }
@@ -907,66 +1353,173 @@ impl Lock {
                 continue;
             }
             for requirement in requirements {
+                let (status, _) = requirement_activation_contexts(
+                    None,
+                    requirement,
+                    &root_activated_contexts,
+                    &root_possible_contexts,
+                );
+                if status == ActivationStatus::Inactive {
+                    continue;
+                }
                 for package in self
                     .packages
                     .iter()
                     .filter(|p| p.id.name == requirement.name)
                 {
-                    if seen.insert((&package.id, None)) {
-                        queue.push_back((package, None));
-                    }
+                    let package_context = ConflictItem::from(package.id.name.clone());
+                    extend_activation_contexts(
+                        status,
+                        [package_context],
+                        &mut root_activated_contexts,
+                        &mut root_possible_contexts,
+                    );
+                    enqueue_package(&mut seen, &mut queue, package, None, status);
+                    group_requirements.push((None, requirement));
                     for extra in &*requirement.extras {
-                        if seen.insert((&package.id, Some(extra))) {
-                            queue.push_back((package, Some(extra)));
-                        }
+                        enqueue_package(&mut seen, &mut queue, package, Some(extra), status);
                     }
                 }
             }
         }
 
-        while let Some((package, extra)) = queue.pop_front() {
-            let is_member = workspace_member_ids.contains(&package.id);
-
-            // Collect non-workspace packages that have version information
-            // and pass the caller's filter.
-            if !is_member && collect_filter(package) {
-                if let Some(version) = package.version() {
-                    visit(package, version);
-                } else {
-                    trace!(
-                        "Skipping audit for `{}` because it has no version information",
-                        package.name()
-                    );
-                }
+        // Stabilize the activated source contexts before filtering source-selection edges. Audit
+        // traversal intentionally spans every marker environment, so contexts activated only in
+        // some environments remain possible rather than selecting one source globally.
+        let mut activated_contexts = root_activated_contexts.clone();
+        let mut possible_contexts = root_possible_contexts.clone();
+        let mut seen_activation_contexts = FxHashSet::default();
+        let mut observed_activation_contexts = Vec::new();
+        let activation_contexts = loop {
+            if !seen_activation_contexts
+                .insert((activated_contexts.clone(), possible_contexts.clone()))
+            {
+                // An unstable activation graph has no single selected source context. Audit every
+                // context observed in the cycle rather than silently omitting a potentially
+                // affected package.
+                break observed_activation_contexts;
             }
+            observed_activation_contexts
+                .push((activated_contexts.clone(), possible_contexts.clone()));
 
-            // Follow allowed dependency groups.
-            if is_member && extra.is_none() {
-                for dep in package
-                    .dependency_groups
-                    .iter()
-                    .filter(|(group, _)| groups.contains(group))
-                    .flat_map(|(_, deps)| deps)
-                {
-                    enqueue_dep(self, &mut seen, &mut queue, dep);
-                }
+            let mut next_activated_contexts = root_activated_contexts.clone();
+            let mut next_possible_contexts = root_possible_contexts.clone();
+            for (package, requirement) in &group_requirements {
+                let (status, additional_contexts) = requirement_activation_contexts(
+                    *package,
+                    requirement,
+                    &activated_contexts,
+                    &possible_contexts,
+                );
+                extend_activation_contexts(
+                    status,
+                    additional_contexts,
+                    &mut next_activated_contexts,
+                    &mut next_possible_contexts,
+                );
             }
-
-            // Follow the regular/extra dependencies for this (package, extra) pair.
-            // For workspace members in only-group mode, skip regular dependencies.
-            let dependencies: &[Dependency] = match extra {
-                Some(extra) => package
-                    .optional_dependencies
-                    .get(extra)
-                    .map(Vec::as_slice)
-                    .unwrap_or_default(),
-                None if is_member && !groups.prod() => &[],
-                None => &package.dependencies,
+            let mut next_contexts = NextActivationContexts {
+                activated: &mut next_activated_contexts,
+                possible: &mut next_possible_contexts,
             };
+            walk_dependencies(
+                self,
+                &workspace_member_ids,
+                groups,
+                queue.clone(),
+                seen.clone(),
+                &mut next_contexts,
+                |next_contexts, dep, package_status| {
+                    let additional_contexts = dependency_activation_contexts(dep);
+                    let edge_status = source_edge_activation_status(
+                        dep,
+                        &self.requires_python,
+                        &self.source_activation_contexts,
+                        &activated_contexts,
+                        &possible_contexts,
+                        &additional_contexts,
+                    );
+                    let status = package_status.and(edge_status);
+                    extend_activation_contexts(
+                        status,
+                        additional_contexts,
+                        next_contexts.activated,
+                        next_contexts.possible,
+                    );
+                    status
+                },
+                |next_contexts, package, extra, package_status| {
+                    if extra.is_none()
+                        && workspace_member_ids.contains(&package.id)
+                        && !groups.prod()
+                    {
+                        return;
+                    }
+                    for requirement in package
+                        .requires_dist()
+                        .iter()
+                        .filter(|requirement| requirement.name == package.id.name)
+                    {
+                        let (status, additional_contexts) = requirement_activation_contexts(
+                            Some(&package.id.name),
+                            requirement,
+                            &activated_contexts,
+                            &possible_contexts,
+                        );
+                        extend_activation_contexts(
+                            package_status.and(status),
+                            additional_contexts,
+                            next_contexts.activated,
+                            next_contexts.possible,
+                        );
+                    }
+                },
+            );
+            next_possible_contexts.retain(|context| !next_activated_contexts.contains(context));
 
-            for dep in dependencies {
-                enqueue_dep(self, &mut seen, &mut queue, dep);
+            if next_activated_contexts == activated_contexts
+                && next_possible_contexts == possible_contexts
+            {
+                break vec![(activated_contexts, possible_contexts)];
             }
+            activated_contexts = next_activated_contexts;
+            possible_contexts = next_possible_contexts;
+        };
+
+        for (activated_contexts, possible_contexts) in activation_contexts {
+            walk_dependencies(
+                self,
+                &workspace_member_ids,
+                groups,
+                queue.clone(),
+                seen.clone(),
+                &mut (),
+                |(), dep, package_status| {
+                    package_status.and(source_edge_activation_status(
+                        dep,
+                        &self.requires_python,
+                        &self.source_activation_contexts,
+                        &activated_contexts,
+                        &possible_contexts,
+                        &[],
+                    ))
+                },
+                |(), package, _, _| {
+                    // Collect non-workspace packages that have version information and pass the
+                    // caller's filter.
+                    if workspace_member_ids.contains(&package.id) || !collect_filter(package) {
+                        return;
+                    }
+                    if let Some(version) = package.version() {
+                        visit(package, version);
+                    } else {
+                        trace!(
+                            "Skipping audit for `{}` because it has no version information",
+                            package.name()
+                        );
+                    }
+                },
+            );
         }
     }
 
@@ -1128,23 +1681,32 @@ impl Lock {
             doc.insert("required-markers", value(required_environments));
         }
 
-        if !self.conflicts.is_empty() {
+        if !self.conflicts.is_empty() || !self.source_activation_contexts.is_empty() {
+            let conflict_item = |item: &ConflictItem| {
+                let mut table = InlineTable::new();
+                table.insert("package", Value::from(item.package().to_string()));
+                match item.kind() {
+                    ConflictKind::Project => {}
+                    ConflictKind::Extra(extra) => {
+                        table.insert("extra", Value::from(extra.to_string()));
+                    }
+                    ConflictKind::Group(group) => {
+                        table.insert("group", Value::from(group.to_string()));
+                    }
+                }
+                table
+            };
             let mut list = Array::new();
             for set in self.conflicts.iter() {
-                list.push(each_element_on_its_line_array(set.iter().map(|item| {
-                    let mut table = InlineTable::new();
-                    table.insert("package", Value::from(item.package().to_string()));
-                    match item.kind() {
-                        ConflictKind::Project => {}
-                        ConflictKind::Extra(extra) => {
-                            table.insert("extra", Value::from(extra.to_string()));
-                        }
-                        ConflictKind::Group(group) => {
-                            table.insert("group", Value::from(group.to_string()));
-                        }
-                    }
-                    table
-                })));
+                list.push(each_element_on_its_line_array(
+                    set.iter().map(&conflict_item),
+                ));
+            }
+            for context in &self.source_activation_contexts {
+                let item = conflict_item(context);
+                list.push(each_element_on_its_line_array(
+                    [item.clone(), item].into_iter(),
+                ));
             }
             doc.insert("conflicts", value(list));
         }
@@ -1618,6 +2180,24 @@ impl Lock {
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<SatisfiesResult<'_>, LockError> {
+        let expected_source_activation_contexts = self.expected_source_activation_contexts(indexes);
+        if expected_source_activation_contexts != self.source_activation_contexts {
+            return Ok(SatisfiesResult::MismatchedSourceActivationContexts(
+                expected_source_activation_contexts,
+                &self.source_activation_contexts,
+            ));
+        }
+        if let Some(package) = self
+            .packages
+            .iter()
+            .find(|package| !package.has_source_variant_group_dependencies(&self.requires_python))
+        {
+            return Ok(SatisfiesResult::MissingSourceVariantGroupDependencies(
+                &package.id.name,
+                package.id.version.as_ref(),
+            ));
+        }
+
         let mut queue: VecDeque<&Package> = VecDeque::new();
         let mut seen = FxHashSet::default();
 
@@ -1964,6 +2544,47 @@ impl Lock {
                             return Ok(SatisfiesResult::MissingLocalIndex(name, version, path));
                         }
                     }
+                }
+            }
+
+            // Older locks omit metadata for immutable Git packages. Re-read that metadata before
+            // accepting the lock, since the old dependency edges alone cannot distinguish a
+            // conditional source from an unconditional source shared by an optional dependency.
+            if matches!(&package.id.source, Source::Git(..))
+                && package.metadata.requires_dist.is_empty()
+                && package.metadata.dependency_groups.is_empty()
+            {
+                let HashedDist { dist, .. } =
+                    package.to_dist(root, TagPolicy::Preferred(tags), build_options, markers)?;
+                let archive = database
+                    .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+                    .await
+                    .map_err(|err| LockErrorKind::Resolution {
+                        id: package.id.clone(),
+                        err,
+                    })?;
+                let mut expected_source_activation_contexts =
+                    self.source_activation_contexts.clone();
+                Self::extend_source_activation_contexts_from_metadata(
+                    &package.id.name,
+                    archive.metadata.requires_dist.iter(),
+                    archive
+                        .metadata
+                        .dependency_groups
+                        .iter()
+                        .flat_map(|(group, requirements)| {
+                            requirements
+                                .iter()
+                                .map(move |requirement| (group, requirement))
+                        }),
+                    indexes,
+                    &mut expected_source_activation_contexts,
+                );
+                if expected_source_activation_contexts != self.source_activation_contexts {
+                    return Ok(SatisfiesResult::MismatchedSourceActivationContexts(
+                        expected_source_activation_contexts,
+                        &self.source_activation_contexts,
+                    ));
                 }
             }
 
@@ -2413,6 +3034,10 @@ impl<'tags> TagPolicy<'tags> {
 pub enum SatisfiesResult<'lock> {
     /// The lockfile satisfies the requirements.
     Satisfied,
+    /// The lockfile uses different source activation contexts.
+    MismatchedSourceActivationContexts(BTreeSet<ConflictItem>, &'lock BTreeSet<ConflictItem>),
+    /// A package in the lockfile is missing derived source-variant dependency group edges.
+    MissingSourceVariantGroupDependencies(&'lock PackageName, Option<&'lock Version>),
     /// The lockfile uses a different set of workspace members.
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
     /// A workspace member switched from virtual to non-virtual or vice versa.
@@ -2665,6 +3290,24 @@ struct LockWire {
     packages: Vec<PackageWire>,
 }
 
+/// Split source activation contexts from user-declared conflicts.
+fn split_source_activation_contexts(conflicts: &Conflicts) -> (Conflicts, BTreeSet<ConflictItem>) {
+    let mut user_conflicts = Conflicts::empty();
+    let mut source_activation_contexts = BTreeSet::new();
+    for set in conflicts.iter() {
+        let mut items = set.iter();
+        let Some(item) = items.next() else {
+            continue;
+        };
+        if items.next().is_none() {
+            source_activation_contexts.insert(item.clone());
+        } else {
+            user_conflicts.push(set.clone());
+        }
+    }
+    (user_conflicts, source_activation_contexts)
+}
+
 impl TryFrom<LockWire> for Lock {
     type Error = LockError;
 
@@ -2711,6 +3354,8 @@ impl TryFrom<LockWire> for Lock {
         if options.exclude_newer.exclude_newer_span.is_some() {
             options.exclude_newer.exclude_newer = None;
         }
+        let (conflicts, source_activation_contexts) =
+            split_source_activation_contexts(&wire.conflicts.unwrap_or_else(Conflicts::empty));
         let lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
@@ -2718,7 +3363,8 @@ impl TryFrom<LockWire> for Lock {
             wire.requires_python,
             options,
             wire.manifest,
-            wire.conflicts.unwrap_or_else(Conflicts::empty),
+            conflicts,
+            source_activation_contexts,
             supported_environments,
             required_environments,
             fork_markers,
@@ -2778,9 +3424,13 @@ impl Package {
         let id = PackageId::from_annotated_dist(annotated_dist, root)?;
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist)?;
-        let requires_dist = if id.source.is_immutable() {
-            BTreeSet::default()
-        } else {
+        let retain_metadata = !id.source.is_immutable()
+            || matches!(&id.source, Source::Git(..))
+                && annotated_dist
+                    .metadata
+                    .as_ref()
+                    .is_some_and(|metadata| !metadata.source_variants.is_empty());
+        let requires_dist = if retain_metadata {
             annotated_dist
                 .metadata
                 .as_ref()
@@ -2791,20 +3441,20 @@ impl Package {
                 .map(|requirement| requirement.relative_to(root))
                 .collect::<Result<_, _>>()
                 .map_err(LockErrorKind::RequirementRelativePath)?
-        };
-        let provides_extra = if id.source.is_immutable() {
-            Box::default()
         } else {
+            BTreeSet::default()
+        };
+        let provides_extra = if retain_metadata {
             annotated_dist
                 .metadata
                 .as_ref()
                 .expect("metadata is present")
                 .provides_extra
                 .clone()
-        };
-        let dependency_groups = if id.source.is_immutable() {
-            BTreeMap::default()
         } else {
+            Box::default()
+        };
+        let dependency_groups = if retain_metadata {
             annotated_dist
                 .metadata
                 .as_ref()
@@ -2821,6 +3471,8 @@ impl Package {
                     Ok::<_, LockError>((group.clone(), requirements))
                 })
                 .collect::<Result<_, _>>()?
+        } else {
+            BTreeMap::default()
         };
         Ok(Self {
             id,
@@ -2919,6 +3571,139 @@ impl Package {
         root: &Path,
     ) -> Result<(), LockError> {
         let dep = Dependency::from_annotated_dist(requires_python, annotated_dist, marker, root)?;
+        self.add_locked_group_dependency(group, dep);
+        Ok(())
+    }
+
+    /// Add production source branches that satisfy source-variant group requirements.
+    fn add_source_variant_group_dependencies(&mut self, requires_python: &RequiresPython) {
+        for (group, dependency) in self.source_variant_group_dependencies(requires_python) {
+            let group_context = ConflictItem::from((self.id.name.clone(), group.clone()));
+            if let Some(dependencies) = self.dependency_groups.get_mut(&group) {
+                dependencies.retain(|existing| {
+                    if existing.package_id != dependency.package_id
+                        || existing.extra != dependency.extra
+                    {
+                        return true;
+                    }
+                    // The group is always active while traversing this edge.
+                    let mut existing_marker = existing.complexified_marker;
+                    existing_marker.assume_conflict_item(&group_context);
+                    let mut dependency_marker = dependency.complexified_marker;
+                    dependency_marker.assume_conflict_item(&group_context);
+                    existing_marker != dependency_marker
+                });
+            }
+            self.add_locked_group_dependency(group, dependency);
+        }
+    }
+
+    /// Return whether all production source branches required by source-variant groups are present.
+    fn has_source_variant_group_dependencies(&self, requires_python: &RequiresPython) -> bool {
+        let mut expected = BTreeMap::new();
+        for (group, dependency) in self.source_variant_group_dependencies(requires_python) {
+            expected
+                .entry((group, dependency.package_id, dependency.simplified_marker))
+                .or_insert_with(BTreeSet::new)
+                .extend(dependency.extra);
+        }
+
+        let mut actual = BTreeMap::new();
+        for (group, dependencies) in &self.dependency_groups {
+            for dependency in dependencies {
+                let key = (
+                    group.clone(),
+                    dependency.package_id.clone(),
+                    dependency.simplified_marker,
+                );
+                if expected.contains_key(&key) {
+                    actual
+                        .entry(key)
+                        .or_insert_with(BTreeSet::new)
+                        .extend(dependency.extra.iter().cloned());
+                }
+            }
+        }
+
+        expected == actual
+    }
+
+    /// Return production source branches that satisfy source-variant group requirements.
+    fn source_variant_group_dependencies(
+        &self,
+        requires_python: &RequiresPython,
+    ) -> Vec<(GroupName, Dependency)> {
+        let mut dependencies = Vec::new();
+        for (group, requirements) in &self.metadata.dependency_groups {
+            let group_marker = UniversalMarker::new(
+                MarkerTree::TRUE,
+                ConflictMarker::group(&self.id.name, group),
+            );
+            let source_variant_names = requirements
+                .iter()
+                .filter(|requirement| match &requirement.source {
+                    RequirementSource::Registry {
+                        index, conflict, ..
+                    } => index.is_some() || conflict.is_some(),
+                    _ => true,
+                })
+                .map(|requirement| &requirement.name)
+                .collect::<BTreeSet<_>>();
+            for requirement in requirements
+                .iter()
+                .filter(|requirement| source_variant_names.contains(&requirement.name))
+            {
+                let requirement_marker = UniversalMarker::from_source_scope(
+                    requirement.marker,
+                    &self.id.name,
+                    None,
+                    None,
+                );
+                let requirement_pep508 = requirement_marker.pep508();
+                let mut branches = self
+                    .dependencies
+                    .iter()
+                    .filter(|dependency| dependency.package_name() == &requirement.name)
+                    .filter(|dependency| {
+                        !dependency
+                            .complexified_marker
+                            .pep508()
+                            .is_disjoint(requirement_pep508)
+                    });
+                let narrow_to_group = branches.next().is_some_and(|first| {
+                    branches.any(|dependency| dependency.package_id != first.package_id)
+                });
+                let mut marker = requirement_marker;
+                if narrow_to_group {
+                    marker.and(group_marker);
+                }
+                let extras = requirement.extras.iter().cloned().collect::<BTreeSet<_>>();
+                dependencies.extend(
+                    self.dependencies
+                        .iter()
+                        .filter(|dependency| dependency.package_name() == &requirement.name)
+                        .filter_map(|dependency| {
+                            let mut dependency_marker = dependency.complexified_marker;
+                            dependency_marker.and(marker);
+                            (!dependency_marker.is_false()).then(|| {
+                                (
+                                    group.clone(),
+                                    Dependency::new(
+                                        requires_python,
+                                        dependency.package_id.clone(),
+                                        extras.clone(),
+                                        dependency_marker,
+                                    ),
+                                )
+                            })
+                        }),
+                );
+            }
+        }
+        dependencies
+    }
+
+    fn add_locked_group_dependency(&mut self, group: GroupName, dep: Dependency) {
         let deps = self.dependency_groups.entry(group).or_default();
         for existing_dep in &mut *deps {
             if existing_dep.package_id == dep.package_id
@@ -2927,12 +3712,11 @@ impl Package {
                 && existing_dep.simplified_marker == dep.simplified_marker
             {
                 existing_dep.extra.extend(dep.extra);
-                return Ok(());
+                return;
             }
         }
 
         deps.push(dep);
-        Ok(())
     }
 
     /// Convert the [`Package`] to a [`Dist`] that can be used in installation, along with its hash.
@@ -3690,6 +4474,11 @@ impl Package {
     /// Returns the extras the package provides, if any.
     pub fn provides_extras(&self) -> &[ExtraName] {
         &self.metadata.provides_extra
+    }
+
+    /// Returns the package's declared requirements.
+    pub(crate) fn requires_dist(&self) -> &BTreeSet<Requirement> {
+        &self.metadata.requires_dist
     }
 
     /// Returns the dependency groups the package provides, if any.
@@ -6611,6 +7400,9 @@ enum LockErrorKind {
         package2: PackageName,
         extra2: ExtraName,
     },
+    /// An error that occurs when activated extras cannot be determined from the lockfile.
+    #[error("Could not determine a stable set of activated extras from the lockfile")]
+    UnstableActivationContext,
     #[error(transparent)]
     GitUrlParse(#[from] GitUrlParseError),
     #[error("Failed to read `{path}`")]

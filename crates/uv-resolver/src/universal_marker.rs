@@ -3,10 +3,13 @@ use std::collections::BTreeSet;
 use std::str::FromStr;
 
 use itertools::Itertools;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::{ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree};
+use uv_pep508::{
+    ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree,
+    MarkerValueExtra,
+};
 use uv_pypi_types::{ConflictItem, ConflictKind, Conflicts, Inference};
 
 use crate::ResolveError;
@@ -107,6 +110,89 @@ impl UniversalMarker {
             marker,
             pep508: marker.without_extras(),
         }
+    }
+
+    /// Creates a universal marker for a source condition declared by a specific package.
+    ///
+    /// Raw `extra` expressions in project metadata are scoped to the package that declared them.
+    /// An explicit source `extra` or `group` selector is then added to the same scope.
+    pub(crate) fn from_source_scope(
+        marker: MarkerTree,
+        package: &PackageName,
+        extra: Option<&ExtraName>,
+        group: Option<&GroupName>,
+    ) -> Self {
+        let mut marker = scope_extras(marker, package);
+        if let Some(extra) = extra {
+            marker.and(ConflictMarker::extra(package, extra).marker);
+        }
+        if let Some(group) = group {
+            marker.and(ConflictMarker::group(package, group).marker);
+        }
+        Self::from_combined(marker)
+    }
+
+    /// Returns the package extras that were scoped only to isolate source identity.
+    ///
+    /// These extras can be translated back to ordinary extra markers after resolution. Explicit
+    /// index conditions are conflict-scoped and must retain their package-qualified encoding.
+    pub(crate) fn source_extra_scopes(
+        marker: MarkerTree,
+        package: &PackageName,
+        extra: Option<&ExtraName>,
+        conflict_scoped: bool,
+        conflicts: &Conflicts,
+    ) -> Box<[ConflictItem]> {
+        if conflict_scoped {
+            return Box::default();
+        }
+
+        let mut extras = BTreeSet::new();
+        marker.visit_extras(|_, extra| {
+            if !conflicts.contains(package, extra) {
+                extras.insert(ConflictItem::from((package.clone(), extra.clone())));
+            }
+        });
+        if let Some(extra) = extra
+            && !conflicts.contains(package, extra)
+        {
+            extras.insert(ConflictItem::from((package.clone(), extra.clone())));
+        }
+        extras.into_iter().collect()
+    }
+
+    /// Returns the marker to persist on an edge for a source-scoped dependency.
+    ///
+    /// Source conditions retain the package-qualified encoding used by universal resolution so
+    /// lockfile traversal can evaluate them against the activated extras and groups for each
+    /// package.
+    pub(crate) fn source_edge_marker(
+        marker: MarkerTree,
+        package: &PackageName,
+        extra: Option<&ExtraName>,
+        group: Option<&GroupName>,
+    ) -> MarkerTree {
+        Self::from_source_scope(marker, package, extra, group).combined()
+    }
+
+    /// Remove solver-only source extra expressions from this marker.
+    ///
+    /// Source scopes selected in this resolution retain their surrounding conjunction after the
+    /// scope expression is removed. Unselected source-only conjunctions are discarded, since they
+    /// represent a fallback source choice rather than a user-visible resolution environment.
+    #[must_use]
+    pub(crate) fn without_source_extra_scopes(
+        self,
+        extras: &FxHashSet<ConflictItem>,
+        selected: &FxHashSet<ConflictItem>,
+    ) -> Self {
+        Self::from_combined(remove_source_extra_scopes(self.marker, extras, selected))
+    }
+
+    /// Returns the complement of this universal marker.
+    #[must_use]
+    pub(crate) fn negate(self) -> Self {
+        Self::from_combined(self.marker.negate())
     }
 
     /// Combine this universal marker with the one given in a way that unions
@@ -381,6 +467,79 @@ impl UniversalMarker {
     }
 }
 
+/// Scope every raw `extra` expression in a marker to the package that declared it.
+fn scope_extras(marker: MarkerTree, package: &PackageName) -> MarkerTree {
+    if marker.is_true() || marker.is_false() {
+        return marker;
+    }
+
+    let mut scoped = MarkerTree::FALSE;
+    for conjunction in marker.to_dnf() {
+        let mut scoped_conjunction = MarkerTree::TRUE;
+        for expression in conjunction {
+            let expression = match expression {
+                MarkerExpression::Extra {
+                    name: MarkerValueExtra::Extra(extra),
+                    operator,
+                } => MarkerExpression::Extra {
+                    name: MarkerValueExtra::Extra(encode_package_extra(package, &extra)),
+                    operator,
+                },
+                expression => expression,
+            };
+            scoped_conjunction.and(MarkerTree::expression(expression));
+        }
+        scoped.or(scoped_conjunction);
+    }
+    scoped
+}
+
+/// Remove selected package-qualified extra expressions from a marker.
+fn remove_source_extra_scopes(
+    marker: MarkerTree,
+    extras: &FxHashSet<ConflictItem>,
+    selected: &FxHashSet<ConflictItem>,
+) -> MarkerTree {
+    if marker.is_true() || marker.is_false() || extras.is_empty() {
+        return marker;
+    }
+
+    let encoded = extras
+        .iter()
+        .filter_map(|item| {
+            item.extra().map(|extra| {
+                (
+                    encode_package_extra(item.package(), extra),
+                    selected.contains(item),
+                )
+            })
+        })
+        .collect::<FxHashMap<_, _>>();
+    let mut projected = MarkerTree::FALSE;
+    for conjunction in marker.to_dnf() {
+        let mut projected_conjunction = MarkerTree::TRUE;
+        let mut has_non_source_expression = false;
+        let mut has_selected_source = false;
+        for expression in conjunction {
+            if let MarkerExpression::Extra {
+                name: MarkerValueExtra::Extra(ref extra),
+                ..
+            } = expression
+                && let Some(selected) = encoded.get(extra)
+            {
+                has_selected_source |= *selected;
+            } else {
+                has_non_source_expression = true;
+                projected_conjunction.and(MarkerTree::expression(expression));
+            }
+        }
+        if has_non_source_expression || has_selected_source {
+            projected.or(projected_conjunction);
+        }
+    }
+    projected
+}
+
 impl std::fmt::Debug for UniversalMarker {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         std::fmt::Debug::fmt(&self.marker, f)
@@ -456,7 +615,7 @@ impl ConflictMarker {
 
     /// Create a conflict marker that is true only when the given group for the
     /// given package is activated.
-    fn group(package: &PackageName, group: &GroupName) -> Self {
+    pub(crate) fn group(package: &PackageName, group: &GroupName) -> Self {
         let operator = uv_pep508::ExtraOperator::Equal;
         let name = uv_pep508::MarkerValueExtra::Extra(encode_package_group(package, group));
         let expr = uv_pep508::MarkerExpression::Extra { operator, name };
@@ -493,6 +652,11 @@ impl ConflictMarker {
     /// Returns true if this conflict marker will always evaluate to `true`.
     pub(crate) fn is_true(self) -> bool {
         self.marker.is_true()
+    }
+
+    /// Returns true if this conflict marker will always evaluate to `false`.
+    pub(crate) fn is_false(self) -> bool {
+        self.marker.is_false()
     }
 
     /// Returns inclusion and exclusion (respectively) conflict items parsed
@@ -907,6 +1071,49 @@ mod tests {
         cm.marker
             .try_to_string()
             .unwrap_or_else(|| "true".to_string())
+    }
+
+    #[test]
+    fn project_source_extra_scopes() -> Result<(), uv_pep508::Pep508Error> {
+        let scope = create_extra_item("foo");
+        let scopes: FxHashSet<_> = [scope.clone()].into_iter().collect();
+        let selected: FxHashSet<_> = [scope].into_iter().collect();
+        let unselected = FxHashSet::default();
+
+        let marker = UniversalMarker::from_combined(MarkerTree::from_str(
+            "sys_platform == 'linux' and extra == 'extra-3-pkg-foo'",
+        )?);
+        assert_eq!(
+            marker
+                .without_source_extra_scopes(&scopes, &selected)
+                .combined(),
+            MarkerTree::from_str("sys_platform == 'linux'")?
+        );
+
+        let marker = UniversalMarker::from_combined(MarkerTree::from_str(
+            "sys_platform != 'linux' or extra != 'extra-3-pkg-foo'",
+        )?);
+        assert_eq!(
+            marker
+                .without_source_extra_scopes(&scopes, &unselected)
+                .combined(),
+            MarkerTree::from_str("sys_platform != 'linux'")?
+        );
+
+        let marker =
+            UniversalMarker::from_combined(MarkerTree::from_str("extra != 'extra-3-pkg-foo'")?);
+        assert!(
+            marker
+                .without_source_extra_scopes(&scopes, &selected)
+                .is_true()
+        );
+        assert!(
+            marker
+                .without_source_extra_scopes(&scopes, &unselected)
+                .is_false()
+        );
+
+        Ok(())
     }
 
     /// This tests the conversion from declared conflicts into a conflict

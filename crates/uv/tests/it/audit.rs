@@ -2,7 +2,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use serde_json::json;
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_test::uv_snapshot;
@@ -749,6 +749,818 @@ async fn audit_extras() {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+/// Source variants selected by excluded extras should not be audited.
+#[tokio::test]
+async fn audit_excludes_source_variant_edges() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig==1.1.1"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "alt" },
+        ]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--no-extra")
+        .arg("alt")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+/// Declared empty extras must affect source selection during audit traversal.
+#[tokio::test]
+async fn audit_empty_extra_excludes_source_variant_edges() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig==1.1.1"]
+        foo = []
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "alt", marker = "extra != 'foo'" },
+        ]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({
+            "queries": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
+                "version": "2.0.0"
+            }]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+/// Groups represented only in package metadata must still activate source
+/// selection markers during audit traversal.
+#[tokio::test]
+async fn audit_metadata_only_group_source_variant_edges() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({
+            "queries": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
+                "version": "1.1.1"
+            }]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({
+            "queries": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
+                "version": "2.0.0"
+            }]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--only-group")
+        .arg("use")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+/// Empty extras activated by dependency group requirements must affect source
+/// selection during audit traversal.
+#[tokio::test]
+async fn audit_group_empty_extra_activates_source_variant_edges() {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["project[foo]", "iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({
+            "queries": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
+                "version": "1.1.1"
+            }]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--only-group")
+        .arg("use")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+/// Platform-conditioned group extras must preserve every possible source
+/// variant during audit traversal.
+#[tokio::test]
+async fn audit_group_platform_extra_preserves_source_variant_edges() {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["project[foo] ; sys_platform == 'linux'", "iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({
+            "queries": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
+                "version": "1.1.1"
+            }, {
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
+                "version": "2.0.0"
+            }]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}, {"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--locked")
+        .arg("--only-group")
+        .arg("use")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 2 packages
+    ");
+}
+
+/// Extras requested by dependency group requirements must not satisfy those
+/// requirements' own markers during audit traversal.
+#[tokio::test]
+async fn audit_group_requirement_does_not_activate_own_extra_marker() {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["project[foo] ; extra == 'foo'", "iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({
+            "queries": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
+                "version": "2.0.0"
+            }]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--only-group")
+        .arg("use")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+/// Audit every source observed when dependency-group extra activation does not
+/// stabilize.
+#[tokio::test]
+async fn audit_group_unstable_extra_activation() {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        foo = []
+        bar = []
+
+        [dependency-groups]
+        use = [
+            "project[foo] ; extra != 'bar'",
+            "project[bar] ; extra == 'foo'",
+            "iniconfig==1.1.1",
+        ]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({
+            "queries": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
+                "version": "1.1.1"
+            }, {
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
+                "version": "2.0.0"
+            }]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}, {"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--locked")
+        .arg("--only-group")
+        .arg("use")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 2 packages
+    ");
+}
+
+/// Extras from inactive dependency groups attached to a project-less root must
+/// not be traversed during audit.
+#[tokio::test]
+async fn audit_inactive_manifest_group_does_not_activate_transitive_extra() {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["child", "other"]
+
+        [dependency-groups]
+        use = ["child[alt] ; extra == 'alt'"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+    "#})
+        .unwrap();
+
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["other"]
+
+        [project.optional-dependencies]
+        alt = ["other[foo]"]
+
+        [tool.uv.sources]
+        other = { workspace = true }
+    "#})
+        .unwrap();
+
+    context
+        .temp_dir
+        .child("other/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "other"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        foo = ["iniconfig==1.1.1"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "foo" },
+        ]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--locked")
+        .arg("--only-group")
+        .arg("use")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 0 packages
+    ");
+}
+
+/// Recursive extras that select a source must be excluded from audit traversal.
+#[tokio::test]
+async fn audit_excludes_recursive_source_variant_edges() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig==1.1.1"]
+        all = ["project[alt]"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "alt" },
+        ]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--no-extra")
+        .arg("all")
+        .arg("--no-extra")
+        .arg("alt")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+/// Empty recursive extras must activate marker-only source variants during
+/// audit traversal.
+#[tokio::test]
+async fn audit_empty_recursive_extra_activates_source_variant_edges() {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [project.optional-dependencies]
+        alt = []
+        all = ["project[alt]"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", marker = "extra == 'alt'" },
+        ]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({
+            "queries": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
+                "version": "1.1.1"
+            }]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--locked")
+        .arg("--no-extra")
+        .arg("alt")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+/// Empty recursive extras on transitive packages must activate source variants
+/// during audit traversal.
+#[tokio::test]
+async fn audit_transitive_empty_recursive_extra_activates_source_variant_edges() {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child[all]"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})
+        .unwrap();
+
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [project.optional-dependencies]
+        alt = []
+        all = ["child[alt]"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", marker = "extra == 'alt'" },
+        ]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({
+            "queries": [
+                {
+                    "package": {
+                        "ecosystem": "PyPI",
+                        "name": "child"
+                    },
+                    "version": "0.1.0"
+                },
+                {
+                    "package": {
+                        "ecosystem": "PyPI",
+                        "name": "iniconfig"
+                    },
+                    "version": "1.1.1"
+                }
+            ]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--locked")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 2 packages
     ");
 }
 
@@ -1962,6 +2774,105 @@ async fn audit_script_extras() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 2 packages
+    ");
+}
+
+/// Extras from inactive PEP 723 requirements must not be traversed during
+/// audit.
+#[tokio::test]
+async fn audit_script_inactive_requirement_does_not_activate_extra() {
+    let context = uv_test::test_context!("3.12");
+
+    let other = context.temp_dir.child("other");
+    other.create_dir_all().unwrap();
+    other
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "other"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        foo = ["iniconfig==1.1.1"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "foo" },
+        ]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})
+        .unwrap();
+    other.child("src/other/__init__.py").touch().unwrap();
+
+    let script = context.temp_dir.child("script.py");
+    script
+        .write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #   "other",
+        #   "other[foo] ; extra == 'foo'",
+        # ]
+        #
+        # [tool.uv.sources]
+        # other = { path = "other" }
+        # ///
+    "#})
+        .unwrap();
+
+    context
+        .lock()
+        .arg("--script")
+        .arg("script.py")
+        .assert()
+        .success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({
+            "queries": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
+                "version": "2.0.0"
+            }, {
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "other"
+                },
+                "version": "0.1.0"
+            }]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}, {"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 2 packages
     ");
 }

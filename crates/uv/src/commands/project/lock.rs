@@ -1008,7 +1008,7 @@ async fn do_lock(
                 lock_supported_environments.clone().into_markers(),
             )?
             .with_manifest(manifest)
-            .with_conflicts(conflicts)
+            .with_conflicts(conflicts, index_locations)
             .with_required_environments(lock_required_environments.into_markers());
 
             if previous.as_ref().is_some_and(|previous| *previous == lock) {
@@ -1267,6 +1267,25 @@ impl ValidatedLock {
             SatisfiesResult::Satisfied => {
                 debug!("Existing `uv.lock` satisfies workspace requirements");
                 Ok(Self::Satisfies(lock))
+            }
+            SatisfiesResult::MismatchedSourceActivationContexts(expected, actual) => {
+                debug!(
+                    "Resolving despite existing lockfile due to mismatched source activation contexts:\n  Requested: {:?}\n  Existing: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Versions(lock))
+            }
+            SatisfiesResult::MissingSourceVariantGroupDependencies(name, version) => {
+                if let Some(version) = version {
+                    debug!(
+                        "Resolving despite existing lockfile due to missing source-variant dependency group edges for: `{name}=={version}`"
+                    );
+                } else {
+                    debug!(
+                        "Resolving despite existing lockfile due to missing source-variant dependency group edges for: `{name}`"
+                    );
+                }
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedMembers(expected, actual) => {
                 debug!(

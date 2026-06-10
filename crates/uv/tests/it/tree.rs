@@ -1216,6 +1216,665 @@ fn group() -> Result<()> {
     Ok(())
 }
 
+/// Group-scoped sources should be reflected in the dependency tree when the
+/// selecting group is enabled.
+#[test]
+fn group_scoped_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [dependency-groups]
+        alt = ["iniconfig==1.1.1"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "alt" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.tree().arg("--group").arg("alt").arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── iniconfig v1.1.1
+    └── iniconfig v1.1.1 (group: alt)
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Materialized source fallback edges for included groups must be scoped to
+/// the group they are attached to.
+#[test]
+fn included_group_scoped_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [dependency-groups]
+        alt = ["iniconfig==1.1.1"]
+        all = [{ include-group = "alt" }]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "alt" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(
+        context.filters(),
+        context.tree().arg("--only-group").arg("alt").arg("--locked"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── iniconfig v1.1.1 (group: alt)
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context.tree().arg("--only-group").arg("all").arg("--locked"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── iniconfig v1.1.1 (group: all)
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+/// Groups represented only in package metadata must still activate source
+/// selection markers in the dependency tree.
+#[test]
+fn metadata_only_group_scoped_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .tree()
+            .arg("--group")
+            .arg("use")
+            .arg("--locked"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── iniconfig v1.1.1
+    └── iniconfig v1.1.1 (group: use)
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context.tree().arg("--only-group").arg("use").arg("--locked"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── iniconfig v2.0.0 (group: use)
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+/// Empty extras activated by dependency group requirements must affect source
+/// selection in the dependency tree.
+#[test]
+fn dependency_group_empty_extra_activates_scoped_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["project[foo]", "iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(
+        context.filters(),
+        context.tree().arg("--only-group").arg("use").arg("--locked"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── iniconfig v1.1.1
+    ├── iniconfig v1.1.1 (group: use)
+    └── project[foo] v0.1.0 (group: use) (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+/// Extras requested by a dependency group requirement must not satisfy that
+/// requirement's own marker during tree traversal.
+#[test]
+fn dependency_group_requirement_does_not_activate_own_extra_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        foo = []
+
+        [dependency-groups]
+        use = ["project[foo] ; extra == 'foo'", "iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(
+        context.filters(),
+        context.tree().arg("--only-group").arg("use").arg("--locked"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── iniconfig v2.0.0 (group: use)
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+/// Tree rendering must reject dependency groups whose activated extras do not
+/// stabilize.
+#[test]
+fn dependency_group_unstable_extra_activation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        foo = []
+        bar = []
+
+        [dependency-groups]
+        use = [
+            "project[foo] ; extra != 'bar'",
+            "project[bar] ; extra == 'foo'",
+            "iniconfig==1.1.1",
+        ]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", group = "use", marker = "extra == 'foo'" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .tree()
+            .arg("--only-group")
+            .arg("use")
+            .arg("--no-dedupe")
+            .arg("--locked"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: Could not determine a stable set of activated extras from the lockfile
+    "
+    );
+
+    Ok(())
+}
+
+/// Extra-scoped sources should be reflected on optional dependency edges.
+#[test]
+fn extra_scoped_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig==1.1.1"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "alt" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.tree().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── iniconfig v2.0.0
+    └── iniconfig v1.1.1 (extra: alt)
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Empty extras should still activate source-selection markers in the
+/// dependency tree.
+#[test]
+fn empty_extra_scoped_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        cpu = []
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", marker = "extra == 'cpu'" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.tree().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── iniconfig v1.1.1
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Source edges must be evaluated with extras activated by incoming
+/// dependencies.
+#[test]
+fn transitive_extra_scoped_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child[alt]"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig==1.1.1"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "alt" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.tree().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── child[alt] v0.1.0
+        ├── iniconfig v1.1.1
+        └── iniconfig v1.1.1 (extra: alt)
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Empty recursive extras on transitive packages must activate source-selection
+/// markers in the dependency tree.
+#[test]
+fn transitive_empty_recursive_extra_scoped_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child[all]"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [project.optional-dependencies]
+        alt = []
+        all = ["child[alt]"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", marker = "extra == 'alt'" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.tree().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── child[all] v0.1.0
+        └── iniconfig v1.1.1
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Source edges must be evaluated with extras activated through optional root
+/// dependencies.
+#[test]
+fn optional_transitive_extra_scoped_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [project.optional-dependencies]
+        use-alt = ["child[alt]"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig==1.1.1"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "alt" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.tree().arg("--locked").arg("--no-dedupe"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── child v0.1.0
+    │   └── iniconfig v1.1.1
+    └── child[alt] v0.1.0 (extra: use-alt)
+        ├── iniconfig v1.1.1
+        └── iniconfig v1.1.1 (extra: alt)
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn script_manifest_extra_scoped_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0 ; sys_platform == 'win32'"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig==1.1.1"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "alt" },
+        ]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    child.child("src/child/__init__.py").touch()?;
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child[alt]"]
+        #
+        # [tool.uv.sources]
+        # child = { path = "child" }
+        # ///
+    "#})?;
+
+    context
+        .lock()
+        .arg("--script")
+        .arg("script.py")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context
+        .tree()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--python-platform")
+        .arg("x86_64-unknown-linux-gnu"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    child v0.1.0
+    └── iniconfig v1.1.1 (extra: alt)
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn cycle() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1746,6 +2405,158 @@ fn non_project_member() -> Result<()> {
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
+
+    Ok(())
+}
+
+/// Dependency groups attached to a non-project workspace root must activate
+/// extras used for source selection in workspace members.
+#[test]
+fn non_project_group_activates_member_extra_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [dependency-groups]
+        use = ["child[alt]"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0 ; sys_platform == 'win32'"]
+
+        [project.optional-dependencies]
+        alt = ["iniconfig==1.1.1"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "alt" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .tree()
+            .arg("--only-group")
+            .arg("use")
+            .arg("--locked")
+            .arg("--python-platform")
+            .arg("x86_64-unknown-linux-gnu"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    child v0.1.0 (group: use)
+    └── iniconfig v1.1.1 (extra: alt)
+    child v0.1.0 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+/// Extras requested by dependency groups attached to a non-project workspace
+/// root must be traversed while source activation contexts stabilize.
+#[test]
+fn non_project_group_activates_transitive_member_extra_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["child", "other"]
+
+        [dependency-groups]
+        use = ["child[alt]"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["other"]
+
+        [project.optional-dependencies]
+        alt = ["other[foo]"]
+
+        [tool.uv.sources]
+        other = { workspace = true }
+        "#,
+    )?;
+
+    let other = context.temp_dir.child("other");
+    other.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "other"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        foo = ["iniconfig==1.1.1"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", extra = "foo" },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .tree()
+            .arg("--only-group")
+            .arg("use")
+            .arg("--package")
+            .arg("child")
+            .arg("--no-dedupe")
+            .arg("--locked"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    child v0.1.0
+    ├── other v0.1.0
+    │   └── iniconfig v1.1.1
+    └── other[foo] v0.1.0 (extra: alt)
+        ├── iniconfig v1.1.1
+        └── iniconfig v1.1.1 (extra: foo)
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "
+    );
 
     Ok(())
 }

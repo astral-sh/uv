@@ -145,25 +145,23 @@ impl SourcedDependencyGroups {
             .into_iter()
             .map(|(name, group)| {
                 let requirements = group
-                    .requirements
-                    .into_iter()
-                    .flat_map(|requirement| {
+                    .into_requirements_with_source_groups()
+                    .flat_map(|(requirement, source_groups)| {
                         // Check if sources should be disabled for this specific package
                         if no_sources.for_package(&requirement.name) {
                             vec![Ok(Requirement::from(requirement))].into_iter()
                         } else {
                             let requirement_name = requirement.name.clone();
                             let group = name.clone();
-                            let extra = None;
 
-                            LoweredRequirement::from_requirement(
+                            LoweredRequirement::from_requirement_with_source_groups(
                                 requirement,
                                 project.project_name(),
                                 project.root(),
                                 project_sources,
                                 project_indexes,
-                                extra,
-                                Some(&group),
+                                &group,
+                                &source_groups,
                                 locations,
                                 project.workspace(),
                                 git_member,

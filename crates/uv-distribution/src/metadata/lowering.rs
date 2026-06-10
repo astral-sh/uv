@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -28,12 +28,51 @@ use crate::metadata::GitWorkspaceMember;
 #[derive(Debug, Clone)]
 pub struct LoweredRequirement(Requirement);
 
+#[derive(Debug, Clone)]
+struct LoweredSourceRequirement {
+    requirement: Requirement,
+    source_extra: Option<ExtraName>,
+    source_group: Option<GroupName>,
+}
+
+/// An extra- or group-conditioned source variant of a production dependency.
+///
+/// This is resolution-only metadata. The regular lowered requirement remains the source of truth
+/// for published metadata and lockfile metadata, while this record describes how a
+/// `tool.uv.sources` entry changes the source of that production dependency.
+#[derive(Debug, Clone)]
+pub struct SourceVariant {
+    pub requirement: Requirement,
+    pub extra: Option<ExtraName>,
+    pub group: Option<GroupName>,
+    /// Extras known to be active when applying constraints to this source.
+    pub constraint_extras: BTreeSet<ExtraName>,
+}
+
 #[derive(Debug, Clone, Copy)]
 enum RequirementOrigin {
     /// The `tool.uv.sources` were read from the project.
     Project,
     /// The `tool.uv.sources` were read from the workspace root.
     Workspace,
+}
+
+#[derive(Debug, Clone)]
+enum SourceSelection {
+    /// Select the sources that apply to the requirement's current extra or dependency group.
+    Context {
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
+        source_groups: BTreeSet<GroupName>,
+    },
+    /// Select every source that is conditional on an extra or dependency group.
+    Conditional,
+}
+
+fn marker_references_extras(marker: MarkerTree) -> bool {
+    let mut references_extras = false;
+    marker.visit_extras(|_, _| references_extras = true);
+    references_extras
 }
 
 impl LoweredRequirement {
@@ -52,6 +91,122 @@ impl LoweredRequirement {
         editable: bool,
         credentials_cache: &'data CredentialsCache,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + use<'data> + 'data {
+        Self::from_requirement_with_selection(
+            requirement,
+            project_name,
+            project_dir,
+            project_sources,
+            project_indexes,
+            SourceSelection::Context {
+                extra: extra.cloned(),
+                group: group.cloned(),
+                source_groups: group.into_iter().cloned().collect(),
+            },
+            locations,
+            workspace,
+            git_member,
+            editable,
+            credentials_cache,
+        )
+        .map(|requirement| requirement.map(LoweredSourceRequirement::into_lowered_requirement))
+    }
+
+    /// Combine a dependency-group requirement with sources selected by the groups that contain it.
+    pub(crate) fn from_requirement_with_source_groups<'data>(
+        requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+        project_name: Option<&'data PackageName>,
+        project_dir: &'data Path,
+        project_sources: &'data BTreeMap<PackageName, Sources>,
+        project_indexes: &'data [Index],
+        group: &GroupName,
+        source_groups: &BTreeSet<GroupName>,
+        locations: &'data IndexLocations,
+        workspace: &'data Workspace,
+        git_member: Option<&'data GitWorkspaceMember<'data>>,
+        editable: bool,
+        credentials_cache: &'data CredentialsCache,
+    ) -> impl Iterator<Item = Result<Self, LoweringError>> + use<'data> + 'data {
+        Self::from_requirement_with_selection(
+            requirement,
+            project_name,
+            project_dir,
+            project_sources,
+            project_indexes,
+            SourceSelection::Context {
+                extra: None,
+                group: Some(group.clone()),
+                source_groups: source_groups.clone(),
+            },
+            locations,
+            workspace,
+            git_member,
+            editable,
+            credentials_cache,
+        )
+        .map(|requirement| requirement.map(LoweredSourceRequirement::into_lowered_requirement))
+    }
+
+    /// Lower the source-specific variants that apply to a production dependency.
+    pub(crate) fn source_variants<'data>(
+        requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+        project_name: Option<&'data PackageName>,
+        project_dir: &'data Path,
+        project_sources: &'data BTreeMap<PackageName, Sources>,
+        project_indexes: &'data [Index],
+        locations: &'data IndexLocations,
+        workspace: &'data Workspace,
+        git_member: Option<&'data GitWorkspaceMember<'data>>,
+        editable: bool,
+        credentials_cache: &'data CredentialsCache,
+    ) -> impl Iterator<Item = Result<SourceVariant, LoweringError>> + use<'data> + 'data {
+        Self::from_requirement_with_selection(
+            requirement,
+            project_name,
+            project_dir,
+            project_sources,
+            project_indexes,
+            SourceSelection::Conditional,
+            locations,
+            workspace,
+            git_member,
+            editable,
+            credentials_cache,
+        )
+        .map(|requirement| requirement.map(LoweredSourceRequirement::into_source_variant))
+    }
+
+    fn from_requirement_with_selection<'data>(
+        requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+        project_name: Option<&'data PackageName>,
+        project_dir: &'data Path,
+        project_sources: &'data BTreeMap<PackageName, Sources>,
+        project_indexes: &'data [Index],
+        selection: SourceSelection,
+        locations: &'data IndexLocations,
+        workspace: &'data Workspace,
+        git_member: Option<&'data GitWorkspaceMember<'data>>,
+        editable: bool,
+        credentials_cache: &'data CredentialsCache,
+    ) -> impl Iterator<Item = Result<LoweredSourceRequirement, LoweringError>> + use<'data> + 'data
+    {
+        let context = match selection {
+            SourceSelection::Context {
+                extra,
+                group,
+                source_groups,
+            } => Some((extra, group, source_groups)),
+            SourceSelection::Conditional => None,
+        };
+        let include_remaining = context.is_some();
+        let context_extra = context
+            .as_ref()
+            .and_then(|(extra, _, _)| extra.as_ref())
+            .cloned();
+        let context_group = context
+            .as_ref()
+            .and_then(|(_, group, _)| group.as_ref())
+            .cloned();
+
         // Identify the source from the `tool.uv.sources` table.
         let (sources, origin) = if let Some(source) = project_sources.get(&requirement.name) {
             (Some(source), RequirementOrigin::Project)
@@ -65,71 +220,92 @@ impl LoweredRequirement {
         let sources = sources.map(|sources| {
             sources
                 .iter()
-                .filter(|source| {
-                    if let Some(target) = source.extra() {
-                        if extra != Some(target) {
+                .filter(|source| match &context {
+                    Some((extra, group, source_groups)) => {
+                        if let Some(target) = source.extra() {
+                            if extra.as_ref() != Some(target) {
+                                return false;
+                            }
+                        }
+
+                        if let Some(target) = source.group() {
+                            if !source_groups.contains(target) {
+                                return false;
+                            }
+                        }
+
+                        if extra.is_none()
+                            && group.is_none()
+                            && marker_references_extras(source.marker())
+                        {
                             return false;
                         }
-                    }
 
-                    if let Some(target) = source.group() {
-                        if group != Some(target) {
-                            return false;
-                        }
+                        true
                     }
-
-                    true
+                    None => {
+                        source.extra().is_some()
+                            || source.group().is_some()
+                            || marker_references_extras(source.marker())
+                    }
                 })
                 .cloned()
                 .collect::<Sources>()
         });
 
         // If you use a package that's part of the workspace...
-        if workspace.packages().contains_key(&requirement.name) {
+        if context.is_some() && workspace.packages().contains_key(&requirement.name) {
             // And it's not a recursive self-inclusion (extras that activate other extras), e.g.
             // `framework[machine_learning]` depends on `framework[cuda]`.
             if project_name.is_none_or(|project_name| *project_name != requirement.name) {
                 // It must be declared as a workspace source.
                 let Some(sources) = sources.as_ref() else {
                     // No sources were declared for the workspace package.
-                    return Either::Left(std::iter::once(Err(
-                        LoweringError::MissingWorkspaceSource(requirement.name.clone()),
-                    )));
+                    return Either::Left(
+                        Some(Err(LoweringError::MissingWorkspaceSource(
+                            requirement.name.clone(),
+                        )))
+                        .into_iter(),
+                    );
                 };
 
                 for source in sources.iter() {
                     match source {
                         Source::Git { .. } => {
-                            return Either::Left(std::iter::once(Err(
-                                LoweringError::NonWorkspaceSource(
+                            return Either::Left(
+                                Some(Err(LoweringError::NonWorkspaceSource(
                                     requirement.name.clone(),
                                     SourceKind::Git,
-                                ),
-                            )));
+                                )))
+                                .into_iter(),
+                            );
                         }
                         Source::Url { .. } => {
-                            return Either::Left(std::iter::once(Err(
-                                LoweringError::NonWorkspaceSource(
+                            return Either::Left(
+                                Some(Err(LoweringError::NonWorkspaceSource(
                                     requirement.name.clone(),
                                     SourceKind::Url,
-                                ),
-                            )));
+                                )))
+                                .into_iter(),
+                            );
                         }
                         Source::Path { .. } => {
-                            return Either::Left(std::iter::once(Err(
-                                LoweringError::NonWorkspaceSource(
+                            return Either::Left(
+                                Some(Err(LoweringError::NonWorkspaceSource(
                                     requirement.name.clone(),
                                     SourceKind::Path,
-                                ),
-                            )));
+                                )))
+                                .into_iter(),
+                            );
                         }
                         Source::Registry { .. } => {
-                            return Either::Left(std::iter::once(Err(
-                                LoweringError::NonWorkspaceSource(
+                            return Either::Left(
+                                Some(Err(LoweringError::NonWorkspaceSource(
                                     requirement.name.clone(),
                                     SourceKind::Registry,
-                                ),
-                            )));
+                                )))
+                                .into_iter(),
+                            );
                         }
                         Source::Workspace { .. } => {
                             // OK
@@ -140,15 +316,20 @@ impl LoweredRequirement {
         }
 
         let Some(sources) = sources else {
-            return Either::Left(std::iter::once(Self::preserve_git_source(
-                requirement,
-                git_member,
-            )));
+            return Either::Left(
+                context
+                    .is_some()
+                    .then(|| {
+                        Self::preserve_git_source(requirement, git_member)
+                            .map(LoweredSourceRequirement::from)
+                    })
+                    .into_iter(),
+            );
         };
 
         // Determine whether the markers cover the full space for the requirement. If not, fill the
         // remaining space with the negation of the sources.
-        let remaining = {
+        let remaining = include_remaining.then(|| {
             // Determine the space covered by the sources.
             let mut total = MarkerTree::FALSE;
             for source in sources.iter() {
@@ -159,16 +340,22 @@ impl LoweredRequirement {
             let mut remaining = total.negate();
             remaining.and(requirement.marker);
 
-            Self(Requirement {
-                marker: remaining,
-                ..Requirement::from(requirement.clone())
-            })
-        };
+            LoweredSourceRequirement {
+                requirement: Requirement {
+                    marker: remaining,
+                    ..Requirement::from(requirement.clone())
+                },
+                source_extra: None,
+                source_group: None,
+            }
+        });
 
         Either::Right(
             sources
                 .into_iter()
                 .map(move |source| {
+                    let source_extra = source.extra().cloned();
+                    let source_group = source.group().cloned();
                     let (source, mut marker) = match source {
                         Source::Git {
                             git,
@@ -223,8 +410,8 @@ impl LoweredRequirement {
                         Source::Registry {
                             index,
                             marker,
-                            extra,
-                            group,
+                            extra: _,
+                            group: _,
                         } => {
                             // Identify the named index from either the project indexes or the workspace indexes,
                             // in that order.
@@ -252,12 +439,16 @@ impl LoweredRequirement {
                                 format: index.format,
                             };
                             let conflict = project_name.and_then(|project_name| {
-                                if let Some(extra) = extra {
-                                    Some(ConflictItem::from((project_name.clone(), extra)))
+                                if source_extra.is_some() {
+                                    context_extra.clone().or_else(|| source_extra.clone()).map(
+                                        |extra| ConflictItem::from((project_name.clone(), extra)),
+                                    )
+                                } else if source_group.is_some() {
+                                    context_group.clone().or_else(|| source_group.clone()).map(
+                                        |group| ConflictItem::from((project_name.clone(), group)),
+                                    )
                                 } else {
-                                    group.map(|group| {
-                                        ConflictItem::from((project_name.clone(), group))
-                                    })
+                                    None
                                 }
                             });
                             let source = registry_source(&requirement, index, conflict);
@@ -347,18 +538,22 @@ impl LoweredRequirement {
 
                     marker.and(requirement.marker);
 
-                    Ok(Self(Requirement {
-                        name: requirement.name.clone(),
-                        extras: requirement.extras.clone(),
-                        groups: Box::new([]),
-                        marker,
-                        source,
-                        origin: requirement.origin.clone(),
-                    }))
+                    Ok(LoweredSourceRequirement {
+                        requirement: Requirement {
+                            name: requirement.name.clone(),
+                            extras: requirement.extras.clone(),
+                            groups: Box::new([]),
+                            marker,
+                            source,
+                            origin: requirement.origin.clone(),
+                        },
+                        source_extra,
+                        source_group,
+                    })
                 })
-                .chain(std::iter::once(Ok(remaining)))
+                .chain(remaining.into_iter().map(Ok))
                 .filter(|requirement| match requirement {
-                    Ok(requirement) => !requirement.0.marker.is_false(),
+                    Ok(requirement) => !requirement.requirement.marker.is_false(),
                     Err(_) => true,
                 }),
         )
@@ -562,6 +757,31 @@ impl LoweredRequirement {
     /// Convert back into a [`Requirement`].
     pub fn into_inner(self) -> Requirement {
         self.0
+    }
+}
+
+impl LoweredSourceRequirement {
+    fn into_lowered_requirement(self) -> LoweredRequirement {
+        LoweredRequirement(self.requirement)
+    }
+
+    fn into_source_variant(self) -> SourceVariant {
+        SourceVariant {
+            requirement: self.requirement,
+            extra: self.source_extra,
+            group: self.source_group,
+            constraint_extras: BTreeSet::new(),
+        }
+    }
+}
+
+impl From<LoweredRequirement> for LoweredSourceRequirement {
+    fn from(requirement: LoweredRequirement) -> Self {
+        Self {
+            requirement: requirement.into_inner(),
+            source_extra: None,
+            source_group: None,
+        }
     }
 }
 
