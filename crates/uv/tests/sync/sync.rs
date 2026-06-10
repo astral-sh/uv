@@ -5,6 +5,7 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use serde_json::json;
+#[cfg(feature = "test-git")]
 use std::process::Command;
 use tempfile::tempdir_in;
 use url::Url;

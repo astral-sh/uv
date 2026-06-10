@@ -1,5 +1,5 @@
 ---
-source: crates/uv/tests/it/workflow.rs
+source: crates/uv/tests/project/workflow.rs
 expression: lock
 ---
 version = 2

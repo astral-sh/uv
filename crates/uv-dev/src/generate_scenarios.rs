@@ -48,9 +48,9 @@ impl TemplateKind {
 
     fn test_file(self) -> &'static str {
         match self {
-            Self::Install => "crates/uv/tests/it/pip_install_scenarios.rs",
-            Self::Compile => "crates/uv/tests/it/pip_compile_scenarios.rs",
-            Self::Lock => "crates/uv/tests/it/lock_scenarios.rs",
+            Self::Install => "crates/uv/tests/pip/pip_install_scenarios.rs",
+            Self::Compile => "crates/uv/tests/pip/pip_compile_scenarios.rs",
+            Self::Lock => "crates/uv/tests/lock_scenarios/lock_scenarios.rs",
         }
     }
 
