@@ -889,6 +889,9 @@ impl AuthMiddleware {
                     Ok(credentials) => credentials,
                     Err(err) => {
                         debug!("Failed to get credentials from native store: {err}");
+                        uv_warnings::warn_user_once!(
+                            "Failed to fetch credentials from the native credential store: {err}"
+                        );
                         None
                     }
                 }

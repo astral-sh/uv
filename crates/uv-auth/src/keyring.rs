@@ -7,6 +7,8 @@ use std::{
     sync::{Arc, LazyLock, Mutex},
 };
 
+#[cfg(all(target_os = "windows", not(test)))]
+use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD};
 use tokio::{
     process::Command,
     sync::{OwnedRwLockReadGuard, OwnedRwLockWriteGuard, RwLock as AsyncRwLock},
@@ -19,7 +21,7 @@ use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
-use crate::credentials::Credentials;
+use crate::credentials::{Credentials, Username};
 use crate::matching;
 use crate::realm::Realm;
 use crate::service::Service;
@@ -27,6 +29,9 @@ use crate::store::PersistentCredential;
 
 /// Service name prefix for storing credentials in a keyring.
 static UV_SERVICE_PREFIX: &str = "uv:";
+
+#[cfg(all(target_os = "windows", not(test)))]
+static WINDOWS_NATIVE_SERVICE_PREFIX: &str = "uv:native-auth:v2:";
 
 /// Process-local locks for native keyring access, keyed by realm.
 static NATIVE_KEYRING_LOCKS: LazyLock<Mutex<HashMap<Realm, Arc<AsyncRwLock<()>>>>> =
@@ -143,7 +148,7 @@ impl NativeCredentialTestHook {
                 .block_next
                 .swap(false, std::sync::atomic::Ordering::SeqCst)
         {
-            self.entered.notify_waiters();
+            self.entered.notify_one();
             self.release.notified().await;
         }
     }
@@ -153,8 +158,37 @@ impl NativeCredentialTestHook {
     }
 
     fn release(&self) {
-        self.release.notify_waiters();
+        self.release.notify_one();
     }
+}
+
+#[cfg(all(target_os = "windows", not(test)))]
+fn windows_native_target_prefix(realm: &Realm) -> String {
+    format!("{WINDOWS_NATIVE_SERVICE_PREFIX}{realm}:")
+}
+
+#[cfg(all(target_os = "windows", not(test)))]
+fn windows_native_target(service: &Service, username: &Username) -> String {
+    let realm = Realm::from(service.url());
+    let service = service.to_string();
+    let username = username.as_deref().unwrap_or_default();
+    let identity = format!("{}:{service}{username}", service.len());
+    format!(
+        "{}{}",
+        windows_native_target_prefix(&realm),
+        BASE64_URL_SAFE_NO_PAD.encode(identity)
+    )
+}
+
+#[cfg(all(target_os = "windows", not(test)))]
+fn windows_native_entry(service: &Service, username: &Username) -> uv_keyring::Entry {
+    let credential = uv_keyring::windows::WinCredential {
+        username: username.as_deref().unwrap_or_default().to_string(),
+        target_name: windows_native_target(service, username),
+        target_alias: String::new(),
+        comment: "uv native authentication credential".to_string(),
+    };
+    uv_keyring::Entry::new_with_credential(Box::new(credential))
 }
 
 #[cfg(test)]
@@ -341,68 +375,87 @@ impl KeyringProvider {
     }
 
     /// Store credentials to the system keyring.
-    ///
-    /// Uses realm-based storage where the keyring service name is the realm
-    /// (scheme://host:port) and all credentials for that realm are stored as a JSON
-    /// array in the password field. Each entry in the array contains the full Service
-    /// URL + credentials.
-    ///
-    /// This supports multiple users per realm by storing them all in a single keyring
-    /// entry as an array.
     #[instrument(skip(self, credentials))]
     async fn store_native(
         &self,
         service: &Service,
         credentials: &Credentials,
     ) -> Result<(), Error> {
-        // Get the realm for the service name.
         let realm = Realm::from(service.url());
         let _lock = native_credential_lock(&realm, NativeCredentialLockMode::Write).await?;
-        let realm_str = realm.to_string();
-        let prefixed_service = format!("{UV_SERVICE_PREFIX}{realm_str}");
+        self.store_native_unlocked(&realm, service, credentials)
+            .await
+    }
 
-        // Use a fixed username for the realm entry
-        let keyring_username = "_uv_";
-        let entry = uv_keyring::Entry::new(&prefixed_service, keyring_username)?;
-
-        // Fetch existing credentials for this realm.
-        let mut credentials_list: Vec<PersistentCredential> = match entry.get_password().await {
-            Ok(json_data) => {
-                serde_json::from_str(&json_data).map_err(Error::CorruptStoredCredentials)?
-            }
-            Err(uv_keyring::Error::NoEntry) => {
-                trace!("No existing credentials for realm {realm_str}");
-                Vec::new()
-            }
-            Err(err) => return Err(Error::Keyring(err)),
-        };
-
-        // Create the new credential entry
-        let new_credential = PersistentCredential {
+    /// Store credentials while the caller holds the realm write lock.
+    async fn store_native_unlocked(
+        &self,
+        realm: &Realm,
+        service: &Service,
+        credentials: &Credentials,
+    ) -> Result<(), Error> {
+        let persistent_credential = PersistentCredential {
             service: service.clone(),
             credentials: credentials.clone(),
         };
 
-        let new_username = credentials.to_username();
+        #[cfg(all(target_os = "windows", not(test)))]
+        {
+            let _ = realm;
+            let username = credentials.to_username();
+            let entry = windows_native_entry(service, &username);
+            let json_data = serde_json::to_vec(&persistent_credential)
+                .map_err(Error::SerializeStoredCredentials)?;
+            entry.set_secret(&json_data).await?;
+            trace!(
+                "Stored credentials for {}@{service} in Windows Credential Manager",
+                username.as_deref().unwrap_or_default()
+            );
+            return Ok(());
+        }
 
-        // Remove any existing credential with the same service URL and username
-        credentials_list.retain(|cred| {
-            let matches_service = cred.service.url() == service.url();
-            let matches_username = cred.credentials.to_username() == new_username;
-            !(matches_service && matches_username)
-        });
+        #[cfg(any(not(target_os = "windows"), test))]
+        {
+            let realm_str = realm.to_string();
+            let prefixed_service = format!("{UV_SERVICE_PREFIX}{realm_str}");
 
-        // Add the new credential
-        credentials_list.push(new_credential);
+            // Use a fixed username for the realm entry
+            let keyring_username = "_uv_";
+            let entry = uv_keyring::Entry::new(&prefixed_service, keyring_username)?;
 
-        // Serialize the updated list.
-        let json_data =
-            serde_json::to_string(&credentials_list).map_err(Error::SerializeStoredCredentials)?;
+            // Fetch existing credentials for this realm.
+            let mut credentials_list: Vec<PersistentCredential> = match entry.get_password().await {
+                Ok(json_data) => {
+                    serde_json::from_str(&json_data).map_err(Error::CorruptStoredCredentials)?
+                }
+                Err(uv_keyring::Error::NoEntry) => {
+                    trace!("No existing credentials for realm {realm_str}");
+                    Vec::new()
+                }
+                Err(err) => return Err(Error::Keyring(err)),
+            };
 
-        entry.set_password(&json_data).await?;
+            let new_username = credentials.to_username();
 
-        trace!("Stored credentials for realm {realm_str} in system keyring");
-        Ok(())
+            // Remove any existing credential with the same service URL and username
+            credentials_list.retain(|cred| {
+                let matches_service = cred.service.url() == service.url();
+                let matches_username = cred.credentials.to_username() == new_username;
+                !(matches_service && matches_username)
+            });
+
+            // Add the new credential
+            credentials_list.push(persistent_credential);
+
+            // Serialize the updated list.
+            let json_data = serde_json::to_string(&credentials_list)
+                .map_err(Error::SerializeStoredCredentials)?;
+
+            entry.set_password(&json_data).await?;
+
+            trace!("Stored credentials for realm {realm_str} in system keyring");
+            Ok(())
+        }
     }
 
     /// Remove credentials for the given [`DisplaySafeUrl`] from the keyring.
@@ -455,77 +508,79 @@ impl KeyringProvider {
         }
     }
 
-    /// Remove credentials from the new realm-based JSON keyring entry.
-    ///
-    /// Removal prefers an exact service match, but falls back to a realm-root credential when the
-    /// requested URL only resolved via host-level matching.
+    /// Remove an exact service and username from the native credential store.
     #[instrument(skip(self))]
     async fn remove_native_realm_entry(
         &self,
         service: &Service,
         username: &str,
     ) -> Result<bool, Error> {
-        let realm = Realm::from(service.url());
-        let realm_str = realm.to_string();
-        let prefixed_service = format!("{UV_SERVICE_PREFIX}{realm_str}");
-        let keyring_username = "_uv_";
-        let entry = uv_keyring::Entry::new(&prefixed_service, keyring_username)?;
+        #[cfg(all(target_os = "windows", not(test)))]
+        {
+            let username = Username::from(Some(username.to_string()));
+            let entry = windows_native_entry(service, &username);
+            return match entry.delete_credential().await {
+                Ok(()) => {
+                    trace!(
+                        "Removed credentials for {}@{service}",
+                        username.as_deref().unwrap_or_default()
+                    );
+                    Ok(true)
+                }
+                Err(uv_keyring::Error::NoEntry) => Ok(false),
+                Err(err) => Err(Error::Keyring(err)),
+            };
+        }
 
-        // Fetch existing credentials for this realm.
-        let json_data = match entry.get_password().await {
-            Ok(json_data) => json_data,
-            Err(uv_keyring::Error::NoEntry) => return Ok(false),
-            Err(err) => return Err(Error::Keyring(err)),
-        };
+        #[cfg(any(not(target_os = "windows"), test))]
+        {
+            let realm = Realm::from(service.url());
+            let realm_str = realm.to_string();
+            let prefixed_service = format!("{UV_SERVICE_PREFIX}{realm_str}");
+            let keyring_username = "_uv_";
+            let entry = uv_keyring::Entry::new(&prefixed_service, keyring_username)?;
 
-        let mut credentials_list: Vec<PersistentCredential> =
-            serde_json::from_str(&json_data).map_err(Error::CorruptStoredCredentials)?;
-        let mut removed_service = service.clone();
+            // Fetch existing credentials for this realm.
+            let json_data = match entry.get_password().await {
+                Ok(json_data) => json_data,
+                Err(uv_keyring::Error::NoEntry) => return Ok(false),
+                Err(err) => return Err(Error::Keyring(err)),
+            };
 
-        // Find and remove the credential matching the requested service and username.
-        let initial_len = credentials_list.len();
-        credentials_list.retain(|credential| {
-            let matches_service = credential.service == *service;
-            let matches_username =
-                credential.credentials.to_username().as_deref() == Some(username);
-            !(matches_service && matches_username)
-        });
+            let mut credentials_list: Vec<PersistentCredential> =
+                serde_json::from_str(&json_data).map_err(Error::CorruptStoredCredentials)?;
 
-        if credentials_list.len() == initial_len {
-            if let Ok(root_service) = Service::from_str(&realm_str)
-                && root_service != *service
-            {
-                credentials_list.retain(|credential| {
-                    let matches_service = credential.service == root_service;
-                    let matches_username =
-                        credential.credentials.to_username().as_deref() == Some(username);
-                    !(matches_service && matches_username)
-                });
-                removed_service = root_service;
+            // Find and remove the credential matching the requested service and username.
+            let initial_len = credentials_list.len();
+            credentials_list.retain(|credential| {
+                let matches_service = credential.service == *service;
+                let matches_username =
+                    credential.credentials.to_username().as_deref() == Some(username);
+                !(matches_service && matches_username)
+            });
+
+            // Check if we actually removed something.
+            if credentials_list.len() == initial_len {
+                return Ok(false);
             }
-        }
 
-        // Check if we actually removed something.
-        if credentials_list.len() == initial_len {
-            return Ok(false);
-        }
+            // If this was the last credential, delete the entire entry.
+            if credentials_list.is_empty() {
+                entry.delete_credential().await?;
+                trace!("Removed last credential for realm {realm_str}, deleted keyring entry");
+            } else {
+                // Otherwise, update with the remaining credentials.
+                let json_data = serde_json::to_string(&credentials_list)
+                    .map_err(Error::SerializeStoredCredentials)?;
+                entry.set_password(&json_data).await?;
+                trace!(
+                    "Removed credentials for {username}@{service}, {} credentials remaining",
+                    credentials_list.len()
+                );
+            }
 
-        // If this was the last credential, delete the entire entry.
-        if credentials_list.is_empty() {
-            entry.delete_credential().await?;
-            trace!("Removed last credential for realm {realm_str}, deleted keyring entry");
-        } else {
-            // Otherwise, update with the remaining credentials.
-            let json_data = serde_json::to_string(&credentials_list)
-                .map_err(Error::SerializeStoredCredentials)?;
-            entry.set_password(&json_data).await?;
-            trace!(
-                "Removed credentials for {username}@{removed_service}, {} credentials remaining",
-                credentials_list.len()
-            );
+            Ok(true)
         }
-
-        Ok(true)
     }
 
     /// Remove credentials from the legacy plain-password keyring entries.
@@ -675,10 +730,26 @@ impl KeyringProvider {
 
             trace!("Checking keyring for realm {request_realm}");
 
-            // Try to fetch from the realm-based entry (new format with JSON array).
+            // Try to fetch from the current native credential format.
             if let Some(credentials_list) = self.fetch_native_json_array(&request_realm).await? {
+                // Match an exact service and username before considering path prefixes.
+                if let Ok(request_service) = Service::try_from(url.clone()) {
+                    let request_username = Username::from(username.map(str::to_string));
+                    let mut exact_matches = credentials_list.iter().filter(|credential| {
+                        credential.service == request_service
+                            && credential.credentials.to_username() == request_username
+                    });
+                    if let Some(exact_match) = exact_matches.next() {
+                        if exact_matches.next().is_some() {
+                            return Err(Error::AmbiguousUsername(url.clone()));
+                        }
+                        return Ok(Some(exact_match.credentials.clone()));
+                    }
+                }
+
                 // Find all matching credentials and pick the most specific one.
                 let mut best: Option<(usize, &PersistentCredential)> = None;
+                let mut best_is_ambiguous = false;
 
                 for persistent_credential in &credentials_list {
                     let service = &persistent_credential.service;
@@ -695,15 +766,19 @@ impl KeyringProvider {
                     ) {
                         if best.is_none_or(|(best_specificity, _)| specificity > best_specificity) {
                             best = Some((specificity, persistent_credential));
+                            best_is_ambiguous = false;
                         } else if best
                             .is_some_and(|(best_specificity, _)| specificity == best_specificity)
                         {
-                            return Err(Error::AmbiguousUsername(url.clone()));
+                            best_is_ambiguous = true;
                         }
                     }
                 }
 
                 if let Some((_, persistent_credential)) = best {
+                    if best_is_ambiguous {
+                        return Err(Error::AmbiguousUsername(url.clone()));
+                    }
                     trace!("Found matching credentials in new format for {url}");
                     return Ok(Some(persistent_credential.credentials.clone()));
                 }
@@ -717,22 +792,25 @@ impl KeyringProvider {
                 if let Some((username, password)) =
                     self.fetch_native_legacy(&service_name, username).await?
                 {
-                    legacy_match = Some((service_name, username, password));
+                    let exact_url_match = service_name == url.as_str();
+                    legacy_match = Some((service_name, username, password, exact_url_match));
                     break;
                 }
             }
             legacy_match
         };
 
-        if let Some((service_name, username, password)) = legacy_match {
+        if let Some((service_name, username, password, exact_url_match)) = legacy_match {
             let credentials = Credentials::basic(Some(username), Some(password));
-            if let Err(err) = self
-                .migrate_native_legacy_credential(&request_realm, &service_name, &credentials)
-                .await
-            {
-                warn!(
-                    "Failed to migrate legacy credentials for {service_name} in realm {request_realm}: {err}"
-                );
+            if !exact_url_match {
+                if let Err(err) = self
+                    .migrate_native_legacy_credential(&request_realm, &service_name, &credentials)
+                    .await
+                {
+                    warn!(
+                        "Failed to migrate legacy credentials for {service_name} in realm {request_realm}: {err}"
+                    );
+                }
             }
             return Ok(Some(credentials));
         }
@@ -746,31 +824,66 @@ impl KeyringProvider {
         &self,
         realm: &Realm,
     ) -> Result<Option<Vec<PersistentCredential>>, Error> {
-        let realm_str = realm.to_string();
-        let prefixed_service = format!("{UV_SERVICE_PREFIX}{realm_str}");
-        let keyring_username = "_uv_";
+        #[cfg(all(target_os = "windows", not(test)))]
+        {
+            let target_prefix = windows_native_target_prefix(realm);
+            let credentials = uv_keyring::windows::WinCredential::enumerate(&target_prefix).await?;
+            let mut credentials_list = Vec::with_capacity(credentials.len());
 
-        let Ok(entry) = uv_keyring::Entry::new(&prefixed_service, keyring_username) else {
-            return Ok(None);
-        };
+            for credential in credentials {
+                let entry = uv_keyring::Entry::new_with_credential(Box::new(credential));
+                let json_data = match entry.get_secret().await {
+                    Ok(json_data) => json_data,
+                    Err(uv_keyring::Error::NoEntry) => continue,
+                    Err(err) => return Err(Error::Keyring(err)),
+                };
+                let credential = serde_json::from_slice::<PersistentCredential>(&json_data)
+                    .map_err(Error::CorruptStoredCredentials)?;
+                if Realm::from(credential.service.url()) == *realm {
+                    credentials_list.push(credential);
+                } else {
+                    warn!(
+                        "Ignoring native credential for {} stored under the wrong realm",
+                        credential.service
+                    );
+                }
+            }
 
-        match entry.get_password().await {
-            Ok(json_data) => {
-                // Try to parse as JSON array.
-                let credentials_list =
-                    serde_json::from_str::<Vec<PersistentCredential>>(&json_data)
-                        .map_err(Error::CorruptStoredCredentials)?;
-                trace!(
-                    "Successfully parsed {} credentials from keyring for realm {realm_str}",
-                    credentials_list.len()
-                );
-                Ok(Some(credentials_list))
+            trace!(
+                "Successfully parsed {} credentials from Windows Credential Manager for realm {realm}",
+                credentials_list.len()
+            );
+            return Ok((!credentials_list.is_empty()).then_some(credentials_list));
+        }
+
+        #[cfg(any(not(target_os = "windows"), test))]
+        {
+            let realm_str = realm.to_string();
+            let prefixed_service = format!("{UV_SERVICE_PREFIX}{realm_str}");
+            let keyring_username = "_uv_";
+
+            let Ok(entry) = uv_keyring::Entry::new(&prefixed_service, keyring_username) else {
+                return Ok(None);
+            };
+
+            match entry.get_password().await {
+                Ok(json_data) => {
+                    // Try to parse as JSON array.
+                    let credentials_list =
+                        serde_json::from_str::<Vec<PersistentCredential>>(&json_data)
+                            .map_err(Error::CorruptStoredCredentials)?;
+                    trace!(
+                        "Successfully parsed {} credentials from keyring for realm {realm_str}",
+                        credentials_list.len()
+                    );
+                    Ok(Some(credentials_list))
+                }
+                Err(uv_keyring::Error::NoEntry) => {
+                    trace!("No entry found in system keyring for realm {realm_str}");
+                    Ok(None)
+                }
+                Err(err) => Err(Error::Keyring(err)),
             }
-            Err(uv_keyring::Error::NoEntry) => {
-                trace!("No entry found in system keyring for realm {realm_str}");
-                Ok(None)
-            }
-            Err(err) => Err(Error::Keyring(err)),
         }
     }
 
@@ -819,7 +932,12 @@ impl KeyringProvider {
             return Ok(());
         };
 
-        let Ok(service) = Service::from_str(service_name) else {
+        let service = if service_name.contains("://") {
+            Service::from_str(service_name)
+        } else {
+            Service::from_str(&request_realm.to_string())
+        };
+        let Ok(service) = service else {
             warn!(
                 "Failed to parse legacy native credential service `{service_name}` during migration"
             );
@@ -834,37 +952,32 @@ impl KeyringProvider {
         }
 
         let _lock = native_credential_lock(request_realm, NativeCredentialLockMode::Write).await?;
-        let realm_str = request_realm.to_string();
-        let prefixed_service = format!("{UV_SERVICE_PREFIX}{realm_str}");
-        let keyring_username = "_uv_";
-        let entry = uv_keyring::Entry::new(&prefixed_service, keyring_username)?;
 
-        let mut credentials_list: Vec<PersistentCredential> = match entry.get_password().await {
-            Ok(json_data) => {
-                serde_json::from_str(&json_data).map_err(Error::CorruptStoredCredentials)?
-            }
-            Err(uv_keyring::Error::NoEntry) => Vec::new(),
-            Err(err) => return Err(Error::Keyring(err)),
-        };
-
-        let has_matching_credential = credentials_list.iter().any(|credential| {
-            credential.service == service
-                && credential.credentials.to_username().as_deref() == Some(username)
-        });
-
-        if !has_matching_credential {
-            credentials_list.push(PersistentCredential {
-                service,
-                credentials: credentials.clone(),
-            });
-
-            let json_data = serde_json::to_string(&credentials_list)
-                .map_err(Error::SerializeStoredCredentials)?;
-            entry.set_password(&json_data).await?;
+        // Re-read after acquiring the write lock. A concurrent logout may have removed or
+        // replaced the legacy credential after the initial lookup released its read lock.
+        let Some((current_username, current_password)) = self
+            .fetch_native_legacy(service_name, Some(username))
+            .await?
+        else {
             trace!(
-                "Migrated legacy credentials for {username}@{service_name} into realm {realm_str}"
+                "Skipping migration for {username}@{service_name}; the legacy credential was removed"
             );
+            return Ok(());
+        };
+        if current_username != username || credentials.password() != Some(current_password.as_str())
+        {
+            trace!(
+                "Skipping migration for {username}@{service_name}; the legacy credential changed"
+            );
+            return Ok(());
         }
+
+        let credentials = Credentials::basic(Some(current_username), Some(current_password));
+        self.store_native_unlocked(request_realm, &service, &credentials)
+            .await?;
+        trace!(
+            "Migrated legacy credentials for {username}@{service_name} into realm {request_realm}"
+        );
 
         self.remove_native_legacy_entry(service_name, username)
             .await?;
@@ -1135,6 +1248,18 @@ mod tests {
                 }
             }
         }
+
+        async fn assert_legacy_present(
+            &self,
+            service_name: &str,
+            username: &str,
+            expected_password: &str,
+        ) {
+            let entry =
+                uv_keyring::Entry::new(&format!("{UV_SERVICE_PREFIX}{service_name}"), username)
+                    .unwrap();
+            assert_eq!(entry.get_password().await.unwrap(), expected_password);
+        }
     }
 
     impl Drop for NativeTestKeyring {
@@ -1379,6 +1504,93 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn native_more_specific_match_wins_over_less_specific_ambiguity() {
+        let _keyring = NativeTestKeyring::install().await;
+        let provider = KeyringProvider::native();
+        let root_url = DisplaySafeUrl::parse("https://example.com").unwrap();
+        let api_url = DisplaySafeUrl::parse("https://example.com/api").unwrap();
+
+        assert!(
+            provider
+                .store(
+                    &root_url,
+                    &Credentials::basic(Some("root-a".to_string()), Some("pass-a".to_string()))
+                )
+                .await
+                .unwrap()
+        );
+        assert!(
+            provider
+                .store(
+                    &root_url,
+                    &Credentials::basic(Some("root-b".to_string()), Some("pass-b".to_string()))
+                )
+                .await
+                .unwrap()
+        );
+        let api_credentials =
+            Credentials::basic(Some("api".to_string()), Some("api-pass".to_string()));
+        assert!(provider.store(&api_url, &api_credentials).await.unwrap());
+
+        let child_url = DisplaySafeUrl::parse("https://example.com/api/child").unwrap();
+        assert_eq!(
+            provider.fetch(&child_url, None).await.unwrap(),
+            Some(api_credentials)
+        );
+    }
+
+    #[tokio::test]
+    async fn native_exact_service_precedes_prefix_ambiguity() {
+        let _keyring = NativeTestKeyring::install().await;
+        let provider = KeyringProvider::native();
+        let first_url = DisplaySafeUrl::parse("https://example.com/api?source=one").unwrap();
+        let second_url = DisplaySafeUrl::parse("https://example.com/api?source=two").unwrap();
+        let first_credentials =
+            Credentials::basic(Some("user".to_string()), Some("first".to_string()));
+        let second_credentials =
+            Credentials::basic(Some("user".to_string()), Some("second".to_string()));
+
+        assert!(
+            provider
+                .store(&first_url, &first_credentials)
+                .await
+                .unwrap()
+        );
+        assert!(
+            provider
+                .store(&second_url, &second_credentials)
+                .await
+                .unwrap()
+        );
+
+        assert_eq!(
+            provider.fetch(&first_url, Some("user")).await.unwrap(),
+            Some(first_credentials)
+        );
+        assert_eq!(
+            provider.fetch(&second_url, Some("user")).await.unwrap(),
+            Some(second_credentials)
+        );
+    }
+
+    #[tokio::test]
+    async fn native_remove_does_not_remove_realm_root_fallback() {
+        let _keyring = NativeTestKeyring::install().await;
+        let provider = KeyringProvider::native();
+        let root_url = DisplaySafeUrl::parse("https://example.com").unwrap();
+        let child_url = DisplaySafeUrl::parse("https://example.com/child").unwrap();
+        let credentials =
+            Credentials::basic(Some("user".to_string()), Some("password".to_string()));
+
+        assert!(provider.store(&root_url, &credentials).await.unwrap());
+        assert!(provider.remove(&child_url, "user").await.is_err());
+        assert_eq!(
+            provider.fetch(&root_url, Some("user")).await.unwrap(),
+            Some(credentials)
+        );
+    }
+
+    #[tokio::test]
     async fn native_store_serializes_concurrent_updates() {
         let _keyring = NativeTestKeyring::install().await;
         let hook = NativeCredentialTestHook::blocking_next_lock(NativeCredentialLockMode::Write);
@@ -1491,6 +1703,94 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn native_fetch_keeps_legacy_full_url_scope_exact() {
+        let test_keyring = NativeTestKeyring::install().await;
+        let provider = KeyringProvider::native();
+        let exact_url = DisplaySafeUrl::parse("https://legacy-auth.example.test/path").unwrap();
+        let child_url =
+            DisplaySafeUrl::parse("https://legacy-auth.example.test/path/child").unwrap();
+        let username = "legacy-user";
+
+        test_keyring
+            .insert_legacy(exact_url.as_str(), username, "legacy-pass")
+            .await;
+
+        assert_eq!(
+            provider.fetch(&exact_url, Some(username)).await.unwrap(),
+            Some(Credentials::basic(
+                Some(username.to_string()),
+                Some("legacy-pass".to_string())
+            ))
+        );
+        test_keyring
+            .assert_legacy_present(exact_url.as_str(), username, "legacy-pass")
+            .await;
+        assert_eq!(
+            provider.fetch(&child_url, Some(username)).await.unwrap(),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn native_migration_does_not_restore_removed_legacy_credential() {
+        let test_keyring = NativeTestKeyring::install().await;
+        let provider = KeyringProvider::native();
+        let url = DisplaySafeUrl::parse("https://legacy-auth.example.test/path").unwrap();
+        let realm = Realm::from(&url);
+        let service_name = "legacy-auth.example.test";
+        let username = "legacy-user";
+        let credentials =
+            Credentials::basic(Some(username.to_string()), Some("legacy-pass".to_string()));
+
+        test_keyring
+            .insert_legacy(service_name, username, "legacy-pass")
+            .await;
+        assert!(
+            provider
+                .remove_native_legacy_entry(service_name, username)
+                .await
+                .unwrap()
+        );
+
+        provider
+            .migrate_native_legacy_credential(&realm, service_name, &credentials)
+            .await
+            .unwrap();
+
+        assert_eq!(provider.fetch(&url, Some(username)).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn native_fetch_migrates_legacy_host_entry_with_port() {
+        let test_keyring = NativeTestKeyring::install().await;
+        let provider = KeyringProvider::native();
+        let first_url =
+            DisplaySafeUrl::parse("https://legacy-auth.example.test:8443/path").unwrap();
+        let second_url =
+            DisplaySafeUrl::parse("https://legacy-auth.example.test:8443/other").unwrap();
+        let service_name = "legacy-auth.example.test:8443";
+        let username = "legacy-user";
+        let credentials =
+            Credentials::basic(Some(username.to_string()), Some("legacy-pass".to_string()));
+
+        test_keyring
+            .insert_legacy(service_name, username, "legacy-pass")
+            .await;
+
+        assert_eq!(
+            provider.fetch(&first_url, Some(username)).await.unwrap(),
+            Some(credentials.clone())
+        );
+        test_keyring
+            .assert_legacy_absent(service_name, username)
+            .await;
+        assert_eq!(
+            provider.fetch(&second_url, Some(username)).await.unwrap(),
+            Some(credentials)
+        );
+    }
+
+    #[tokio::test]
     async fn native_remove_removes_legacy_host_entry() {
         let test_keyring = NativeTestKeyring::install().await;
         let provider = KeyringProvider::native();
@@ -1500,14 +1800,6 @@ mod tests {
         test_keyring
             .insert_legacy("legacy-auth.example.test", username, "legacy-pass")
             .await;
-
-        assert_eq!(
-            provider.fetch(&url, Some(username)).await.unwrap(),
-            Some(Credentials::basic(
-                Some(username.to_string()),
-                Some("legacy-pass".to_string())
-            ))
-        );
 
         provider.remove(&url, username).await.unwrap();
 

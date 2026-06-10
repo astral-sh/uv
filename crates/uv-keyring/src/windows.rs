@@ -51,7 +51,8 @@ use windows::Win32::Foundation::{
 use windows::Win32::Security::Credentials::{
     CRED_FLAGS, CRED_MAX_CREDENTIAL_BLOB_SIZE, CRED_MAX_GENERIC_TARGET_NAME_LENGTH,
     CRED_MAX_STRING_LENGTH, CRED_MAX_USERNAME_LENGTH, CRED_PERSIST_ENTERPRISE, CRED_TYPE_GENERIC,
-    CREDENTIAL_ATTRIBUTEW, CREDENTIALW, CredDeleteW, CredFree, CredReadW, CredWriteW,
+    CREDENTIAL_ATTRIBUTEW, CREDENTIALW, CredDeleteW, CredEnumerateW, CredFree, CredReadW,
+    CredWriteW,
 };
 use windows::core::PWSTR;
 use zeroize::Zeroize;
@@ -186,6 +187,83 @@ impl CredentialApi for WinCredential {
 }
 
 impl WinCredential {
+    /// Return all Windows Generic credentials with target names matching `target_prefix`.
+    ///
+    /// Windows credential enumeration accepts a single trailing wildcard, so this method treats
+    /// the provided value as a literal target-name prefix.
+    pub async fn enumerate(target_prefix: &str) -> Result<Vec<Self>> {
+        if target_prefix.contains('\0') {
+            return Err(ErrorCode::Invalid(
+                "target prefix".to_string(),
+                "cannot contain a null character".to_string(),
+            ));
+        }
+        if target_prefix.contains('*') {
+            return Err(ErrorCode::Invalid(
+                "target prefix".to_string(),
+                "cannot contain a wildcard".to_string(),
+            ));
+        }
+
+        let mut filter = to_wstr(&format!("{target_prefix}*"));
+        crate::blocking::spawn_blocking(move || {
+            let mut count = 0;
+            let mut credentials: *mut *mut CREDENTIALW = std::ptr::null_mut();
+
+            // SAFETY: `filter` is null-terminated. On success, Windows initializes `count` and
+            // `credentials`, and the returned allocation remains valid until released by
+            // `CredFree`.
+            match unsafe {
+                CredEnumerateW(
+                    PWSTR(filter.as_mut_ptr()),
+                    None,
+                    &raw mut count,
+                    &raw mut credentials,
+                )
+            } {
+                Ok(()) => {}
+                Err(err) if err == ERROR_NOT_FOUND.into() => return Ok(Vec::new()),
+                Err(err) => return Err(Error(err).into()),
+            }
+
+            if credentials.is_null() || count == 0 {
+                if !credentials.is_null() {
+                    // SAFETY: `credentials` is the allocation returned by `CredEnumerateW`.
+                    unsafe { CredFree(credentials.cast()) };
+                }
+                return Ok(Vec::new());
+            }
+
+            // SAFETY: `CredEnumerateW` returned an array containing `count` credential pointers.
+            let credential_pointers =
+                unsafe { std::slice::from_raw_parts_mut(credentials, count as usize) };
+            let result = credential_pointers
+                .iter()
+                .filter_map(|credential| {
+                    // SAFETY: Each non-null pointer belongs to the allocation returned by
+                    // `CredEnumerateW` and remains valid until the outer allocation is freed.
+                    unsafe { credential.as_ref() }
+                })
+                .filter(|credential| credential.Type == CRED_TYPE_GENERIC)
+                .map(Self::extract_credential)
+                .collect();
+
+            for credential in credential_pointers {
+                // SAFETY: Each non-null pointer belongs to the allocation returned by
+                // `CredEnumerateW` and remains valid until the outer allocation is freed.
+                if let Some(credential) = unsafe { credential.as_mut() } {
+                    erase_secret(credential);
+                }
+            }
+
+            // SAFETY: `credentials` is the single allocation returned by `CredEnumerateW`.
+            unsafe { CredFree(credentials.cast()) };
+
+            result
+        })
+        .await
+    }
+
     fn validate_attributes(&self, secret: Option<&[u8]>, password: Option<&str>) -> Result<()> {
         if self.username.len() > CRED_MAX_USERNAME_LENGTH as usize {
             return Err(ErrorCode::TooLong(
@@ -749,6 +827,57 @@ mod tests {
         assert!(
             matches!(entry.get_attributes().await, Err(ErrorCode::NoEntry)),
             "Read deleted credential in attribute test",
+        );
+    }
+
+    #[tokio::test]
+    async fn test_enumerate_target_prefix() {
+        let name = generate_random_string();
+        let prefix = format!("uv-keyring-enumerate-{name}-");
+        let targets = [
+            format!("{prefix}first"),
+            format!("{prefix}second"),
+            format!("uv-keyring-other-{name}"),
+        ];
+
+        for (index, target) in targets.iter().enumerate() {
+            let credential =
+                WinCredential::new_with_target(Some(target), "enumeration-test", "test-user")
+                    .unwrap();
+            Entry::new_with_credential(Box::new(credential))
+                .set_secret(format!("secret-{index}").as_bytes())
+                .await
+                .unwrap();
+        }
+
+        let enumerated = WinCredential::enumerate(&prefix.to_uppercase())
+            .await
+            .unwrap();
+
+        for target in &targets {
+            let credential =
+                WinCredential::new_with_target(Some(target), "enumeration-test", "test-user")
+                    .unwrap();
+            Entry::new_with_credential(Box::new(credential))
+                .delete_credential()
+                .await
+                .unwrap();
+        }
+
+        let mut enumerated_targets = enumerated
+            .into_iter()
+            .map(|credential| credential.target_name)
+            .collect::<Vec<_>>();
+        enumerated_targets.sort();
+
+        let mut expected_targets = targets[..2].to_vec();
+        expected_targets.sort();
+        assert_eq!(enumerated_targets, expected_targets);
+        assert!(
+            WinCredential::enumerate(&format!("uv-keyring-missing-{name}"))
+                .await
+                .unwrap()
+                .is_empty()
         );
     }
 
