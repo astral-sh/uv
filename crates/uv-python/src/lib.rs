@@ -853,6 +853,120 @@ mod tests {
     }
 
     #[test]
+    fn find_python_installations_discovers_search_path_lazily() -> Result<()> {
+        let context = TestContext::new()?;
+        let first_directory = context.tempdir.child("first");
+        let second_directory = context.tempdir.child("second");
+
+        let python = first_directory.join(format!("python{}", env::consts::EXE_SUFFIX));
+        let second = second_directory.join(format!("python{}", env::consts::EXE_SUFFIX));
+
+        let installation = context.run(|| -> Result<_> {
+            let mut installations = find_python_installations(
+                &PythonRequest::Default,
+                EnvironmentPreference::OnlySystem,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            );
+
+            TestContext::create_mock_interpreter(
+                &python,
+                &PythonVersion::from_str("3.12.1").expect("Test uses a valid Python version"),
+                ImplementationName::CPython,
+                true,
+                false,
+            )?;
+
+            let search_path = env::join_paths([first_directory.path(), second_directory.path()])?;
+            with_vars(
+                [(EnvVars::PATH, Some(search_path.as_os_str()))],
+                || -> Result<_> {
+                    let installation = installations
+                        .next()
+                        .expect("Deferred search path should contain an interpreter")??;
+
+                    TestContext::create_mock_interpreter(
+                        &second,
+                        &PythonVersion::from_str("3.11.9")
+                            .expect("Test uses a valid Python version"),
+                        ImplementationName::CPython,
+                        true,
+                        false,
+                    )?;
+                    let second_installation = installations
+                        .next()
+                        .expect("Later search path directory should be discovered")??;
+                    assert_eq!(second_installation.interpreter().sys_executable(), second);
+
+                    Ok(installation)
+                },
+            )
+        })?;
+
+        assert_eq!(installation.interpreter().sys_executable(), python);
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_python_installation_queries_lazily() -> Result<()> {
+        let mut context = TestContext::new()?;
+        let first_directory = context.new_search_path_directory("first")?;
+        let second_directory = context.new_search_path_directory("second")?;
+
+        let first = first_directory.join(format!("python{}", env::consts::EXE_SUFFIX));
+        TestContext::create_mock_interpreter(
+            &first,
+            &PythonVersion::from_str("3.12.1").expect("Test uses a valid Python version"),
+            ImplementationName::CPython,
+            true,
+            false,
+        )?;
+
+        let second = second_directory.join(format!("python{}", env::consts::EXE_SUFFIX));
+        TestContext::create_mock_interpreter(
+            &second,
+            &PythonVersion::from_str("3.11.9").expect("Test uses a valid Python version"),
+            ImplementationName::CPython,
+            true,
+            false,
+        )?;
+        let second_target =
+            second_directory.join(format!("python-real{}", env::consts::EXE_SUFFIX));
+        fs_err::rename(&second, &second_target)?;
+
+        let marker = context.tempdir.child("second-was-queried");
+        fs_err::write(
+            &second,
+            formatdoc! {r#"
+                #!/bin/sh
+                : > "{marker}"
+                exec "{target}" "$@"
+            "#,
+            marker = marker.path().display(),
+            target = second_target.display()},
+        )?;
+        fs_err::set_permissions(&second, std::os::unix::fs::PermissionsExt::from_mode(0o770))?;
+
+        let installation = context.run(|| {
+            find_python_installation(
+                &PythonRequest::Default,
+                EnvironmentPreference::OnlySystem,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
+
+        assert_eq!(installation.interpreter().sys_executable(), first);
+        assert!(
+            !marker.path().exists(),
+            "Sequential discovery should not query candidates after finding a match"
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn find_all_python_installations_matches_sequential_discovery() -> Result<()> {
         let mut context = TestContext::new()?;
         let sequential_cache = Cache::temp()?;

@@ -3720,11 +3720,12 @@ fn split_wheel_tag_release_version(version: Version) -> Version {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, str::FromStr};
+    use std::{cell::Cell, path::PathBuf, str::FromStr};
 
     use assert_fs::{TempDir, prelude::*};
     use target_lexicon::{Aarch64Architecture, Architecture};
     use test_log::test;
+    use uv_cache::Cache;
     use uv_distribution_types::RequiresPython;
     use uv_pep440::{Prerelease, PrereleaseKind, Version, VersionSpecifiers};
 
@@ -3736,8 +3737,32 @@ mod tests {
     use uv_platform::{Arch, Libc, Os};
 
     use super::{
-        DiscoveryPreferences, EnvironmentPreference, Error, PythonPreference, PythonVariant,
+        DiscoveryPreferences, EnvironmentPreference, Error, PythonPreference, PythonSource,
+        PythonVariant, QueryStrategy, python_installations_from_executables,
     };
+
+    #[test]
+    fn sequential_query_strategy_does_not_prefetch_executables() -> anyhow::Result<()> {
+        let cache = Cache::temp()?;
+        let pulls = Cell::new(0);
+        let executables = (0..2).map(|_| {
+            pulls.set(pulls.get() + 1);
+            Err::<(PythonSource, PathBuf), _>(Error::SourceNotAllowed(
+                PythonRequest::Default,
+                PythonSource::SearchPath,
+                PythonPreference::OnlyManaged,
+            ))
+        });
+
+        let mut installations =
+            python_installations_from_executables(executables, &cache, QueryStrategy::Sequential);
+
+        assert_eq!(pulls.get(), 0);
+        assert!(installations.next().is_some_and(|result| result.is_err()));
+        assert_eq!(pulls.get(), 1);
+
+        Ok(())
+    }
 
     #[test]
     fn interpreter_request_from_str() {
