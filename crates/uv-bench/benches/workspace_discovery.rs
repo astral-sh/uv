@@ -17,6 +17,10 @@ fn provider_name(member_index: usize) -> String {
     format!("workspace-discovery-provider-{member_index:03}")
 }
 
+fn provider_requirement(member_index: usize) -> String {
+    format!("{}>=0.0.0", provider_name(member_index))
+}
+
 /// Create a synthetic workspace with a root and [`MEMBER_COUNT`] members, returning the
 /// directories to run discovery from.
 fn create_workspace(root: &Path) -> Vec<PathBuf> {
@@ -43,7 +47,74 @@ fn create_workspace(root: &Path) -> Vec<PathBuf> {
 }
 
 fn root_pyproject() -> String {
-    let mut pyproject = toml::toml! {
+    let dependencies: Vec<String> = (0..MEMBER_COUNT).map(provider_requirement).collect();
+
+    let optional_dependencies: toml::Table = (0..OPTIONAL_DEPENDENCY_GROUP_COUNT)
+        .map(|group_index| {
+            let dependencies: Vec<String> = (0..5)
+                .map(|offset| {
+                    let member_index = (group_index * 7 + offset * 11) % MEMBER_COUNT;
+                    format!(
+                        "{}; python_version >= '3.12'",
+                        provider_requirement(member_index)
+                    )
+                })
+                .collect();
+            (
+                format!("provider-set-{group_index:03}"),
+                dependencies.into(),
+            )
+        })
+        .collect();
+
+    let dependency_groups: toml::Table = (0..DEPENDENCY_GROUP_COUNT)
+        .map(|group_index| {
+            let dependencies: Vec<String> = (0..4)
+                .map(|offset| {
+                    let member_index = (group_index * 13 + offset * 17) % MEMBER_COUNT;
+                    provider_requirement(member_index)
+                })
+                .collect();
+            (
+                format!("development-set-{group_index:03}"),
+                dependencies.into(),
+            )
+        })
+        .collect();
+
+    let sources: toml::Table = (0..MEMBER_COUNT)
+        .map(|member_index| {
+            (
+                provider_name(member_index),
+                toml::toml! { workspace = true }.into(),
+            )
+        })
+        .collect();
+
+    // Generate some unrelated work for the toml parser, mimicking real tool configuration.
+    let generated: toml::Table = (0..UNUSED_ROOT_TABLE_COUNT)
+        .map(|table_index| {
+            let enabled = table_index % 2 == 0;
+            let owner = table_index % 12;
+            (
+                format!("root-section-{table_index:03}"),
+                toml::toml! {
+                    enabled = (enabled)
+                    label = (format!("Generated root metadata section {table_index:03}"))
+                    owner = (format!("workspace-team-{owner:02}"))
+                    tags = ["benchmark", "root", (format!("section-{table_index:03}"))]
+                    include = ["packages/provider-*", "plugins/**/*.py", "tests/**/*.py"]
+                    exclude = ["build/**", "dist/**", ".cache/**"]
+                    settings = { retries = 3, timeout = 30, strict = false }
+                }
+                .into(),
+            )
+        })
+        .collect();
+
+    let pyproject = toml::toml! {
+        dependency-groups = (dependency_groups)
+
         [build-system]
         requires = ["uv_build>=0.11.0,<10000"]
         build-backend = "uv_build"
@@ -64,9 +135,8 @@ fn root_pyproject() -> String {
             "Programming Language :: Python :: 3.15",
             "Typing :: Typed",
         ]
-        dependencies = []
-
-        [project.optional-dependencies]
+        dependencies = (dependencies)
+        optional-dependencies = (optional_dependencies)
 
         [project.urls]
         Documentation = "https://example.com/docs"
@@ -82,99 +152,54 @@ fn root_pyproject() -> String {
         validate = "workspace_discovery.hooks:validate"
         finalize = "workspace_discovery.hooks:finalize"
 
-        [dependency-groups]
+        [tool.uv]
+        sources = (sources)
 
         [tool.uv.workspace]
         members = ["packages/*"]
 
-        [tool.uv.sources]
-
-        [tool.workspace_discovery.generated]
+        [tool.workspace_discovery]
+        generated = (generated)
     };
 
-    let dependencies = pyproject["project"]["dependencies"].as_array_mut().unwrap();
-    for member_index in 0..MEMBER_COUNT {
-        dependencies.push(format!("{}>=0.0.0", provider_name(member_index)).into());
-    }
-
-    let optional_dependencies = pyproject["project"]["optional-dependencies"]
-        .as_table_mut()
-        .unwrap();
-    for group_index in 0..OPTIONAL_DEPENDENCY_GROUP_COUNT {
-        let mut dependencies = Vec::with_capacity(5);
-        for offset in 0..5 {
-            let member_index = (group_index * 7 + offset * 11) % MEMBER_COUNT;
-            dependencies.push(
-                format!(
-                    "{}; python_version >= '3.12'",
-                    format!("{}>=0.0.0", provider_name(member_index))
-                )
-                .into(),
-            );
-        }
-        optional_dependencies.insert(
-            format!("provider-set-{group_index:03}"),
-            toml::Value::Array(dependencies),
-        );
-    }
-
-    let dependency_groups = pyproject["dependency-groups"].as_table_mut().unwrap();
-    for group_index in 0..DEPENDENCY_GROUP_COUNT {
-        let mut dependencies = Vec::with_capacity(4);
-        for offset in 0..4 {
-            let member_index = (group_index * 13 + offset * 17) % MEMBER_COUNT;
-            dependencies.push(format!("{}>=0.0.0", provider_name(member_index)).into());
-        }
-        dependency_groups.insert(
-            format!("development-set-{group_index:03}"),
-            toml::Value::Array(dependencies),
-        );
-    }
-
-    let sources = pyproject["tool"]["uv"]["sources"].as_table_mut().unwrap();
-    for member_index in 0..MEMBER_COUNT {
-        sources.insert(
-            provider_name(member_index),
-            toml::Value::Table(toml::toml! {
-                workspace = true
-            }),
-        );
-    }
-
-    // Generate some unrelated work for the toml parser, mimicking real tool configuration.
-    let generated = pyproject["tool"]["workspace_discovery"]["generated"]
-        .as_table_mut()
-        .unwrap();
-    for table_index in 0..UNUSED_ROOT_TABLE_COUNT {
-        let enabled = table_index % 2 == 0;
-        let owner = table_index % 12;
-        generated.insert(
-            format!("root-section-{table_index:03}"),
-            toml::Value::Table(toml::toml! {
-                enabled = (enabled)
-                label = (format!("Generated root metadata section {table_index:03}"))
-                owner = (format!("workspace-team-{owner:02}"))
-                tags = ["benchmark", "root", (format!("section-{table_index:03}"))]
-                include = ["packages/provider-*", "plugins/**/*.py", "tests/**/*.py"]
-                exclude = ["build/**", "dist/**", ".cache/**"]
-                settings = { retries = 3, timeout = 30, strict = false }
-            }),
-        );
-    }
-
-    toml::to_string_pretty(&pyproject).unwrap()
+    toml::to_string_pretty(&pyproject).expect("Failed to serialize root pyproject.toml")
 }
 
 fn member_pyproject(member_index: usize) -> String {
-    let mut dependencies = Vec::with_capacity(5);
-    for offset in 1..=4 {
-        if let Some(dependency_index) = member_index.checked_sub(offset) {
-            dependencies.push(format!("{}>=0.0.0", provider_name(dependency_index)));
-        }
-        dependencies.push("anyio>=4,<5".to_string());
-    }
+    let mut dependencies: Vec<String> = (1..=4)
+        .filter_map(|offset| member_index.checked_sub(offset))
+        .map(provider_requirement)
+        .collect();
+    dependencies.push("anyio>=4,<5".to_string());
 
-    let mut pyproject = toml::toml! {
+    let entry_points: toml::Table = [(
+        format!("provider-{member_index:03}"),
+        format!("workspace_discovery_provider_{member_index:03}.plugin:Provider").into(),
+    )]
+    .into_iter()
+    .collect();
+
+    // Add some unrelated work for the toml parser, mimicking real tool configuration.
+    let generated: toml::Table = (0..UNUSED_MEMBER_TABLE_COUNT)
+        .map(|table_index| {
+            let enabled = table_index % 3 != 0;
+            let priority = table_index % 5;
+            (
+                format!("member-section-{table_index:02}"),
+                toml::toml! {
+                    member = (member_index)
+                    label = (format!("Provider {member_index:03} metadata section {table_index:02}"))
+                    enabled = (enabled)
+                    capabilities = ["discover", "validate", "report", "archive"]
+                    paths = ["src/**/*.py", "tests/**/*.py", "resources/**/*"]
+                    metadata = { priority = (priority), retries = 2, experimental = true }
+                }
+                .into(),
+            )
+        })
+        .collect();
+
+    let pyproject = toml::toml! {
         [project]
         name = (provider_name(member_index))
         version = "0.0.0"
@@ -204,39 +229,14 @@ fn member_pyproject(member_index: usize) -> String {
         Documentation = "https://example.com/providers"
         Source = "https://example.com/repository"
 
-        [project.entry-points."workspace_discovery.providers"]
+        [project.entry-points]
+        "workspace_discovery.providers" = (entry_points)
 
-        [tool.workspace_discovery.generated]
+        [tool.workspace_discovery]
+        generated = (generated)
     };
 
-    // Add some unrelated work for the toml parser, mimicking real tool configuration.
-    let entry_points = pyproject["project"]["entry-points"]["workspace_discovery.providers"]
-        .as_table_mut()
-        .unwrap();
-    entry_points.insert(
-        format!("provider-{member_index:03}"),
-        format!("workspace_discovery_provider_{member_index:03}.plugin:Provider").into(),
-    );
-    let generated = pyproject["tool"]["workspace_discovery"]["generated"]
-        .as_table_mut()
-        .unwrap();
-    for table_index in 0..UNUSED_MEMBER_TABLE_COUNT {
-        let enabled = table_index % 3 != 0;
-        let priority = table_index % 5;
-        generated.insert(
-            format!("member-section-{table_index:02}"),
-            toml::Value::Table(toml::toml! {
-                member = (member_index)
-                label = (format!("Provider {member_index:03} metadata section {table_index:02}"))
-                enabled = (enabled)
-                capabilities = ["discover", "validate", "report", "archive"]
-                paths = ["src/**/*.py", "tests/**/*.py", "resources/**/*"]
-                metadata = { priority = (priority), retries = 2, experimental = true }
-            }),
-        );
-    }
-
-    toml::to_string_pretty(&pyproject).unwrap()
+    toml::to_string_pretty(&pyproject).expect("Failed to serialize member pyproject.toml")
 }
 
 fn discover_workspace_from_all_members(c: &mut Criterion<WallTime>) {
