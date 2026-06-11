@@ -5,6 +5,8 @@ use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 use assert_fs::prelude::*;
 
+use uv_python::PythonVersion;
+use uv_python::managed::ManagedPythonInstallations;
 use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
@@ -947,6 +949,316 @@ fn list_prefix() -> Result<()> {
     ----- stderr -----
     "
     );
+
+    Ok(())
+}
+
+/// Check support for `include-system-site-packages = true` in `uv pip list`.
+///
+/// Specifically, check that:
+/// * system packages are shown when using the system interpreter
+/// * system packages are hidden with `include-system-site-packages = false`, but venv packages are
+///   shown
+/// * system packages are shown with `include-system-site-packages = true`, and also venv packages
+#[test]
+#[cfg(feature = "test-pypi")]
+fn list_system_site_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_keys()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_filter((r"(?m)^(pip +)\d+\.\d+\.\d+$", "$1[PIP_VERSION]"));
+
+    let python_version_312: PythonVersion = "3.12".parse().map_err(anyhow::Error::msg)?;
+    let base_python = ManagedPythonInstallations::from_settings(None)?
+        .find_version(&python_version_312)?
+        .next()
+        .expect("a managed Python 3.12 interpreter");
+    let relative_executable = base_python
+        .executable(false)
+        .strip_prefix(base_python.path())?
+        .to_path_buf();
+    let base_python = base_python.path().to_path_buf();
+
+    let custom_python_path = context.temp_dir.join(
+        base_python
+            .file_name()
+            .expect("managed Python 3.12 interpreter has a filename"),
+    );
+    uv_fs::copy_dir_all(&base_python, &custom_python_path)?;
+
+    let no_system_venv = context.temp_dir.join("no-system-venv");
+
+    let custom_python_3_12 = custom_python_path.join(relative_executable);
+    let empty_requirements = context.temp_dir.child("empty-requirements.txt");
+    empty_requirements.write_str("")?;
+
+    uv_snapshot!(context.filters(), context
+        .venv()
+        .arg("--python")
+        .arg(&custom_python_3_12)
+        .arg(&no_system_venv), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: cpython-3.12.[X]-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    Creating virtual environment at: no-system-venv
+    Activate with: source no-system-venv/[BIN]/activate
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("--system")
+        // Don't do this at home
+        .arg("--break-system-packages")
+        .arg("--python")
+        .arg(&custom_python_3_12)
+        .arg("anyio"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: cpython-3.12.[X]-[PLATFORM]
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("--python")
+        .arg(&no_system_venv)
+        .arg("markupsafe"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: no-system-venv
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + markupsafe==2.1.5
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_list()
+        .arg("--python")
+        .arg(&custom_python_3_12), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package Version
+    ------- -------
+    anyio   4.3.0
+    idna    3.6
+    pip     [PIP_VERSION]
+    sniffio 1.3.1
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: cpython-3.12.[X]-[PLATFORM]
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_list()
+        .arg("--python")
+        .arg(&no_system_venv),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package    Version
+    ---------- -------
+    markupsafe 2.1.5
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: no-system-venv
+    ");
+
+    // Recreate the same environment with system site-packages enabled. Reusing the path verifies
+    // that interpreter caching accounts for `pyvenv.cfg` changes.
+    uv_snapshot!(context.filters(), context
+        .venv()
+        .arg("--clear")
+        .arg("--system-site-packages")
+        .arg("--python")
+        .arg(&custom_python_3_12)
+        .arg(&no_system_venv), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: cpython-3.12.[X]-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    Creating virtual environment at: no-system-venv
+    Activate with: source no-system-venv/[BIN]/activate
+    ");
+
+    // Exact reconciliation must not treat inherited packages as extraneous.
+    uv_snapshot!(context.filters(), context
+        .pip_sync()
+        .arg(empty_requirements.path())
+        .arg("--allow-empty-requirements")
+        .arg("--dry-run")
+        .arg("--python")
+        .arg(&no_system_venv), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Requirements file `empty-requirements.txt` does not contain any dependencies
+    Using Python 3.12.[X] environment at: no-system-venv
+    Resolved in [TIME]
+    Checked in [TIME]
+    Would make no changes
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("--python")
+        .arg(&no_system_venv)
+        .arg("markupsafe"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: no-system-venv
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + markupsafe==2.1.5
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_list()
+        .arg("--python")
+        .arg(&no_system_venv),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package    Version
+    ---------- -------
+    anyio      4.3.0
+    idna       3.6
+    markupsafe 2.1.5
+    pip        [PIP_VERSION]
+    sniffio    1.3.1
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: no-system-venv
+    ");
+
+    // A matching inherited package satisfies an install request without creating a local copy.
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("--python")
+        .arg(&no_system_venv)
+        .arg("anyio==4.3.0"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: no-system-venv
+    Checked 1 package in [TIME]
+    ");
+
+    // A mismatched inherited package is shadowed by a local installation without uninstalling the
+    // read-only base copy.
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("--python")
+        .arg(&no_system_venv)
+        .arg("anyio==3.0.0"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: no-system-venv
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==3.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_list()
+        .arg("--python")
+        .arg(&no_system_venv), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package    Version
+    ---------- -------
+    anyio      3.0.0
+    idna       3.6
+    markupsafe 2.1.5
+    pip        [PIP_VERSION]
+    sniffio    1.3.1
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: no-system-venv
+    ");
+
+    // Uninstall removes the local shadow, revealing the inherited package. A second uninstall does
+    // not mutate the base interpreter.
+    uv_snapshot!(context.filters(), context
+        .pip_uninstall()
+        .arg("--python")
+        .arg(&no_system_venv)
+        .arg("anyio"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: no-system-venv
+    Uninstalled 1 package in [TIME]
+     - anyio==3.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_uninstall()
+        .arg("--python")
+        .arg(&no_system_venv)
+        .arg("anyio"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: no-system-venv
+    warning: Skipping anyio as it is not installed
+    warning: No packages to uninstall
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_list()
+        .arg("--python")
+        .arg(&no_system_venv), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package    Version
+    ---------- -------
+    anyio      4.3.0
+    idna       3.6
+    markupsafe 2.1.5
+    pip        [PIP_VERSION]
+    sniffio    1.3.1
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: no-system-venv
+    ");
 
     Ok(())
 }
