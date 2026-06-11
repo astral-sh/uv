@@ -11250,6 +11250,70 @@ fn add_index_without_trailing_slash() -> Result<()> {
     Ok(())
 }
 
+/// Replacing an index by name should not retain settings from the previous URL.
+#[test]
+fn add_index_replaces_stale_settings() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "index"
+        url = "https://example.com/flat"
+        format = "flat"
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .add()
+            .arg("iniconfig>=2.0.0")
+            .arg("--index")
+            .arg("index=https://pypi.org/simple")
+            .arg("--frozen"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "
+    );
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0",
+        ]
+
+        [[tool.uv.index]]
+        name = "index"
+        url = "https://pypi.org/simple"
+
+        [tool.uv.sources]
+        iniconfig = { index = "index" }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// Add an index with an existing relative path.
 #[test]
 fn add_index_with_existing_relative_path_index() -> Result<()> {

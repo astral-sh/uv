@@ -486,6 +486,22 @@ impl PyProjectTomlMut {
             .cloned()
             .unwrap_or_default();
 
+        let same_name = index.name.as_deref().is_some_and(|index| {
+            table
+                .get("name")
+                .and_then(|name| name.as_str())
+                .is_some_and(|name| name == index)
+        });
+        let same_url = table
+            .get("url")
+            .and_then(|item| item.as_str())
+            .and_then(|url| DisplaySafeUrl::parse(url).ok())
+            .is_some_and(|url| CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url()));
+
+        if same_name && !same_url {
+            table = Table::new();
+        }
+
         // If necessary, update the name.
         if let Some(index) = index.name.as_deref() {
             if table
