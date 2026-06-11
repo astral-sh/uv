@@ -2,7 +2,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use uv_auth::{AuthBackend, Credentials, Realm};
+use uv_auth::{AuthBackend, Credentials};
 use uv_keyring::windows::WinCredential;
 use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
@@ -56,25 +56,62 @@ async fn native_store_enumerates_many_credentials_in_one_realm()
         Credentials::basic(Some("signed".to_string()), Some("second".to_string())),
     ));
 
-    let realm = Realm::from(&*entries[0].0);
-    let malformed = uv_keyring::Entry::new_with_credential(Box::new(WinCredential {
-        username: "malformed".to_string(),
-        target_name: format!("uv:native-auth:v2:{realm}:{}", "0".repeat(64)),
-        target_alias: String::new(),
-        comment: "uv native authentication credential".to_string(),
-    }));
+    let corrupt_url = DisplaySafeUrl::parse(&format!(
+        "https://native-auth-{unique}.example.invalid/corrupt"
+    ))?;
+    let corrupt_credentials =
+        Credentials::basic(Some("corrupt".to_string()), Some("password".to_string()));
 
     let result = async {
         for (url, credentials) in &entries {
-            assert!(provider.store(url, credentials).await?);
+            provider.store(url, credentials).await?;
         }
-        malformed.set_secret(b"not JSON").await?;
+        provider.store(&corrupt_url, &corrupt_credentials).await?;
+
+        let corrupt_credential = WinCredential::enumerate("uv:native-auth:")
+            .await?
+            .into_iter()
+            .find(|credential| {
+                serde_json::from_slice::<serde_json::Value>(credential.secret())
+                    .ok()
+                    .and_then(|value| {
+                        value
+                            .get("service")
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_owned)
+                    })
+                    .as_deref()
+                    == Some(corrupt_url.as_str())
+            })
+            .ok_or_else(|| std::io::Error::other("failed to enumerate test credential"))?;
+        let corrupt_entry = uv_keyring::Entry::new_with_credential(Box::new(
+            corrupt_credential.credential().clone(),
+        ));
+        corrupt_entry.set_secret(b"not JSON").await?;
+
         for (url, credentials) in &entries {
-            assert_eq!(
-                provider.fetch(url, credentials.username()).await?,
-                Some(credentials.clone())
-            );
+            let actual = provider.fetch(url, credentials.username()).await?;
+            if actual != Some(credentials.clone()) {
+                return Err(std::io::Error::other(format!(
+                    "unexpected credentials returned for {url}"
+                ))
+                .into());
+            }
         }
+
+        let (removed_url, removed_credentials) = &entries[0];
+        let removed_username = removed_credentials
+            .username()
+            .ok_or_else(|| std::io::Error::other("test credential must have a username"))?;
+        provider.remove(removed_url, removed_username).await?;
+        if provider
+            .fetch(removed_url, Some(removed_username))
+            .await?
+            .is_some()
+        {
+            return Err(std::io::Error::other("removed credential was still returned").into());
+        }
+
         Ok::<(), Box<dyn std::error::Error>>(())
     }
     .await;
@@ -84,8 +121,9 @@ async fn native_store_enumerates_many_credentials_in_one_realm()
             let _ = provider.remove(url, username).await;
         }
     }
-    let _ = malformed.delete_credential().await;
+    if let Some(username) = corrupt_credentials.username() {
+        let _ = provider.remove(&corrupt_url, username).await;
+    }
 
-    result?;
-    Ok(())
+    result
 }
