@@ -235,8 +235,7 @@ impl Credentials {
             } else {
                 Some(
                     percent_encoding::percent_decode_str(url.username())
-                        .decode_utf8()
-                        .expect("An encoded username should always decode")
+                        .decode_utf8_lossy()
                         .into_owned(),
                 )
             }
@@ -244,8 +243,7 @@ impl Credentials {
             password: url.password().map(|password| {
                 Password(
                     percent_encoding::percent_decode_str(password)
-                        .decode_utf8()
-                        .expect("An encoded password should always decode")
+                        .decode_utf8_lossy()
                         .into_owned(),
                 )
             }),
@@ -671,6 +669,22 @@ mod tests {
         let credentials = Credentials::from_url(&auth_url).unwrap();
         assert_eq!(credentials.username(), Some("user"));
         assert_eq!(credentials.password(), Some("password"));
+    }
+
+    #[test]
+    fn from_url_invalid_utf8_username() {
+        let url = Url::parse("https://%FF:password@example.com/simple/first/").unwrap();
+        let credentials = Credentials::from_url(&url).unwrap();
+        assert_eq!(credentials.username(), Some("\u{fffd}"));
+        assert_eq!(credentials.password(), Some("password"));
+    }
+
+    #[test]
+    fn from_url_invalid_utf8_password() {
+        let url = Url::parse("https://user:%FF@example.com/simple/first/").unwrap();
+        let credentials = Credentials::from_url(&url).unwrap();
+        assert_eq!(credentials.username(), Some("user"));
+        assert_eq!(credentials.password(), Some("\u{fffd}"));
     }
 
     #[test]
