@@ -61,7 +61,8 @@ impl SourceDistFilename {
         }
         let (Some(actual_package_name), Some(version)) = (
             stem.get(..package_name_len),
-            stem.get(package_name_len + "-".len()..),
+            stem.get(package_name_len..)
+                .and_then(|suffix| suffix.strip_prefix('-')),
         ) else {
             return Err(SourceDistFilenameError {
                 filename: filename.to_string(),
@@ -236,7 +237,7 @@ mod tests {
 
     #[test]
     fn errors() {
-        for invalid in ["b-1.2.3.zip", "a-1.2.3-gamma.3.zip"] {
+        for invalid in ["b-1.2.3.zip", "aX1.2.3.zip", "a-1.2.3-gamma.3.zip"] {
             let ext = SourceDistExtension::from_path(invalid).unwrap();
             assert!(
                 SourceDistFilename::parse(invalid, ext, &PackageName::from_str("a").unwrap())
