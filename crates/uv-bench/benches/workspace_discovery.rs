@@ -1,3 +1,6 @@
+//! Run workspace discovery in large synthetic workspace with many non-trivial to parse
+//! `pyproject.toml` files.
+
 use std::hint::black_box;
 use std::path::{Path, PathBuf};
 
