@@ -571,7 +571,6 @@ impl BuildContext for BuildDispatch<'_> {
             environment_variables,
             build_output,
             self.client.credentials_cache(),
-            self.cache,
         )
         .boxed_local()
         .await?;

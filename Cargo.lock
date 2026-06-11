@@ -7401,7 +7401,6 @@ dependencies = [
  "pathdiff",
  "thiserror",
  "tracing",
- "uv-cache",
  "uv-console",
  "uv-errors",
  "uv-fs",

@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::{Interpreter, PythonEnvironment};
 
@@ -15,8 +14,6 @@ mod virtualenv;
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error(transparent)]
-    InterpreterQuery(#[from] uv_python::InterpreterError),
     #[error(
         "Could not find a suitable Python executable for the virtual environment based on the interpreter: {0}"
     )]
@@ -78,9 +75,8 @@ impl Prompt {
 #[expect(clippy::fn_params_excessive_bools)]
 pub fn create_venv(
     location: &Path,
-    interpreter: &Interpreter,
+    interpreter: Interpreter,
     prompt: Prompt,
-    cache: &Cache,
     system_site_packages: bool,
     on_existing: OnExisting,
     relocatable: bool,
@@ -90,7 +86,7 @@ pub fn create_venv(
     // Create the virtualenv at the given location.
     let virtualenv = virtualenv::create(
         location,
-        interpreter,
+        &interpreter,
         prompt,
         system_site_packages,
         on_existing,
@@ -99,13 +95,7 @@ pub fn create_venv(
         upgradeable,
     )?;
 
-    // A virtual environment that includes system site-packages must be queried because its ordered
-    // runtime roots depend on the base interpreter. Avoid the subprocess for isolated environments,
-    // where the derived installation scheme is sufficient.
-    let interpreter = if system_site_packages {
-        Interpreter::query(&virtualenv.executable, cache)?
-    } else {
-        interpreter.clone().with_virtualenv(virtualenv)
-    };
+    // Create the corresponding `PythonEnvironment`.
+    let interpreter = interpreter.with_virtualenv(virtualenv);
     Ok(PythonEnvironment::from_interpreter(interpreter))
 }

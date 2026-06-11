@@ -188,9 +188,8 @@ pub(crate) async fn check(
         temp_dir = cache.venv_dir()?;
         Some(uv_virtualenv::create_venv(
             temp_dir.path(),
-            &interpreter,
+            interpreter,
             uv_virtualenv::Prompt::None,
-            cache,
             false,
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::TemporaryEnvironment),
             false,

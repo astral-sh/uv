@@ -327,15 +327,7 @@ impl<'a> Planner<'a> {
                 .cloned()
                 .collect::<Vec<_>>();
             if reinstall {
-                if installed_dists
-                    .iter()
-                    .any(|installed| !installed.is_mutable() && !installed.is_shadowable())
-                {
-                    bail!(
-                        "Cannot reinstall `{}` because the effective installation cannot be shadowed",
-                        dist.name()
-                    );
-                }
+                ensure_replacement_is_safe(&installed_packages, dist, true)?;
                 reinstalls.extend(installed_packages.remove_mutable_packages(dist.name()));
             } else {
                 match installed_dists.as_slice() {
@@ -393,27 +385,14 @@ impl<'a> Planner<'a> {
                             }
                         }
 
-                        if !installed.is_mutable() && !installed.is_shadowable() {
-                            bail!(
-                                "Cannot replace `{}` because the effective installation cannot be shadowed",
-                                dist.name()
-                            );
-                        }
+                        ensure_replacement_is_safe(&installed_packages, dist, false)?;
                         reinstalls.extend(installed_packages.remove_mutable_packages(dist.name()));
                     }
                     // We reinstall installed distributions with multiple versions because
                     // we do not want to keep multiple incompatible versions but removing
                     // one version is likely to break another.
                     _ => {
-                        if installed_dists
-                            .iter()
-                            .any(|installed| !installed.is_mutable() && !installed.is_shadowable())
-                        {
-                            bail!(
-                                "Cannot replace `{}` because the effective installation cannot be shadowed",
-                                dist.name()
-                            );
-                        }
+                        ensure_replacement_is_safe(&installed_packages, dist, false)?;
                         reinstalls.extend(installed_packages.remove_mutable_packages(dist.name()));
                     }
                 }
@@ -822,6 +801,28 @@ impl<'a> Planner<'a> {
             extraneous,
         })
     }
+}
+
+/// Reject a replacement that cannot be guaranteed to take precedence over every read-only copy.
+fn ensure_replacement_is_safe(
+    installed_packages: &InstalledPackages,
+    distribution: &ResolvedDist,
+    reinstall: bool,
+) -> Result<()> {
+    let action = if reinstall { "reinstall" } else { "replace" };
+    if distribution.is_editable() && installed_packages.has_read_only_package(distribution.name()) {
+        bail!(
+            "Cannot install `{}` as editable because it cannot be guaranteed to shadow the read-only installation",
+            distribution.name()
+        );
+    }
+    if !installed_packages.can_guarantee_wheel_replacement(distribution.name()) {
+        bail!(
+            "Cannot {action} `{}` because the effective installation cannot be shadowed",
+            distribution.name()
+        );
+    }
+    Ok(())
 }
 
 /// Returns `true` if the given distribution is a seed package.

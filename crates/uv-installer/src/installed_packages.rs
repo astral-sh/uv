@@ -45,6 +45,8 @@ pub struct InstalledPackages {
     mutable_by_name: FxHashMap<PackageName, Vec<usize>>,
     /// All mutable editable distributions, keyed by URL.
     mutable_by_url: FxHashMap<DisplaySafeUrl, Vec<usize>>,
+    /// All discovered distributions, keyed by name.
+    all_by_name: FxHashMap<PackageName, Vec<usize>>,
     /// Effective distributions, in discovery order.
     effective: Vec<usize>,
 }
@@ -53,8 +55,9 @@ pub struct InstalledPackages {
 pub(crate) struct IndexedDistribution {
     distribution: InstalledDist,
     mutable: bool,
-    /// Whether a mutable installation root precedes this distribution's discovery root.
-    shadowable: bool,
+    /// Whether every possible wheel installation root precedes this distribution's discovery
+    /// root.
+    wheel_shadowable: bool,
 }
 
 impl IndexedDistribution {
@@ -66,8 +69,8 @@ impl IndexedDistribution {
         self.mutable
     }
 
-    pub(crate) fn is_shadowable(&self) -> bool {
-        self.shadowable
+    fn is_wheel_shadowable(&self) -> bool {
+        self.wheel_shadowable
     }
 }
 
@@ -88,23 +91,24 @@ impl InstalledPackages {
         let mut effective = Vec::new();
 
         let mutable_paths = interpreter.site_packages().collect::<Vec<_>>();
-        let mut mutable_path_seen = false;
+        let mut mutable_paths_seen = vec![false; mutable_paths.len()];
 
-        for import_path in interpreter.discovery_paths() {
-            let mutable = mutable_paths.iter().any(|mutable_path| {
-                mutable_path.as_ref() == import_path.as_ref()
-                    || is_same_file(mutable_path.as_ref(), import_path.as_ref()).unwrap_or(false)
-            });
-            let shadowable = mutable || mutable_path_seen;
-            let names_from_earlier_paths = by_name.keys().cloned().collect::<FxHashSet<_>>();
-            if mutable {
-                // The root may not exist yet, but an installation can create it and shadow later
-                // read-only roots.
-                mutable_path_seen = true;
+        for import_path in interpreter.discovery_paths()? {
+            let mut mutable = false;
+            for (index, mutable_path) in mutable_paths.iter().enumerate() {
+                if mutable_path.as_ref() == import_path
+                    || is_same_file(mutable_path.as_ref(), &import_path).unwrap_or(false)
+                {
+                    mutable = true;
+                    mutable_paths_seen[index] = true;
+                }
             }
+            let wheel_shadowable =
+                !mutable_paths_seen.is_empty() && mutable_paths_seen.iter().all(|seen| *seen);
+            let names_from_earlier_paths = by_name.keys().cloned().collect::<FxHashSet<_>>();
 
             // Read the site-packages directory.
-            let ordered_directory_paths = match fs::read_dir(import_path.as_ref()) {
+            let ordered_directory_paths = match fs::read_dir(&import_path) {
                 Ok(import_path_entry) => {
                     trace!("Discovering packages in: `{}`", import_path.user_display());
                     // Collect sorted directory paths; `read_dir` is not stable across platforms
@@ -112,6 +116,7 @@ impl InstalledPackages {
                         .filter_map(|read_dir| match read_dir {
                             Ok(entry) => match entry.file_type() {
                                 Ok(file_type) => (file_type.is_dir()
+                                    || (file_type.is_symlink() && entry.path().is_dir())
                                     || entry
                                         .path()
                                         .extension()
@@ -130,7 +135,12 @@ impl InstalledPackages {
                         })?;
                     dist_likes
                 }
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                Err(err)
+                    if matches!(
+                        err.kind(),
+                        std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+                    ) =>
+                {
                     debug!(
                         "Package directory does not exist: `{}`",
                         import_path.user_display()
@@ -198,7 +208,7 @@ impl InstalledPackages {
                 distributions.push(Some(IndexedDistribution {
                     distribution: dist_info,
                     mutable,
-                    shadowable,
+                    wheel_shadowable,
                 }));
             }
         }
@@ -210,6 +220,7 @@ impl InstalledPackages {
             by_url,
             mutable_by_name,
             mutable_by_url,
+            all_by_name,
             effective,
         })
     }
@@ -268,6 +279,33 @@ impl InstalledPackages {
             .iter()
             .filter_map(|index| self.distributions[*index].as_ref())
             .collect()
+    }
+
+    /// Returns `true` if a read-only distribution exists for the package, including a shadowed
+    /// distribution.
+    pub(crate) fn has_read_only_package(&self, name: &PackageName) -> bool {
+        self.all_by_name.get(name).is_some_and(|indexes| {
+            indexes.iter().any(|index| {
+                self.distributions[*index]
+                    .as_ref()
+                    .is_some_and(|distribution| !distribution.is_mutable())
+            })
+        })
+    }
+
+    /// Returns `true` if installing a wheel is guaranteed to shadow every read-only distribution
+    /// for the package, regardless of whether the wheel writes importable files to `purelib` or
+    /// `platlib`.
+    pub(crate) fn can_guarantee_wheel_replacement(&self, name: &PackageName) -> bool {
+        self.all_by_name.get(name).is_none_or(|indexes| {
+            indexes.iter().all(|index| {
+                self.distributions[*index]
+                    .as_ref()
+                    .is_none_or(|distribution| {
+                        distribution.is_mutable() || distribution.is_wheel_shadowable()
+                    })
+            })
+        })
     }
 
     /// Returns all mutable distributions for a given package.

@@ -306,7 +306,6 @@ impl SourceBuild {
         mut environment_variables: FxHashMap<OsString, OsString>,
         level: BuildOutput,
         credentials_cache: &CredentialsCache,
-        cache: &Cache,
     ) -> Result<Self, Error> {
         let temp_dir = build_context.cache().venv_dir()?;
 
@@ -370,9 +369,8 @@ impl SourceBuild {
         } else {
             uv_virtualenv::create_venv(
                 temp_dir.path(),
-                interpreter,
+                interpreter.clone(),
                 uv_virtualenv::Prompt::None,
-                cache,
                 false,
                 uv_virtualenv::OnExisting::Remove(
                     uv_virtualenv::RemovalReason::TemporaryEnvironment,

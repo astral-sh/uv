@@ -9,7 +9,6 @@ use std::{env, io, iter};
 
 use configparser::ini::Ini;
 use fs_err as fs;
-use itertools::Either;
 use owo_colors::OwoColorize;
 use same_file::is_same_file;
 use serde::{Deserialize, Serialize};
@@ -644,11 +643,10 @@ impl Interpreter {
 
     /// Return the ordered site-packages roots to inspect for installed distributions.
     ///
-    /// This deliberately uses [`site::getsitepackages`](https://docs.python.org/3/library/site.html#site.getsitepackages)
-    /// instead of the full `sys.path`. In particular, interpreter-provided distributions in the
-    /// standard library, such as PyPy's vendored `cffi`, are not ordinary installable packages and
-    /// must not be reconciled as if they could be replaced or removed.
-    pub fn discovery_paths(&self) -> impl Iterator<Item = Cow<'_, Path>> {
+    /// Runtime search paths are not persisted in the interpreter cache. They can change when a
+    /// `.pth` file, `sitecustomize`, user-site configuration, `PYTHONPATH`, or an external path
+    /// changes, without modifying the interpreter executable or `pyvenv.cfg`.
+    pub fn discovery_paths(&self) -> Result<Vec<PathBuf>, Error> {
         let target = self.target().map(Target::site_packages);
 
         let prefix = self
@@ -663,24 +661,69 @@ impl Interpreter {
         // When installing into a specific directory, only inspect that directory. Runtime and
         // interpreter-provided packages must not affect `--target` or `--prefix` operations.
         if target.is_some() || prefix.is_some() {
-            Either::Left(
-                target
-                    .into_iter()
-                    .flatten()
-                    .map(Cow::Borrowed)
-                    .chain(prefix.into_iter().flatten().map(Cow::Owned)),
-            )
+            Ok(target
+                .into_iter()
+                .flatten()
+                .map(Path::to_path_buf)
+                .chain(prefix.into_iter().flatten())
+                .collect())
         } else {
-            Either::Right(
-                self.runtime_site_packages()
-                    .iter()
-                    .map(|path| Cow::Borrowed(path.as_path()))
-                    // A newly-created isolated virtual environment is derived without a second
-                    // interpreter query, so its runtime roots are empty. The mutable roots also
-                    // provide a fallback for unusual interpreters that omit them here.
-                    .chain(self.site_packages()),
-            )
+            let mut discovery_paths = self.query_runtime_sys_path()?;
+
+            // A newly-created isolated virtual environment is derived without a second interpreter
+            // query. Its mutable roots may not exist yet, but an installation can create them.
+            for mutable_path in self.site_packages() {
+                if !discovery_paths.iter().any(|discovery_path| {
+                    discovery_path.as_path() == mutable_path.as_ref()
+                        || is_same_file(discovery_path, mutable_path.as_ref()).unwrap_or(false)
+                }) {
+                    discovery_paths.push(mutable_path.into_owned());
+                }
+            }
+            Ok(discovery_paths)
         }
+    }
+
+    /// Query the runtime module search path without using the persistent interpreter cache.
+    fn query_runtime_sys_path(&self) -> Result<Vec<PathBuf>, Error> {
+        const RESPONSE_PREFIX: &str = "__UV_RUNTIME_SYS_PATH__";
+        // Omit the empty, invocation-dependent `sys.path[0]` added for `-c`. Stable additions of
+        // the working directory (for example, `PYTHONPATH=.`) are returned as absolute paths.
+        const SCRIPT: &str = r#"import json, sys; print("__UV_RUNTIME_SYS_PATH__" + json.dumps([path for path in sys.path if isinstance(path, str) and path]))"#;
+
+        let output = Command::new(&self.sys_executable)
+            .arg("-B")
+            .arg("-c")
+            .arg(SCRIPT)
+            .output()
+            .map_err(|err| map_interpreter_spawn_error(&self.sys_executable, err))?;
+
+        if !output.status.success() {
+            return Err(Error::StatusCode(StatusCodeError {
+                code: output.status,
+                stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                path: self.sys_executable.clone(),
+            }));
+        }
+
+        // `.pth` files and `sitecustomize` may write to stdout during interpreter startup. Read the
+        // final prefixed response rather than requiring stdout to contain only JSON.
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let response = stdout
+            .lines()
+            .rev()
+            .find_map(|line| line.strip_prefix(RESPONSE_PREFIX))
+            .unwrap_or_default();
+        let paths = serde_json::from_str::<Vec<PathBuf>>(response).map_err(|err| {
+            Error::UnexpectedResponse(UnexpectedResponseError {
+                err,
+                stdout: stdout.trim().to_string(),
+                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                path: self.sys_executable.clone(),
+            })
+        })?;
+        Ok(paths)
     }
     /// Whether or not this Python interpreter is from a default Python executable name, like
     /// `python`, `python3`, or `python.exe`.
@@ -889,6 +932,35 @@ pub enum Error {
     Encode(#[from] rmp_serde::encode::Error),
 }
 
+fn map_interpreter_spawn_error(interpreter: &Path, err: io::Error) -> Error {
+    match err.kind() {
+        io::ErrorKind::NotFound => return Error::NotFound(interpreter.to_path_buf()),
+        io::ErrorKind::PermissionDenied => {
+            return Error::PermissionDenied {
+                path: interpreter.to_path_buf(),
+                err,
+            };
+        }
+        _ => {}
+    }
+    #[cfg(windows)]
+    // These error codes indicate a corrupt MSIX package rather than a normal spawn failure.
+    if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) = err
+        .raw_os_error()
+        .and_then(|code| u32::try_from(code).ok())
+        .map(WIN32_ERROR)
+    {
+        return Error::CorruptWindowsPackage {
+            path: interpreter.to_path_buf(),
+            err,
+        };
+    }
+    Error::SpawnFailed {
+        path: interpreter.to_path_buf(),
+        err,
+    }
+}
+
 impl uv_errors::Hint for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
@@ -1027,35 +1099,9 @@ impl InterpreterInfo {
         #[cfg(target_os = "macos")]
         command.env("SYSTEM_VERSION_COMPAT", "0");
 
-        let output = command.output().map_err(|err| {
-            match err.kind() {
-                io::ErrorKind::NotFound => return Error::NotFound(interpreter.to_path_buf()),
-                io::ErrorKind::PermissionDenied => {
-                    return Error::PermissionDenied {
-                        path: interpreter.to_path_buf(),
-                        err,
-                    };
-                }
-                _ => {}
-            }
-            #[cfg(windows)]
-            if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) = err
-                .raw_os_error()
-                .and_then(|code| u32::try_from(code).ok())
-                .map(WIN32_ERROR)
-            {
-                // These error codes are returned if the Python interpreter is a corrupt MSIX
-                // package, which we want to differentiate from a typical spawn failure.
-                return Error::CorruptWindowsPackage {
-                    path: interpreter.to_path_buf(),
-                    err,
-                };
-            }
-            Error::SpawnFailed {
-                path: interpreter.to_path_buf(),
-                err,
-            }
-        })?;
+        let output = command
+            .output()
+            .map_err(|err| map_interpreter_spawn_error(interpreter, err))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -1191,11 +1237,25 @@ impl InterpreterInfo {
         // predict which keys each Python implementation observes. A virtual environment can be
         // recreated at the same path within one timestamp tick, so executable metadata alone is
         // insufficient.
-        let pyvenv_cfg_interpreter_key = absolute
+        let pyvenv_cfg = absolute
             .parent()
             .and_then(Path::parent)
-            .map(|venv_root| venv_root.join("pyvenv.cfg"))
-            .and_then(|pyvenv_cfg| fs::read(pyvenv_cfg).ok());
+            .map(|venv_root| venv_root.join("pyvenv.cfg"));
+        let pyvenv_cfg_interpreter_key = if let Some(pyvenv_cfg) = pyvenv_cfg {
+            match fs::read(pyvenv_cfg) {
+                Ok(contents) => Some(contents),
+                Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+                Err(err) => return Err(err.into()),
+            }
+        } else {
+            None
+        };
+
+        // Debian patches `sysconfig` to select an installation scheme from this variable. Unlike
+        // `PYTHON*` startup variables, it remains visible under `-I`, so it must participate in the
+        // cache key or a package-build invocation can poison later interpreter layouts.
+        let debian_install_layout = env::var_os("DEB_PYTHON_INSTALL_LAYOUT")
+            .map(|value| value.to_string_lossy().into_owned());
 
         let cache_shard = cache_digest(&(
             ARCH,
@@ -1209,10 +1269,18 @@ impl InterpreterInfo {
         let cache_filename = if let Some(pyvenv_cfg_interpreter_key) = &pyvenv_cfg_interpreter_key {
             format!(
                 "{}.msgpack",
-                cache_digest(&(&absolute, &canonical, pyvenv_cfg_interpreter_key))
+                cache_digest(&(
+                    &absolute,
+                    &canonical,
+                    pyvenv_cfg_interpreter_key,
+                    &debian_install_layout,
+                ))
             )
         } else {
-            format!("{}.msgpack", cache_digest(&(&absolute, &canonical)))
+            format!(
+                "{}.msgpack",
+                cache_digest(&(&absolute, &canonical, &debian_install_layout))
+            )
         };
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
@@ -1232,13 +1300,17 @@ impl InterpreterInfo {
         // environment whose `pyvenv.cfg` was removed. On Windows, the environment's copied Python
         // executable cannot be queried without that file, but the cached data is still sufficient
         // for uv to diagnose the invalid environment without deleting it.
-        let legacy_cache_entry = pyvenv_cfg_interpreter_key.is_some().then(|| {
-            cache.entry(
-                CacheBucket::Interpreter,
-                &cache_shard,
-                format!("{}.msgpack", cache_digest(&(&absolute, &canonical))),
-            )
-        });
+        let legacy_cache_entry =
+            (cfg!(windows) && pyvenv_cfg_interpreter_key.is_some()).then(|| {
+                cache.entry(
+                    CacheBucket::Interpreter,
+                    &cache_shard,
+                    format!(
+                        "{}.msgpack",
+                        cache_digest(&(&absolute, &canonical, &debian_install_layout))
+                    ),
+                )
+            });
 
         // We check the timestamp of the canonicalized executable to check if an underlying
         // interpreter has been modified.
@@ -1398,7 +1470,6 @@ fn python_home(interpreter: &Path) -> Option<PathBuf> {
 #[cfg(unix)]
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
     use std::str::FromStr;
 
     use fs_err as fs;
@@ -1494,7 +1565,7 @@ mod tests {
             formatdoc! {r"
         #!/bin/sh
         echo query >> '{query_count}'
-        if grep -q 'include-system-site-packages = true' '{pyvenv_cfg}' 2>/dev/null; then
+        if [ x$DEB_PYTHON_INSTALL_LAYOUT = xdeb ] || grep -q 'include-system-site-packages = true' '{pyvenv_cfg}' 2>/dev/null; then
             echo '{json_313}'
         else
             echo '{json_312}'
@@ -1508,10 +1579,24 @@ mod tests {
             std::os::unix::fs::PermissionsExt::from_mode(0o770),
         )
         .unwrap();
-        let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
+        let interpreter = temp_env::with_var("DEB_PYTHON_INSTALL_LAYOUT", None::<&str>, || {
+            Interpreter::query(&mocked_interpreter, &cache)
+        })
+        .unwrap();
         assert_eq!(
             interpreter.markers.python_version().version,
             Version::from_str("3.12").unwrap()
+        );
+
+        // Distro-specific environment variables that affect `sysconfig` must participate in the
+        // cache key even though the interpreter is queried with `-I`.
+        let interpreter = temp_env::with_var("DEB_PYTHON_INSTALL_LAYOUT", Some("deb"), || {
+            Interpreter::query(&mocked_interpreter, &cache)
+        })
+        .unwrap();
+        assert_eq!(
+            interpreter.markers.python_version().version,
+            Version::from_str("3.13").unwrap()
         );
 
         // `--target` discovery is isolated from both runtime site-packages and the standard
@@ -1524,8 +1609,7 @@ mod tests {
         assert_eq!(
             target_interpreter
                 .discovery_paths()
-                .map(Cow::into_owned)
-                .collect::<Vec<_>>(),
+                .expect("target discovery paths should be available"),
             vec![target]
         );
 
@@ -1536,21 +1620,31 @@ mod tests {
             "home = /home/ferris/.pyenv/versions/3.12.0\ninclude-system-site-packages = true\n",
         )
         .unwrap();
-        let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
+        let interpreter = temp_env::with_var("DEB_PYTHON_INSTALL_LAYOUT", None::<&str>, || {
+            Interpreter::query(&mocked_interpreter, &cache)
+        })
+        .unwrap();
         assert_eq!(
             interpreter.markers.python_version().version,
             Version::from_str("3.13").unwrap()
         );
 
-        // If the configuration is removed, fall back to the most recent cached response. This is
-        // required on Windows, where a copied virtual environment executable cannot be queried
-        // without `pyvenv.cfg`, and lets callers diagnose the invalid environment safely.
+        // On Unix, removing the configuration causes the executable to behave as the base
+        // interpreter, so the stale virtual environment response must not be reused. Windows keeps
+        // a configuration-independent fallback because a copied virtual environment executable
+        // cannot be queried without `pyvenv.cfg`.
         fs::remove_file(&pyvenv_cfg).unwrap();
-        let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
+        let interpreter = temp_env::with_var("DEB_PYTHON_INSTALL_LAYOUT", None::<&str>, || {
+            Interpreter::query(&mocked_interpreter, &cache)
+        })
+        .unwrap();
         assert_eq!(
             interpreter.markers.python_version().version,
-            Version::from_str("3.13").unwrap()
+            Version::from_str("3.12").unwrap()
         );
-        assert_eq!(fs::read_to_string(query_count).unwrap(), "query\nquery\n");
+        assert_eq!(
+            fs::read_to_string(query_count).unwrap(),
+            "query\nquery\nquery\nquery\n"
+        );
     }
 }

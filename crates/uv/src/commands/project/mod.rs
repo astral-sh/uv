@@ -281,7 +281,7 @@ pub(crate) enum ProjectError {
     Osv(#[from] osv::Error),
 
     #[error("Failed to find `site-packages` directory for environment")]
-    NoInstalledPackages,
+    NoSitePackages,
 
     #[error("Attempted to drop a temporary virtual environment while still in-use")]
     DroppedEnvironment,
@@ -1539,9 +1539,8 @@ impl ProjectEnvironment {
                     let temp_dir = cache.venv_dir()?;
                     let environment = uv_virtualenv::create_venv(
                         temp_dir.path(),
-                        &interpreter,
+                        interpreter,
                         prompt,
-                        cache,
                         false,
                         uv_virtualenv::OnExisting::Remove(
                             uv_virtualenv::RemovalReason::ManagedEnvironment,
@@ -1580,9 +1579,8 @@ impl ProjectEnvironment {
 
                 let environment = uv_virtualenv::create_venv(
                     &root,
-                    &interpreter,
+                    interpreter,
                     prompt,
-                    cache,
                     false,
                     uv_virtualenv::OnExisting::Remove(
                         uv_virtualenv::RemovalReason::ManagedEnvironment,
@@ -1731,9 +1729,8 @@ impl ScriptEnvironment {
                     let temp_dir = cache.venv_dir()?;
                     let environment = uv_virtualenv::create_venv(
                         temp_dir.path(),
-                        &interpreter,
+                        interpreter,
                         prompt,
-                        cache,
                         false,
                         uv_virtualenv::OnExisting::Remove(
                             uv_virtualenv::RemovalReason::ManagedEnvironment,
@@ -1769,9 +1766,8 @@ impl ScriptEnvironment {
 
                 let environment = uv_virtualenv::create_venv(
                     &root,
-                    &interpreter,
+                    interpreter,
                     prompt,
-                    cache,
                     false,
                     uv_virtualenv::OnExisting::Remove(
                         uv_virtualenv::RemovalReason::ManagedEnvironment,

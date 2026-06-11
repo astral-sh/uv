@@ -145,9 +145,14 @@ pub(crate) async fn pip_uninstall(
             let installed = installed_packages.get_mutable_packages(package);
             if installed.is_empty() {
                 if !dry_run.enabled() {
+                    let reason = if installed_packages.get_packages(package).is_empty() {
+                        "as it is not installed"
+                    } else {
+                        "as it is installed in a read-only location"
+                    };
                     writeln!(
                         printer.stderr(),
-                        "{}{} Skipping {} as it is not installed",
+                        "{}{} Skipping {} {reason}",
                         "warning".yellow().bold(),
                         ":".bold(),
                         package.as_ref().bold()
@@ -163,9 +168,14 @@ pub(crate) async fn pip_uninstall(
             let installed = installed_packages.get_mutable_urls(url);
             if installed.is_empty() {
                 if !dry_run.enabled() {
+                    let reason = if installed_packages.get_urls(url).is_empty() {
+                        "as it is not installed"
+                    } else {
+                        "as it is installed in a read-only location"
+                    };
                     writeln!(
                         printer.stderr(),
-                        "{}{} Skipping {} as it is not installed",
+                        "{}{} Skipping {} {reason}",
                         "warning".yellow().bold(),
                         ":".bold(),
                         url.as_ref().bold()

@@ -1,3 +1,5 @@
+use std::process::Command;
+
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
@@ -1209,6 +1211,23 @@ fn list_system_site_packages() -> Result<()> {
     Using Python 3.12.[X] environment at: no-system-venv
     ");
 
+    let no_system_python = uv_test::venv_bin_path(&no_system_venv).join(if cfg!(windows) {
+        "python.exe"
+    } else {
+        "python"
+    });
+    uv_snapshot!(Command::new(&no_system_python)
+        .arg("-c")
+        .arg("import anyio, importlib.metadata, pathlib, sys; print(importlib.metadata.version('anyio')); print(pathlib.Path(anyio.__file__).is_relative_to(sys.prefix))"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.0.0
+    True
+
+    ----- stderr -----
+    ");
+
     // Uninstall removes the local shadow, revealing the inherited package. A second uninstall does
     // not mutate the base interpreter.
     uv_snapshot!(context.filters(), context
@@ -1237,7 +1256,7 @@ fn list_system_site_packages() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] environment at: no-system-venv
-    warning: Skipping anyio as it is not installed
+    warning: Skipping anyio as it is installed in a read-only location
     warning: No packages to uninstall
     ");
 
@@ -1258,6 +1277,176 @@ fn list_system_site_packages() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] environment at: no-system-venv
+    ");
+
+    uv_snapshot!(Command::new(&no_system_python)
+        .arg("-c")
+        .arg("import anyio, importlib.metadata, pathlib, sys; print(importlib.metadata.version('anyio')); print(pathlib.Path(anyio.__file__).is_relative_to(sys.prefix))"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    4.3.0
+    False
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// An executable `.pth` file can place a distribution before the environment's installation
+/// roots. Installing another copy would report matching metadata without changing the imported
+/// package, so uv must treat the interposed distribution as effective and unshadowable.
+#[test]
+#[cfg(feature = "test-pypi")]
+fn list_executable_pth_precedence() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let external = context.temp_dir.child("external");
+    external.child("anyio").create_dir_all()?;
+    external
+        .child("anyio")
+        .child("__init__.py")
+        .write_str("__version__ = '3.0.0'\n")?;
+    external.child("anyio-3.0.0.dist-info").create_dir_all()?;
+    external
+        .child("anyio-3.0.0.dist-info")
+        .child("METADATA")
+        .write_str("Metadata-Version: 2.1\nName: anyio\nVersion: 3.0.0\n")?;
+
+    let external = serde_json::to_string(
+        external
+            .path()
+            .to_str()
+            .expect("temporary path should be valid UTF-8"),
+    )?;
+    ChildPath::new(context.site_packages())
+        .child("early.pth")
+        .write_str(&format!("import sys; sys.path.insert(0, {external})\n"))?;
+
+    uv_snapshot!(context.python_command()
+        .arg("-c")
+        .arg("import anyio, importlib.metadata; print(anyio.__version__); print(importlib.metadata.version('anyio'))"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.0.0
+    3.0.0
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.pip_list(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package Version
+    ------- -------
+    anyio   3.0.0
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.pip_install()
+        .arg("anyio==4.3.0")
+        .arg("--dry-run"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: Failed to determine installation plan
+      Caused by: Cannot replace `anyio` because the effective installation cannot be shadowed
+    ");
+
+    Ok(())
+}
+
+/// Runtime paths depend on executable startup hooks and must not be persisted in the interpreter
+/// cache. Neither the executable nor `pyvenv.cfg` changes when a hook is removed.
+#[test]
+fn list_runtime_paths_are_not_persistently_cached() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let external = context.temp_dir.child("external");
+    external
+        .child("cache_probe-1.0.dist-info")
+        .create_dir_all()?;
+    external
+        .child("cache_probe-1.0.dist-info")
+        .child("METADATA")
+        .write_str("Metadata-Version: 2.1\nName: cache-probe\nVersion: 1.0\n")?;
+
+    let external = serde_json::to_string(
+        external
+            .path()
+            .to_str()
+            .expect("temporary path should be valid UTF-8"),
+    )?;
+    let site_packages = ChildPath::new(context.site_packages());
+    let sitecustomize = site_packages.child("sitecustomize.py");
+    sitecustomize.write_str(&format!(
+        "import site, sys\npath = {external}\nsys.path.insert(0, path)\noriginal = site.getsitepackages\nsite.getsitepackages = lambda: [*original(), path]\n"
+    ))?;
+
+    uv_snapshot!(context.pip_list(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package     Version
+    ----------- -------
+    cache-probe 1.0
+
+    ----- stderr -----
+    ");
+
+    fs_err::remove_file(sitecustomize.path())?;
+    let pycache = site_packages.child("__pycache__");
+    if pycache.exists() {
+        fs_err::remove_dir_all(pycache.path())?;
+    }
+
+    uv_snapshot!(context.pip_list(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // A plain path in a `.pth` file is dormant until its target exists. Creating the target does
+    // not change the interpreter, `pyvenv.cfg`, or the path file itself.
+    let dormant = context.temp_dir.child("dormant");
+    site_packages
+        .child("dormant.pth")
+        .write_str(&format!("{}\n", dormant.path().display()))?;
+
+    uv_snapshot!(context.pip_list(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    dormant
+        .child("dormant_probe-1.0.dist-info")
+        .create_dir_all()?;
+    dormant
+        .child("dormant_probe-1.0.dist-info")
+        .child("METADATA")
+        .write_str("Metadata-Version: 2.1\nName: dormant-probe\nVersion: 1.0\n")?;
+
+    uv_snapshot!(context.pip_list(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package       Version
+    ------------- -------
+    dormant-probe 1.0
+
+    ----- stderr -----
     ");
 
     Ok(())

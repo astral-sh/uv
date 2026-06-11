@@ -47,7 +47,7 @@ impl EphemeralEnvironment {
             .0
             .site_packages()
             .next()
-            .ok_or(ProjectError::NoInstalledPackages)?;
+            .ok_or(ProjectError::NoSitePackages)?;
         let overlay_path = site_packages.join("_uv_ephemeral_overlay.pth");
         fs_err::write(overlay_path, contents)?;
         Ok(())
@@ -216,9 +216,8 @@ impl CachedEnvironment {
         let temp_dir = cache.venv_dir()?;
         let venv = uv_virtualenv::create_venv(
             temp_dir.path(),
-            &interpreter,
+            interpreter,
             uv_virtualenv::Prompt::None,
-            cache,
             false,
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::TemporaryEnvironment),
             true,

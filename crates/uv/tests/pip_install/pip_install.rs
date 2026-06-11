@@ -14122,6 +14122,58 @@ fn config_settings_package() -> Result<()> {
     Ok(())
 }
 
+/// PEP 660 does not require editable import hooks to take precedence over normal path entries.
+/// Setuptools appends its finder after `PathFinder`, so an inherited regular package can keep
+/// winning even when the editable distribution metadata is installed in an earlier site root.
+#[test]
+fn reject_editable_that_cannot_shadow_inherited_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let inherited = context.temp_dir.child("inherited");
+    inherited.child("setuptools_editable").create_dir_all()?;
+    inherited
+        .child("setuptools_editable")
+        .child("__init__.py")
+        .write_str("ORIGIN = 'inherited'\n")?;
+    inherited
+        .child("setuptools_editable-0.0.0.dist-info")
+        .create_dir_all()?;
+    inherited
+        .child("setuptools_editable-0.0.0.dist-info")
+        .child("METADATA")
+        .write_str("Metadata-Version: 2.1\nName: setuptools-editable\nVersion: 0.0.0\n")?;
+
+    // A plain path line is appended after the environment's site-packages directory. A regular
+    // wheel installed into the environment could shadow it, but a backend-defined editable finder
+    // is not guaranteed to do so.
+    fs_err::write(
+        context.site_packages().join("inherited.pth"),
+        format!("{}\n", inherited.path().display()),
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--editable")
+        .arg(context.workspace_root.join("test/packages/setuptools_editable")), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Failed to determine installation plan
+      Caused by: Cannot install `setuptools-editable` as editable because it cannot be guaranteed to shadow the read-only installation
+    ");
+
+    context
+        .python_command()
+        .arg("-c")
+        .arg("import setuptools_editable; assert setuptools_editable.ORIGIN == 'inherited'")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 #[test]
 fn reject_invalid_archive_member_names() {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-10-07T00:00:00Z");

@@ -319,8 +319,7 @@ impl InstalledTools {
     pub fn create_environment(
         &self,
         name: &PackageName,
-        interpreter: &Interpreter,
-        cache: &Cache,
+        interpreter: Interpreter,
     ) -> Result<PythonEnvironment, Error> {
         let environment_path = self.tool_dir(name);
 
@@ -346,7 +345,6 @@ impl InstalledTools {
             &environment_path,
             interpreter,
             uv_virtualenv::Prompt::None,
-            cache,
             false,
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::ManagedEnvironment),
             false,
