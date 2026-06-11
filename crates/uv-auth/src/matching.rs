@@ -1,88 +1,66 @@
-/// Shared credential matching logic used by both text and native stores.
-///
-/// This module provides utilities for matching stored credentials against
-/// requested URLs using realm and path prefix matching.
+//! Shared credential matching for persistent stores.
+
 use uv_redacted::DisplaySafeUrl;
 
-use crate::{Realm, Service, Username};
+use crate::index::is_path_prefix;
+use crate::{RealmRef, Service};
 
-/// Return `true` if `stored_path` applies to `request_path`.
-///
-/// This treats stored paths as hierarchical prefixes, so `/api` matches `/api`
-/// and `/api/v1`, but not `/apiv1`.
-fn path_prefix_matches(stored_path: &str, request_path: &str) -> bool {
-    if request_path == stored_path {
-        return true;
+/// The best credential match is not unique.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct AmbiguousCredential;
+
+/// Return the path specificity when a stored credential matches the request.
+fn match_specificity(
+    service: &Service,
+    stored_username: Option<&str>,
+    request_url: &DisplaySafeUrl,
+    request_realm: RealmRef<'_>,
+    request_username: Option<&str>,
+) -> Option<usize> {
+    if RealmRef::from(&**service.url()) != request_realm
+        || !is_path_prefix(service.url().path(), request_url.path())
+        || request_username.is_some_and(|username| stored_username != Some(username))
+    {
+        return None;
     }
 
-    let Some(remainder) = request_path.strip_prefix(stored_path) else {
-        return false;
-    };
-
-    stored_path.ends_with('/') || remainder.starts_with('/')
+    Some(service.url().path().len())
 }
 
-/// Check if a stored credential matches a request URL with username filtering.
-///
-/// This performs:
-/// 1. Realm matching (scheme://host:port must be equal)
-/// 2. Path prefix matching (stored path must be a prefix of request path)
-/// 3. Username matching (if username provided, it must match)
-///
-/// Returns `true` if the credential matches the request.
-pub(crate) fn credential_matches(
-    service: &Service,
-    stored_username: &Username,
+/// Select the most specific credential matching a URL and optional username.
+pub(crate) fn select_credential<'a, T>(
+    credentials: impl IntoIterator<Item = (&'a Service, Option<&'a str>, &'a T)>,
     request_url: &DisplaySafeUrl,
-    request_realm: &Realm,
     request_username: Option<&str>,
-) -> bool {
-    let service_realm = Realm::from(service.url());
+) -> Result<Option<&'a T>, AmbiguousCredential> {
+    let request_realm = RealmRef::from(&**request_url);
+    let mut best = None;
+    let mut best_is_ambiguous = false;
 
-    // Only consider services in the same realm
-    if service_realm != *request_realm {
-        return false;
-    }
-
-    // Service path must be a path-segment prefix of request path.
-    if !path_prefix_matches(service.url().path(), request_url.path()) {
-        return false;
-    }
-
-    // If a username is provided, it must match
-    if let Some(req_username) = request_username {
-        if Some(req_username) != stored_username.as_deref() {
-            return false;
+    for (service, stored_username, credential) in credentials {
+        if let Some(path_specificity) = match_specificity(
+            service,
+            stored_username,
+            request_url,
+            request_realm,
+            request_username,
+        ) {
+            let exact = service.url() == request_url && stored_username == request_username;
+            let rank = (exact, path_specificity);
+            if best.is_none_or(|(best_rank, _)| rank > best_rank) {
+                best = Some((rank, credential));
+                best_is_ambiguous = false;
+            } else if best.is_some_and(|(best_rank, _)| rank == best_rank) {
+                best_is_ambiguous = true;
+            }
         }
     }
 
-    true
-}
-
-/// Check if a credential matches and return its specificity score.
-///
-/// The specificity is the length of the service path, which determines
-/// which credential wins when multiple credentials match (longest path wins).
-///
-/// Returns `Some(specificity)` if the credential matches, `None` otherwise.
-pub(crate) fn match_specificity(
-    service: &Service,
-    stored_username: &Username,
-    request_url: &DisplaySafeUrl,
-    request_realm: &Realm,
-    request_username: Option<&str>,
-) -> Option<usize> {
-    if credential_matches(
-        service,
-        stored_username,
-        request_url,
-        request_realm,
-        request_username,
-    ) {
-        Some(service.url().path().len())
-    } else {
-        None
+    if best_is_ambiguous {
+        return Err(AmbiguousCredential);
     }
+
+    Ok(best.map(|(_, credential)| credential))
 }
 
 #[cfg(test)]
@@ -91,31 +69,120 @@ mod tests {
 
     use uv_redacted::DisplaySafeUrl;
 
-    use super::{credential_matches, path_prefix_matches};
-    use crate::{Realm, Service, Username};
+    use super::{match_specificity, select_credential};
+    use crate::{RealmRef, Service};
 
     #[test]
-    fn path_prefix_matches_respects_segment_boundaries() {
-        assert!(path_prefix_matches("/api", "/api"));
-        assert!(path_prefix_matches("/api", "/api/v1"));
-        assert!(path_prefix_matches("/", "/anything"));
-
-        assert!(!path_prefix_matches("/api", "/apiv1"));
-        assert!(!path_prefix_matches("/api", "/api-private"));
+    fn match_specificity_rejects_sibling_paths() {
+        let service =
+            Service::from_str("https://example.com/api").expect("service URL should be valid");
+        let request_url = DisplaySafeUrl::parse("https://example.com/apiv1")
+            .expect("request URL should be valid");
+        assert_eq!(
+            match_specificity(
+                &service,
+                Some("user"),
+                &request_url,
+                RealmRef::from(&*request_url),
+                Some("user"),
+            ),
+            None
+        );
     }
 
     #[test]
-    fn credential_matches_rejects_sibling_paths() {
-        let service = Service::from_str("https://example.com/api").unwrap();
-        let request_url = DisplaySafeUrl::parse("https://example.com/apiv1").unwrap();
-        let request_realm = Realm::from(&request_url);
+    fn select_credential_prefers_the_most_specific_path() {
+        let root =
+            Service::from_str("https://example.com").expect("root service URL should be valid");
+        let api =
+            Service::from_str("https://example.com/api").expect("API service URL should be valid");
+        let request = DisplaySafeUrl::parse("https://example.com/api/project")
+            .expect("request URL should be valid");
+        let root_value = "root";
+        let api_value = "api";
 
-        assert!(!credential_matches(
-            &service,
-            &Username::from(Some("user".to_string())),
-            &request_url,
-            &request_realm,
+        let selected = select_credential(
+            [
+                (&root, Some("user"), &root_value),
+                (&api, Some("user"), &api_value),
+            ],
+            &request,
             Some("user"),
-        ));
+        )
+        .expect("credential match should not be ambiguous");
+
+        assert_eq!(selected, Some(&api_value));
+    }
+
+    #[test]
+    fn select_credential_rejects_equally_specific_users() {
+        let service =
+            Service::from_str("https://example.com/api").expect("service URL should be valid");
+        let request = DisplaySafeUrl::parse("https://example.com/api/project")
+            .expect("request URL should be valid");
+        let first = "first";
+        let second = "second";
+
+        assert!(
+            select_credential(
+                [
+                    (&service, Some("first"), &first),
+                    (&service, Some("second"), &second),
+                ],
+                &request,
+                None,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn select_credential_ignores_less_specific_ambiguity() {
+        let root =
+            Service::from_str("https://example.com").expect("root service URL should be valid");
+        let api =
+            Service::from_str("https://example.com/api").expect("API service URL should be valid");
+        let request = DisplaySafeUrl::parse("https://example.com/api/project")
+            .expect("request URL should be valid");
+        let first_root = "first-root";
+        let second_root = "second-root";
+        let api_value = "api";
+
+        let selected = select_credential(
+            [
+                (&root, Some("first"), &first_root),
+                (&root, Some("second"), &second_root),
+                (&api, Some("api"), &api_value),
+            ],
+            &request,
+            None,
+        )
+        .expect("less-specific matches should not make the result ambiguous");
+
+        assert_eq!(selected, Some(&api_value));
+    }
+
+    #[test]
+    fn select_credential_prefers_an_exact_query_match() {
+        let first = Service::from_str("https://example.com/api?signature=first")
+            .expect("first service URL should be valid");
+        let second = Service::from_str("https://example.com/api?signature=second")
+            .expect("second service URL should be valid");
+        let request = DisplaySafeUrl::parse("https://example.com/api?signature=second")
+            .expect("request URL should be valid");
+        let first_value = "first";
+        let second_value = "second";
+
+        let selected = select_credential(
+            [
+                (&first, Some("user"), &first_value),
+                (&second, Some("user"), &second_value),
+            ],
+            &request,
+            Some("user"),
+        )
+        .expect("the exact service should resolve the prefix ambiguity");
+
+        assert_eq!(selected, Some(&second_value));
     }
 }

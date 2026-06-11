@@ -14,6 +14,7 @@ mod index;
 mod keyring;
 mod matching;
 mod middleware;
+mod persistent;
 mod providers;
 mod realm;
 mod service;
