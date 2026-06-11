@@ -45,7 +45,7 @@ jobs:
     timeout-minutes: 10
     name: "python on fedora"
     runs-on: ubuntu-latest
-    container: fedora:45@sha256:af8cdc432037f5e8e288bbc26c2b55b96000a911ec5b37959cd464d830f6cc5b
+    container: fedora:45@sha256:0c1f63ed8fb818fad16cf6ae091598c410a21d2e1a9adf183beb93189299bfba
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
