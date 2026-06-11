@@ -1199,19 +1199,28 @@ impl InterpreterInfo {
                 (pyvenv_cfg.home, include_system_site_packages)
             });
 
+        let cache_shard = cache_digest(&(
+            ARCH,
+            uv_platform::OsType::from_env()
+                .map(|os_type| os_type.to_string())
+                .unwrap_or_default(),
+            uv_platform::OsRelease::from_env()
+                .map(|os_release| os_release.to_string())
+                .unwrap_or_default(),
+        ));
+        let cache_filename = if let Some(pyvenv_cfg_interpreter_key) = &pyvenv_cfg_interpreter_key {
+            format!(
+                "{}.msgpack",
+                cache_digest(&(&absolute, &canonical, pyvenv_cfg_interpreter_key))
+            )
+        } else {
+            format!("{}.msgpack", cache_digest(&(&absolute, &canonical)))
+        };
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
             // invalidate the cache (e.g.) on OS upgrades.
-            cache_digest(&(
-                ARCH,
-                uv_platform::OsType::from_env()
-                    .map(|os_type| os_type.to_string())
-                    .unwrap_or_default(),
-                uv_platform::OsRelease::from_env()
-                    .map(|os_release| os_release.to_string())
-                    .unwrap_or_default(),
-            )),
+            &cache_shard,
             // We use the absolute path for the cache entry to avoid cache collisions for relative
             // paths. But we don't want to query the executable with symbolic links resolved because
             // that can change reported values, e.g., `sys.executable`. We include the canonical
@@ -1219,11 +1228,19 @@ impl InterpreterInfo {
             // absolute path refers to different interpreters with matching ctimes, e.g., if you
             // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
             // modified at the same time.
-            format!(
-                "{}.msgpack",
-                cache_digest(&(&absolute, &canonical, &pyvenv_cfg_interpreter_key))
-            ),
+            cache_filename,
         );
+        // Keep the configuration-independent entry up to date as a fallback for a broken virtual
+        // environment whose `pyvenv.cfg` was removed. On Windows, the environment's copied Python
+        // executable cannot be queried without that file, but the cached data is still sufficient
+        // for uv to diagnose the invalid environment without deleting it.
+        let legacy_cache_entry = pyvenv_cfg_interpreter_key.is_some().then(|| {
+            cache.entry(
+                CacheBucket::Interpreter,
+                &cache_shard,
+                format!("{}.msgpack", cache_digest(&(&absolute, &canonical))),
+            )
+        });
 
         // We check the timestamp of the canonicalized executable to check if an underlying
         // interpreter has been modified.
@@ -1272,14 +1289,14 @@ impl InterpreterInfo {
         // If `executable` is a pyenv shim, a bash script that redirects to the activated
         // python executable at another path, we're not allowed to cache the interpreter info.
         if is_same_file(executable, &info.sys_executable).unwrap_or(false) {
-            fs::create_dir_all(cache_entry.dir())?;
-            write_atomic_sync(
-                cache_entry.path(),
-                rmp_serde::to_vec(&CachedByTimestamp {
-                    timestamp: modified,
-                    data: info.clone(),
-                })?,
-            )?;
+            let data = rmp_serde::to_vec(&CachedByTimestamp {
+                timestamp: modified,
+                data: info.clone(),
+            })?;
+            for cache_entry in std::iter::once(&cache_entry).chain(legacy_cache_entry.as_ref()) {
+                fs::create_dir_all(cache_entry.dir())?;
+                write_atomic_sync(cache_entry.path(), &data)?;
+            }
         }
 
         Ok(info)
@@ -1398,8 +1415,10 @@ mod tests {
     #[tokio::test]
     async fn test_cache_invalidation() {
         let mock_dir = tempdir().unwrap();
-        let mocked_interpreter = mock_dir.path().join("python");
-        let json = indoc! {r##"
+        let bin_dir = mock_dir.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        let mocked_interpreter = bin_dir.join("python");
+        let json_312 = indoc! {r##"
         {
             "result": "success",
             "platform": {
@@ -1457,15 +1476,32 @@ mod tests {
             "debug_enabled": false
         }
     "##};
+        let json_312 = json_312.replace(
+            "/home/ferris/projects/uv/.venv/bin/python",
+            mocked_interpreter.to_str().unwrap(),
+        );
+        let json_313 = json_312.replace("3.12", "3.13");
 
         let cache = Cache::temp().unwrap().init().await.unwrap();
+        let pyvenv_cfg = mock_dir.path().join("pyvenv.cfg");
+        let query_count = mock_dir.path().join("query-count");
+        fs::write(
+            &pyvenv_cfg,
+            "home = /home/ferris/.pyenv/versions/3.12.0\ninclude-system-site-packages = false\n",
+        )
+        .unwrap();
 
         fs::write(
             &mocked_interpreter,
             formatdoc! {r"
         #!/bin/sh
-        echo '{json}'
-        "},
+        echo query >> '{query_count}'
+        if grep -q 'include-system-site-packages = true' '{pyvenv_cfg}' 2>/dev/null; then
+            echo '{json_313}'
+        else
+            echo '{json_312}'
+        fi
+        ", query_count = query_count.display(), pyvenv_cfg = pyvenv_cfg.display()},
         )
         .unwrap();
 
@@ -1495,12 +1531,11 @@ mod tests {
             vec![target]
         );
 
+        // Virtual environment configuration must invalidate the interpreter response even when
+        // the executable itself is unchanged.
         fs::write(
-            &mocked_interpreter,
-            formatdoc! {r"
-        #!/bin/sh
-        echo '{}'
-        ", json.replace("3.12", "3.13")},
+            &pyvenv_cfg,
+            "home = /home/ferris/.pyenv/versions/3.12.0\ninclude-system-site-packages = true\n",
         )
         .unwrap();
         let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
@@ -1508,5 +1543,16 @@ mod tests {
             interpreter.markers.python_version().version,
             Version::from_str("3.13").unwrap()
         );
+
+        // If the configuration is removed, fall back to the most recent cached response. This is
+        // required on Windows, where a copied virtual environment executable cannot be queried
+        // without `pyvenv.cfg`, and lets callers diagnose the invalid environment safely.
+        fs::remove_file(&pyvenv_cfg).unwrap();
+        let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
+        assert_eq!(
+            interpreter.markers.python_version().version,
+            Version::from_str("3.13").unwrap()
+        );
+        assert_eq!(fs::read_to_string(query_count).unwrap(), "query\nquery\n");
     }
 }
