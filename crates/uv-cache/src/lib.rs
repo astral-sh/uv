@@ -1337,6 +1337,7 @@ impl CacheBucket {
             Self::Archive,
             Self::Builds,
             Self::Environments,
+            Self::Python,
             Self::Binaries,
             Self::Osv,
         ]

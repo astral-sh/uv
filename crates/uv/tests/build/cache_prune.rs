@@ -84,6 +84,31 @@ fn prune_stale_directory() -> Result<()> {
     Ok(())
 }
 
+/// `cache prune` should preserve cached Python downloads.
+#[test]
+fn prune_python_downloads() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let python_cache = context.cache_dir.child("python-v0");
+    python_cache.create_dir_all()?;
+    let download = python_cache.child("python.tar.gz");
+    download.write_binary(b"cached Python download")?;
+
+    uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    No unused entries found
+    ");
+
+    assert!(download.is_file());
+
+    Ok(())
+}
+
 /// `cache prune` should remove all cached environments from the cache.
 #[test]
 fn prune_cached_env() {
