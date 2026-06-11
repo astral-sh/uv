@@ -94,7 +94,7 @@ fn prune_python_downloads() -> Result<()> {
     let download = python_cache.child("python.tar.gz");
     download.write_binary(b"cached Python download")?;
 
-    uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
+    uv_snapshot!(context.filters(), context.prune(), @"
     success: true
     exit_code: 0
     ----- stdout -----
