@@ -255,6 +255,10 @@ pub struct Index {
     pub exclude_newer: Option<ExcludeNewerOverride>,
 }
 
+#[derive(Debug, Error)]
+#[error("Failed to parse credentials in index URL")]
+pub struct IndexCredentialsError(#[from] CredentialsFromUrlError);
+
 impl PartialEq for Index {
     fn eq(&self, other: &Self) -> bool {
         let Self {
@@ -459,6 +463,11 @@ impl Index {
         self
     }
 
+    /// Return whether credentials are configured for the index.
+    ///
+    /// This only checks for the presence of credentials. It intentionally avoids decoding URL
+    /// credentials, since this is used to preserve the authentication policy after credentials are
+    /// removed from the stored URL; parsing errors are reported when the credentials are retrieved.
     fn has_credentials(&self) -> bool {
         if self
             .name
@@ -473,7 +482,7 @@ impl Index {
     }
 
     /// Retrieve the credentials for the index, either from the environment, or from the URL itself.
-    pub fn credentials(&self) -> Result<Option<Credentials>, CredentialsFromUrlError> {
+    pub fn credentials(&self) -> Result<Option<Credentials>, IndexCredentialsError> {
         // If the index is named, and credentials are provided via the environment, prefer those.
         if let Some(name) = self.name.as_ref() {
             if let Some(credentials) = Credentials::from_env(name.to_env_var()) {
@@ -482,7 +491,7 @@ impl Index {
         }
 
         // Otherwise, extract the credentials from the URL.
-        Credentials::from_url(self.url.url())
+        Ok(Credentials::from_url(self.url.url())?)
     }
 
     /// Resolve the index relative to the given root directory.

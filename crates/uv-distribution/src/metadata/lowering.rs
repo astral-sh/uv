@@ -5,10 +5,11 @@ use std::path::{Path, PathBuf};
 use either::Either;
 
 use thiserror::Error;
-use uv_auth::{CredentialsCache, CredentialsFromUrlError};
+use uv_auth::CredentialsCache;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
-    Index, IndexLocations, IndexMetadata, IndexName, Origin, Requirement, RequirementSource,
+    Index, IndexCredentialsError, IndexLocations, IndexMetadata, IndexName, Origin, Requirement,
+    RequirementSource,
 };
 use uv_fs::{Simplified, normalize_absolute_path, normalize_path};
 use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
@@ -596,7 +597,7 @@ pub enum LoweringError {
     #[error(transparent)]
     InvalidUrl(#[from] DisplaySafeUrlError),
     #[error(transparent)]
-    Credentials(#[from] CredentialsFromUrlError),
+    IndexCredentials(#[from] IndexCredentialsError),
     #[error(transparent)]
     InvalidVerbatimUrl(#[from] uv_pep508::VerbatimUrlError),
     #[error("Fragments are not allowed in URLs: `{0}`")]
