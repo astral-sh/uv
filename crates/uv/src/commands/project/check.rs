@@ -229,15 +229,20 @@ pub(crate) async fn check(
         };
 
         let state = UniversalState::default();
-        let (lock, environment) = if no_sync {
+        let _environment_lock;
+        let lock = if no_sync {
             debug!("Skipping environment synchronization due to `--no-sync`");
 
-            (
-                LockTarget::Workspace(project.workspace()).read().await?,
-                None,
-            )
+            match LockTarget::Workspace(project.workspace()).read().await {
+                Ok(lock) => lock,
+                Err(err) => {
+                    debug!("Failed to read lockfile; skipping workspace metadata: {err}");
+                    None
+                }
+            }
         } else {
-            let _lock = venv
+            // Keep the environment locked through synchronization and metadata collection.
+            _environment_lock = venv
                 .lock()
                 .await
                 .inspect_err(|err| {
@@ -335,14 +340,27 @@ pub(crate) async fn check(
                 Err(err) => return Err(err.into()),
             }
 
-            (Some(result.into_lock()), Some(&venv))
+            Some(result.into_lock())
         };
 
         if let Some(lock) = lock {
-            let metadata = crate::commands::workspace::metadata::metadata_from_lock(
+            let target = match project {
+                VirtualProject::Project(project) => InstallTarget::Project {
+                    workspace: project.workspace(),
+                    name: project.project_name(),
+                    lock: &lock,
+                },
+                VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
+                    workspace,
+                    lock: &lock,
+                },
+            };
+            let metadata = crate::commands::workspace::metadata::metadata_from_target(
                 project.workspace(),
-                &lock,
-                environment,
+                (!no_sync).then_some(&venv),
+                target,
+                &extras,
+                &groups,
                 &settings.resolver,
             )?;
             let mut metadata = metadata.to_json()?;

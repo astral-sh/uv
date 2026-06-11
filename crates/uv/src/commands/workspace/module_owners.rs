@@ -4,7 +4,8 @@ use anyhow::Result;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions, Reinstall,
+    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
+    ExtrasSpecificationWithDefaults, InstallOptions, Reinstall,
 };
 use uv_distribution_types::{Dist, Name, ResolvedDist};
 use uv_fs::PortablePathBuf;
@@ -91,27 +92,25 @@ pub(crate) async fn collect_module_owners(
     )
     .await?;
 
-    find_module_owners(workspace, lock, venv, settings)
+    find_module_owners(target, venv, &extras, &groups, settings)
 }
 
 /// Map the modules in an existing environment to package IDs from the lockfile.
 pub(crate) fn find_module_owners(
-    workspace: &Workspace,
-    lock: &Lock,
+    target: InstallTarget<'_>,
     venv: &PythonEnvironment,
+    extras: &ExtrasSpecificationWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
     settings: &ResolverSettings,
 ) -> Result<BTreeMap<ModuleName, Vec<String>>> {
-    let target = InstallTarget::Workspace { workspace, lock };
     let marker_env = resolution_markers(None, None, venv.interpreter());
     let tags = resolution_tags(None, None, venv.interpreter())?;
-    let extras = ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default());
-    let groups = DependencyGroups::from_all_groups().with_defaults(DefaultGroups::default());
 
     let resolution = target.to_resolution(
         &marker_env,
         &tags,
-        &extras,
-        &groups,
+        extras,
+        groups,
         &settings.build_options,
         &InstallOptions::default(),
     )?;
@@ -119,7 +118,7 @@ pub(crate) fn find_module_owners(
         return Ok(BTreeMap::new());
     }
 
-    let workspace_root = PortablePathBuf::from(workspace.install_path().as_path());
+    let workspace_root = PortablePathBuf::from(target.install_path());
     let mut package_ids = BTreeMap::<PackageName, String>::new();
     for dist in resolution.distributions().filter(|dist| !is_virtual(dist)) {
         package_ids.insert(

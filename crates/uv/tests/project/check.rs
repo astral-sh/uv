@@ -81,6 +81,47 @@ fn check_passes_workspace_metadata_to_ty() -> Result<()> {
 }
 
 #[test]
+fn check_no_sync_ignores_invalid_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str("invalid")?;
+    context.temp_dir.child("main.py").write_str(indoc! {r"
+        x: int = 1
+    "})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--ty-version")
+            .arg("0.0.17")
+            .env(EnvVars::RUST_LOG, "error"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
 fn check_rejects_tool_arguments() {
     let context = uv_test::test_context_with_versions!(&[]);
 
