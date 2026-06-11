@@ -256,8 +256,12 @@ pub struct Index {
 }
 
 #[derive(Debug, Error)]
-#[error("Failed to parse credentials in index URL")]
-pub struct IndexCredentialsError(#[from] CredentialsFromUrlError);
+#[error("Failed to parse credentials in index URL: {url}")]
+pub struct IndexCredentialsError {
+    url: DisplaySafeUrl,
+    #[source]
+    source: CredentialsFromUrlError,
+}
 
 impl PartialEq for Index {
     fn eq(&self, other: &Self) -> bool {
@@ -491,7 +495,10 @@ impl Index {
         }
 
         // Otherwise, extract the credentials from the URL.
-        Ok(Credentials::from_url(self.url.url())?)
+        Credentials::from_url(self.url.url()).map_err(|source| IndexCredentialsError {
+            url: self.url.url().clone(),
+            source,
+        })
     }
 
     /// Resolve the index relative to the given root directory.

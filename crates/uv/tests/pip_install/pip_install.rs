@@ -6353,7 +6353,7 @@ fn install_package_basic_auth_invalid_utf8() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse credentials in index URL
+    error: Failed to parse credentials in index URL: https://user:****@example.com/simple
       Caused by: URL password contains invalid UTF-8
       Caused by: invalid utf-8 sequence of 1 bytes from index 0
     ");
