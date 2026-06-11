@@ -1212,6 +1212,62 @@ async fn login_text_store() {
 }
 
 #[test]
+fn login_text_store_empty_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    context.temp_dir.child("credentials.toml").write_str("")?;
+
+    uv_snapshot!(context.auth_login()
+        .arg("https://example.com/simple")
+        .arg("--token")
+        .arg("test-token")
+        .env(EnvVars::UV_CREDENTIALS_DIR, context.temp_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for https://example.com/
+    ");
+
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/simple")
+        .env(EnvVars::UV_CREDENTIALS_DIR, context.temp_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    test-token
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn login_text_store_comments_only_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    context
+        .temp_dir
+        .child("credentials.toml")
+        .write_str("# No credentials have been configured yet.\n")?;
+
+    uv_snapshot!(context.auth_login()
+        .arg("https://example.com/simple")
+        .arg("--token")
+        .arg("test-token")
+        .env(EnvVars::UV_CREDENTIALS_DIR, context.temp_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for https://example.com/
+    ");
+
+    Ok(())
+}
+
+#[test]
 #[expect(clippy::disallowed_types)]
 fn login_password_stdin() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);

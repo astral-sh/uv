@@ -231,7 +231,7 @@ impl TryFrom<TomlCredentialWire> for TomlCredential {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct TomlCredentials {
     /// Array of credential entries.
-    #[serde(rename = "credential")]
+    #[serde(default, rename = "credential")]
     credentials: Vec<TomlCredential>,
 }
 
