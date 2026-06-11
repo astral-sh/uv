@@ -549,12 +549,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             cache_dir.user_display()
         );
     } else if let Ok(cache_dir) = fs_err::canonicalize(&cache_dir)
-        && let Ok(current_dir) = fs_err::canonicalize(&*project_dir)
-        && current_dir.starts_with(&cache_dir)
+        && let Ok(project_dir) = fs_err::canonicalize(&*project_dir)
+        && project_dir.starts_with(&cache_dir)
     {
         bail!(
             "The project directory `{}` is inside the cache directory `{}`",
-            current_dir.user_display(),
+            project_dir.user_display(),
             cache_dir.user_display()
         );
     }
