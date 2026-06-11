@@ -38,7 +38,11 @@ const ACTIVATE_TEMPLATES: &[(&str, &str, Option<PromptQuoting>)] = &[
         Some(PromptQuoting::Fish),
     ),
     ("activate.nu", include_str!("activator/activate.nu"), None),
-    ("activate.ps1", include_str!("activator/activate.ps1"), None),
+    (
+        "activate.ps1",
+        include_str!("activator/activate.ps1"),
+        Some(PromptQuoting::PowerShell),
+    ),
     ("activate.bat", include_str!("activator/activate.bat"), None),
     (
         "deactivate.bat",
@@ -58,6 +62,7 @@ const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
 enum PromptQuoting {
     Posix,
     Fish,
+    PowerShell,
 }
 
 impl PromptQuoting {
@@ -69,6 +74,15 @@ impl PromptQuoting {
                 let value = value.replace('\\', r"\\").replace('\'', r"\'");
                 format!("'{value}'")
             }
+            Self::PowerShell => format!(
+                "'{}'",
+                value
+                    .replace('\'', "''")
+                    .replace('‘', "‘‘")
+                    .replace('’', "’’")
+                    .replace('‚', "‚‚")
+                    .replace('‛', "‛‛")
+            ),
         }
     }
 }

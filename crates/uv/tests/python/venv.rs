@@ -161,6 +161,42 @@ fn custom_prompt_is_not_evaluated_by_bash() {
     marker.assert(predicates::path::missing());
 }
 
+/// Custom prompts are treated as data when the PowerShell activation script is executed.
+#[test]
+fn custom_prompt_is_escaped_in_powershell() {
+    #[cfg(windows)]
+    let powershell = "powershell";
+    #[cfg(unix)]
+    let Ok(powershell) = which::which("pwsh") else {
+        return;
+    };
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let marker = context.temp_dir.child("injected");
+    let prompt = "safe’ + $(New-Item -ItemType File -Force -Path $env:INJECTION_MARKER) + ‘‚ + $(New-Item -ItemType File -Force -Path $env:INJECTION_MARKER) + ‛";
+
+    create_venv_with_prompt(&context, prompt);
+
+    let scripts = context
+        .venv
+        .child(if cfg!(windows) { "Scripts" } else { "bin" });
+    let activation = scripts.child("activate.ps1");
+    Command::new(powershell)
+        .arg("-NoProfile")
+        .arg("-NonInteractive")
+        .args(["-ExecutionPolicy", "Bypass"])
+        .arg("-Command")
+        .arg(
+            "& $env:ACTIVATE_PS1; if ($env:VIRTUAL_ENV_PROMPT -ne $env:EXPECTED_PROMPT) { exit 1 }",
+        )
+        .env("ACTIVATE_PS1", activation.path())
+        .env("EXPECTED_PROMPT", prompt)
+        .env("INJECTION_MARKER", marker.path())
+        .assert()
+        .success();
+
+    marker.assert(predicates::path::missing());
+}
+
 #[test]
 fn create_venv_project_environment() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
