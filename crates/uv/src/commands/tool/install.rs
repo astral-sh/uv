@@ -14,7 +14,7 @@ use uv_configuration::{
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirementSpecification,
+    RequirementSource, UnresolvedRequirementSpecification, VersionSpecifiersOrExact,
 };
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -224,9 +224,7 @@ pub(crate) async fn install(
                 groups: Box::new([]),
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
-                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
-                        version.clone(),
-                    )),
+                    specifier: VersionSpecifiersOrExact::Exact(version.clone()),
                     index: None,
                     conflict: None,
                 },
@@ -248,7 +246,9 @@ pub(crate) async fn install(
                 groups: Box::new([]),
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
-                    specifier: VersionSpecifiers::empty(),
+                    specifier: VersionSpecifiersOrExact::VersionSpecifiers(
+                        VersionSpecifiers::empty(),
+                    ),
                     index: None,
                     conflict: None,
                 },
@@ -314,7 +314,9 @@ pub(crate) async fn install(
                 groups: Box::new([]),
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
-                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(version)),
+                    specifier: VersionSpecifiersOrExact::VersionSpecifiers(
+                        VersionSpecifiers::from(VersionSpecifier::equals_version(version)),
+                    ),
                     index: None,
                     conflict: None,
                 },

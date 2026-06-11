@@ -9,6 +9,7 @@ use uv_auth::CredentialsCache;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
     Index, IndexLocations, IndexMetadata, IndexName, Origin, Requirement, RequirementSource,
+    VersionSpecifiersOrExact,
 };
 use uv_fs::{Simplified, normalize_absolute_path, normalize_path};
 use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
@@ -796,17 +797,17 @@ fn registry_source(
 ) -> RequirementSource {
     match &requirement.version_or_url {
         None => RequirementSource::Registry {
-            specifier: VersionSpecifiers::empty(),
+            specifier: VersionSpecifiersOrExact::VersionSpecifiers(VersionSpecifiers::empty()),
             index: Some(index),
             conflict,
         },
         Some(VersionOrUrl::VersionSpecifier(version)) => RequirementSource::Registry {
-            specifier: version.clone(),
+            specifier: VersionSpecifiersOrExact::VersionSpecifiers(version.clone()),
             index: Some(index),
             conflict,
         },
         Some(VersionOrUrl::Url(_)) => RequirementSource::Registry {
-            specifier: VersionSpecifiers::empty(),
+            specifier: VersionSpecifiersOrExact::VersionSpecifiers(VersionSpecifiers::empty()),
             index: Some(index),
             conflict,
         },
