@@ -978,9 +978,21 @@ impl AuthMiddleware {
                 Ok(credentials) => credentials,
                 Err(err) => {
                     debug!("Failed to get credentials from native store: {err}");
-                    uv_warnings::warn_user_once!(
-                        "Failed to fetch credentials from the native credential store: {err}"
+                    let platform_unavailable = matches!(
+                        &err,
+                        crate::keyring::Error::Keyring(
+                            uv_keyring::Error::PlatformFailure(_)
+                                | uv_keyring::Error::NoStorageAccess(_)
+                        )
                     );
+                    if username.is_some()
+                        || matches!(&err, crate::keyring::Error::AmbiguousUsername(_))
+                        || !platform_unavailable
+                    {
+                        uv_warnings::warn_user_once!(
+                            "Failed to fetch credentials from the native credential store: {err}"
+                        );
+                    }
                     None
                 }
             }
