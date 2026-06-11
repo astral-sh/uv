@@ -6,6 +6,7 @@ use criterion::{Criterion, criterion_group, criterion_main, measurement::WallTim
 use uv_cache::Cache;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
+/// Mirroring the airflow workspace size at time of writing.
 const MEMBER_COUNT: usize = 127;
 const OPTIONAL_DEPENDENCY_GROUP_COUNT: usize = 122;
 const DEPENDENCY_GROUP_COUNT: usize = 64;
@@ -14,10 +15,6 @@ const UNUSED_MEMBER_TABLE_COUNT: usize = 16;
 
 fn provider_name(member_index: usize) -> String {
     format!("workspace-discovery-provider-{member_index:03}")
-}
-
-fn provider_requirement(member_index: usize) -> String {
-    format!("{}>=0.0.0", provider_name(member_index))
 }
 
 /// Create a synthetic workspace with a root and [`MEMBER_COUNT`] members, returning the
@@ -48,22 +45,23 @@ fn create_workspace(root: &Path) -> Vec<PathBuf> {
 fn root_pyproject() -> String {
     let mut pyproject = toml::toml! {
         [build-system]
-        requires = ["uv_build>=0.8.0,<0.9.0"]
+        requires = ["uv_build>=0.11.0,<10000"]
         build-backend = "uv_build"
 
         [project]
         name = "workspace-discovery-benchmark"
         version = "0.0.0"
         description = "A generated workspace used to benchmark repeated workspace discovery"
-        requires-python = ">=3.11"
+        requires-python = ">=3.12"
         license = "MIT"
         keywords = ["benchmark", "generated", "monorepo", "workspace"]
         classifiers = [
             "Development Status :: 4 - Beta",
             "Programming Language :: Python :: 3",
-            "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",
             "Programming Language :: Python :: 3.13",
+            "Programming Language :: Python :: 3.14",
+            "Programming Language :: Python :: 3.15",
             "Typing :: Typed",
         ]
         dependencies = []
@@ -71,9 +69,9 @@ fn root_pyproject() -> String {
         [project.optional-dependencies]
 
         [project.urls]
-        Documentation = "https://example.invalid/docs"
-        Repository = "https://example.invalid/repository"
-        Issues = "https://example.invalid/issues"
+        Documentation = "https://example.com/docs"
+        Repository = "https://example.com/repository"
+        Issues = "https://example.com/issues"
 
         [project.scripts]
         workspace-discovery-admin = "workspace_discovery.cli:main"
@@ -87,7 +85,7 @@ fn root_pyproject() -> String {
         [dependency-groups]
 
         [tool.uv.workspace]
-        members = []
+        members = ["packages/*"]
 
         [tool.uv.sources]
 
@@ -96,7 +94,7 @@ fn root_pyproject() -> String {
 
     let dependencies = pyproject["project"]["dependencies"].as_array_mut().unwrap();
     for member_index in 0..MEMBER_COUNT {
-        dependencies.push(provider_requirement(member_index).into());
+        dependencies.push(format!("{}>=0.0.0", provider_name(member_index)).into());
     }
 
     let optional_dependencies = pyproject["project"]["optional-dependencies"]
@@ -108,8 +106,8 @@ fn root_pyproject() -> String {
             let member_index = (group_index * 7 + offset * 11) % MEMBER_COUNT;
             dependencies.push(
                 format!(
-                    "{}; python_version >= '3.11'",
-                    provider_requirement(member_index)
+                    "{}; python_version >= '3.12'",
+                    format!("{}>=0.0.0", provider_name(member_index))
                 )
                 .into(),
             );
@@ -125,19 +123,12 @@ fn root_pyproject() -> String {
         let mut dependencies = Vec::with_capacity(4);
         for offset in 0..4 {
             let member_index = (group_index * 13 + offset * 17) % MEMBER_COUNT;
-            dependencies.push(provider_requirement(member_index).into());
+            dependencies.push(format!("{}>=0.0.0", provider_name(member_index)).into());
         }
         dependency_groups.insert(
             format!("development-set-{group_index:03}"),
             toml::Value::Array(dependencies),
         );
-    }
-
-    let members = pyproject["tool"]["uv"]["workspace"]["members"]
-        .as_array_mut()
-        .unwrap();
-    for member_index in 0..MEMBER_COUNT {
-        members.push(format!("packages/provider-{member_index:03}").into());
     }
 
     let sources = pyproject["tool"]["uv"]["sources"].as_table_mut().unwrap();
@@ -150,6 +141,7 @@ fn root_pyproject() -> String {
         );
     }
 
+    // Generate some unrelated work for the toml parser, mimicking real tool configuration.
     let generated = pyproject["tool"]["workspace_discovery"]["generated"]
         .as_table_mut()
         .unwrap();
@@ -174,11 +166,12 @@ fn root_pyproject() -> String {
 }
 
 fn member_pyproject(member_index: usize) -> String {
-    let mut dependencies = Vec::with_capacity(4);
+    let mut dependencies = Vec::with_capacity(5);
     for offset in 1..=4 {
         if let Some(dependency_index) = member_index.checked_sub(offset) {
-            dependencies.push(provider_requirement(dependency_index));
+            dependencies.push(format!("{}>=0.0.0", provider_name(dependency_index)));
         }
+        dependencies.push("anyio>=4,<5".to_string());
     }
 
     let mut pyproject = toml::toml! {
@@ -191,7 +184,10 @@ fn member_pyproject(member_index: usize) -> String {
         keywords = ["generated", "provider", "workspace"]
         classifiers = [
             "Programming Language :: Python :: 3",
-            "Programming Language :: Python :: 3.11",
+            "Programming Language :: Python :: 3.12",
+            "Programming Language :: Python :: 3.13",
+            "Programming Language :: Python :: 3.14",
+            "Programming Language :: Python :: 3.15",
             "Typing :: Typed",
         ]
         dependencies = (dependencies)
@@ -202,17 +198,18 @@ fn member_pyproject(member_index: usize) -> String {
 
         [dependency-groups]
         test = ["pytest>=8", "pytest-asyncio>=0.24"]
-        lint = ["ruff>=0.11", "mypy>=1.15"]
+        lint = ["tqdm", "mypy>=1.15"]
 
         [project.urls]
-        Documentation = "https://example.invalid/providers"
-        Source = "https://example.invalid/repository"
+        Documentation = "https://example.com/providers"
+        Source = "https://example.com/repository"
 
         [project.entry-points."workspace_discovery.providers"]
 
         [tool.workspace_discovery.generated]
     };
 
+    // Add some unrelated work for the toml parser, mimicking real tool configuration.
     let entry_points = pyproject["project"]["entry-points"]["workspace_discovery.providers"]
         .as_table_mut()
         .unwrap();
@@ -220,7 +217,6 @@ fn member_pyproject(member_index: usize) -> String {
         format!("provider-{member_index:03}"),
         format!("workspace_discovery_provider_{member_index:03}.plugin:Provider").into(),
     );
-
     let generated = pyproject["tool"]["workspace_discovery"]["generated"]
         .as_table_mut()
         .unwrap();
