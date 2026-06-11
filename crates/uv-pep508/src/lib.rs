@@ -816,7 +816,7 @@ fn parse_specifier<T: Pep508Url>(
 /// Such as `>=1.19,<2.0`, either delimited by the end of the specifier or a `;` for the marker part
 ///
 /// ```text
-/// version_one (wsp* ',' version_one)*
+/// version_one (wsp* ',' version_one)* (wsp* ',')?
 /// ```
 fn parse_version_specifier<T: Pep508Url>(
     cursor: &mut Cursor,
@@ -834,6 +834,11 @@ fn parse_version_specifier<T: Pep508Url>(
                 start = end + 1;
             }
             Some((_, ';')) | None => {
+                if buffer.trim().is_empty() && !specifiers.is_empty() {
+                    break Some(VersionOrUrl::VersionSpecifier(
+                        specifiers.into_iter().collect(),
+                    ));
+                }
                 let end = cursor.pos();
                 let specifier = parse_specifier(cursor, &buffer, start, end)?;
                 specifiers.push(specifier);
@@ -853,7 +858,7 @@ fn parse_version_specifier<T: Pep508Url>(
 /// Such as `(>=1.19,<2.0)`
 ///
 /// ```text
-/// '(' version_one (wsp* ',' version_one)* ')'
+/// '(' version_one (wsp* ',' version_one)* (wsp* ',')? ')'
 /// ```
 fn parse_version_specifier_parentheses<T: Pep508Url>(
     cursor: &mut Cursor,
@@ -875,6 +880,11 @@ fn parse_version_specifier_parentheses<T: Pep508Url>(
                 start = end + 1;
             }
             Some((end, ')')) => {
+                if buffer.trim().is_empty() && !specifiers.is_empty() {
+                    break Some(VersionOrUrl::VersionSpecifier(
+                        specifiers.into_iter().collect(),
+                    ));
+                }
                 let specifier = parse_specifier(cursor, &buffer, start, end)?;
                 specifiers.push(specifier);
                 break Some(VersionOrUrl::VersionSpecifier(specifiers.into_iter().collect()));
@@ -1196,6 +1206,12 @@ mod tests {
     }
 
     #[test]
+    fn parenthesized_trailing_comma() {
+        let numpy = Requirement::<Url>::from_str("numpy(>=1.19,<2.0,)").unwrap();
+        assert_eq!(numpy.to_string(), "numpy>=1.19,<2.0");
+    }
+
+    #[test]
     fn versions_single() {
         let numpy = Requirement::<Url>::from_str("numpy >=1.19 ").unwrap();
         assert_eq!(numpy.name.as_ref(), "numpy");
@@ -1205,6 +1221,26 @@ mod tests {
     fn versions_double() {
         let numpy = Requirement::<Url>::from_str("numpy >=1.19, <2.0 ").unwrap();
         assert_eq!(numpy.name.as_ref(), "numpy");
+    }
+
+    #[test]
+    fn versions_trailing_comma() {
+        let numpy = Requirement::<Url>::from_str("numpy>=1.19,<2.0,").unwrap();
+        assert_eq!(numpy.to_string(), "numpy>=1.19,<2.0");
+
+        let numpy =
+            Requirement::<Url>::from_str("numpy >=1.19, <2.0, ; python_version < '3.13'").unwrap();
+        assert_eq!(
+            numpy.to_string(),
+            "numpy>=1.19,<2.0 ; python_full_version < '3.13'"
+        );
+    }
+
+    #[test]
+    fn invalid_version_specifier_commas() {
+        for input in ["numpy>=1.19,,", "numpy(>=1.19,,)", "numpy(,)"] {
+            assert!(Requirement::<Url>::from_str(input).is_err(), "{input}");
+        }
     }
 
     #[test]
