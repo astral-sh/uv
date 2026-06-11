@@ -617,7 +617,7 @@ fn parse_extras_cursor<T: Pep508Url>(
                         "Expected either `,` (separating extras) or `]` (ending the extras section), found `{other}`"
                     )),
                     start: pos,
-                    len: 1,
+                    len: other.len_utf8(),
                     input: cursor.to_string(),
                 });
             }
@@ -1316,6 +1316,18 @@ mod tests {
         Invalid character in extras name, expected an alphanumeric character, `-`, `_`, `.`, `,` or `]`, found `ü`
         black[jüpyter]
                ^
+        "
+        );
+    }
+
+    #[test]
+    fn error_unicode_after_extra() {
+        assert_snapshot!(
+            parse_pep508_err("foo[bar α]"),
+            @"
+        Expected either `,` (separating extras) or `]` (ending the extras section), found `α`
+        foo[bar α]
+                ^
         "
         );
     }
