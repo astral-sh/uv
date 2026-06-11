@@ -17,7 +17,7 @@ use tracing::{debug, trace};
 use walkdir::WalkDir;
 
 use uv_distribution_filename::WheelFilename;
-use uv_fs::{Simplified, normalize_path};
+use uv_fs::{PythonExt, Simplified, normalize_path};
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
 use uv_preview::PreviewFeature;
@@ -341,7 +341,7 @@ pub fn build_editable(
             &format!(
                 r#"sys.meta_path.insert(0, UvDirectSrcFinder("{}", "{}"))"#,
                 pyproject_toml.name().as_dist_info_name(),
-                src_root.display()
+                src_root.escape_for_python()
             ),
         ]
         .join("; ");
