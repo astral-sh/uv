@@ -68,7 +68,7 @@ async fn credentials_for_url(
     let pyx_store = PyxTokenStore::from_settings()?;
 
     // Use only the username from the URL, if present - discarding the password
-    let url_credentials = Credentials::from_url(url);
+    let url_credentials = Credentials::from_url(url)?;
     let username = url_credentials.as_ref().and_then(|c| c.username());
     if url_credentials
         .as_ref()

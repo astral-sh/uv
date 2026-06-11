@@ -796,7 +796,7 @@ pub(crate) async fn do_sync(
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
 
     // Populate credentials from the target.
-    store_credentials_from_target(target, &client_builder);
+    store_credentials_from_target(target, &client_builder)?;
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
@@ -1025,10 +1025,13 @@ fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
 ///
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
-fn store_credentials_from_target(target: InstallTarget<'_>, client_builder: &BaseClientBuilder) {
+fn store_credentials_from_target(
+    target: InstallTarget<'_>,
+    client_builder: &BaseClientBuilder,
+) -> Result<()> {
     // Iterate over any indexes in the target.
     for index in target.indexes() {
-        if let Some(credentials) = index.credentials() {
+        if let Some(credentials) = index.credentials()? {
             if let Some(root_url) = index.root_url() {
                 client_builder.store_credentials(&root_url, credentials.clone());
             }
@@ -1040,10 +1043,10 @@ fn store_credentials_from_target(target: InstallTarget<'_>, client_builder: &Bas
     for source in target.sources() {
         match source {
             Source::Git { git, .. } => {
-                uv_git::store_credentials_from_url(git);
+                uv_git::store_credentials_from_url(git)?;
             }
             Source::Url { url, .. } => {
-                client_builder.store_credentials_from_url(url);
+                client_builder.store_credentials_from_url(url)?;
             }
             _ => {}
         }
@@ -1057,14 +1060,15 @@ fn store_credentials_from_target(target: InstallTarget<'_>, client_builder: &Bas
         match &url.parsed_url {
             ParsedUrl::GitDirectory(ParsedGitDirectoryUrl { url, .. })
             | ParsedUrl::GitPath(ParsedGitPathUrl { url, .. }) => {
-                uv_git::store_credentials_from_url(url.url());
+                uv_git::store_credentials_from_url(url.url())?;
             }
             ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
-                client_builder.store_credentials_from_url(url);
+                client_builder.store_credentials_from_url(url)?;
             }
             _ => {}
         }
     }
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]

@@ -21,7 +21,9 @@ use tracing::{debug, warn};
 use url::ParseError;
 use url::Url;
 
-use uv_auth::{AuthMiddleware, Credentials, CredentialsCache, Indexes, PyxTokenStore};
+use uv_auth::{
+    AuthMiddleware, Credentials, CredentialsCache, CredentialsFromUrlError, Indexes, PyxTokenStore,
+};
 use uv_configuration::ProxyUrlKind;
 use uv_configuration::{KeyringProviderType, ProxyUrl, TrustedHost};
 use uv_git::GitHttpSettings;
@@ -61,13 +63,11 @@ pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 pub const DEFAULT_READ_TIMEOUT_UPLOAD: Duration = Duration::from_mins(15);
 
 #[derive(Debug, Error)]
-#[error("failed to build HTTP client")]
-pub struct ClientBuildError(#[source] reqwest::Error);
-
-impl From<reqwest::Error> for ClientBuildError {
-    fn from(error: reqwest::Error) -> Self {
-        Self(error)
-    }
+pub enum ClientBuildError {
+    #[error("failed to build HTTP client")]
+    Reqwest(#[from] reqwest::Error),
+    #[error(transparent)]
+    Credentials(#[from] CredentialsFromUrlError),
 }
 
 /// Selectively skip parts or the entire auth middleware.
@@ -361,7 +361,10 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     /// See [`CredentialsCache::store_credentials_from_url`].
-    pub fn store_credentials_from_url(&self, url: &DisplaySafeUrl) -> bool {
+    pub fn store_credentials_from_url(
+        &self,
+        url: &DisplaySafeUrl,
+    ) -> Result<bool, CredentialsFromUrlError> {
         self.credentials_cache.store_credentials_from_url(url)
     }
 
@@ -962,7 +965,9 @@ fn request_into_redirect(
     // Check if there are credentials on the redirect location itself.
     // If so, move them to Authorization header.
     if !redirect_url.username().is_empty() {
-        if let Some(credentials) = Credentials::from_url(&redirect_url) {
+        if let Some(credentials) =
+            Credentials::from_url(&redirect_url).map_err(reqwest_middleware::Error::middleware)?
+        {
             let _ = redirect_url.set_username("");
             let _ = redirect_url.set_password(None);
             headers.insert(AUTHORIZATION, credentials.to_header_value());

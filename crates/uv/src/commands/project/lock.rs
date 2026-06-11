@@ -697,7 +697,7 @@ async fn do_lock(
     let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     for index in target.indexes() {
-        if let Some(credentials) = index.credentials() {
+        if let Some(credentials) = index.credentials()? {
             if let Some(root_url) = index.root_url() {
                 client_builder.store_credentials(&root_url, credentials.clone());
             }

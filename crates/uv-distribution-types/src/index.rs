@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
-use uv_auth::{AuthPolicy, Credentials};
+use uv_auth::{AuthPolicy, Credentials, CredentialsFromUrlError};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
@@ -453,18 +453,31 @@ impl Index {
     /// are stripped from the stored URL.
     #[must_use]
     pub fn with_promoted_auth_policy(mut self) -> Self {
-        if matches!(self.authenticate, AuthPolicy::Auto) && self.credentials().is_some() {
+        if matches!(self.authenticate, AuthPolicy::Auto) && self.has_credentials() {
             self.authenticate = AuthPolicy::Always;
         }
         self
     }
 
+    fn has_credentials(&self) -> bool {
+        if self
+            .name
+            .as_ref()
+            .is_some_and(|name| Credentials::from_env(name.to_env_var()).is_some())
+        {
+            return true;
+        }
+
+        let url = self.url.url();
+        !url.username().is_empty() || url.password().is_some()
+    }
+
     /// Retrieve the credentials for the index, either from the environment, or from the URL itself.
-    pub fn credentials(&self) -> Option<Credentials> {
+    pub fn credentials(&self) -> Result<Option<Credentials>, CredentialsFromUrlError> {
         // If the index is named, and credentials are provided via the environment, prefer those.
         if let Some(name) = self.name.as_ref() {
             if let Some(credentials) = Credentials::from_env(name.to_env_var()) {
-                return Some(credentials);
+                return Ok(Some(credentials));
             }
         }
 

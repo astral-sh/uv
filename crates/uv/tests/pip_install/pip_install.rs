@@ -6338,6 +6338,26 @@ async fn install_package_basic_auth_from_url() {
     context.assert_command("import anyio").success();
 }
 
+/// Reject credentials that are not valid UTF-8.
+#[test]
+fn install_package_basic_auth_invalid_utf8() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://user:%FF@example.com/simple")
+        .arg("--strict"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: URL password contains invalid UTF-8
+      Caused by: invalid utf-8 sequence of 1 bytes from index 0
+    ");
+}
+
 /// Install a package from an index that requires authentication
 #[tokio::test]
 async fn install_package_basic_auth_from_netrc_default() -> Result<()> {
