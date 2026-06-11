@@ -113,6 +113,7 @@ async fn add_package_native_auth_realm() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    WARN Range requests not supported for anyio-4.3.0-py3-none-any.whl; streaming wheel
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -1029,6 +1030,13 @@ async fn logout_token_native_auth() -> Result<()> {
 #[cfg(feature = "native-auth")]
 fn login_native_auth_url() {
     let context = uv_test::test_context_with_versions!(&[]).with_real_home();
+    let _cleanup = NativeCredentialCleanup::new(
+        &context,
+        &[
+            ("https://example.com", "test"),
+            ("http://localhost:1324", "test"),
+        ],
+    );
 
     // A domain-only service name gets https:// prepended
     uv_snapshot!(context.auth_login()
