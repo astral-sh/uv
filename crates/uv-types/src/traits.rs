@@ -174,6 +174,7 @@ pub trait BuildContext {
         source: &'a Path,
         subdirectory: Option<&'a Path>,
         install_path: &'a Path,
+        stop_discovery_at: Option<&'a Path>,
         version_id: Option<&'a str>,
         dist: Option<&'a SourceDist>,
         sources: &'a NoSources,

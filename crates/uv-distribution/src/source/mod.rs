@@ -2909,6 +2909,23 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(hashes)
     }
 
+    /// For Git directories, we check them out into the cache, so we need to avoid workspace
+    /// discovery that goes outside the cache.
+    fn stop_discovery_at<'path>(
+        source: &BuildableSource<'_>,
+        source_root: &'path Path,
+    ) -> Option<&'path Path> {
+        if matches!(
+            source,
+            BuildableSource::Dist(SourceDist::GitDirectory(_))
+                | BuildableSource::Url(SourceUrl::GitDirectory(_))
+        ) {
+            Some(source_root)
+        } else {
+            None
+        }
+    }
+
     /// Build a source distribution, storing the built wheel in the cache.
     ///
     /// Returns the un-normalized disk filename, the parsed, normalized filename and the metadata
@@ -2990,6 +3007,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 BuildKind::Wheel
             };
 
+            let install_path = if let Some(subdirectory) = subdirectory {
+                source_root.join(subdirectory)
+            } else {
+                source_root.to_path_buf()
+            };
+
+            let stop_discovery_at = Self::stop_discovery_at(source, source_root);
+
             let build_key = BuildKey {
                 base_python: base_python.into_boxed_path(),
                 source_root: source_root.to_path_buf().into_boxed_path(),
@@ -3015,7 +3040,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .setup_build(
                         source_root,
                         subdirectory,
-                        source_root,
+                        &install_path,
+                        stop_discovery_at,
                         Some(&source.to_string()),
                         source.as_dist(),
                         &no_sources,
@@ -3134,13 +3160,22 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             BuildKind::Wheel
         };
 
+        let install_path = if let Some(subdirectory) = subdirectory {
+            source_root.join(subdirectory)
+        } else {
+            source_root.to_path_buf()
+        };
+
+        let stop_discovery_at = Self::stop_discovery_at(source, source_root);
+
         // Set up the builder.
         let mut builder = self
             .build_context
             .setup_build(
                 source_root,
                 subdirectory,
-                source_root,
+                &install_path,
+                stop_discovery_at,
                 Some(&source.to_string()),
                 source.as_dist(),
                 &no_sources,
