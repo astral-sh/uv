@@ -106,7 +106,7 @@ pub(crate) async fn pip_list(
             continue;
         }
         // Don't show duplicate entries in neither the results nor the shadowed list.
-        if !seen_dist.insert(installed_dist.clone()) {
+        if !seen_dist.insert(&installed_dist.kind) {
             continue;
         }
         // Show only the first occurrence of any given packages, ignoring shadowed packages.
