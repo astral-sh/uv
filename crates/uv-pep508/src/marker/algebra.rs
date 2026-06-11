@@ -1233,7 +1233,9 @@ impl Edges {
             MarkerOperator::GreaterEqual => Ranges::higher_than(value),
             MarkerOperator::LessThan => Ranges::strictly_lower_than(value),
             MarkerOperator::LessEqual => Ranges::lower_than(value),
-            MarkerOperator::TildeEqual => unreachable!("string comparisons with ~= are ignored"),
+            MarkerOperator::TildeEqual | MarkerOperator::ArbitraryEqual => {
+                unreachable!("unsupported string comparisons are ignored")
+            }
             _ => unreachable!("`in` and `contains` are treated as boolean variables"),
         };
 

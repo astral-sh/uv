@@ -227,10 +227,13 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                 MarkerValue::QuotedString(r_string) => r_string,
             };
 
-            if operator == MarkerOperator::TildeEqual {
+            if matches!(
+                operator,
+                MarkerOperator::TildeEqual | MarkerOperator::ArbitraryEqual
+            ) {
                 reporter.report(
                     MarkerWarningKind::LexicographicComparison,
-                    "Can't compare strings with `~=`, will be ignored".to_string(),
+                    format!("Can't compare strings with `{operator}`, will be ignored"),
                 );
 
                 return Ok(None);
@@ -283,10 +286,13 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                 }
                 // '...' == <env key>
                 MarkerValue::MarkerEnvString(key) => {
-                    if operator == MarkerOperator::TildeEqual {
+                    if matches!(
+                        operator,
+                        MarkerOperator::TildeEqual | MarkerOperator::ArbitraryEqual
+                    ) {
                         reporter.report(
                             MarkerWarningKind::LexicographicComparison,
-                            "Can't compare strings with `~=`, will be ignored".to_string(),
+                            format!("Can't compare strings with `{operator}`, will be ignored"),
                         );
 
                         return Ok(None);

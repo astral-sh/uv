@@ -235,6 +235,8 @@ pub enum MarkerOperator {
     LessEqual,
     /// `~=`
     TildeEqual,
+    /// `===`
+    ArbitraryEqual,
     /// `in`
     In,
     /// `not in`
@@ -262,6 +264,7 @@ impl MarkerOperator {
             Self::LessThan => Some(uv_pep440::Operator::LessThan),
             Self::LessEqual => Some(uv_pep440::Operator::LessThanEqual),
             Self::TildeEqual => Some(uv_pep440::Operator::TildeEqual),
+            Self::ArbitraryEqual => Some(uv_pep440::Operator::ExactEqual),
             _ => None,
         }
     }
@@ -276,6 +279,7 @@ impl MarkerOperator {
             Self::Equal => Self::Equal,
             Self::NotEqual => Self::NotEqual,
             Self::TildeEqual => Self::TildeEqual,
+            Self::ArbitraryEqual => Self::ArbitraryEqual,
             Self::In => Self::Contains,
             Self::NotIn => Self::NotContains,
             Self::Contains => Self::In,
@@ -285,13 +289,14 @@ impl MarkerOperator {
 
     /// Negates this marker operator.
     ///
-    /// If a negation doesn't exist, which is only the case for ~=, then this
+    /// If a negation doesn't exist, which is the case for `~=` and `===`, then this
     /// returns `None`.
     pub(crate) fn negate(self) -> Option<Self> {
         Some(match self {
             Self::Equal => Self::NotEqual,
             Self::NotEqual => Self::Equal,
             Self::TildeEqual => return None,
+            Self::ArbitraryEqual => return None,
             Self::LessThan => Self::GreaterEqual,
             Self::LessEqual => Self::GreaterThan,
             Self::GreaterThan => Self::LessEqual,
@@ -352,6 +357,7 @@ impl FromStr for MarkerOperator {
             "<" => Self::LessThan,
             "<=" => Self::LessEqual,
             "~=" => Self::TildeEqual,
+            "===" => Self::ArbitraryEqual,
             "in" => Self::In,
             not_space_in
                 if not_space_in
@@ -380,6 +386,7 @@ impl Display for MarkerOperator {
             Self::LessThan => "<",
             Self::LessEqual => "<=",
             Self::TildeEqual => "~=",
+            Self::ArbitraryEqual => "===",
             Self::In | Self::Contains => "in",
             Self::NotIn | Self::NotContains => "not in",
         })
@@ -1820,10 +1827,12 @@ mod test {
     use insta::assert_snapshot;
 
     use uv_normalize::ExtraName;
-    use uv_pep440::Version;
+    use uv_pep440::{Operator, Version, VersionSpecifier};
 
     use crate::marker::{MarkerEnvironment, MarkerEnvironmentBuilder};
-    use crate::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
+    use crate::{
+        MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerValueVersion,
+    };
 
     fn parse_err(input: &str) -> String {
         MarkerTree::from_str(input).unwrap_err().to_string()
@@ -2211,6 +2220,68 @@ mod test {
                 value: arcstr::literal!("nt")
             }
         );
+    }
+
+    #[test]
+    fn test_marker_arbitrary_equality() {
+        assert_eq!(
+            MarkerOperator::from_str("===").unwrap(),
+            MarkerOperator::ArbitraryEqual
+        );
+        assert_eq!(MarkerOperator::ArbitraryEqual.to_string(), "===");
+
+        let expression = MarkerExpression::from_str(r#"implementation_version === "3.14.5""#)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            expression,
+            MarkerExpression::Version {
+                key: MarkerValueVersion::ImplementationVersion,
+                specifier: VersionSpecifier::from_pattern(
+                    Operator::ExactEqual,
+                    "3.14.5".parse().unwrap(),
+                )
+                .unwrap(),
+            }
+        );
+        assert_eq!(
+            expression.to_string(),
+            "implementation_version === '3.14.5'"
+        );
+
+        let environment = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+            implementation_name: "cpython",
+            implementation_version: "3.14.5",
+            os_name: "posix",
+            platform_machine: "x86_64",
+            platform_python_implementation: "CPython",
+            platform_release: "",
+            platform_system: "Linux",
+            platform_version: "",
+            python_full_version: "3.14.5",
+            python_version: "3.14",
+            sys_platform: "linux",
+        })
+        .unwrap();
+
+        assert!(m("implementation_version === '3.14.5'").evaluate(&environment, &[]));
+        assert!(m("'3.14.5' === implementation_version").evaluate(&environment, &[]));
+        assert!(!m("implementation_version === '3.14.6'").evaluate(&environment, &[]));
+    }
+
+    #[test]
+    fn test_marker_arbitrary_equality_string() {
+        // Arbitrary equality is unsupported for string-valued markers, so the expression is
+        // ignored like other invalid marker comparisons.
+        assert!(m("implementation_name === 'cpython'").is_true());
+    }
+
+    #[test]
+    #[cfg(feature = "tracing")]
+    #[tracing_test::traced_test]
+    fn warning_arbitrary_equality_string() {
+        assert!(m("implementation_name === 'cpython'").is_true());
+        logs_contain("Can't compare strings with `===`, will be ignored");
     }
 
     #[test]
