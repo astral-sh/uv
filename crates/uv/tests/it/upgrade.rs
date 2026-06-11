@@ -4,6 +4,7 @@ use insta::allow_duplicates;
 use url::Url;
 
 use uv_static::EnvVars;
+use uv_test::packse::PackseServer;
 use uv_test::{TestContext, uv_snapshot};
 
 fn assert_project_unchanged(context: &TestContext, expected: &str) -> Result<()> {
@@ -16,57 +17,32 @@ fn assert_project_unchanged(context: &TestContext, expected: &str) -> Result<()>
     Ok(())
 }
 
-/// Write path dependencies that deterministically force marker-exclusive `anyio` forks.
-///
-/// The target remains a single direct requirement because duplicate direct requirements are not
-/// supported by `uv upgrade` yet.
-fn write_forked_anyio_project(
-    context: &TestContext,
-    selected_requirement: &str,
-    darwin_requirement: &str,
-    other_requirement: &str,
-) -> Result<String> {
-    let darwin_dependency = context.temp_dir.child("darwin-dependency");
-    fs_err::create_dir_all(&darwin_dependency)?;
-    darwin_dependency
-        .child("pyproject.toml")
-        .write_str(&format!(
-            r#"
-        [project]
-        name = "dependency"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["{darwin_requirement}"]
-        "#,
-        ))?;
-    let other_dependency = context.temp_dir.child("other-dependency");
-    fs_err::create_dir_all(&other_dependency)?;
-    other_dependency
-        .child("pyproject.toml")
-        .write_str(&format!(
-            r#"
-        [project]
-        name = "dependency"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["{other_requirement}"]
-        "#,
-        ))?;
+/// Return snapshot filters for metadata fetched from a [`PackseServer`].
+fn packse_filters(context: &TestContext) -> Vec<(&str, &str)> {
+    let mut filters = context.filters();
+    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    filters
+}
 
+/// Write a project where `foo==1` resolves two versions of `bar` in platform forks.
+fn write_fork_upgrade_project(
+    context: &TestContext,
+    server: &PackseServer,
+    bar_requirement: &str,
+) -> Result<String> {
     let pyproject_toml = format!(
         r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = [
-            "{selected_requirement}",
-            "dependency @ {} ; sys_platform == 'darwin'",
-            "dependency @ {} ; sys_platform != 'darwin'",
-        ]
+        dependencies = ["{bar_requirement}", "foo==1"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
     "#,
-        Url::from_file_path(&darwin_dependency).map_err(|()| anyhow!("invalid dependency path"))?,
-        Url::from_file_path(&other_dependency).map_err(|()| anyhow!("invalid dependency path"))?
+        server.index_url()
     );
     context
         .temp_dir
@@ -193,16 +169,16 @@ exclude-newer = "2024-03-25T00:00:00Z"
 #[test]
 fn upgrade_ignores_disjoint_fork_version_for_selected_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let pyproject_toml = write_forked_anyio_project(
-        &context,
-        "anyio>=3.7 ; sys_platform == 'darwin'",
-        "anyio>=3.7",
-        "anyio==3.0.0",
-    )?;
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml =
+        write_fork_upgrade_project(&context, &server, "bar==2 ; sys_platform != 'linux'")?;
 
     uv_snapshot!(
-        context.filters(),
-        context.upgrade().arg("anyio"),
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
     success: true
     exit_code: 0
@@ -210,8 +186,8 @@ fn upgrade_ignores_disjoint_fork_version_for_selected_requirement() -> Result<()
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Resolved 7 packages in [TIME]
-    Add anyio v3.0.0, v4.3.0
+    Resolved 4 packages in [TIME]
+    Add bar v1.0.0, v2.0.0
     "
     );
 
@@ -221,12 +197,15 @@ fn upgrade_ignores_disjoint_fork_version_for_selected_requirement() -> Result<()
 #[test]
 fn upgrade_preserves_constraint_that_admits_multiple_fork_versions() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let pyproject_toml =
-        write_forked_anyio_project(&context, "anyio>=3", "anyio==3.0.0", "anyio==4.3.0")?;
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = write_fork_upgrade_project(&context, &server, "bar>=1")?;
 
     uv_snapshot!(
-        context.filters(),
-        context.upgrade().arg("anyio"),
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
     success: true
     exit_code: 0
@@ -234,8 +213,8 @@ fn upgrade_preserves_constraint_that_admits_multiple_fork_versions() -> Result<(
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Resolved 7 packages in [TIME]
-    Add anyio v3.0.0, v4.3.0
+    Resolved 4 packages in [TIME]
+    Add bar v1.0.0, v2.0.0
     "
     );
 
@@ -275,12 +254,15 @@ fn upgrade_preserves_inapplicable_marked_dependency() -> Result<()> {
 #[test]
 fn upgrade_expands_constraint_for_multiple_fork_versions() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let pyproject_toml =
-        write_forked_anyio_project(&context, "anyio<4", "anyio==3.0.0", "anyio==4.3.0")?;
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = write_fork_upgrade_project(&context, &server, "bar<2")?;
 
     uv_snapshot!(
-        context.filters(),
-        context.upgrade().arg("anyio"),
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
     success: true
     exit_code: 0
@@ -288,15 +270,15 @@ fn upgrade_expands_constraint_for_multiple_fork_versions() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Resolved 7 packages in [TIME]
-    Add anyio v3.0.0, v4.3.0
-    Updated requirement: `anyio<4` -> `anyio<5`
+    Resolved 4 packages in [TIME]
+    Add bar v1.0.0, v2.0.0
+    Updated requirement: `bar<2` -> `bar<3`
     "
     );
 
     assert_eq!(
         fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
-        pyproject_toml.replace("anyio<4", "anyio<5")
+        pyproject_toml.replace("bar<2", "bar<3")
     );
     assert!(!context.temp_dir.child("uv.lock").exists());
     assert!(!context.temp_dir.child(".venv").exists());
@@ -306,12 +288,39 @@ fn upgrade_expands_constraint_for_multiple_fork_versions() -> Result<()> {
 #[test]
 fn upgrade_expands_compatible_constraint_for_multiple_fork_versions() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let pyproject_toml =
-        write_forked_anyio_project(&context, "anyio~=3.0", "anyio==4.2.0", "anyio==4.3.0")?;
+    let server = PackseServer::new("fork/filter-sibling-dependencies.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a~=3.0"]
+
+        [tool.uv]
+        constraint-dependencies = [
+            "a==4.3.0 ; sys_platform == 'darwin'",
+            "a==4.4.0 ; sys_platform != 'darwin'",
+        ]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        context.filters(),
-        context.upgrade().arg("anyio"),
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("a")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
     success: true
     exit_code: 0
@@ -319,15 +328,15 @@ fn upgrade_expands_compatible_constraint_for_multiple_fork_versions() -> Result<
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Resolved 7 packages in [TIME]
-    Add anyio v4.2.0, v4.3.0
-    Updated requirement: `anyio~=3.0` -> `anyio~=4.2`
+    Resolved 3 packages in [TIME]
+    Add a v4.3.0, v4.4.0
+    Updated requirement: `a~=3.0` -> `a~=4.3`
     "
     );
 
     assert_eq!(
         fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
-        pyproject_toml.replace("anyio~=3.0", "anyio~=4.2")
+        pyproject_toml.replace("a~=3.0", "a~=4.3")
     );
     assert!(!context.temp_dir.child("uv.lock").exists());
     assert!(!context.temp_dir.child(".venv").exists());
