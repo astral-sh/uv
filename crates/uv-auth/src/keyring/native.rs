@@ -5,6 +5,7 @@ use std::{
     sync::{Arc, LazyLock, Mutex, Weak},
 };
 
+use serde::{Deserialize, Serialize};
 use tokio::sync::{OwnedRwLockReadGuard, OwnedRwLockWriteGuard, RwLock as AsyncRwLock};
 use tracing::{instrument, trace, warn};
 use uv_cache_key::cache_digest;
@@ -26,24 +27,21 @@ mod collection;
 #[cfg(target_os = "windows")]
 mod windows;
 
-/// Prefix for legacy native credentials stored as individual passwords.
-pub(super) const LEGACY_SERVICE_PREFIX: &str = "uv:";
-
-/// Namespace for credentials using the JSON native-auth storage format.
-pub(super) const NATIVE_SERVICE_PREFIX: &str = "uv:native-auth:";
+/// Keyring service prefix for uv credentials.
+pub(super) const SERVICE_PREFIX: &str = "uv:";
 
 /// Process-local locks for native credential operations.
 static NATIVE_LOCKS: LazyLock<Mutex<HashMap<String, Weak<AsyncRwLock<()>>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-/// A read lock for the current native credential format in one realm.
+/// A read lock for persisted credentials in one realm.
 pub(super) struct RealmReadGuard {
     realm: Realm,
     _process: OwnedRwLockReadGuard<()>,
     _file: LockedFile,
 }
 
-/// A write lock for the current native credential format in one realm.
+/// A write lock for persisted credentials in one realm.
 pub(super) struct RealmWriteGuard {
     realm: Realm,
     _process: OwnedRwLockWriteGuard<()>,
@@ -88,6 +86,38 @@ impl RealmWriteGuard {
     }
 }
 
+/// Credentials persisted for one authentication realm.
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(transparent)]
+pub(super) struct PersistedCredentials(Vec<PersistentCredential>);
+
+impl PersistedCredentials {
+    /// Iterate over the persisted credentials.
+    fn iter(&self) -> impl Iterator<Item = &PersistentCredential> {
+        self.0.iter()
+    }
+
+    /// Select the most specific credential matching a URL and optional username.
+    fn select(
+        &self,
+        url: &DisplaySafeUrl,
+        username: Option<&str>,
+    ) -> Result<Option<&Credentials>, Error> {
+        matching::select_credential(
+            self.0.iter().map(|credential| {
+                (
+                    &credential.service,
+                    credential.credentials.username(),
+                    &credential.credentials,
+                )
+            }),
+            url,
+            username,
+        )
+        .map_err(|_| Error::AmbiguousUsername(url.clone()))
+    }
+}
+
 /// A borrowed legacy lock accepted by read-only backend operations.
 #[derive(Clone, Copy)]
 pub(super) enum LegacyGuardRef<'a> {
@@ -110,7 +140,7 @@ impl LegacyGuardRef<'_> {
 pub(super) async fn store(service: &Service, credentials: &Credentials) -> Result<(), Error> {
     let realm = Realm::from(service.url());
     let guard = acquire_realm_write(&realm).await?;
-    platform::store_current(
+    platform::store_persisted_credential(
         &guard,
         &PersistentCredential {
             service: service.clone(),
@@ -128,14 +158,18 @@ pub(super) async fn remove(service: &Service, username: &str) -> Result<(), Erro
 
     let mut removed_legacy = false;
     for service_name in legacy_removal_service_names(service.url()) {
+        if platform::is_persisted_entry(&realm, &service_name, username) {
+            continue;
+        }
         let legacy_guard = acquire_legacy_write(&service_name).await?;
         removed_legacy |= system_remove_legacy(&legacy_guard, username).await?;
     }
 
     let username = Username::from(Some(username.to_string()));
-    let removed_current = platform::remove_current(&realm_guard, service, &username).await?;
+    let removed_persisted =
+        platform::remove_persisted_credential(&realm_guard, service, &username).await?;
 
-    if removed_current || removed_legacy {
+    if removed_persisted || removed_legacy {
         Ok(())
     } else {
         Err(Error::Keyring(uv_keyring::Error::NoEntry))
@@ -151,9 +185,10 @@ pub(super) async fn fetch(
     let realm = Realm::from(url);
     let legacy_match = {
         let realm_guard = acquire_realm_read(&realm).await?;
-        let credentials = platform::load_current(RealmGuardRef::Read(&realm_guard)).await?;
+        let credentials =
+            platform::load_persisted_credentials(RealmGuardRef::Read(&realm_guard)).await?;
 
-        if let Some(credentials) = select_credentials(&credentials, url, username)? {
+        if let Some(credentials) = credentials.select(url, username)? {
             return Ok(Some(credentials.clone()));
         }
 
@@ -162,6 +197,9 @@ pub(super) async fn fetch(
             let Some(username) = username else {
                 break;
             };
+            if platform::is_persisted_entry(&realm, &service_name, username) {
+                continue;
+            }
             let legacy_guard = acquire_legacy_read(&service_name).await?;
             if let Some(password) =
                 system_fetch_legacy(LegacyGuardRef::Read(&legacy_guard), username).await?
@@ -190,7 +228,7 @@ pub(super) async fn fetch(
     Ok(Some(credentials))
 }
 
-/// Migrate an unchanged legacy credential into the current format.
+/// Migrate an unchanged legacy credential into persisted realm storage.
 #[instrument(skip(service_name, credentials), fields(realm = %realm))]
 async fn migrate_legacy_credential(
     realm: &Realm,
@@ -230,37 +268,18 @@ async fn migrate_legacy_credential(
         service,
         credentials: Credentials::basic(Some(username.to_string()), Some(current_password)),
     };
-    let current_credentials = platform::load_current(RealmGuardRef::Write(&realm_guard)).await?;
-    if current_credentials.iter().any(|current| {
-        current.service == credential.service
-            && current.credentials.to_username() == credential.credentials.to_username()
+    let persisted_credentials =
+        platform::load_persisted_credentials(RealmGuardRef::Write(&realm_guard)).await?;
+    if persisted_credentials.iter().any(|persisted| {
+        persisted.service == credential.service
+            && persisted.credentials.to_username() == credential.credentials.to_username()
     }) {
         system_remove_legacy(&legacy_guard, username).await?;
         return Ok(());
     }
-    platform::store_current(&realm_guard, &credential).await?;
+    platform::store_persisted_credential(&realm_guard, &credential).await?;
     system_remove_legacy(&legacy_guard, username).await?;
     Ok(())
-}
-
-/// Select the most specific matching credential.
-fn select_credentials<'a>(
-    credentials: &'a [PersistentCredential],
-    url: &DisplaySafeUrl,
-    username: Option<&str>,
-) -> Result<Option<&'a Credentials>, Error> {
-    matching::select_credential(
-        credentials.iter().map(|credential| {
-            (
-                &credential.service,
-                credential.credentials.username(),
-                &credential.credentials,
-            )
-        }),
-        url,
-        username,
-    )
-    .map_err(|_| Error::AmbiguousUsername(url.clone()))
 }
 
 /// Return legacy service names in lookup order.
@@ -454,7 +473,7 @@ pub(super) async fn system_fetch_legacy(
     username: &str,
 ) -> Result<Option<String>, Error> {
     let entry = uv_keyring::Entry::new(
-        &format!("{LEGACY_SERVICE_PREFIX}{}", guard.service_name()),
+        &format!("{SERVICE_PREFIX}{}", guard.service_name()),
         username,
     )?;
     match entry.get_password().await {
@@ -469,10 +488,8 @@ pub(super) async fn system_remove_legacy(
     guard: &LegacyWriteGuard,
     username: &str,
 ) -> Result<bool, Error> {
-    let entry = uv_keyring::Entry::new(
-        &format!("{LEGACY_SERVICE_PREFIX}{}", guard.service_name),
-        username,
-    )?;
+    let entry =
+        uv_keyring::Entry::new(&format!("{SERVICE_PREFIX}{}", guard.service_name), username)?;
     match entry.delete_credential().await {
         Ok(()) => Ok(true),
         Err(uv_keyring::Error::NoEntry) => Ok(false),

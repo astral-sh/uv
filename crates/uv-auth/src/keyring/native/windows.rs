@@ -2,15 +2,23 @@ use sha2::{Digest, Sha256};
 use tracing::warn;
 use zeroize::Zeroizing;
 
-use super::{Error, NATIVE_SERVICE_PREFIX, RealmGuardRef, RealmWriteGuard, ensure_service_realm};
+use super::{
+    Error, PersistedCredentials, RealmGuardRef, RealmWriteGuard, SERVICE_PREFIX,
+    ensure_service_realm,
+};
 use crate::{Realm, Service, Username, persistent::PersistentCredential};
 
 /// Description attached to uv credentials in Windows Credential Manager.
 const CREDENTIAL_COMMENT: &str = "uv native authentication credential";
 
+/// Windows targets cannot overlap with legacy keyring entries.
+pub(super) fn is_persisted_entry(_realm: &Realm, _service_name: &str, _username: &str) -> bool {
+    false
+}
+
 /// Return the target prefix used to enumerate credentials in a realm.
 fn target_prefix(realm: &Realm) -> String {
-    format!("{NATIVE_SERVICE_PREFIX}{realm}:")
+    format!("{SERVICE_PREFIX}{realm}:")
 }
 
 /// Return a collision-resistant target for one service and username.
@@ -71,10 +79,10 @@ fn entry(
     )))
 }
 
-/// Load all current-format credentials in the locked realm.
-pub(super) async fn load_current(
+/// Load the persisted credentials in the locked realm.
+pub(super) async fn load_persisted_credentials(
     guard: RealmGuardRef<'_>,
-) -> Result<Vec<PersistentCredential>, Error> {
+) -> Result<PersistedCredentials, Error> {
     let realm = guard.realm();
     let prefix = target_prefix(realm);
     let entries = uv_keyring::windows::WinCredential::enumerate(&prefix).await?;
@@ -98,7 +106,36 @@ pub(super) async fn load_current(
         }
         credentials.push(credential);
     }
-    Ok(credentials)
+    Ok(PersistedCredentials(credentials))
+}
+
+/// Store one credential while holding its realm write lock.
+pub(super) async fn store_persisted_credential(
+    guard: &RealmWriteGuard,
+    credential: &PersistentCredential,
+) -> Result<(), Error> {
+    let entry = entry(
+        guard,
+        &credential.service,
+        &credential.credentials.to_username(),
+    )?;
+    let json =
+        Zeroizing::new(serde_json::to_vec(credential).map_err(Error::SerializeStoredCredentials)?);
+    entry.set_secret(&json).await?;
+    Ok(())
+}
+
+/// Remove one persisted credential while holding its realm write lock.
+pub(super) async fn remove_persisted_credential(
+    guard: &RealmWriteGuard,
+    service: &Service,
+    username: &Username,
+) -> Result<bool, Error> {
+    match entry(guard, service, username)?.delete_credential().await {
+        Ok(()) => Ok(true),
+        Err(uv_keyring::Error::NoEntry) => Ok(false),
+        Err(err) => Err(Error::Keyring(err)),
+    }
 }
 
 #[cfg(test)]
@@ -154,34 +191,5 @@ mod tests {
             &format!("{}{}", &target[..prefix_length], "0".repeat(64)),
             &credential
         ));
-    }
-}
-
-/// Store one current-format credential while holding its realm write lock.
-pub(super) async fn store_current(
-    guard: &RealmWriteGuard,
-    credential: &PersistentCredential,
-) -> Result<(), Error> {
-    let entry = entry(
-        guard,
-        &credential.service,
-        &credential.credentials.to_username(),
-    )?;
-    let json =
-        Zeroizing::new(serde_json::to_vec(credential).map_err(Error::SerializeStoredCredentials)?);
-    entry.set_secret(&json).await?;
-    Ok(())
-}
-
-/// Remove one current-format credential while holding its realm write lock.
-pub(super) async fn remove_current(
-    guard: &RealmWriteGuard,
-    service: &Service,
-    username: &Username,
-) -> Result<bool, Error> {
-    match entry(guard, service, username)?.delete_credential().await {
-        Ok(()) => Ok(true),
-        Err(uv_keyring::Error::NoEntry) => Ok(false),
-        Err(err) => Err(Error::Keyring(err)),
     }
 }
