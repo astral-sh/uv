@@ -1,4 +1,5 @@
 use anyhow::Result;
+use assert_cmd::Command;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
@@ -10,6 +11,18 @@ use uv_static::EnvVars;
 use fs_err::os::unix::fs::symlink;
 
 use uv_test::uv_snapshot;
+
+fn create_venv_with_prompt(context: &uv_test::TestContext, prompt: &str) {
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--prompt")
+        .arg(prompt)
+        .assert()
+        .success();
+}
 
 #[test]
 fn create_venv() {
@@ -92,6 +105,30 @@ fn create_venv_313() {
     );
 
     context.venv.assert(predicates::path::is_dir());
+}
+
+/// Custom prompts are treated as data when the activation script is sourced.
+#[test]
+#[cfg(unix)]
+fn custom_prompt_is_escaped() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let marker = context.temp_dir.child("injected");
+    let prompt = r#"safe'"; touch "$INJECTION_MARKER"; echo "'"#;
+
+    create_venv_with_prompt(&context, prompt);
+
+    let activation = context.venv.child("bin").child("activate");
+    Command::new("sh")
+        .arg("-c")
+        .arg(r#". "$1" && test "$VIRTUAL_ENV_PROMPT" = "$EXPECTED_PROMPT""#)
+        .arg("sh")
+        .arg(activation.path())
+        .env("EXPECTED_PROMPT", prompt)
+        .env("INJECTION_MARKER", marker.path())
+        .assert()
+        .success();
+
+    marker.assert(predicates::path::missing());
 }
 
 #[test]
