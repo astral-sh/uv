@@ -582,36 +582,174 @@ fn upgrade_requires_production_dependency() -> Result<()> {
 }
 
 #[test]
-fn upgrade_rejects_duplicate_marked_production_dependencies() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]);
-    let pyproject_toml = r#"
+fn upgrade_updates_multiple_marked_production_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
         [project]
         name = "example"
         version = "0.1.0"
+        requires-python = ">=3.12"
         dependencies = [
-            "Requests>=2 ; sys_platform == 'darwin'",
-            "requests<3 ; sys_platform != 'darwin'",
+            # No upper bound to upgrade.
+            "bar>=1",
+            "bar<1 ; sys_platform == 'linux'",
+            "bar<2 ; sys_platform != 'linux'",
+            "bar<2 ; sys_platform != 'linux'",
+            "foo==1",
         ]
-    "#;
+
+        [tool.uv]
+        environments = ["sys_platform != 'win32'"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
     context
         .temp_dir
         .child("pyproject.toml")
-        .write_str(pyproject_toml)?;
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        context.filters(),
-        context.upgrade().arg("requests"),
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Dependency `requests` is declared multiple times in `project.dependencies`
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add bar v1.0.0, v2.0.0
+    Updated requirement: `bar<1 ; sys_platform == 'linux'` -> `bar<2 ; sys_platform == 'linux'`
+    Updated requirement: `bar<2 ; sys_platform != 'linux'` -> `bar<3 ; sys_platform != 'linux'`
     "
     );
 
-    assert_project_unchanged(&context, pyproject_toml)
+    let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+    insta::with_settings!({ filters => packse_filters(&context) }, {
+        insta::assert_snapshot!(
+            updated_pyproject_toml,
+            @r#"
+
+[project]
+name = "example"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    # No upper bound to upgrade.
+    "bar>=1",
+    "bar<2 ; sys_platform == 'linux'",
+    "bar<3 ; sys_platform != 'linux'",
+    "bar<3 ; sys_platform != 'linux'",
+    "foo==1",
+]
+
+[tool.uv]
+environments = ["sys_platform != 'win32'"]
+
+[[tool.uv.index]]
+url = "http://[LOCALHOST]/simple/"
+default = true
+"#
+        );
+    });
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_updates_duplicate_production_dependencies_in_resolution_domain() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "bar<1 ; python_version < '3.12' or sys_platform == 'win32'",
+            "bar>=1",
+            "bar<2",
+            "bar<2",
+            "foo==2",
+        ]
+
+        [tool.uv]
+        environments = ["sys_platform != 'win32'"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    Add bar v2.0.0
+    Updated requirement: `bar<2` -> `bar<3`
+    "
+    );
+
+    let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+    insta::with_settings!({ filters => packse_filters(&context) }, {
+        insta::assert_snapshot!(
+            updated_pyproject_toml,
+            @r#"
+
+[project]
+name = "example"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "bar<1 ; python_version < '3.12' or sys_platform == 'win32'",
+    "bar>=1",
+    "bar<3",
+    "bar<3",
+    "foo==2",
+]
+
+[tool.uv]
+environments = ["sys_platform != 'win32'"]
+
+[[tool.uv.index]]
+url = "http://[LOCALHOST]/simple/"
+default = true
+"#
+        );
+    });
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
 }
 
 #[test]

@@ -363,14 +363,16 @@ impl PyProjectTomlMut {
         Ok(edit)
     }
 
-    /// Replaces a dependency in `project.dependencies` without modifying its source.
+    /// Replaces every exact match for a dependency in `project.dependencies` without modifying
+    /// its source.
     ///
-    /// Returns `Some` if the dependency was replaced, or `None` if it was not found.
+    /// Returns the position of every dependency that was replaced.
     pub fn replace_dependency(
         &mut self,
-        req: &Requirement,
+        existing: &Requirement,
+        replacement: &Requirement,
         raw: bool,
-    ) -> Result<Option<ArrayEdit>, Error> {
+    ) -> Result<Vec<ArrayEdit>, Error> {
         let Some(dependencies) = self
             .project_mut()?
             .and_then(|project| project.get_mut("dependencies"))
@@ -381,30 +383,24 @@ impl PyProjectTomlMut {
             })
             .transpose()?
         else {
-            return Ok(None);
+            return Ok(Vec::new());
         };
-        let mut to_replace = find_dependencies(&req.name, Some(&req.marker), dependencies);
 
-        match to_replace.as_slice() {
-            [] => Ok(None),
-            [_] => {
-                let (index, _) = to_replace.remove(0);
-                let req_string = if raw {
-                    req.displayable_with_credentials().to_string()
-                } else {
-                    req.to_string()
-                };
-                dependencies.replace(index, req_string);
-                Ok(Some(ArrayEdit::Update(index)))
+        let replacement = if raw {
+            replacement.displayable_with_credentials().to_string()
+        } else {
+            replacement.to_string()
+        };
+        let mut edits = Vec::new();
+        for (index, requirement) in
+            find_dependencies(&existing.name, Some(&existing.marker), dependencies)
+        {
+            if same_requirement_declaration(&requirement, existing) {
+                dependencies.replace(index, replacement.clone());
+                edits.push(ArrayEdit::Update(index));
             }
-            _ => Err(Error::Ambiguous {
-                package_name: req.name.clone(),
-                requirements: to_replace
-                    .into_iter()
-                    .map(|(_, requirement)| requirement)
-                    .collect(),
-            }),
         }
+        Ok(edits)
     }
 
     /// Adds a development dependency to `tool.uv.dev-dependencies`.
@@ -1696,6 +1692,14 @@ fn find_dependencies(
     to_replace
 }
 
+/// Return whether two requirements represent the same serialized dependency declaration.
+fn same_requirement_declaration(left: &Requirement, right: &Requirement) -> bool {
+    left.name == right.name
+        && left.extras == right.extras
+        && left.version_or_url == right.version_or_url
+        && left.marker == right.marker
+}
+
 /// Returns the key in `tool.uv.sources` that matches the given package name.
 fn find_source(name: &PackageName, sources: &Table) -> Option<String> {
     for (key, _) in sources {
@@ -1866,7 +1870,7 @@ fn split_specifiers(req: &str) -> (&str, &str) {
 #[cfg(test)]
 mod test {
     use super::{
-        AddBoundsKind, DependencyTarget, PyProjectTomlMut, reformat_array_multiline,
+        AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut, reformat_array_multiline,
         remove_dependency, split_specifiers,
     };
     use anyhow::Result;
@@ -1877,7 +1881,7 @@ mod test {
     use uv_distribution_types::Index;
     use uv_normalize::PackageName;
     use uv_pep440::Version;
-    use uv_pep508::Requirement;
+    use uv_pep508::{Requirement, RequirementOrigin};
 
     #[test]
     fn split() {
@@ -2053,26 +2057,27 @@ dependencies = [
     }
 
     #[test]
-    fn replace_dependency_preserves_source() -> Result<()> {
+    fn replace_dependency_updates_every_exact_match() -> Result<()> {
         let mut pyproject = PyProjectTomlMut::from_toml(
             r#"[project]
-dependencies = ["anyio<=2"]
+dependencies = ["anyio<=2", "anyio>=1", "anyio<=2"]
 
 [tool.uv.sources]
 anyio = { index = "internal" }
             "#,
             DependencyTarget::PyProjectToml,
         )?;
-        let requirement = Requirement::from_str("anyio")?;
+        let existing = Requirement::from_str("anyio<=2")?.with_origin(RequirementOrigin::Workspace);
+        let replacement = Requirement::from_str("anyio<3")?;
 
-        let replaced = pyproject.replace_dependency(&requirement, false)?;
-        assert!(replaced.is_some());
+        let replaced = pyproject.replace_dependency(&existing, &replacement, false)?;
+        assert_eq!(replaced, vec![ArrayEdit::Update(0), ArrayEdit::Update(2)]);
 
         assert_snapshot!(
             pyproject.to_string(),
             @r#"
 [project]
-dependencies = ["anyio"]
+dependencies = ["anyio<3", "anyio>=1", "anyio<3"]
 
 [tool.uv.sources]
 anyio = { index = "internal" }
