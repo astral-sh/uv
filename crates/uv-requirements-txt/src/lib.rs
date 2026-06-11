@@ -1034,7 +1034,7 @@ fn parse_requirement_and_hashes(
 /// Parse `--hash=... --hash ...` after a requirement
 fn parse_hashes(content: &str, s: &mut Scanner) -> Result<Vec<String>, RequirementsTxtParserError> {
     let mut hashes = Vec::new();
-    if s.eat_while("--hash").is_empty() {
+    if !s.eat_if("--hash") {
         let (line, column) = calculate_row_column(content, s.cursor());
         return Err(RequirementsTxtParserError::Parser {
             message: format!(
@@ -2893,6 +2893,28 @@ mod test {
             filters => filters
         }, {
             insta::assert_snapshot!(errors, @"Unexpected '-', expected '-c', '-e', '-r' or the start of a requirement at <REQUIREMENTS_TXT>:2:3");
+        });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn malformed_hash_option() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str("flask==3.0.0 --hash--hash=sha256:deadbeef")?;
+
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
+        let errors = anyhow::Error::new(error).chain().join("\n");
+
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
+        insta::with_settings!({
+            filters => filters
+        }, {
+            insta::assert_snapshot!(errors, @"Expected '=' or whitespace, found Some('-') at <REQUIREMENTS_TXT>:1:20");
         });
 
         Ok(())
