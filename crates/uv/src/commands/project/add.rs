@@ -922,7 +922,7 @@ fn edits(
                 extra,
                 group,
             }) => {
-                let credentials = uv_auth::Credentials::from_url(&git);
+                let credentials = uv_auth::Credentials::from_url(&git)?;
                 if let Some(credentials) = credentials {
                     debug!("Caching credentials for: {git}");
                     store_credentials(RepositoryUrl::new(&git), credentials);

@@ -8,7 +8,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, trace, warn};
 use uv_audit::osv;
 use uv_audit::{Dependency, VulnerabilityID};
-use uv_auth::CredentialsCache;
+use uv_auth::{CredentialsCache, CredentialsFromUrlError};
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -19,8 +19,8 @@ use uv_configuration::{
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
-    ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement, RequiresPython, Resolution,
-    UnresolvedRequirement, UnresolvedRequirementSpecification,
+    ExtraBuildRequirement, ExtraBuildRequires, Index, IndexCredentialsError, Requirement,
+    RequiresPython, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -294,6 +294,12 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     ClientBuild(#[from] uv_client::ClientBuildError),
+
+    #[error(transparent)]
+    Credentials(#[from] CredentialsFromUrlError),
+
+    #[error(transparent)]
+    IndexCredentials(#[from] IndexCredentialsError),
 
     #[error(transparent)]
     Python(#[from] uv_python::Error),

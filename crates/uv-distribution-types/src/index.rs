@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
-use uv_auth::{AuthPolicy, Credentials};
+use uv_auth::{AuthPolicy, Credentials, CredentialsFromUrlError};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
@@ -255,6 +255,14 @@ pub struct Index {
     pub exclude_newer: Option<ExcludeNewerOverride>,
 }
 
+#[derive(Debug, Error)]
+#[error("Failed to parse credentials in index URL: {url}")]
+pub struct IndexCredentialsError {
+    url: DisplaySafeUrl,
+    #[source]
+    source: CredentialsFromUrlError,
+}
+
 impl PartialEq for Index {
     fn eq(&self, other: &Self) -> bool {
         let Self {
@@ -453,23 +461,44 @@ impl Index {
     /// are stripped from the stored URL.
     #[must_use]
     pub fn with_promoted_auth_policy(mut self) -> Self {
-        if matches!(self.authenticate, AuthPolicy::Auto) && self.credentials().is_some() {
+        if matches!(self.authenticate, AuthPolicy::Auto) && self.has_credentials() {
             self.authenticate = AuthPolicy::Always;
         }
         self
     }
 
+    /// Return whether credentials are configured for the index.
+    ///
+    /// This only checks for the presence of credentials. It intentionally avoids decoding URL
+    /// credentials, since this is used to preserve the authentication policy after credentials are
+    /// removed from the stored URL; parsing errors are reported when the credentials are retrieved.
+    fn has_credentials(&self) -> bool {
+        if self
+            .name
+            .as_ref()
+            .is_some_and(|name| Credentials::from_env(name.to_env_var()).is_some())
+        {
+            return true;
+        }
+
+        let url = self.url.url();
+        !url.username().is_empty() || url.password().is_some()
+    }
+
     /// Retrieve the credentials for the index, either from the environment, or from the URL itself.
-    pub fn credentials(&self) -> Option<Credentials> {
+    pub fn credentials(&self) -> Result<Option<Credentials>, IndexCredentialsError> {
         // If the index is named, and credentials are provided via the environment, prefer those.
         if let Some(name) = self.name.as_ref() {
             if let Some(credentials) = Credentials::from_env(name.to_env_var()) {
-                return Some(credentials);
+                return Ok(Some(credentials));
             }
         }
 
         // Otherwise, extract the credentials from the URL.
-        Credentials::from_url(self.url.url())
+        Credentials::from_url(self.url.url()).map_err(|source| IndexCredentialsError {
+            url: self.url.url().clone(),
+            source,
+        })
     }
 
     /// Resolve the index relative to the given root directory.
