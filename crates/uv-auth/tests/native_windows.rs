@@ -68,7 +68,8 @@ async fn native_store_enumerates_many_credentials_in_one_realm()
         }
         provider.store(&corrupt_url, &corrupt_credentials).await?;
 
-        let corrupt_credential = WinCredential::enumerate("uv:native-auth:")
+        let target_prefix = format!("uv:https://native-auth-{unique}.example.invalid:");
+        let corrupt_credential = WinCredential::enumerate(&target_prefix)
             .await?
             .into_iter()
             .find(|credential| {
