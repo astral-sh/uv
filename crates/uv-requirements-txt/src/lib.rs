@@ -52,7 +52,7 @@ use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_distribution_types::{
     Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_fs::Simplified;
+use uv_fs::{Simplified, normalize_path};
 use uv_pep508::{Pep508Error, RequirementOrigin, VerbatimUrl, expand_env_vars};
 use uv_pypi_types::VerbatimParsedUrl;
 #[cfg(feature = "http")]
@@ -392,7 +392,7 @@ impl RequirementsTxt {
                         };
                     match visited {
                         VisitedFiles::Requirements { requirements, .. } => {
-                            if !requirements.insert(sub_file.clone()) {
+                            if !requirements.insert(visited_file(&sub_file)) {
                                 continue;
                             }
                         }
@@ -400,7 +400,7 @@ impl RequirementsTxt {
                         // from `pip`, which seems to treat `-r` requirements in constraints files as
                         // _requirements_, but we don't want to support that.
                         VisitedFiles::Constraints { constraints } => {
-                            if !constraints.insert(sub_file.clone()) {
+                            if !constraints.insert(visited_file(&sub_file)) {
                                 continue;
                             }
                         }
@@ -469,13 +469,13 @@ impl RequirementsTxt {
                     // Switch to constraints mode, if we aren't in it already.
                     let mut visited = match visited {
                         VisitedFiles::Requirements { constraints, .. } => {
-                            if !constraints.insert(sub_file.clone()) {
+                            if !constraints.insert(visited_file(&sub_file)) {
                                 continue;
                             }
                             VisitedFiles::Constraints { constraints }
                         }
                         VisitedFiles::Constraints { constraints } => {
-                            if !constraints.insert(sub_file.clone()) {
+                            if !constraints.insert(visited_file(&sub_file)) {
                                 continue;
                             }
                             VisitedFiles::Constraints { constraints }
@@ -1509,6 +1509,15 @@ enum VisitedFiles<'a> {
     Constraints {
         constraints: &'a mut FxHashSet<PathBuf>,
     },
+}
+
+/// Return a stable identity for a requirements file without changing the path used to read it.
+fn visited_file(path: &Path) -> PathBuf {
+    if path.starts_with("http://") || path.starts_with("https://") {
+        path.to_path_buf()
+    } else {
+        normalize_path(path).into_owned()
+    }
 }
 
 /// Calculates the column and line offset of a given cursor based on the
