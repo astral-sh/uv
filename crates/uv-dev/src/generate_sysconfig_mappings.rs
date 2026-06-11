@@ -14,12 +14,14 @@ use crate::generate_all::Mode;
 const TARGETS_YML_URL: &str = "https://raw.githubusercontent.com/astral-sh/python-build-standalone/refs/tags/20260610/cpython-unix/targets.yml";
 
 // Preserve compiler paths embedded in older downloadable python-build-standalone releases.
-const HISTORICAL_CC_VALUES: [&str; 2] = [
+const HISTORICAL_CC_VALUES: [&str; 3] = [
     "/usr/bin/aarch64-linux-gnu-gcc",
+    "/usr/bin/riscv64-linux-gnu-clang",
     "/usr/bin/riscv64-linux-gnu-gcc",
 ];
-const HISTORICAL_CXX_VALUES: [&str; 2] = [
+const HISTORICAL_CXX_VALUES: [&str; 3] = [
     "/usr/bin/aarch64-linux-gnu-g++",
+    "/usr/bin/riscv64-linux-gnu-clang++",
     "/usr/bin/riscv64-linux-gnu-g++",
 ];
 
