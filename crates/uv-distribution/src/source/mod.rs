@@ -2911,7 +2911,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
     /// For Git directories, we check them out into the cache, so we need to avoid workspace
     /// discovery that goes outside the cache.
-    fn stop_discovery_at(&self, source: &BuildableSource<'_>, source_root: &Path) -> Option<&Path> {
+    fn stop_discovery_at<'path>(
+        source: &BuildableSource<'_>,
+        source_root: &'path Path,
+    ) -> Option<&'path Path> {
         if matches!(
             source,
             BuildableSource::Dist(SourceDist::GitDirectory(_))
@@ -3010,7 +3013,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_root.to_path_buf()
             };
 
-            let stop_discovery_at = self.stop_discovery_at(source, source_root):
+            let stop_discovery_at = Self::stop_discovery_at(source, source_root);
 
             let build_key = BuildKey {
                 base_python: base_python.into_boxed_path(),
@@ -3163,7 +3166,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             source_root.to_path_buf()
         };
 
-        let stop_discovery_at = self.stop_discovery_at(source, source_root);
+        let stop_discovery_at = Self::stop_discovery_at(source, source_root);
 
         // Set up the builder.
         let mut builder = self
