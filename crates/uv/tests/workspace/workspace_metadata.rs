@@ -162,6 +162,9 @@ dependencies = [
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/",
+      "environment": {
+        "root": "[VENV]/"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []

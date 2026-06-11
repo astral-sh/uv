@@ -31,7 +31,8 @@ use uv_options_metadata::{OptionSet, OptionsMetadata, Visit};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{
-    Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
+    ConflictError, Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments,
+    VerbatimParsedUrl,
 };
 use uv_redacted::DisplaySafeUrl;
 
@@ -180,19 +181,19 @@ impl PyProjectToml {
     }
 
     /// Returns the set of conflicts for the project.
-    pub(crate) fn conflicts(&self) -> Conflicts {
+    pub(crate) fn conflicts(&self) -> Result<Conflicts, ConflictError> {
         let empty = Conflicts::empty();
         let Some(project) = self.project.as_ref() else {
-            return empty;
+            return Ok(empty);
         };
         let Some(tool) = self.tool.as_ref() else {
-            return empty;
+            return Ok(empty);
         };
         let Some(tooluv) = tool.uv.as_ref() else {
-            return empty;
+            return Ok(empty);
         };
         let Some(conflicting) = tooluv.conflicts.as_ref() else {
-            return empty;
+            return Ok(empty);
         };
         conflicting.to_conflicts_with_package_name(&project.name)
     }

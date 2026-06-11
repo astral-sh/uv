@@ -606,6 +606,7 @@ class GraalPyFinder(Finder):
 
     GRAALPY_VERSION_RE = re.compile(r"-(\d+\.\d+\.\d+)$", re.ASCII)
     CPY_VERSION_RE = re.compile(r"Python (\d+\.\d+(\.\d+)?)", re.ASCII)
+    GRAALPY_ASSET_VERSION_RE = re.compile(r"graalpy(\d+\.\d+(\.\d+)?)-", re.ASCII)
     PLATFORM_RE = re.compile(r"(\w+)-(\w+)\.(?:zip|tar\.gz)$", re.ASCII)
 
     def __init__(self, client: httpx.AsyncClient):
@@ -630,13 +631,6 @@ class GraalPyFinder(Finder):
             if not m:
                 continue
             graalpy_version = m.group(1)
-            m = self.CPY_VERSION_RE.search(release["body"])
-            if not m:
-                continue
-            python_version_str = m.group(1)
-            if not m.group(2):
-                python_version_str += ".0"
-            python_version = Version.from_str(python_version_str)
             for asset in release["assets"]:
                 url = asset["browser_download_url"]
                 m = self.PLATFORM_RE.search(url)
@@ -648,6 +642,15 @@ class GraalPyFinder(Finder):
                 sha256 = None
                 if digest := asset["digest"]:
                     sha256 = digest.removeprefix("sha256:")
+                m = self.GRAALPY_ASSET_VERSION_RE.search(asset["name"])
+                if not m:
+                    m = self.CPY_VERSION_RE.search(release["body"])
+                if not m:
+                    continue
+                python_version_str = m.group(1)
+                if not m.group(2):
+                    python_version_str += ".0"
+                python_version = Version.from_str(python_version_str)
                 download = PythonDownload(
                     release=0,
                     version=python_version,
@@ -664,8 +667,9 @@ class GraalPyFinder(Finder):
                     sha256=sha256,
                 )
                 # Only keep the latest GraalPy version of each arch/platform
-                if (python_version, arch, platform) not in results:
-                    results[(python_version, arch, platform)] = download
+                key = (python_version, arch, platform)
+                if key not in results or graalpy_version > results[key].build:
+                    results[key] = download
 
         return list(results.values())
 

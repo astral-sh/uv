@@ -84,6 +84,31 @@ fn prune_stale_directory() -> Result<()> {
     Ok(())
 }
 
+/// `cache prune` should preserve cached Python downloads.
+#[test]
+fn prune_python_downloads() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let python_cache = context.cache_dir.child("python-v0");
+    python_cache.create_dir_all()?;
+    let download = python_cache.child("python.tar.gz");
+    download.write_binary(b"cached Python download")?;
+
+    uv_snapshot!(context.filters(), context.prune(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    No unused entries found
+    ");
+
+    assert!(download.is_file());
+
+    Ok(())
+}
+
 /// `cache prune` should remove all cached environments from the cache.
 #[test]
 fn prune_cached_env() {
@@ -239,6 +264,26 @@ async fn prune_force() -> Result<()> {
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache bucket: [CACHE_DIR]/simple-v4
     Removed 1 directory
+    ");
+
+    Ok(())
+}
+
+/// `cache prune --ci` should be a no-op if the cache does not contain any buckets.
+#[test]
+fn prune_ci_empty_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.cache_dir.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.prune().arg("--ci"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    No unused entries found
     ");
 
     Ok(())

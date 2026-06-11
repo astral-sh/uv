@@ -538,6 +538,27 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         debug!("Disabling the uv cache due to `--no-cache`");
     }
     let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
+    // This check happens after the first (fallible) workspace discovery, which we need to resolve
+    // the settings that go into the cache constructor, but the check happens before the first
+    // workspace discovery that's used beyond settings discovery.
+    let cache_dir = std::path::absolute(cache.root())?;
+    if project_dir.starts_with(&cache_dir) {
+        bail!(
+            "The project directory `{}` is inside the cache directory `{}`",
+            project_dir.user_display(),
+            cache_dir.user_display()
+        );
+    } else if let Ok(cache_dir) = fs_err::canonicalize(&cache_dir)
+        && let Ok(project_dir) = fs_err::canonicalize(&*project_dir)
+        && project_dir.starts_with(&cache_dir)
+    {
+        bail!(
+            "The project directory `{}` is inside the cache directory `{}`",
+            project_dir.user_display(),
+            cache_dir.user_display()
+        );
+    }
+
     let workspace_cache = WorkspaceCache::default();
 
     // Configure the global network settings.
@@ -2122,7 +2143,8 @@ async fn run_project(
     match *project_command {
         ProjectCommand::Init(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::InitSettings::resolve(args, filesystem, environment);
+            let args =
+                settings::InitSettings::resolve(args, filesystem, environment, globals.preview)?;
             show_settings!(args);
 
             // The `--project` arg is being deprecated for `init` with a warning now and an error in preview.

@@ -677,7 +677,7 @@ impl Workspace {
             }
         }
         for member in self.packages.values() {
-            conflicting.append(&mut member.pyproject_toml.conflicts());
+            conflicting.append(&mut member.pyproject_toml.conflicts()?);
         }
         Ok(conflicting)
     }

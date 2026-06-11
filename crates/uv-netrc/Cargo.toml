@@ -1,6 +1,6 @@
 [package]
 name = "uv-netrc"
-version = "0.0.52"
+version = "0.0.54"
 description = "A vendored netrc parser for uv"
 edition = { workspace = true }
 rust-version = { workspace = true }

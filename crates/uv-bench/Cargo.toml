@@ -1,6 +1,6 @@
 [package]
 name = "uv-bench"
-version = "0.0.52"
+version = "0.0.54"
 description = "This is an internal component crate of uv"
 publish = false
 authors = { workspace = true }
@@ -35,6 +35,7 @@ uv-extract = { workspace = true }
 uv-install-wheel = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
+uv-performance-memory-allocator = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }

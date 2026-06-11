@@ -1,6 +1,6 @@
 [package]
 name = "uv-python"
-version = "0.0.52"
+version = "0.0.54"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -67,6 +67,7 @@ tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
+rayon = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-registry = { workspace = true }

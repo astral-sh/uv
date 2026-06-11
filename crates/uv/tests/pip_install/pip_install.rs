@@ -2382,6 +2382,112 @@ fn install_git_public_https() {
     context.assert_installed("uv_public_pypackage", "0.1.0");
 }
 
+/// Install a package from a Git workspace subdirectory with a workspace build requirement.
+#[test]
+#[cfg(feature = "test-git")]
+fn install_git_workspace_build_requirement() -> Result<()> {
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
+
+    let repository = context.temp_dir.child("repository");
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+
+        [tool.uv.sources]
+        uv-test-stop-discovery-at-build-dependency = { workspace = true }
+    "#})?;
+
+    repository
+        .child("packages/build-dependency/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "uv-test-stop-discovery-at-build-dependency"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    repository
+        .child(
+            "packages/build-dependency/src/uv_test_stop_discovery_at_build_dependency/__init__.py",
+        )
+        .touch()?;
+
+    repository
+        .child("packages/project/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling", "uv-test-stop-discovery-at-build-dependency"]
+        build-backend = "hatchling.build"
+
+        [tool.hatch.version]
+        path = "src/project/__init__.py"
+    "#})?;
+    repository
+        .child("packages/project/src/project/__init__.py")
+        .write_str(r#"__version__ = "0.1.0""#)?;
+
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("add")
+        .arg(".")
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("-c")
+        .arg("user.name=ferris")
+        .arg("-c")
+        .arg("user.email=ferris@example.com")
+        .arg("commit")
+        .arg("-m")
+        .arg("Initial commit")
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+
+    let repository_url = Url::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    let repository_url = repository_url.as_str().trim_end_matches('/');
+
+    let mut filters = context.filters();
+    filters.push((r"@[0-9a-f]{40}", "@[COMMIT]"));
+    uv_snapshot!(filters, context
+        .pip_install()
+        .arg(format!(
+            "project @ git+{repository_url}#subdirectory=packages/project"
+        )), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from git+file://[TEMP_DIR]/repository@[COMMIT]#subdirectory=packages/project)
+    ");
+
+    context.assert_installed("project", "0.1.0");
+
+    Ok(())
+}
+
 /// Install a package from a public GitHub repository, omitting the `git+` prefix
 #[test]
 #[cfg(feature = "test-git")]

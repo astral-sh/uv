@@ -4,6 +4,7 @@
 pub mod find_links;
 mod http_server;
 pub mod packse;
+pub mod pypi_proxy;
 mod vendor;
 
 use std::borrow::BorrowMut;
@@ -44,8 +45,8 @@ pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
 const LATEST_PYTHON_3_15: &str = "3.15.0b2";
-const LATEST_PYTHON_3_14: &str = "3.14.5";
-const LATEST_PYTHON_3_13: &str = "3.13.13";
+const LATEST_PYTHON_3_14: &str = "3.14.6";
+const LATEST_PYTHON_3_13: &str = "3.13.14";
 pub const LATEST_PYTHON_3_12: &str = "3.12.13";
 const LATEST_PYTHON_3_11: &str = "3.11.15";
 const LATEST_PYTHON_3_10: &str = "3.10.20";

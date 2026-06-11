@@ -131,6 +131,51 @@ fn python_list() {
     ");
 }
 
+#[cfg(unix)]
+#[test]
+fn python_list_ignores_noncritical_explicit_path_errors() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let context = uv_test::test_context_with_versions!(&[]);
+    let contents = r"#!/bin/sh
+    echo 'error: intentionally broken python executable' >&2
+    exit 1";
+
+    let python = context.temp_dir.join("python");
+    fs_err::write(&python, contents)?;
+    let mut permissions = fs_err::metadata(&python)?.permissions();
+    permissions.set_mode(0o755);
+    fs_err::set_permissions(&python, permissions)?;
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg(&python)
+        .arg("--only-installed"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    let environment = context.temp_dir.join("environment");
+    let environment_bin = environment.join("bin");
+    let environment_python = environment_bin.join("python");
+    fs_err::create_dir_all(&environment_bin)?;
+    fs_err::copy(&python, &environment_python)?;
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg(&environment)
+        .arg("--only-installed"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn python_list_pin() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])

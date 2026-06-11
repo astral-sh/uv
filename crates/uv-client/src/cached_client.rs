@@ -964,7 +964,7 @@ impl DataWithCachePolicy {
             );
             return Err(ErrorKind::ArchiveRead(msg).into());
         };
-        if bytes.len() < len_usize + 8 {
+        if len_usize > cache_policy_len_start {
             let msg = format!(
                 "invalid cache entry: data-with-cache-policy has cache policy length of {}, \
                  but total buffer size is {}",

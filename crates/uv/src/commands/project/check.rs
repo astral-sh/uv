@@ -22,6 +22,7 @@ use crate::commands::pip::loggers::{SummaryInstallLogger, SummaryResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
+use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectEnvironment, ProjectError, UniversalState, WorkspacePython, default_dependency_groups,
     validate_project_requires_python,
@@ -201,6 +202,7 @@ pub(crate) async fn check(
     };
 
     // Select an environment and, if we found a project, sync it before running checks.
+    let mut workspace_metadata = None;
     let venv_path = if let Some(project) = &project {
         let extras = extras.with_defaults(DefaultExtras::default());
 
@@ -226,10 +228,21 @@ pub(crate) async fn check(
             .into_environment()?
         };
 
-        if no_sync {
+        let state = UniversalState::default();
+        let _environment_lock;
+        let lock = if no_sync {
             debug!("Skipping environment synchronization due to `--no-sync`");
+
+            match LockTarget::Workspace(project.workspace()).read().await {
+                Ok(lock) => lock,
+                Err(err) => {
+                    debug!("Failed to read lockfile; skipping workspace metadata: {err}");
+                    None
+                }
+            }
         } else {
-            let _lock = venv
+            // Keep the environment locked through synchronization and metadata collection.
+            _environment_lock = venv
                 .lock()
                 .await
                 .inspect_err(|err| {
@@ -237,8 +250,7 @@ pub(crate) async fn check(
                 })
                 .ok();
 
-            let lock_state = UniversalState::default();
-            let sync_state = lock_state.fork();
+            let sync_state = state.fork();
 
             let mode = if let Some(frozen_source) = frozen {
                 LockMode::Frozen(frozen_source.into())
@@ -255,7 +267,7 @@ pub(crate) async fn check(
                     mode,
                     &settings.resolver,
                     &client_builder,
-                    &lock_state,
+                    &state,
                     Box::new(SummaryResolveLogger),
                     &concurrency,
                     cache,
@@ -327,6 +339,33 @@ pub(crate) async fn check(
                 }
                 Err(err) => return Err(err.into()),
             }
+
+            Some(result.into_lock())
+        };
+
+        if let Some(lock) = lock {
+            let target = match project {
+                VirtualProject::Project(project) => InstallTarget::Project {
+                    workspace: project.workspace(),
+                    name: project.project_name(),
+                    lock: &lock,
+                },
+                VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
+                    workspace,
+                    lock: &lock,
+                },
+            };
+            let metadata = crate::commands::workspace::metadata::metadata_from_target(
+                project.workspace(),
+                (!no_sync).then_some(&venv),
+                target,
+                &extras,
+                &groups,
+                &settings.resolver,
+            )?;
+            let mut metadata = metadata.to_json()?;
+            metadata.push('\n');
+            workspace_metadata = Some(metadata);
         }
 
         Some(venv.root().to_owned())
@@ -344,6 +383,7 @@ pub(crate) async fn check(
         ty_version,
         &target_dir,
         venv_path.as_deref(),
+        workspace_metadata,
         exclude_newer,
         &client_builder,
         cache,
