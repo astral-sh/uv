@@ -142,7 +142,7 @@ pub(crate) async fn pip_uninstall(
 
         // Identify all packages that are installed.
         for package in &names {
-            let installed = installed_packages.get_packages(package);
+            let installed = installed_packages.get_mutable_packages(package);
             if installed.is_empty() {
                 if !dry_run.enabled() {
                     writeln!(
@@ -160,7 +160,7 @@ pub(crate) async fn pip_uninstall(
 
         // Identify all unnamed distributions that are installed.
         for url in &urls {
-            let installed = installed_packages.get_urls(url);
+            let installed = installed_packages.get_mutable_urls(url);
             if installed.is_empty() {
                 if !dry_run.enabled() {
                     writeln!(

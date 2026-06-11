@@ -1,11 +1,12 @@
 use std::borrow::Cow;
 use std::collections::BTreeSet;
-use std::iter::Flatten;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use same_file::is_same_file;
+use tracing::{debug, trace};
 
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
@@ -31,16 +32,43 @@ use crate::satisfies::RequirementSatisfaction;
 #[derive(Debug, Clone)]
 pub struct InstalledPackages {
     interpreter: Interpreter,
-    /// The vector of all installed distributions. The `by_name` and `by_url` indices index into
-    /// this vector. The vector may contain `None` values, which represent distributions that were
-    /// removed from the virtual environment.
-    distributions: Vec<Option<InstalledDist>>,
-    /// The installed distributions, keyed by name. Although the Python runtime does not support it,
-    /// it is possible to have multiple distributions with the same name to be present in the
-    /// virtual environment, which we handle gracefully.
+    /// All discovered distributions, including shadowed and read-only distributions.
+    distributions: Vec<Option<IndexedDistribution>>,
+    /// The effective installed distributions, keyed by name.
+    ///
+    /// Only distributions from the first discovery root containing a package are indexed. Multiple
+    /// distributions with the same name in that root are retained as a corrupt installation.
     by_name: FxHashMap<PackageName, Vec<usize>>,
-    /// The installed editable distributions, keyed by URL.
+    /// The effective installed editable distributions, keyed by URL.
     by_url: FxHashMap<DisplaySafeUrl, Vec<usize>>,
+    /// All mutable distributions, keyed by name.
+    mutable_by_name: FxHashMap<PackageName, Vec<usize>>,
+    /// All mutable editable distributions, keyed by URL.
+    mutable_by_url: FxHashMap<DisplaySafeUrl, Vec<usize>>,
+    /// Effective distributions, in discovery order.
+    effective: Vec<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct IndexedDistribution {
+    distribution: InstalledDist,
+    mutable: bool,
+    /// Whether a mutable installation root precedes this distribution's discovery root.
+    shadowable: bool,
+}
+
+impl IndexedDistribution {
+    pub(crate) fn distribution(&self) -> &InstalledDist {
+        &self.distribution
+    }
+
+    pub(crate) fn is_mutable(&self) -> bool {
+        self.mutable
+    }
+
+    pub(crate) fn is_shadowable(&self) -> bool {
+        self.shadowable
+    }
 }
 
 impl InstalledPackages {
@@ -51,16 +79,36 @@ impl InstalledPackages {
 
     /// Build an index of installed packages from the given Python executable.
     pub fn from_interpreter(interpreter: &Interpreter) -> Result<Self> {
-        let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
-        let mut by_name = FxHashMap::default();
-        let mut by_url = FxHashMap::default();
+        let mut distributions: Vec<Option<IndexedDistribution>> = Vec::new();
+        let mut by_name: FxHashMap<PackageName, Vec<usize>> = FxHashMap::default();
+        let mut by_url: FxHashMap<DisplaySafeUrl, Vec<usize>> = FxHashMap::default();
+        let mut mutable_by_name: FxHashMap<PackageName, Vec<usize>> = FxHashMap::default();
+        let mut mutable_by_url: FxHashMap<DisplaySafeUrl, Vec<usize>> = FxHashMap::default();
+        let mut all_by_name: FxHashMap<PackageName, Vec<usize>> = FxHashMap::default();
+        let mut effective = Vec::new();
 
-        for installed_packages in interpreter.site_packages() {
+        let mutable_paths = interpreter.site_packages().collect::<Vec<_>>();
+        let mut mutable_path_seen = false;
+
+        for import_path in interpreter.discovery_paths() {
+            let mutable = mutable_paths.iter().any(|mutable_path| {
+                mutable_path.as_ref() == import_path.as_ref()
+                    || is_same_file(mutable_path.as_ref(), import_path.as_ref()).unwrap_or(false)
+            });
+            let shadowable = mutable || mutable_path_seen;
+            let names_from_earlier_paths = by_name.keys().cloned().collect::<FxHashSet<_>>();
+            if mutable {
+                // The root may not exist yet, but an installation can create it and shadow later
+                // read-only roots.
+                mutable_path_seen = true;
+            }
+
             // Read the site-packages directory.
-            let installed_packages = match fs::read_dir(installed_packages.as_ref()) {
-                Ok(read_dir) => {
+            let ordered_directory_paths = match fs::read_dir(import_path.as_ref()) {
+                Ok(import_path_entry) => {
+                    trace!("Discovering packages in: `{}`", import_path.user_display());
                     // Collect sorted directory paths; `read_dir` is not stable across platforms
-                    let dist_likes: BTreeSet<_> = read_dir
+                    let dist_likes: BTreeSet<_> = import_path_entry
                         .filter_map(|read_dir| match read_dir {
                             Ok(entry) => match entry.file_type() {
                                 Ok(file_type) => (file_type.is_dir()
@@ -77,24 +125,24 @@ impl InstalledPackages {
                         .with_context(|| {
                             format!(
                                 "Failed to read site-packages directory contents: {}",
-                                installed_packages.user_display()
+                                import_path.user_display()
                             )
                         })?;
                     dist_likes
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    return Ok(Self {
-                        interpreter: interpreter.clone(),
-                        distributions,
-                        by_name,
-                        by_url,
-                    });
+                    debug!(
+                        "Package directory does not exist: `{}`",
+                        import_path.user_display()
+                    );
+                    // The site-packages directory doesn't exist, skip it.
+                    continue;
                 }
                 Err(err) => return Err(err).context("Failed to read site-packages directory"),
             };
 
             // Index all installed packages by name.
-            for path in installed_packages {
+            for path in ordered_directory_paths {
                 let dist_info = match InstalledDist::try_from_path(&path) {
                     Ok(Some(dist_info)) => dist_info,
                     Ok(None) => continue,
@@ -117,21 +165,41 @@ impl InstalledPackages {
                     }
                 };
 
-                let idx = distributions.len();
-
-                // Index the distribution by name.
-                by_name
-                    .entry(dist_info.name().clone())
-                    .or_default()
-                    .push(idx);
-
-                // Index the distribution by URL.
-                if let InstalledDistKind::Url(dist) = &dist_info.kind {
-                    by_url.entry(dist.url.clone()).or_default().push(idx);
+                if Self::is_duplicate_distribution(&distributions, &all_by_name, &dist_info) {
+                    continue;
                 }
 
-                // Add the distribution to the database.
-                distributions.push(Some(dist_info));
+                let index = distributions.len();
+                let name = dist_info.name().clone();
+                let url = match &dist_info.kind {
+                    InstalledDistKind::Url(dist) => Some(dist.url.clone()),
+                    _ => None,
+                };
+
+                all_by_name.entry(name.clone()).or_default().push(index);
+
+                if mutable {
+                    mutable_by_name.entry(name.clone()).or_default().push(index);
+                    if let Some(url) = &url {
+                        mutable_by_url.entry(url.clone()).or_default().push(index);
+                    }
+                }
+
+                // Python and importlib.metadata use the first discovery root containing a package.
+                // Retain all same-root duplicates, but do not promote later shadowed copies.
+                if !names_from_earlier_paths.contains(&name) {
+                    by_name.entry(name).or_default().push(index);
+                    if let Some(url) = url {
+                        by_url.entry(url).or_default().push(index);
+                    }
+                    effective.push(index);
+                }
+
+                distributions.push(Some(IndexedDistribution {
+                    distribution: dist_info,
+                    mutable,
+                    shadowable,
+                }));
             }
         }
 
@@ -140,6 +208,32 @@ impl InstalledPackages {
             distributions,
             by_name,
             by_url,
+            mutable_by_name,
+            mutable_by_url,
+            effective,
+        })
+    }
+
+    /// Whether the distribution is an exact duplicate of one already tracked.
+    fn is_duplicate_distribution(
+        distributions: &[Option<IndexedDistribution>],
+        all_by_name: &FxHashMap<PackageName, Vec<usize>>,
+        dist_info: &InstalledDist,
+    ) -> bool {
+        let Some(existing_ids) = all_by_name.get(dist_info.name()) else {
+            return false;
+        };
+
+        existing_ids.iter().any(|existing_id| {
+            let Some(existing) = distributions[*existing_id].as_ref() else {
+                return false;
+            };
+            existing.distribution == *dist_info
+                || is_same_file(
+                    existing.distribution.install_path(),
+                    dist_info.install_path(),
+                )
+                .unwrap_or(false)
         })
     }
 
@@ -148,47 +242,106 @@ impl InstalledPackages {
         &self.interpreter
     }
 
-    /// Returns an iterator over the installed distributions.
+    /// Returns an iterator over the effective installed distributions.
     pub fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
-        self.distributions.iter().flatten()
+        self.effective.iter().filter_map(|index| {
+            self.distributions[*index]
+                .as_ref()
+                .map(IndexedDistribution::distribution)
+        })
     }
 
-    /// Returns the installed distributions for a given package.
+    /// Returns the effective installed distributions for a given package.
     pub fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist> {
+        self.get_indexed_packages(name)
+            .into_iter()
+            .map(IndexedDistribution::distribution)
+            .collect()
+    }
+
+    /// Returns the effective indexed distributions for a given package.
+    pub(crate) fn get_indexed_packages(&self, name: &PackageName) -> Vec<&IndexedDistribution> {
         let Some(indexes) = self.by_name.get(name) else {
             return Vec::new();
         };
         indexes
             .iter()
-            .flat_map(|&index| &self.distributions[index])
+            .filter_map(|index| self.distributions[*index].as_ref())
             .collect()
     }
 
-    /// Remove the given packages from the index, returning all installed versions, if any.
-    pub(crate) fn remove_packages(&mut self, name: &PackageName) -> Vec<InstalledDist> {
-        let Some(indexes) = self.by_name.get(name) else {
+    /// Returns all mutable distributions for a given package.
+    pub fn get_mutable_packages(&self, name: &PackageName) -> Vec<&InstalledDist> {
+        let Some(indexes) = self.mutable_by_name.get(name) else {
+            return Vec::new();
+        };
+        indexes
+            .iter()
+            .filter_map(|index| self.distributions[*index].as_ref())
+            .map(IndexedDistribution::distribution)
+            .collect()
+    }
+
+    /// Remove all mutable distributions for a package from the index.
+    pub(crate) fn remove_mutable_packages(&mut self, name: &PackageName) -> Vec<InstalledDist> {
+        let Some(indexes) = self.mutable_by_name.get(name) else {
             return Vec::new();
         };
         indexes
             .iter()
             .filter_map(|index| std::mem::take(&mut self.distributions[*index]))
+            .map(|indexed| indexed.distribution)
             .collect()
     }
 
-    /// Returns the distributions installed from the given URL, if any.
+    /// Remove effective mutable distributions for a package from the index.
+    ///
+    /// Shadowed mutable distributions remain in the index so exact reconciliation can remove
+    /// them as extraneous, while sufficient reconciliation leaves them untouched.
+    pub(crate) fn remove_effective_mutable_packages(&mut self, name: &PackageName) {
+        let Some(indexes) = self.by_name.get(name) else {
+            return;
+        };
+        for index in indexes {
+            if self.distributions[*index]
+                .as_ref()
+                .is_some_and(IndexedDistribution::is_mutable)
+            {
+                self.distributions[*index] = None;
+            }
+        }
+    }
+
+    /// Returns the effective distributions installed from the given URL, if any.
     pub fn get_urls(&self, url: &DisplaySafeUrl) -> Vec<&InstalledDist> {
         let Some(indexes) = self.by_url.get(url) else {
             return Vec::new();
         };
         indexes
             .iter()
-            .flat_map(|&index| &self.distributions[index])
+            .filter_map(|index| self.distributions[*index].as_ref())
+            .map(IndexedDistribution::distribution)
             .collect()
     }
 
-    /// Returns `true` if there are any installed packages.
+    /// Returns the mutable distributions installed from the given URL, if any.
+    pub fn get_mutable_urls(&self, url: &DisplaySafeUrl) -> Vec<&InstalledDist> {
+        let Some(indexes) = self.mutable_by_url.get(url) else {
+            return Vec::new();
+        };
+        indexes
+            .iter()
+            .filter_map(|index| self.distributions[*index].as_ref())
+            .map(IndexedDistribution::distribution)
+            .collect()
+    }
+
+    /// Returns `true` if there are any mutable installed packages.
     pub(crate) fn any(&self) -> bool {
-        self.distributions.iter().any(Option::is_some)
+        self.distributions
+            .iter()
+            .flatten()
+            .any(IndexedDistribution::is_mutable)
     }
 
     /// Validate the installed packages in the virtual environment.
@@ -201,7 +354,10 @@ impl InstalledPackages {
         let mut diagnostics = Vec::new();
 
         for (package, indexes) in &self.by_name {
-            let mut distributions = indexes.iter().flat_map(|index| &self.distributions[*index]);
+            let mut distributions = indexes
+                .iter()
+                .filter_map(|index| self.distributions[*index].as_ref())
+                .map(IndexedDistribution::distribution);
 
             // Find the installed distribution for the given package.
             let Some(distribution) = distributions.next() else {
@@ -221,7 +377,10 @@ impl InstalledPackages {
             }
 
             for index in indexes {
-                let Some(distribution) = &self.distributions[*index] else {
+                let Some(distribution) = self.distributions[*index]
+                    .as_ref()
+                    .map(IndexedDistribution::distribution)
+                else {
                     continue;
                 };
 
@@ -611,10 +770,16 @@ pub enum SatisfiesResult {
 
 impl IntoIterator for InstalledPackages {
     type Item = InstalledDist;
-    type IntoIter = Flatten<std::vec::IntoIter<Option<InstalledDist>>>;
+    type IntoIter = std::vec::IntoIter<InstalledDist>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.distributions.into_iter().flatten()
+        self.distributions
+            .into_iter()
+            .flatten()
+            .filter(|indexed| indexed.mutable)
+            .map(|indexed| indexed.distribution)
+            .collect::<Vec<_>>()
+            .into_iter()
     }
 }
 

@@ -318,18 +318,34 @@ impl<'a> Planner<'a> {
             let no_binary = build_options.no_binary_package(dist.name());
             let no_build = build_options.no_build_package(dist.name());
 
-            // Determine whether the distribution is already installed.
-            let installed_dists = installed_packages.remove_packages(dist.name());
+            // Determine which distribution is effective at runtime. Read-only distributions can
+            // satisfy the resolution or be shadowed by a new local installation, but must never be
+            // uninstalled.
+            let installed_dists = installed_packages
+                .get_indexed_packages(dist.name())
+                .into_iter()
+                .cloned()
+                .collect::<Vec<_>>();
             if reinstall {
-                reinstalls.extend(installed_dists);
+                if installed_dists
+                    .iter()
+                    .any(|installed| !installed.is_mutable() && !installed.is_shadowable())
+                {
+                    bail!(
+                        "Cannot reinstall `{}` because the effective installation cannot be shadowed",
+                        dist.name()
+                    );
+                }
+                reinstalls.extend(installed_packages.remove_mutable_packages(dist.name()));
             } else {
                 match installed_dists.as_slice() {
                     [] => {}
                     [installed] => {
+                        let installed_dist = installed.distribution();
                         let source = RequirementSource::from(dist);
                         match RequirementSatisfaction::check(
                             dist.name(),
-                            installed,
+                            installed_dist,
                             &source,
                             dist.version(),
                             installation,
@@ -341,15 +357,16 @@ impl<'a> Planner<'a> {
                         ) {
                             RequirementSatisfaction::Mismatch => {
                                 debug!(
-                                    "Requirement installed, but mismatched:\n  Installed: {installed:?}\n  Requested: {source:?}"
+                                    "Requirement installed, but mismatched:\n  Installed: {installed_dist:?}\n  Requested: {source:?}"
                                 );
                             }
                             RequirementSatisfaction::Satisfied => {
-                                debug!("Requirement already installed: {installed}");
+                                debug!("Requirement already installed: {installed_dist}");
+                                installed_packages.remove_effective_mutable_packages(dist.name());
                                 continue;
                             }
                             RequirementSatisfaction::OutOfDate => {
-                                debug!("Requirement installed, but not fresh: {installed}");
+                                debug!("Requirement installed, but not fresh: {installed_dist}");
 
                                 // If we made it here, something went wrong in the resolver, because it returned an
                                 // already-installed distribution that we "shouldn't" use. Typically, this means the
@@ -366,6 +383,8 @@ impl<'a> Planner<'a> {
                                     warn!(
                                         "Installed distribution was considered out-of-date, but returned by the resolver: {dist}"
                                     );
+                                    installed_packages
+                                        .remove_effective_mutable_packages(dist.name());
                                     continue;
                                 }
                             }
@@ -373,12 +392,30 @@ impl<'a> Planner<'a> {
                                 // Already logged
                             }
                         }
-                        reinstalls.push(installed.clone());
+
+                        if !installed.is_mutable() && !installed.is_shadowable() {
+                            bail!(
+                                "Cannot replace `{}` because the effective installation cannot be shadowed",
+                                dist.name()
+                            );
+                        }
+                        reinstalls.extend(installed_packages.remove_mutable_packages(dist.name()));
                     }
                     // We reinstall installed distributions with multiple versions because
                     // we do not want to keep multiple incompatible versions but removing
                     // one version is likely to break another.
-                    _ => reinstalls.extend(installed_dists),
+                    _ => {
+                        if installed_dists
+                            .iter()
+                            .any(|installed| !installed.is_mutable() && !installed.is_shadowable())
+                        {
+                            bail!(
+                                "Cannot replace `{}` because the effective installation cannot be shadowed",
+                                dist.name()
+                            );
+                        }
+                        reinstalls.extend(installed_packages.remove_mutable_packages(dist.name()));
+                    }
                 }
             }
 
