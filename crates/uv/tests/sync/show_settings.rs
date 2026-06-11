@@ -2181,6 +2181,59 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     "
     );
 
+    // Now test the duplicate case.
+    pyproject.write_str(indoc::indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicts = [
+            [{extra = "dev"}, {extra = "dev"}],
+        ]
+    "#})?;
+
+    // The file should be rejected for violating the schema.
+    uv_snapshot!(context.filters(), add_shared_args(context.lock()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 7, column 13
+      |
+    7 | conflicts = [
+      |             ^
+    Each set of conflicts must have at least two entries, but found only one
+    "
+    );
+
+    // Now test entries that duplicate after applying the default package.
+    pyproject.write_str(indoc::indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicts = [
+            [{extra = "dev"}, {package = "example", extra = "dev"}],
+        ]
+    "#})?;
+
+    // The file should be rejected for violating the schema.
+    uv_snapshot!(context.filters(), add_shared_args(context.lock()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Each set of conflicts must have at least two entries, but found only one
+    "
+    );
+
     Ok(())
 }
 
