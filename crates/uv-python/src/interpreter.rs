@@ -1001,9 +1001,10 @@ impl InterpreterInfo {
         let tempdir = tempfile::tempdir_in(cache.root())?;
         Self::setup_python_query_files(tempdir.path())?;
 
-        // Sanitize the path by (1) running under isolated mode (`-I`) to ignore any site packages
-        // modifications, and then (2) adding the path containing our query script to the front of
-        // `sys.path` so that we can import it.
+        // Sanitize the path by (1) running under isolated mode (`-I`) to ignore environment
+        // variables and user site-packages, and then (2) adding the path containing our query
+        // script to the front of `sys.path` so that we can import it. Isolated mode still processes
+        // environment `.pth` files and `sitecustomize`.
         let script = format!(
             r#"import sys; sys.path = ["{}"] + sys.path; from python.get_interpreter_info import main; main()"#,
             tempdir.path().escape_for_python()
@@ -1186,18 +1187,15 @@ impl InterpreterInfo {
         let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
 
         // Virtual environment configuration changes the interpreter response independently of
-        // the executable. Include interpreter-affecting configuration in the cache key instead of
-        // relying on file metadata; a virtual environment can be recreated at the same path within
-        // one timestamp tick, while options like `relocatable` do not affect this data.
+        // the executable. Include the raw configuration in the cache key instead of trying to
+        // predict which keys each Python implementation observes. A virtual environment can be
+        // recreated at the same path within one timestamp tick, so executable metadata alone is
+        // insufficient.
         let pyvenv_cfg_interpreter_key = absolute
             .parent()
             .and_then(Path::parent)
             .map(|venv_root| venv_root.join("pyvenv.cfg"))
-            .and_then(|pyvenv_cfg| PyVenvConfiguration::parse(pyvenv_cfg).ok())
-            .map(|pyvenv_cfg| {
-                let include_system_site_packages = pyvenv_cfg.include_system_site_packages();
-                (pyvenv_cfg.home, include_system_site_packages)
-            });
+            .and_then(|pyvenv_cfg| fs::read(pyvenv_cfg).ok());
 
         let cache_shard = cache_digest(&(
             ARCH,
