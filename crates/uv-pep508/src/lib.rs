@@ -1739,11 +1739,12 @@ mod tests {
     #[test]
     fn error_non_ascii_after_marker() {
         assert_snapshot!(
-            Requirement::<VerbatimUrl>::from_str(r#"foo; python_version == "3.12" α"#)
-                .unwrap_err()
-                .message
-                .to_string(),
-            @"Unexpected character 'α', expected 'and', 'or' or end of input"
+            parse_pep508_err(r#"foo; python_version == "3.12" αx"#),
+            @r#"
+        Unexpected character 'α', expected 'and', 'or' or end of input
+        foo; python_version == "3.12" αx
+                                      ^^
+        "#
         );
     }
 

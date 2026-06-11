@@ -634,13 +634,14 @@ impl MarkerExpression {
         let expression = parse::parse_marker_key_op_value(&mut chars, reporter)?;
         chars.eat_whitespace();
         if let Some((pos, unexpected)) = chars.next() {
+            let input = chars.to_string();
             return Err(Pep508Error {
                 message: Pep508ErrorSource::String(format!(
                     "Unexpected character '{unexpected}', expected end of input"
                 )),
                 start: pos,
-                len: chars.remaining(),
-                input: chars.to_string(),
+                len: input.len() - pos,
+                input,
             });
         }
 
@@ -2185,7 +2186,7 @@ mod test {
             @r#"
         Unexpected character '.', expected 'and', 'or' or end of input
         python_version == "3.8".* and python_version >= "3.8"
-                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         "#
         );
         assert_snapshot!(
@@ -2193,7 +2194,7 @@ mod test {
             @r#"
         Unexpected character '.', expected 'and', 'or' or end of input
         python_version == "3.8".*
-                               ^
+                               ^^
         "#
         );
     }
@@ -2236,7 +2237,22 @@ mod test {
             @r#"
         Unexpected character 'a', expected end of input
         os_name == "nt" and python_version >= "3.8"
-                        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "#
+        );
+    }
+
+    #[test]
+    fn test_marker_expression_non_ascii_trailing() {
+        let err = MarkerExpression::from_str(r#"os_name == "nt" αx"#)
+            .unwrap_err()
+            .to_string();
+        assert_snapshot!(
+            err,
+            @r#"
+        Unexpected character 'α', expected end of input
+        os_name == "nt" αx
+                        ^^
         "#
         );
     }
