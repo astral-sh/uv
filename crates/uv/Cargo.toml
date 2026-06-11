@@ -130,38 +130,22 @@ embed-manifest = { workspace = true }
 uv-publish = { workspace = true, features = ["test"] }
 uv-test = { workspace = true }
 
-assert_cmd = { workspace = true }
-assert_fs = { workspace = true }
-backon = { workspace = true }
-byteorder = { workspace = true }
-bytes = { workspace = true }
-filetime = { workspace = true }
-flate2 = { workspace = true, default-features = false }
-http-body-util = { workspace = true }
-hyper = { workspace = true }
-hyper-util = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
-predicates = { workspace = true }
-regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
-sha2 = { workspace = true }
-astral-tokio-tar = { workspace = true }
 tempfile = { workspace = true }
-tokio-stream = { workspace = true }
-tokio-util = { workspace = true }
-wiremock = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
 uv-unix = { workspace = true }
 
 [features]
-default = ["performance", "uv-distribution/static", "test-defaults"]
+default = ["performance", "static", "test-defaults"]
 native-auth = []
 # Use better memory allocators, etc.
 performance = ["performance-memory-allocator"]
 performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
+static = ["uv-distribution/static"]
 
 # Adds self-update functionality. This feature is only enabled for uv's cargo-dist installer
 # and should be left unselected when building uv for package managers.

@@ -104,7 +104,7 @@ jobs:
         run: |
           cargo nextest run \
             --cargo-profile fast-build \
-            --features test-python-patch,native-auth,secret-service \
+            --features uv-integration/test-python-patch,uv-integration/native-auth,uv-keyring/native-auth,uv-keyring/secret-service \
             --workspace \
             --profile ci-linux
 
@@ -180,7 +180,7 @@ jobs:
           cargo nextest run \
             --cargo-profile fast-build \
             --no-default-features \
-            --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
+            --features uv-integration/test-python,uv-integration/test-python-managed,uv-integration/test-pypi,uv-integration/test-git-lfs,uv-integration/test-crates-io,uv-integration/native-auth,uv-integration/performance,uv-keyring/native-auth,uv-keyring/apple-native \
             --workspace \
             --profile ci-macos
 
@@ -275,7 +275,7 @@ jobs:
           cargo nextest run \
             --cargo-profile fast-build \
             --no-default-features \
-            --features test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native \
+            --features uv-integration/test-python,uv-integration/test-pypi,uv-integration/test-python-managed,uv-integration/test-windows-registry,uv-integration/native-auth,uv-keyring/native-auth,uv-keyring/windows-native \
             --workspace \
             --profile ci-windows \
             --partition hash:${{ matrix.partition }}/3

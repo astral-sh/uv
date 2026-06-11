@@ -66,13 +66,36 @@ used when NASM is found, you can guarantee this behavior by setting `AWS_LC_SYS_
 
 ## Testing
 
-For running tests, we recommend [nextest](https://nexte.st/).
+For running tests, we recommend [nextest](https://nexte.st/). Integration tests are grouped into
+harnesses by command area, so editing a test only relinks its corresponding harness:
 
 To run a specific test by name:
 
 ```shell
-cargo nextest run -E 'test(test_name)'
+cargo nextest run --package uv-integration -E 'test(test_name)'
 ```
+
+To run all uv integration tests:
+
+```shell
+cargo nextest run --package uv-integration
+```
+
+To run all workspace tests:
+
+```shell
+cargo nextest run --workspace
+```
+
+When enabling features for integration tests, pass them to `uv-integration`. The `uv` executable
+under test is a binary target of the same package, so Cargo builds it with the same feature set:
+
+```shell
+cargo nextest run --package uv-integration --features <test-features>
+```
+
+Editing an integration test only rebuilds its test harness. Editing uv or one of its dependencies
+rebuilds the executable in the same nextest invocation.
 
 To run all tests and accept snapshot changes:
 
@@ -116,7 +139,7 @@ fn test_add() {
 To run and review a specific snapshot test:
 
 ```shell
-cargo test --package <package> --test <test> -- <test_name> -- --exact
+cargo nextest run --package uv-integration --test <test> -E 'test(=<test_name>)'
 cargo insta review
 ```
 
