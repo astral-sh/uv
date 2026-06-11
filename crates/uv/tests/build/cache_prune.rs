@@ -244,6 +244,26 @@ async fn prune_force() -> Result<()> {
     Ok(())
 }
 
+/// `cache prune --ci` should be a no-op if the cache does not contain any buckets.
+#[test]
+fn prune_ci_empty_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.cache_dir.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.prune().arg("--ci"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    No unused entries found
+    ");
+
+    Ok(())
+}
+
 /// `cache prune --ci` should remove all unzipped archives.
 #[test]
 fn prune_unzipped() -> Result<()> {
