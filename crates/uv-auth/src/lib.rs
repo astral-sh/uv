@@ -6,7 +6,7 @@ pub use middleware::AuthMiddleware;
 pub use providers::AzureEndpointProvider;
 pub use realm::{Realm, RealmRef};
 pub use service::Service;
-pub use store::{AuthBackend, TextCredentialStore, TomlCredentialError};
+pub use store::{AuthBackend, AuthScheme, TextCredentialStore, TomlCredentialError};
 
 mod cache;
 mod credentials;

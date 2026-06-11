@@ -136,7 +136,6 @@ async fn add_package_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    WARN Range requests not supported for anyio-4.3.0-py3-none-any.whl; streaming wheel
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -348,8 +347,6 @@ async fn native_auth_uses_path_specific_credentials_in_one_client() -> Result<()
     ----- stdout -----
 
     ----- stderr -----
-    WARN Range requests not supported for anyio-4.3.0-py3-none-any.whl; streaming wheel
-    WARN Range requests not supported for iniconfig-2.0.0-py3-none-any.whl; streaming wheel
     Resolved 5 packages in [TIME]
     ");
 
@@ -1759,7 +1756,7 @@ fn logout_text_store_multiple_usernames() {
 
 #[test]
 #[cfg(feature = "native-auth")]
-fn native_auth_prefix_match() -> Result<()> {
+fn native_auth_prefix_match() {
     let context = uv_test::test_context_with_versions!(&[]).with_real_home();
     let service = "https://native-prefix.example.com/api";
     let host = "native-prefix.example.com";
@@ -1803,13 +1800,11 @@ fn native_auth_prefix_match() -> Result<()> {
     error: Failed to fetch credentials for native-prefix-user@https://native-prefix.example.com/apiv1
     "
     );
-
-    Ok(())
 }
 
 #[test]
 #[cfg(feature = "native-auth")]
-fn native_auth_host_fallback() -> Result<()> {
+fn native_auth_host_fallback() {
     let context = uv_test::test_context_with_versions!(&[]).with_real_home();
     let service = "native-host.example.com";
     let username = "native-host-user";
@@ -1849,13 +1844,11 @@ fn native_auth_host_fallback() -> Result<()> {
     error: Failed to fetch credentials for `native-host-user@https://native-other.example.com/any/path`
     "
     );
-
-    Ok(())
 }
 
 #[test]
 #[cfg(feature = "native-auth")]
-fn native_auth_multiple_users() -> Result<()> {
+fn native_auth_multiple_users() {
     let context = uv_test::test_context_with_versions!(&[]).with_real_home();
     let service = "native-users.example.com";
     let _cleanup =
@@ -1962,13 +1955,11 @@ fn native_auth_multiple_users() -> Result<()> {
     ----- stderr -----
     "
     );
-
-    Ok(())
 }
 
 #[test]
 #[cfg(feature = "native-auth")]
-fn native_auth_logout_is_service_scoped() -> Result<()> {
+fn native_auth_logout_is_service_scoped() {
     let context = uv_test::test_context_with_versions!(&[]).with_real_home();
     let first_service = "https://native-scoped.example.com/first";
     let second_service = "https://native-scoped.example.com/second";
@@ -2045,8 +2036,6 @@ fn native_auth_logout_is_service_scoped() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
         .assert()
         .success();
-
-    Ok(())
 }
 
 /// Test credential helper with basic auth credentials
