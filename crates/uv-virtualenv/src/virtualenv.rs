@@ -1,6 +1,7 @@
 //! Create a virtual environment.
 
 use std::env::consts::EXE_SUFFIX;
+use std::fmt::Write as _;
 use std::io;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -53,7 +54,7 @@ const ACTIVATE_TEMPLATES: &[(&str, &str, Option<PromptQuoting>)] = &[
     (
         "activate_this.py",
         include_str!("activator/activate_this.py"),
-        None,
+        Some(PromptQuoting::Python),
     ),
 ];
 const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
@@ -63,6 +64,7 @@ enum PromptQuoting {
     Posix,
     Fish,
     PowerShell,
+    Python,
 }
 
 impl PromptQuoting {
@@ -83,8 +85,30 @@ impl PromptQuoting {
                     .replace('‚', "‚‚")
                     .replace('‛', "‛‛")
             ),
+            Self::Python => quote_python(value),
         }
     }
+}
+
+fn quote_python(value: &str) -> String {
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('"');
+    for character in value.chars() {
+        match character {
+            '\\' => quoted.push_str(r"\\"),
+            '"' => quoted.push_str(r#"\""#),
+            '\n' => quoted.push_str(r"\n"),
+            '\r' => quoted.push_str(r"\r"),
+            '\t' => quoted.push_str(r"\t"),
+            character if character.is_control() => {
+                write!(quoted, r"\u{:04x}", u32::from(character))
+                    .expect("writing to a string cannot fail");
+            }
+            _ => quoted.push(character),
+        }
+    }
+    quoted.push('"');
+    quoted
 }
 
 /// Very basic `.cfg` file format writer.

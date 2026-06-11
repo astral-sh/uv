@@ -4,6 +4,7 @@ use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use predicates::prelude::*;
+use std::env::consts::EXE_SUFFIX;
 use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
 use uv_static::EnvVars;
 
@@ -189,6 +190,39 @@ fn custom_prompt_is_escaped_in_powershell() {
             "& $env:ACTIVATE_PS1; if ($env:VIRTUAL_ENV_PROMPT -ne $env:EXPECTED_PROMPT) { exit 1 }",
         )
         .env("ACTIVATE_PS1", activation.path())
+        .env("EXPECTED_PROMPT", prompt)
+        .env("INJECTION_MARKER", marker.path())
+        .assert()
+        .success();
+
+    marker.assert(predicates::path::missing());
+}
+
+/// Custom prompts are treated as data when the Python activation script is executed.
+#[test]
+fn custom_prompt_is_escaped_in_activate_this() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let marker = context.temp_dir.child("injected");
+    let prompt = r#"safe"; __import__("pathlib").Path(__import__("os").environ["INJECTION_MARKER"]).touch(); #"#;
+
+    create_venv_with_prompt(&context, prompt);
+
+    let scripts = context
+        .venv
+        .child(if cfg!(windows) { "Scripts" } else { "bin" });
+    let activation = scripts.child("activate_this.py");
+    let python = scripts.child(format!("python{EXE_SUFFIX}"));
+    Command::new(python.path())
+        .arg("-c")
+        .arg(indoc! {r#"
+            import os
+            import runpy
+            import sys
+
+            runpy.run_path(sys.argv[1])
+            assert os.environ["VIRTUAL_ENV_PROMPT"] == os.environ["EXPECTED_PROMPT"]
+        "#})
+        .arg(activation.path())
         .env("EXPECTED_PROMPT", prompt)
         .env("INJECTION_MARKER", marker.path())
         .assert()
