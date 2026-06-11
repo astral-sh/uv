@@ -478,8 +478,9 @@ pub(crate) async fn run(
                 temp_dir = cache.venv_dir()?;
                 let environment = uv_virtualenv::create_venv(
                     temp_dir.path(),
-                    interpreter,
+                    &interpreter,
                     uv_virtualenv::Prompt::None,
+                    &cache,
                     false,
                     uv_virtualenv::OnExisting::Remove(
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
@@ -686,8 +687,9 @@ pub(crate) async fn run(
                 temp_dir = cache.venv_dir()?;
                 uv_virtualenv::create_venv(
                     temp_dir.path(),
-                    interpreter,
+                    &interpreter,
                     uv_virtualenv::Prompt::None,
+                    &cache,
                     false,
                     uv_virtualenv::OnExisting::Remove(
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
@@ -921,8 +923,9 @@ pub(crate) async fn run(
                 temp_dir = cache.venv_dir()?;
                 let venv = uv_virtualenv::create_venv(
                     temp_dir.path(),
-                    interpreter,
+                    &interpreter,
                     uv_virtualenv::Prompt::None,
+                    &cache,
                     false,
                     uv_virtualenv::OnExisting::Remove(
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
@@ -1054,8 +1057,9 @@ pub(crate) async fn run(
 
             uv_virtualenv::create_venv(
                 dir.path(),
-                base_interpreter.clone(),
+                &base_interpreter,
                 uv_virtualenv::Prompt::None,
+                &cache,
                 false,
                 uv_virtualenv::OnExisting::Remove(
                     uv_virtualenv::RemovalReason::TemporaryEnvironment,
@@ -1076,10 +1080,8 @@ pub(crate) async fn run(
     // existing such module in the python installation.
     if let Some(ephemeral_env) = ephemeral_env.as_ref() {
         if let Some(requirements_env) = requirements_env.as_ref() {
-            let requirements_installed_packages = requirements_env
-                .site_packages()
-                .next()
-                .ok_or_else(|| {
+            let requirements_installed_packages =
+                requirements_env.site_packages().next().ok_or_else(|| {
                     anyhow!("Requirements environment has no site packages directory")
                 })?;
             let mut base_installed_packages = base_interpreter

@@ -5,10 +5,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use std::str::FromStr;
 use std::sync::OnceLock;
-use std::{env, io};
+use std::{env, io, iter};
 
 use configparser::ini::Ini;
 use fs_err as fs;
+use itertools::Either;
 use owo_colors::OwoColorize;
 use same_file::is_same_file;
 use serde::{Deserialize, Serialize};
@@ -472,11 +473,9 @@ impl Interpreter {
 
     /// Return the `site.getsitepackages` for this Python interpreter.
     ///
-    /// These are the paths Python will search for packages in at runtime. We use this for
-    /// environment layering, but not for checking for installed packages. We could use these paths
-    /// to check for installed packages, but it introduces a lot of complexity, so instead we use a
-    /// simplified version that does not respect customized site-packages. See
-    /// [`Interpreter::site_packages`].
+    /// These are the conventional site roots added by Python's `site` module. They are narrower
+    /// than `sys.path`: entries added by `.pth` files or `sitecustomize`, user site-packages, and
+    /// interpreter-provided standard-library distributions are not included.
     pub fn runtime_site_packages(&self) -> &[PathBuf] {
         &self.site_packages
     }
@@ -624,7 +623,7 @@ impl Interpreter {
         let interpreter = if target.is_none() && prefix.is_none() {
             let purelib = self.purelib();
             let platlib = self.platlib();
-            Some(std::iter::once(purelib).chain(
+            Some(iter::once(purelib).chain(
                 if purelib == platlib || is_same_file(purelib, platlib).unwrap_or(false) {
                     None
                 } else {
@@ -643,6 +642,46 @@ impl Interpreter {
             .chain(interpreter.into_iter().flatten().map(Cow::Borrowed))
     }
 
+    /// Return the ordered site-packages roots to inspect for installed distributions.
+    ///
+    /// This deliberately uses [`site::getsitepackages`](https://docs.python.org/3/library/site.html#site.getsitepackages)
+    /// instead of the full `sys.path`. In particular, interpreter-provided distributions in the
+    /// standard library, such as PyPy's vendored `cffi`, are not ordinary installable packages and
+    /// must not be reconciled as if they could be replaced or removed.
+    pub fn discovery_paths(&self) -> impl Iterator<Item = Cow<'_, Path>> {
+        let target = self.target().map(Target::site_packages);
+
+        let prefix = self
+            .prefix()
+            .map(|prefix| prefix.site_packages(self.virtualenv()));
+
+        debug_assert!(
+            !(target.is_some() && prefix.is_some()),
+            "target and prefix can't both be defined"
+        );
+
+        // When installing into a specific directory, only inspect that directory. Runtime and
+        // interpreter-provided packages must not affect `--target` or `--prefix` operations.
+        if target.is_some() || prefix.is_some() {
+            Either::Left(
+                target
+                    .into_iter()
+                    .flatten()
+                    .map(Cow::Borrowed)
+                    .chain(prefix.into_iter().flatten().map(Cow::Owned)),
+            )
+        } else {
+            Either::Right(
+                self.runtime_site_packages()
+                    .iter()
+                    .map(|path| Cow::Borrowed(path.as_path()))
+                    // A newly-created isolated virtual environment is derived without a second
+                    // interpreter query, so its runtime roots are empty. The mutable roots also
+                    // provide a fallback for unusual interpreters that omit them here.
+                    .chain(self.site_packages()),
+            )
+        }
+    }
     /// Whether or not this Python interpreter is from a default Python executable name, like
     /// `python`, `python3`, or `python.exe`.
     pub(crate) fn has_default_executable_name(&self) -> bool {
@@ -1146,6 +1185,20 @@ impl InterpreterInfo {
 
         let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
 
+        // Virtual environment configuration changes the interpreter response independently of
+        // the executable. Include interpreter-affecting configuration in the cache key instead of
+        // relying on file metadata; a virtual environment can be recreated at the same path within
+        // one timestamp tick, while options like `relocatable` do not affect this data.
+        let pyvenv_cfg_interpreter_key = absolute
+            .parent()
+            .and_then(Path::parent)
+            .map(|venv_root| venv_root.join("pyvenv.cfg"))
+            .and_then(|pyvenv_cfg| PyVenvConfiguration::parse(pyvenv_cfg).ok())
+            .map(|pyvenv_cfg| {
+                let include_system_site_packages = pyvenv_cfg.include_system_site_packages();
+                (pyvenv_cfg.home, include_system_site_packages)
+            });
+
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
@@ -1166,7 +1219,10 @@ impl InterpreterInfo {
             // absolute path refers to different interpreters with matching ctimes, e.g., if you
             // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
             // modified at the same time.
-            format!("{}.msgpack", cache_digest(&(&absolute, &canonical))),
+            format!(
+                "{}.msgpack",
+                cache_digest(&(&absolute, &canonical, &pyvenv_cfg_interpreter_key))
+            ),
         );
 
         // We check the timestamp of the canonicalized executable to check if an underlying
@@ -1327,6 +1383,7 @@ fn python_home(interpreter: &Path) -> Option<PathBuf> {
 #[cfg(unix)]
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
     use std::str::FromStr;
 
     use fs_err as fs;
@@ -1336,7 +1393,7 @@ mod tests {
     use uv_cache::Cache;
     use uv_pep440::Version;
 
-    use crate::Interpreter;
+    use crate::{Interpreter, Target};
 
     #[tokio::test]
     async fn test_cache_invalidation() {
@@ -1422,6 +1479,22 @@ mod tests {
             interpreter.markers.python_version().version,
             Version::from_str("3.12").unwrap()
         );
+
+        // `--target` discovery is isolated from both runtime site-packages and the standard
+        // library. The latter can contain fixed interpreter distributions such as PyPy's `cffi`.
+        let target = mock_dir.path().join("target");
+        let target_interpreter = interpreter
+            .clone()
+            .with_target(Target::from(target.clone()))
+            .unwrap();
+        assert_eq!(
+            target_interpreter
+                .discovery_paths()
+                .map(Cow::into_owned)
+                .collect::<Vec<_>>(),
+            vec![target]
+        );
+
         fs::write(
             &mocked_interpreter,
             formatdoc! {r"
