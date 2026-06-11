@@ -282,12 +282,23 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                     parse_inverted_version_expr(&l_string, operator, key, reporter)
                 }
                 // '...' == <env key>
-                MarkerValue::MarkerEnvString(key) => Some(MarkerExpression::String {
-                    key,
-                    // Invert the operator to normalize the expression order.
-                    operator: operator.invert(),
-                    value: l_string,
-                }),
+                MarkerValue::MarkerEnvString(key) => {
+                    if operator == MarkerOperator::TildeEqual {
+                        reporter.report(
+                            MarkerWarningKind::LexicographicComparison,
+                            "Can't compare strings with `~=`, will be ignored".to_string(),
+                        );
+
+                        return Ok(None);
+                    }
+
+                    Some(MarkerExpression::String {
+                        key,
+                        // Invert the operator to normalize the expression order.
+                        operator: operator.invert(),
+                        value: l_string,
+                    })
+                }
                 // `"test" in extras` or `"dev" in dependency_groups`
                 MarkerValue::MarkerEnvList(key) => {
                     let operator =
