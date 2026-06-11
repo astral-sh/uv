@@ -3347,7 +3347,7 @@ impl FromStr for VersionRequest {
                 return Err(Error::InvalidVersionRequest(s.to_string()));
             }
 
-            let Some(mut start) = s.rfind(|c: char| c.is_numeric()) else {
+            let Some(mut start) = s.rfind(|c: char| c.is_ascii_digit()) else {
                 return Ok((s, PythonVariant::Default));
             };
 
@@ -4328,6 +4328,10 @@ mod tests {
         );
         assert!(matches!(
             VersionRequest::from_str("3.13tt"),
+            Err(Error::InvalidVersionRequest(_))
+        ));
+        assert!(matches!(
+            VersionRequest::from_str("3.12²t"),
             Err(Error::InvalidVersionRequest(_))
         ));
 
