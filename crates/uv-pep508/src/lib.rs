@@ -675,6 +675,16 @@ fn parse_extras_cursor<T: Pep508Url>(
             }
             _ => {}
         }
+        if let Some(last @ ('-' | '_' | '.')) = buffer.chars().last() {
+            return Err(Pep508Error {
+                message: Pep508ErrorSource::String(format!(
+                    "Extra name must end with an alphanumeric character, not `{last}`"
+                )),
+                start: cursor.pos() - last.len_utf8(),
+                len: last.len_utf8(),
+                input: cursor.to_string(),
+            });
+        }
         // wsp* after the identifier
         cursor.eat_whitespace();
 
@@ -1315,6 +1325,34 @@ mod tests {
             @"
         Invalid character in extras name, expected an alphanumeric character, `-`, `_`, `.`, `,` or `]`, found `ü`
         black[jüpyter]
+               ^
+        "
+        );
+    }
+
+    #[test]
+    fn error_extras_illegal_end() {
+        assert_snapshot!(
+            parse_pep508_err("foo[bar-]"),
+            @"
+        Extra name must end with an alphanumeric character, not `-`
+        foo[bar-]
+               ^
+        "
+        );
+        assert_snapshot!(
+            parse_pep508_err("foo[bar_]"),
+            @"
+        Extra name must end with an alphanumeric character, not `_`
+        foo[bar_]
+               ^
+        "
+        );
+        assert_snapshot!(
+            parse_pep508_err("foo[bar.]"),
+            @"
+        Extra name must end with an alphanumeric character, not `.`
+        foo[bar.]
                ^
         "
         );
