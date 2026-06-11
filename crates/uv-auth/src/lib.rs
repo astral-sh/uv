@@ -19,6 +19,7 @@ mod index;
 mod keyring;
 mod matching;
 mod middleware;
+mod persistent;
 mod providers;
 mod pyx;
 mod realm;

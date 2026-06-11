@@ -88,3 +88,12 @@ impl TryFrom<DisplaySafeUrl> for Service {
         Ok(Self(value))
     }
 }
+
+impl TryFrom<Url> for Service {
+    type Error = ServiceParseError;
+
+    fn try_from(value: Url) -> Result<Self, Self::Error> {
+        Self::check_scheme(&value)?;
+        Ok(Self(DisplaySafeUrl::from(value)))
+    }
+}
