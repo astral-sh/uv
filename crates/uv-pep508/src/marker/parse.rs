@@ -671,13 +671,14 @@ pub(crate) fn parse_markers_cursor<T: Pep508Url>(
     if let Some((pos, unexpected)) = cursor.next() {
         // If we're here, both parse_marker_or and parse_marker_and returned because the next
         // character was neither "and" nor "or"
+        let input = cursor.to_string();
         return Err(Pep508Error {
             message: Pep508ErrorSource::String(format!(
                 "Unexpected character '{unexpected}', expected 'and', 'or' or end of input"
             )),
             start: pos,
-            len: cursor.remaining(),
-            input: cursor.to_string(),
+            len: input.len() - pos,
+            input,
         });
     }
 
