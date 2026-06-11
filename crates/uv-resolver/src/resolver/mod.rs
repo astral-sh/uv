@@ -129,10 +129,11 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     selector: CandidateSelector,
     index: InMemoryIndex,
     installed_packages: InstalledPackages,
+    // Papaya's maps are large on Windows, so box them to keep resolver futures small.
     /// Incompatibilities for packages that are entirely unavailable.
-    unavailable_packages: HashMap<PackageName, UnavailablePackage>,
+    unavailable_packages: Box<HashMap<PackageName, UnavailablePackage>>,
     /// Incompatibilities for packages that are unavailable at specific versions.
-    incomplete_packages: HashMap<PackageName, HashMap<Version, MetadataUnavailable>>,
+    incomplete_packages: Box<HashMap<PackageName, HashMap<Version, MetadataUnavailable>>>,
     /// The options that were used to configure this resolver.
     options: Options,
     /// The reporter to use for this resolver.
@@ -251,8 +252,8 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             python_requirement: python_requirement.clone(),
             conflicts,
             installed_packages,
-            unavailable_packages: HashMap::default(),
-            incomplete_packages: HashMap::default(),
+            unavailable_packages: Box::default(),
+            incomplete_packages: Box::default(),
             options,
             reporter: None,
         };
