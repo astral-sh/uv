@@ -2909,6 +2909,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(hashes)
     }
 
+    /// For Git directories, we check them out into the cache, so we need to avoid workspac
+    /// discovery that goes outside the cache.
+    fn stop_discovery_at(&self, source: &BuildableSource<'_>, source_root: &Path) -> Option<&Path> {
+        if matches!(
+            source,
+            BuildableSource::Dist(SourceDist::GitDirectory(_))
+                | BuildableSource::Url(SourceUrl::GitDirectory(_))
+        ) {
+            Some(source_root)
+        } else {
+            None
+        }
+    }
+
     /// Build a source distribution, storing the built wheel in the cache.
     ///
     /// Returns the un-normalized disk filename, the parsed, normalized filename and the metadata
@@ -2990,6 +3004,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 BuildKind::Wheel
             };
 
+            let install_path = if let Some(subdirectory) = subdirectory {
+                source_root.join(subdirectory)
+            } else {
+                source_root.to_path_buf()
+            };
+
+            let stop_discovery_at = self.stop_discovery_at(source, source_root):
+
             let build_key = BuildKey {
                 base_python: base_python.into_boxed_path(),
                 source_root: source_root.to_path_buf().into_boxed_path(),
@@ -3010,25 +3032,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             } else {
                 debug!("Reusing existing build environment for: {source}");
 
-                let install_path = subdirectory.map(|subdirectory| source_root.join(subdirectory));
-                let install_path = install_path.as_deref().unwrap_or(source_root);
-
-                let stop_discovery_at = if matches!(
-                    source,
-                    BuildableSource::Dist(SourceDist::GitDirectory(_))
-                        | BuildableSource::Url(SourceUrl::GitDirectory(_))
-                ) {
-                    source_root.parent()
-                } else {
-                    None
-                };
-
                 let builder = self
                     .build_context
                     .setup_build(
                         source_root,
                         subdirectory,
-                        install_path,
+                        &install_path,
                         stop_discovery_at,
                         Some(&source.to_string()),
                         source.as_dist(),
@@ -3148,18 +3157,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             BuildKind::Wheel
         };
 
-        let install_path = subdirectory.map(|subdirectory| source_root.join(subdirectory));
-        let install_path = install_path.as_deref().unwrap_or(source_root);
-
-        let stop_discovery_at = if matches!(
-            source,
-            BuildableSource::Dist(SourceDist::GitDirectory(_))
-                | BuildableSource::Url(SourceUrl::GitDirectory(_))
-        ) {
-            source_root.parent()
+        let install_path = if let Some(subdirectory) = subdirectory {
+            source_root.join(subdirectory)
         } else {
-            None
+            source_root.to_path_buf()
         };
+
+        let stop_discovery_at = self.stop_discovery_at(source, source_root);
 
         // Set up the builder.
         let mut builder = self
@@ -3167,7 +3171,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .setup_build(
                 source_root,
                 subdirectory,
-                install_path,
+                &install_path,
                 stop_discovery_at,
                 Some(&source.to_string()),
                 source.as_dist(),
