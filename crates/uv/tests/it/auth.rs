@@ -5,6 +5,47 @@ use uv_static::EnvVars;
 
 use uv_test::uv_snapshot;
 
+#[cfg(feature = "native-auth")]
+struct NativeCredentialCleanup<'a> {
+    context: &'a uv_test::TestContext,
+    entries: Vec<(String, String)>,
+}
+
+#[cfg(feature = "native-auth")]
+impl<'a> NativeCredentialCleanup<'a> {
+    fn new(context: &'a uv_test::TestContext, entries: &[(&str, &str)]) -> Self {
+        let cleanup = Self {
+            context,
+            entries: entries
+                .iter()
+                .map(|(service, username)| ((*service).to_string(), (*username).to_string()))
+                .collect(),
+        };
+        cleanup.remove();
+        cleanup
+    }
+
+    fn remove(&self) {
+        for (service, username) in &self.entries {
+            let _ = self
+                .context
+                .auth_logout()
+                .arg(service)
+                .arg("--username")
+                .arg(username)
+                .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+                .output();
+        }
+    }
+}
+
+#[cfg(feature = "native-auth")]
+impl Drop for NativeCredentialCleanup<'_> {
+    fn drop(&mut self) {
+        self.remove();
+    }
+}
+
 #[tokio::test]
 #[cfg(feature = "native-auth")]
 async fn add_package_native_auth_realm() -> Result<()> {
@@ -222,6 +263,84 @@ async fn add_package_native_auth() -> Result<()> {
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
+
+    Ok(())
+}
+
+#[tokio::test]
+#[cfg(feature = "native-auth")]
+async fn native_auth_uses_path_specific_credentials_in_one_client() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_real_home();
+    let proxy = crate::pypi_proxy::start().await;
+    let heron_index = proxy.url("/basic-auth-heron/simple");
+    let eagle_index = proxy.url("/basic-auth-eagle/simple");
+    let _cleanup = NativeCredentialCleanup::new(
+        &context,
+        &[
+            (heron_index.as_str(), "public"),
+            (eagle_index.as_str(), "public"),
+        ],
+    );
+
+    context
+        .auth_login()
+        .arg(&heron_index)
+        .arg("--username")
+        .arg("public")
+        .arg("--password")
+        .arg("heron")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .assert()
+        .success();
+    context
+        .auth_login()
+        .arg(&eagle_index)
+        .arg("--username")
+        .arg("public")
+        .arg("--password")
+        .arg("eagle")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .assert()
+        .success();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+            [project]
+            name = "path-specific-auth"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["anyio", "iniconfig"]
+
+            [tool.uv.sources]
+            anyio = {{ index = "heron" }}
+            iniconfig = {{ index = "eagle" }}
+
+            [[tool.uv.index]]
+            name = "heron"
+            url = "{}"
+            explicit = true
+
+            [[tool.uv.index]]
+            name = "eagle"
+            url = "{}"
+            explicit = true
+            "#,
+            proxy.username_url("public", "/basic-auth-heron/simple"),
+            proxy.username_url("public", "/basic-auth-eagle/simple"),
+        ))?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
 
     Ok(())
 }
@@ -908,6 +1027,13 @@ async fn logout_token_native_auth() -> Result<()> {
 #[cfg(feature = "native-auth")]
 fn login_native_auth_url() {
     let context = uv_test::test_context_with_versions!(&[]).with_real_home();
+    let _cleanup = NativeCredentialCleanup::new(
+        &context,
+        &[
+            ("https://example.com", "test"),
+            ("http://localhost:1324", "test"),
+        ],
+    );
 
     // A domain-only service name gets https:// prepended
     uv_snapshot!(context.auth_login()
@@ -1836,23 +1962,17 @@ fn logout_text_store_multiple_usernames() {
 
 #[test]
 #[cfg(feature = "native-auth")]
-fn native_auth_prefix_match() -> Result<()> {
+fn native_auth_prefix_match() {
     let context = uv_test::test_context_with_versions!(&[]).with_real_home();
+    let service = "https://native-prefix.example.com/api";
+    let host = "native-prefix.example.com";
+    let username = "native-prefix-user";
+    let _cleanup = NativeCredentialCleanup::new(&context, &[(service, username), (host, username)]);
 
-    // Clear state before the test
-    context
-        .auth_logout()
-        .arg("https://example.com/api")
-        .arg("--username")
-        .arg("testuser")
-        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
-        .status()?;
-
-    // Login with credentials for a path
     uv_snapshot!(context.auth_login()
-        .arg("https://example.com/api")
+        .arg(service)
         .arg("--username")
-        .arg("testuser")
+        .arg(username)
         .arg("--password")
         .arg("testpass")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
@@ -1861,16 +1981,14 @@ fn native_auth_prefix_match() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Stored credentials for testuser@https://example.com/api
+    Stored credentials for native-prefix-user@https://native-prefix.example.com/api
     "
     );
 
-    // A request for a child path does not match, the native store does not yet implement prefix
-    // matching
     uv_snapshot!(context.auth_token()
-        .arg("https://example.com/api/v1")
+        .arg("https://native-prefix.example.com/api/v1")
         .arg("--username")
-        .arg("testuser")
+        .arg(username)
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     success: true
     exit_code: 0
@@ -1881,28 +1999,33 @@ fn native_auth_prefix_match() -> Result<()> {
     "
     );
 
-    Ok(())
+    uv_snapshot!(context.auth_token()
+        .arg("https://native-prefix.example.com/apiv1")
+        .arg("--username")
+        .arg(username)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for native-prefix-user@https://native-prefix.example.com/apiv1
+    "
+    );
 }
 
 #[test]
 #[cfg(feature = "native-auth")]
-fn native_auth_host_fallback() -> Result<()> {
+fn native_auth_host_fallback() {
     let context = uv_test::test_context_with_versions!(&[]).with_real_home();
+    let service = "native-host.example.com";
+    let username = "native-host-user";
+    let _cleanup = NativeCredentialCleanup::new(&context, &[(service, username)]);
 
-    // Clear state before the test
-    context
-        .auth_logout()
-        .arg("example.com")
-        .arg("--username")
-        .arg("testuser")
-        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
-        .status()?;
-
-    // Login with credentials for the host
     uv_snapshot!(context.auth_login()
-        .arg("example.com")
+        .arg(service)
         .arg("--username")
-        .arg("testuser")
+        .arg(username)
         .arg("--password")
         .arg("hostpass")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
@@ -1911,15 +2034,14 @@ fn native_auth_host_fallback() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Stored credentials for testuser@https://example.com/
+    Stored credentials for native-host-user@https://native-host.example.com/
     "
     );
 
-    // Should fallback to host-level matching
     uv_snapshot!(context.auth_token()
-        .arg("https://example.com/any/path")
+        .arg("https://native-host.example.com/any/path")
         .arg("--username")
-        .arg("testuser")
+        .arg(username)
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     success: true
     exit_code: 0
@@ -1930,22 +2052,211 @@ fn native_auth_host_fallback() -> Result<()> {
     "
     );
 
-    // A request to another host should not work
     uv_snapshot!(context.auth_token()
-        .arg("https://another-example.com/any/path")
+        .arg("https://native-other.example.com/any/path")
         .arg("--username")
-        .arg("testuser")
+        .arg(username)
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to fetch credentials for testuser@https://another-example.com/any/path
+    error: Failed to fetch credentials for native-host-user@https://native-other.example.com/any/path
+    "
+    );
+}
+
+#[test]
+#[cfg(feature = "native-auth")]
+fn native_auth_multiple_users() {
+    let context = uv_test::test_context_with_versions!(&[]).with_real_home();
+    let service = "native-users.example.com";
+    let _cleanup =
+        NativeCredentialCleanup::new(&context, &[(service, "user1"), (service, "user2")]);
+
+    context
+        .auth_login()
+        .arg(service)
+        .arg("--username")
+        .arg("user1")
+        .arg("--password")
+        .arg("pass1")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .assert()
+        .success();
+
+    context
+        .auth_login()
+        .arg(service)
+        .arg("--username")
+        .arg("user2")
+        .arg("--password")
+        .arg("pass2")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.auth_token()
+        .arg(service)
+        .arg("--username")
+        .arg("user1")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pass1
+
+    ----- stderr -----
     "
     );
 
-    Ok(())
+    uv_snapshot!(context.auth_token()
+        .arg(service)
+        .arg("--username")
+        .arg("user2")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pass2
+
+    ----- stderr -----
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth,auth-helper"),
+        input=r#"{"uri":"https://native-users.example.com/path"}"#,
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Multiple credentials found for URL 'https://native-users.example.com/path', specify which username to use
+    "
+    );
+
+    context
+        .auth_logout()
+        .arg(service)
+        .arg("--username")
+        .arg("user1")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.auth_token()
+        .arg(service)
+        .arg("--username")
+        .arg("user1")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for user1@https://native-users.example.com/
+    "
+    );
+
+    uv_snapshot!(context.auth_token()
+        .arg(service)
+        .arg("--username")
+        .arg("user2")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pass2
+
+    ----- stderr -----
+    "
+    );
+}
+
+#[test]
+#[cfg(feature = "native-auth")]
+fn native_auth_logout_is_service_scoped() {
+    let context = uv_test::test_context_with_versions!(&[]).with_real_home();
+    let first_service = "https://native-scoped.example.com/first";
+    let second_service = "https://native-scoped.example.com/second";
+    let username = "native-scoped-user";
+    let _cleanup = NativeCredentialCleanup::new(
+        &context,
+        &[(first_service, username), (second_service, username)],
+    );
+
+    context
+        .auth_login()
+        .arg(first_service)
+        .arg("--username")
+        .arg(username)
+        .arg("--password")
+        .arg("pass-first")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .assert()
+        .success();
+
+    context
+        .auth_login()
+        .arg(second_service)
+        .arg("--username")
+        .arg(username)
+        .arg("--password")
+        .arg("pass-second")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .assert()
+        .success();
+
+    context
+        .auth_logout()
+        .arg(first_service)
+        .arg("--username")
+        .arg(username)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.auth_token()
+        .arg(first_service)
+        .arg("--username")
+        .arg(username)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for native-scoped-user@https://native-scoped.example.com/first
+    "
+    );
+
+    uv_snapshot!(context.auth_token()
+        .arg(second_service)
+        .arg("--username")
+        .arg(username)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pass-second
+
+    ----- stderr -----
+    "
+    );
+
+    context
+        .auth_logout()
+        .arg(second_service)
+        .arg("--username")
+        .arg(username)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .assert()
+        .success();
 }
 
 /// Test credential helper with basic auth credentials

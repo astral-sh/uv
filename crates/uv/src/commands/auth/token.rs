@@ -63,7 +63,7 @@ pub(crate) async fn token(
     let credentials = match &backend {
         AuthBackend::System(provider) => provider
             .fetch(url, Some(&username))
-            .await
+            .await?
             .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?,
         AuthBackend::TextStore(store, _lock) => store
             .get_credentials(url, Some(&username))?

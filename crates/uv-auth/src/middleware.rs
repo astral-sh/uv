@@ -19,7 +19,7 @@ use crate::providers::{
 use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use crate::{
     AccessToken, CredentialsCache, KeyringProvider,
-    cache::FetchUrl,
+    cache::{CredentialsCacheScope, FetchUrl, FetchedCredentials},
     credentials::{Authentication, AuthenticationError, Credentials, Username},
     index::{AuthPolicy, Indexes},
     realm::Realm,
@@ -508,7 +508,7 @@ impl Middleware for AuthMiddleware {
 
         // Then, fetch from external services.
         // Here, we use the username from the cache if present.
-        if let Some(credentials) = self
+        if let Some(fetched_credentials) = self
             .fetch_credentials(
                 credentials.as_deref(),
                 retry_request_url,
@@ -517,11 +517,17 @@ impl Middleware for AuthMiddleware {
             )
             .await
         {
-            retry_request = credentials.authenticate(retry_request).await?;
-            trace!("Retrying request for {url} with {credentials:?}");
+            retry_request = fetched_credentials
+                .credentials
+                .authenticate(retry_request)
+                .await?;
+            trace!(
+                "Retrying request for {url} with {:?}",
+                fetched_credentials.credentials
+            );
             return self
                 .complete_request(
-                    Some(credentials),
+                    Some(fetched_credentials),
                     retry_request,
                     extensions,
                     next,
@@ -569,13 +575,17 @@ impl AuthMiddleware {
     /// If credentials are present, insert them into the cache on success.
     async fn complete_request(
         &self,
-        credentials: Option<Arc<Authentication>>,
+        credentials: Option<FetchedCredentials>,
         request: Request,
         extensions: &mut Extensions,
         next: Next<'_>,
         auth_policy: AuthPolicy,
     ) -> reqwest_middleware::Result<Response> {
-        let Some(credentials) = credentials else {
+        let Some(FetchedCredentials {
+            credentials,
+            cache_scope,
+        }) = credentials
+        else {
             // Nothing to insert into the cache if we don't have credentials
             return next.run(request, extensions).await;
         };
@@ -593,8 +603,13 @@ impl AuthMiddleware {
             .is_ok_and(|response| response.error_for_status_ref().is_ok())
         {
             // TODO(zanieb): Consider also updating the system keyring after successful use
-            trace!("Updating cached credentials for {url} to {credentials:?}");
-            self.cache().insert(&url, credentials);
+            match cache_scope {
+                CredentialsCacheScope::Realm => {
+                    trace!("Updating cached credentials for {url} to {credentials:?}");
+                    self.cache().insert(&url, credentials);
+                }
+                CredentialsCacheScope::FetchOnly => {}
+            }
         }
 
         result
@@ -617,7 +632,16 @@ impl AuthMiddleware {
         if credentials.is_authenticated() {
             trace!("Request for {url} already contains complete authentication");
             return self
-                .complete_request(Some(credentials), request, extensions, next, auth_policy)
+                .complete_request(
+                    Some(FetchedCredentials {
+                        credentials,
+                        cache_scope: CredentialsCacheScope::Realm,
+                    }),
+                    request,
+                    extensions,
+                    next,
+                    auth_policy,
+                )
                 .await;
         }
 
@@ -653,7 +677,7 @@ impl AuthMiddleware {
             request = credentials.authenticate(request).await?;
             // Do not insert already-cached credentials
             None
-        } else if let Some(credentials) = self
+        } else if let Some(fetched_credentials) = self
             .fetch_credentials(
                 Some(&credentials),
                 DisplaySafeUrl::ref_cast(request.url()),
@@ -662,8 +686,19 @@ impl AuthMiddleware {
             )
             .await
         {
-            request = credentials.authenticate(request).await?;
-            Some(credentials)
+            request = fetched_credentials
+                .credentials
+                .authenticate(request)
+                .await?;
+            return self
+                .complete_request(
+                    Some(fetched_credentials),
+                    request,
+                    extensions,
+                    next,
+                    auth_policy,
+                )
+                .await;
         } else if index.is_some() {
             // If this is a known index, we fall back to checking for the realm.
             if let Some(credentials) = self
@@ -680,8 +715,17 @@ impl AuthMiddleware {
             Some(credentials)
         };
 
-        self.complete_request(credentials, request, extensions, next, auth_policy)
-            .await
+        self.complete_request(
+            credentials.map(|credentials| FetchedCredentials {
+                credentials,
+                cache_scope: CredentialsCacheScope::Realm,
+            }),
+            request,
+            extensions,
+            next,
+            auth_policy,
+        )
+        .await
     }
 
     /// Fetch credentials for a URL.
@@ -693,160 +737,211 @@ impl AuthMiddleware {
         url: &DisplaySafeUrl,
         index: Option<&Index>,
         auth_policy: AuthPolicy,
-    ) -> Option<Arc<Authentication>> {
+    ) -> Option<FetchedCredentials> {
         let username = Username::from(
             credentials.map(|credentials| credentials.username().unwrap_or_default().to_string()),
         );
 
-        // Fetches can be expensive, so we will only run them _once_ per realm or index URL and username combination
-        // All other requests for the same realm or index URL will wait until the first one completes
-        let key = if let Some(index) = index {
-            (FetchUrl::Index(index.url.clone()), username)
+        let provider_url = if let Some(index) = index {
+            FetchUrl::Index(index.url.clone())
         } else {
-            (FetchUrl::Realm(Realm::from(&**url)), username)
+            FetchUrl::Realm(Realm::from(&**url))
         };
-        if let Some(credentials) = self.cache().fetches.register_or_wait(&key).await {
-            if credentials.is_some() {
-                trace!("Using credentials from previous fetch for {}", key.0);
-            } else {
+        let provider_key = (provider_url, username.clone());
+        let keyring_key = provider_key.clone();
+        let fetch_providers = match self.cache().fetches.register_or_wait(&provider_key).await {
+            Some(Some(credentials)) => {
+                trace!(
+                    "Using credentials from previous fetch for {}",
+                    provider_key.0
+                );
+                return Some(credentials);
+            }
+            Some(None) => {
                 trace!(
                     "Skipping fetch of credentials for {}, previous attempt failed",
-                    key.0
+                    provider_key.0
                 );
+                false
             }
+            None => true,
+        };
 
-            return credentials;
-        }
-
-        // Support for known providers, like Hugging Face and S3.
-        if let Some(credentials) = HuggingFaceProvider::credentials_for(url)
-            .map(Authentication::from)
-            .map(Arc::new)
-        {
-            debug!("Found Hugging Face credentials for {url}");
-            self.cache().fetches.done(key, Some(credentials.clone()));
-            return Some(credentials);
-        }
-
-        if S3EndpointProvider::is_s3_endpoint(url, self.preview) {
-            let mut s3_state = self.s3_credential_state.lock().await;
-
-            // If the S3 credential state is uninitialized, initialize it.
-            let credentials = match &*s3_state {
-                S3CredentialState::Uninitialized => {
-                    trace!("Initializing S3 credentials for {url}");
-                    let signer = S3EndpointProvider::create_signer();
-                    let credentials = Arc::new(Authentication::from(signer));
-                    *s3_state = S3CredentialState::Initialized(Some(credentials.clone()));
-                    Some(credentials)
-                }
-                S3CredentialState::Initialized(credentials) => credentials.clone(),
-            };
-
-            if let Some(credentials) = credentials {
-                debug!("Found S3 credentials for {url}");
-                self.cache().fetches.done(key, Some(credentials.clone()));
+        if fetch_providers {
+            // Support for known providers, like Hugging Face and S3.
+            if let Some(credentials) = HuggingFaceProvider::credentials_for(url)
+                .map(Authentication::from)
+                .map(Arc::new)
+            {
+                debug!("Found Hugging Face credentials for {url}");
+                let credentials = FetchedCredentials {
+                    credentials,
+                    cache_scope: CredentialsCacheScope::Realm,
+                };
+                self.cache()
+                    .fetches
+                    .done(provider_key, Some(credentials.clone()));
                 return Some(credentials);
             }
-        }
 
-        if GcsEndpointProvider::is_gcs_endpoint(url, self.preview) {
-            let mut gcs_state = self.gcs_credential_state.lock().await;
+            if S3EndpointProvider::is_s3_endpoint(url, self.preview) {
+                let mut s3_state = self.s3_credential_state.lock().await;
 
-            // If the GCS credential state is uninitialized, initialize it.
-            let credentials = match &*gcs_state {
-                GcsCredentialState::Uninitialized => {
-                    trace!("Initializing GCS credentials for {url}");
-                    let signer = GcsEndpointProvider::create_signer();
-                    let credentials = Arc::new(Authentication::from(signer));
-                    *gcs_state = GcsCredentialState::Initialized(Some(credentials.clone()));
-                    Some(credentials)
-                }
-                GcsCredentialState::Initialized(credentials) => credentials.clone(),
-            };
+                // If the S3 credential state is uninitialized, initialize it.
+                let credentials = match &*s3_state {
+                    S3CredentialState::Uninitialized => {
+                        trace!("Initializing S3 credentials for {url}");
+                        let signer = S3EndpointProvider::create_signer();
+                        let credentials = Arc::new(Authentication::from(signer));
+                        *s3_state = S3CredentialState::Initialized(Some(credentials.clone()));
+                        Some(credentials)
+                    }
+                    S3CredentialState::Initialized(credentials) => credentials.clone(),
+                };
 
-            if let Some(credentials) = credentials {
-                debug!("Found GCS credentials for {url}");
-                self.cache().fetches.done(key, Some(credentials.clone()));
-                return Some(credentials);
-            }
-        }
-
-        if AzureEndpointProvider::is_azure_endpoint(url, self.preview) {
-            let mut azure_state = self.azure_credential_state.lock().await;
-
-            // If the Azure credential state is uninitialized, initialize it.
-            let credentials = match &*azure_state {
-                AzureCredentialState::Uninitialized => {
-                    trace!("Initializing Azure credentials for {url}");
-                    let signer = AzureEndpointProvider::create_signer();
-                    let credentials = Arc::new(Authentication::from(signer));
-                    *azure_state = AzureCredentialState::Initialized(Some(credentials.clone()));
-                    Some(credentials)
-                }
-                AzureCredentialState::Initialized(credentials) => credentials.clone(),
-            };
-
-            if let Some(credentials) = credentials {
-                debug!("Found Azure credentials for {url}");
-                self.cache().fetches.done(key, Some(credentials.clone()));
-                return Some(credentials);
-            }
-        }
-
-        // If this is a known URL, authenticate it via the token store.
-        let credentials = if let Some(credentials) = async {
-            let base_client = self.base_client.as_ref()?;
-            let token_store = self.pyx_token_store.as_ref()?;
-            if !token_store.is_known_url(url) {
-                return None;
-            }
-
-            let mut token_state = self.pyx_token_state.lock().await;
-
-            // If the token store is uninitialized, initialize it.
-            let token = match *token_state {
-                TokenState::Uninitialized => {
-                    trace!("Initializing token store for {url}");
-                    let generated = match token_store
-                        .access_token(base_client, DEFAULT_TOLERANCE_SECS)
-                        .await
-                    {
-                        Ok(Some(token)) => Some(token),
-                        Ok(None) => None,
-                        Err(err) => {
-                            warn!("Failed to generate access tokens: {err}");
-                            None
-                        }
+                if let Some(credentials) = credentials {
+                    debug!("Found S3 credentials for {url}");
+                    let credentials = FetchedCredentials {
+                        credentials,
+                        cache_scope: CredentialsCacheScope::Realm,
                     };
-                    *token_state = TokenState::Initialized(generated.clone());
-                    generated
+                    self.cache()
+                        .fetches
+                        .done(provider_key, Some(credentials.clone()));
+                    return Some(credentials);
                 }
-                TokenState::Initialized(ref tokens) => tokens.clone(),
+            }
+
+            if GcsEndpointProvider::is_gcs_endpoint(url, self.preview) {
+                let mut gcs_state = self.gcs_credential_state.lock().await;
+
+                // If the GCS credential state is uninitialized, initialize it.
+                let credentials = match &*gcs_state {
+                    GcsCredentialState::Uninitialized => {
+                        trace!("Initializing GCS credentials for {url}");
+                        let signer = GcsEndpointProvider::create_signer();
+                        let credentials = Arc::new(Authentication::from(signer));
+                        *gcs_state = GcsCredentialState::Initialized(Some(credentials.clone()));
+                        Some(credentials)
+                    }
+                    GcsCredentialState::Initialized(credentials) => credentials.clone(),
+                };
+
+                if let Some(credentials) = credentials {
+                    debug!("Found GCS credentials for {url}");
+                    let credentials = FetchedCredentials {
+                        credentials,
+                        cache_scope: CredentialsCacheScope::Realm,
+                    };
+                    self.cache()
+                        .fetches
+                        .done(provider_key, Some(credentials.clone()));
+                    return Some(credentials);
+                }
+            }
+
+            if AzureEndpointProvider::is_azure_endpoint(url, self.preview) {
+                let mut azure_state = self.azure_credential_state.lock().await;
+
+                // If the Azure credential state is uninitialized, initialize it.
+                let credentials = match &*azure_state {
+                    AzureCredentialState::Uninitialized => {
+                        trace!("Initializing Azure credentials for {url}");
+                        let signer = AzureEndpointProvider::create_signer();
+                        let credentials = Arc::new(Authentication::from(signer));
+                        *azure_state = AzureCredentialState::Initialized(Some(credentials.clone()));
+                        Some(credentials)
+                    }
+                    AzureCredentialState::Initialized(credentials) => credentials.clone(),
+                };
+
+                if let Some(credentials) = credentials {
+                    debug!("Found Azure credentials for {url}");
+                    let credentials = FetchedCredentials {
+                        credentials,
+                        cache_scope: CredentialsCacheScope::Realm,
+                    };
+                    self.cache()
+                        .fetches
+                        .done(provider_key, Some(credentials.clone()));
+                    return Some(credentials);
+                }
+            }
+
+            // If this is a known URL, authenticate it via the token store.
+            let provider_credentials = if let Some(credentials) = async {
+                let base_client = self.base_client.as_ref()?;
+                let token_store = self.pyx_token_store.as_ref()?;
+                if !token_store.is_known_url(url) {
+                    return None;
+                }
+
+                let mut token_state = self.pyx_token_state.lock().await;
+
+                // If the token store is uninitialized, initialize it.
+                let token = match *token_state {
+                    TokenState::Uninitialized => {
+                        trace!("Initializing token store for {url}");
+                        let generated = match token_store
+                            .access_token(base_client, DEFAULT_TOLERANCE_SECS)
+                            .await
+                        {
+                            Ok(Some(token)) => Some(token),
+                            Ok(None) => None,
+                            Err(err) => {
+                                warn!("Failed to generate access tokens: {err}");
+                                None
+                            }
+                        };
+                        *token_state = TokenState::Initialized(generated.clone());
+                        generated
+                    }
+                    TokenState::Initialized(ref tokens) => tokens.clone(),
+                };
+
+                token.map(Credentials::from)
+            }
+            .await
+            {
+                debug!("Found credentials from token store for {url}");
+                Some(credentials)
+            // Netrc support based on: <https://github.com/gribouille/netrc>.
+            } else if let Some(credentials) = self.netrc.get().and_then(|netrc| {
+                debug!("Checking netrc for credentials for {url}");
+                Credentials::from_netrc(
+                    netrc,
+                    url,
+                    credentials
+                        .as_ref()
+                        .and_then(|credentials| credentials.username()),
+                )
+            }) {
+                debug!("Found credentials in netrc file for {url}");
+                Some(credentials)
+            } else {
+                None
             };
 
-            token.map(Credentials::from)
-        }
-        .await
-        {
-            debug!("Found credentials from token store for {url}");
-            Some(credentials)
-        // Netrc support based on: <https://github.com/gribouille/netrc>.
-        } else if let Some(credentials) = self.netrc.get().and_then(|netrc| {
-            debug!("Checking netrc for credentials for {url}");
-            Credentials::from_netrc(
-                netrc,
-                url,
-                credentials
-                    .as_ref()
-                    .and_then(|credentials| credentials.username()),
-            )
-        }) {
-            debug!("Found credentials in netrc file for {url}");
-            Some(credentials)
+            if let Some(credentials) = provider_credentials {
+                let credentials = FetchedCredentials {
+                    credentials: Arc::new(Authentication::from(credentials)),
+                    cache_scope: CredentialsCacheScope::Realm,
+                };
+                self.cache()
+                    .fetches
+                    .done(provider_key, Some(credentials.clone()));
+                return Some(credentials);
+            }
 
-        // Text credential store support.
-        } else if let Some(credentials) = self.text_store.get().await.and_then(|text_store| {
+            self.cache().fetches.done(provider_key, None);
+        }
+
+        // Text and native stores can scope credentials to a URL path, so consult them for each
+        // request instead of retaining every path in the process-wide fetch cache.
+        let text_store = self.text_store.get().await;
+        let path_sensitive_store_enabled =
+            text_store.is_some() || self.preview.is_enabled(PreviewFeature::NativeAuth);
+        let store_credentials = if let Some(credentials) = text_store.and_then(|text_store| {
             debug!("Checking text store for credentials for {url}");
             match text_store.get_credentials(
                 url,
@@ -863,47 +958,72 @@ impl AuthMiddleware {
         }) {
             debug!("Found credentials in plaintext store for {url}");
             Some(credentials)
-        } else if let Some(credentials) = {
-            if self.preview.is_enabled(PreviewFeature::NativeAuth) {
-                let native_store = KeyringProvider::native();
-                let username = credentials.and_then(|credentials| credentials.username());
-                let display_username = if let Some(username) = username {
-                    format!("{username}@")
-                } else {
-                    String::new()
-                };
-                if let Some(index) = index {
-                    // N.B. The native store performs an exact look up right now, so we use the root
-                    // URL of the index instead of relying on prefix-matching.
-                    debug!(
-                        "Checking native store for credentials for index URL {}{}",
-                        display_username, index.root_url
-                    );
-                    native_store.fetch(&index.root_url, username).await
-                } else {
-                    debug!(
-                        "Checking native store for credentials for URL {}{}",
-                        display_username, url
-                    );
-                    native_store.fetch(url, username).await
-                }
-                // TODO(zanieb): We should have a realm fallback here too
+        } else if self.preview.is_enabled(PreviewFeature::NativeAuth) {
+            let native_store = KeyringProvider::native();
+            let username = credentials.and_then(|credentials| credentials.username());
+            let display_username =
+                username.map_or_else(String::new, |username| format!("{username}@"));
+            if let Some(index) = index {
+                debug!(
+                    "Checking native store for credentials for URL {}{} in index {}",
+                    display_username, url, index.root_url
+                );
             } else {
-                None
+                debug!(
+                    "Checking native store for credentials for URL {}{}",
+                    display_username, url
+                );
             }
-        } {
-            debug!("Found credentials in native store for {url}");
-            Some(credentials)
-        // N.B. The keyring provider performs lookups for the exact URL then falls back to the host.
-        //      But, in the absence of an index URL, we cache the result per realm. So in that case,
-        //      if a keyring implementation returns different credentials for different URLs in the
-        //      same realm we will use the wrong credentials.
-        } else if let Some(credentials) = match self.keyring {
+            match native_store.fetch(url, username).await {
+                Ok(credentials) => credentials,
+                Err(err) => {
+                    debug!("Failed to get credentials from native store: {err}");
+                    let platform_unavailable = matches!(
+                        &err,
+                        crate::keyring::Error::Keyring(
+                            uv_keyring::Error::PlatformFailure(_)
+                                | uv_keyring::Error::NoStorageAccess(_)
+                        )
+                    );
+                    if username.is_some()
+                        || matches!(&err, crate::keyring::Error::AmbiguousUsername(_))
+                        || !platform_unavailable
+                    {
+                        uv_warnings::warn_user_once!(
+                            "Failed to fetch credentials from the native credential store: {err}"
+                        );
+                    }
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        let store_credentials = store_credentials.map(|credentials| FetchedCredentials {
+            credentials: Arc::new(Authentication::from(credentials)),
+            cache_scope: CredentialsCacheScope::FetchOnly,
+        });
+        if store_credentials.is_some() {
+            return store_credentials;
+        }
+
+        // The subprocess provider is slow, but its lookup target is realm- or index-scoped. Keep
+        // its memoization separate so path-sensitive store lookups still run first on every path.
+        if let Some(credentials) = self
+            .cache()
+            .keyring_fetches
+            .register_or_wait(&keyring_key)
+            .await
+        {
+            return credentials;
+        }
+
+        let keyring_credentials = match self.keyring {
             Some(ref keyring) => {
-                // The subprocess keyring provider is _slow_ so we do not perform fetches for all
-                // URLs; instead, we fetch if there's a username or if the user has requested to
-                // always authenticate.
-                if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
+                let credentials = if let Some(username) =
+                    credentials.and_then(|credentials| credentials.username())
+                {
                     if let Some(index) = index {
                         debug!(
                             "Checking keyring for credentials for index URL {}@{}",
@@ -929,29 +1049,37 @@ impl AuthMiddleware {
                             .fetch(DisplaySafeUrl::ref_cast(&index.url), None)
                             .await
                     } else {
-                        None
+                        Ok(None)
                     }
                 } else {
                     debug!(
                         "Skipping keyring fetch for {url} without username; use `authenticate = always` to force"
                     );
-                    None
+                    Ok(None)
+                };
+                match credentials {
+                    Ok(credentials) => credentials,
+                    Err(err) => {
+                        debug!("Failed to get credentials from keyring: {err}");
+                        None
+                    }
                 }
             }
             None => None,
-        } {
-            debug!("Found credentials in keyring for {url}");
-            Some(credentials)
-        } else {
-            None
         };
 
-        let credentials = credentials.map(Authentication::from).map(Arc::new);
-
-        // Register the fetch for this key
-        self.cache().fetches.done(key, credentials.clone());
-
-        credentials
+        let keyring_credentials = keyring_credentials.map(|credentials| FetchedCredentials {
+            credentials: Arc::new(Authentication::from(credentials)),
+            cache_scope: if path_sensitive_store_enabled {
+                CredentialsCacheScope::FetchOnly
+            } else {
+                CredentialsCacheScope::Realm
+            },
+        });
+        self.cache()
+            .keyring_fetches
+            .done(keyring_key, keyring_credentials.clone());
+        keyring_credentials
     }
 }
 
@@ -2557,6 +2685,199 @@ mod tests {
             client.get(server.uri()).send().await?.status(),
             200,
             "Credentials should be pulled from the text store"
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_text_store_credentials_do_not_mask_more_specific_paths() -> Result<(), Error> {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/root$"))
+            .and(basic_auth("root-user", "root-password"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path_regex("/root/private.*"))
+            .and(basic_auth("private-user", "private-password"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let base_url = Url::parse(&server.uri())?;
+        let mut store = TextCredentialStore::default();
+        store.insert(
+            crate::Service::try_from(DisplaySafeUrl::from_url(base_url.join("root")?))?,
+            Credentials::basic(
+                Some("root-user".to_string()),
+                Some("root-password".to_string()),
+            ),
+        );
+        store.insert(
+            crate::Service::try_from(DisplaySafeUrl::from_url(base_url.join("root/private")?))?,
+            Credentials::basic(
+                Some("private-user".to_string()),
+                Some("private-password".to_string()),
+            ),
+        );
+
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_text_store(Some(store)),
+            )
+            .build();
+
+        assert_eq!(
+            client.get(base_url.join("root")?).send().await?.status(),
+            200
+        );
+        assert_eq!(
+            client
+                .get(base_url.join("root/private/package")?)
+                .send()
+                .await?
+                .status(),
+            200,
+            "Root credentials must not mask a more-specific credential"
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_text_store_miss_does_not_mask_another_path() -> Result<(), Error> {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/second.*"))
+            .and(basic_auth("second-user", "second-password"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let base_url = Url::parse(&server.uri())?;
+        let mut store = TextCredentialStore::default();
+        store.insert(
+            crate::Service::try_from(DisplaySafeUrl::from_url(base_url.join("first")?))?,
+            Credentials::basic(
+                Some("first-user".to_string()),
+                Some("first-password".to_string()),
+            ),
+        );
+        store.insert(
+            crate::Service::try_from(DisplaySafeUrl::from_url(base_url.join("second")?))?,
+            Credentials::basic(
+                Some("second-user".to_string()),
+                Some("second-password".to_string()),
+            ),
+        );
+
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_text_store(Some(store)),
+            )
+            .build();
+
+        assert_eq!(
+            client
+                .get(base_url.join("first/package")?)
+                .send()
+                .await?
+                .status(),
+            401
+        );
+        assert_eq!(
+            client
+                .get(base_url.join("second/package")?)
+                .send()
+                .await?
+                .status(),
+            200,
+            "A failed fetch for another path must not poison this lookup"
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_keyring_credentials_do_not_mask_a_more_specific_text_credential()
+    -> Result<(), Error> {
+        let server = MockServer::start().await;
+        let username = "user";
+
+        Mock::given(method("GET"))
+            .and(path_regex("/root$"))
+            .and(basic_auth(username, "keyring-password"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path_regex("/root/private.*"))
+            .and(basic_auth(username, "text-password"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let base_url = Url::parse(&server.uri())?;
+        let mut store = TextCredentialStore::default();
+        store.insert(
+            crate::Service::try_from(DisplaySafeUrl::from_url(base_url.join("root/private")?))?,
+            Credentials::basic(
+                Some(username.to_string()),
+                Some("text-password".to_string()),
+            ),
+        );
+        let keyring_service = format!(
+            "{}:{}",
+            base_url.host_str().expect("mock server URL has a host"),
+            base_url.port().expect("mock server URL has a port")
+        );
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_text_store(Some(store))
+                    .with_keyring(Some(KeyringProvider::dummy([(
+                        keyring_service,
+                        username,
+                        "keyring-password",
+                    )]))),
+            )
+            .build();
+
+        let mut root_url = base_url.join("root")?;
+        root_url
+            .set_username(username)
+            .expect("HTTP URL accepts a username");
+        assert_eq!(client.get(root_url).send().await?.status(), 200);
+
+        let mut private_url = base_url.join("root/private/package")?;
+        private_url
+            .set_username(username)
+            .expect("HTTP URL accepts a username");
+        assert_eq!(
+            client.get(private_url).send().await?.status(),
+            200,
+            "A realm-cached keyring credential must not mask a path-specific text credential"
         );
 
         Ok(())
