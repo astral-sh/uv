@@ -150,7 +150,7 @@ impl VerbatimUrl {
 
     /// Parse a URL from an absolute or relative path, including a URL fragment.
     #[cfg(feature = "non-pep508-extensions")]
-    fn from_path_with_fragment(
+    pub(crate) fn from_path_with_fragment(
         path: impl AsRef<Path>,
         base_dir: impl AsRef<Path>,
     ) -> Result<Self, VerbatimUrlError> {
@@ -186,7 +186,9 @@ impl VerbatimUrl {
 
     /// Parse a URL from an absolute path, including a URL fragment.
     #[cfg(feature = "non-pep508-extensions")]
-    fn from_absolute_path_with_fragment(path: impl AsRef<Path>) -> Result<Self, VerbatimUrlError> {
+    pub(crate) fn from_absolute_path_with_fragment(
+        path: impl AsRef<Path>,
+    ) -> Result<Self, VerbatimUrlError> {
         let (path, fragment) = split_fragment(path.as_ref());
         Ok(Self::from_absolute_path(path)?.with_url_fragment(fragment))
     }
