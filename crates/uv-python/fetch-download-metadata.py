@@ -636,6 +636,12 @@ class GraalPyFinder(Finder):
                 m = self.PLATFORM_RE.search(url)
                 if not m:
                     continue
+                platform = self._normalize_os(m.group(1))
+                arch = self._normalize_arch(m.group(2))
+                libc = "gnu" if platform == "linux" else "none"
+                sha256 = None
+                if digest := asset["digest"]:
+                    sha256 = digest.removeprefix("sha256:")
                 m = self.GRAALPY_ASSET_VERSION_RE.search(asset["name"])
                 if not m:
                     m = self.CPY_VERSION_RE.search(release["body"])
@@ -645,12 +651,6 @@ class GraalPyFinder(Finder):
                 if not m.group(2):
                     python_version_str += ".0"
                 python_version = Version.from_str(python_version_str)
-                platform = self._normalize_os(m.group(1))
-                arch = self._normalize_arch(m.group(2))
-                libc = "gnu" if platform == "linux" else "none"
-                sha256 = None
-                if digest := asset["digest"]:
-                    sha256 = digest.removeprefix("sha256:")
                 download = PythonDownload(
                     release=0,
                     version=python_version,
