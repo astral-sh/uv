@@ -2909,7 +2909,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(hashes)
     }
 
-    /// For Git directories, we check them out into the cache, so we need to avoid workspac
+    /// For Git directories, we check them out into the cache, so we need to avoid workspace
     /// discovery that goes outside the cache.
     fn stop_discovery_at(&self, source: &BuildableSource<'_>, source_root: &Path) -> Option<&Path> {
         if matches!(
