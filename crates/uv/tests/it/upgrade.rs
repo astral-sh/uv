@@ -4,6 +4,7 @@ use insta::allow_duplicates;
 use url::Url;
 
 use uv_static::EnvVars;
+use uv_test::packse::PackseServer;
 use uv_test::{TestContext, uv_snapshot};
 
 fn assert_project_unchanged(context: &TestContext, expected: &str) -> Result<()> {
@@ -14,6 +15,41 @@ fn assert_project_unchanged(context: &TestContext, expected: &str) -> Result<()>
     assert!(!context.temp_dir.child("uv.lock").exists());
     assert!(!context.temp_dir.child(".venv").exists());
     Ok(())
+}
+
+/// Return snapshot filters for metadata fetched from a [`PackseServer`].
+fn packse_filters(context: &TestContext) -> Vec<(&str, &str)> {
+    let mut filters = context.filters();
+    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    filters
+}
+
+/// Write a project where `foo==1` resolves two versions of `bar` in platform forks.
+fn write_fork_upgrade_project(
+    context: &TestContext,
+    server: &PackseServer,
+    bar_requirement: &str,
+) -> Result<String> {
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["{bar_requirement}", "foo==1"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+    Ok(pyproject_toml)
 }
 
 #[test]
@@ -108,14 +144,207 @@ fn upgrade_selects_normalized_production_dependency() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
     Add anyio v4.3.0
+    Updated requirement: `AnyIO>=2,<3,!=2.1 ; python_version >= '3.12'` -> `anyio>=2,!=2.1,<5 ; python_full_version >= '3.12'`
     "
     );
+
+    insta::assert_snapshot!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        @r#"
+[project]
+name = "example"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["anyio>=2,!=2.1,<5 ; python_full_version >= '3.12'"]
+
+[tool.uv]
+exclude-newer = "2024-03-25T00:00:00Z"
+"#
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_ignores_disjoint_fork_version_for_selected_requirement() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml =
+        write_fork_upgrade_project(&context, &server, "bar==2 ; sys_platform != 'linux'")?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add bar v1.0.0, v2.0.0
+    "
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)
+}
+
+#[test]
+fn upgrade_preserves_constraint_that_admits_multiple_fork_versions() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = write_fork_upgrade_project(&context, &server, "bar>=1")?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add bar v1.0.0, v2.0.0
+    "
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)
+}
+
+#[test]
+fn upgrade_preserves_inapplicable_marked_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio<3 ; python_version < '3.12'"]
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    No version change for anyio
+    ");
 
     assert_project_unchanged(&context, pyproject_toml)
 }
 
 #[test]
-fn upgrade_resolves_selected_dependency_without_mutation() -> Result<()> {
+fn upgrade_expands_constraint_for_multiple_fork_versions() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = write_fork_upgrade_project(&context, &server, "bar<2")?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add bar v1.0.0, v2.0.0
+    Updated requirement: `bar<2` -> `bar<3`
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        pyproject_toml.replace("bar<2", "bar<3")
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_expands_compatible_constraint_for_multiple_fork_versions() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/filter-sibling-dependencies.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a~=3.0"]
+
+        [tool.uv]
+        constraint-dependencies = [
+            "a==4.3.0 ; sys_platform == 'darwin'",
+            "a==4.4.0 ; sys_platform != 'darwin'",
+        ]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("a")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    Add a v4.3.0, v4.4.0
+    Updated requirement: `a~=3.0` -> `a~=4.3`
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        pyproject_toml.replace("a~=3.0", "a~=4.3")
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_updates_requirement_without_updating_lockfile_or_environment() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let initial_pyproject_toml = r#"
         [project]
@@ -150,9 +379,9 @@ fn upgrade_resolves_selected_dependency_without_mutation() -> Result<()> {
         .temp_dir
         .child("pyproject.toml")
         .write_str(&pyproject_toml)?;
-    fs_err::remove_dir_all(&context.venv)?;
+    let environment_sentinel = context.venv.child("sentinel");
+    environment_sentinel.write_str("present")?;
 
-    let pyproject = fs_err::read(context.temp_dir.child("pyproject.toml"))?;
     let lock = fs_err::read(context.temp_dir.child("uv.lock"))?;
 
     uv_snapshot!(
@@ -167,15 +396,15 @@ fn upgrade_resolves_selected_dependency_without_mutation() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolving despite existing lockfile due to change of exclude newer timestamp from `2021-01-01T00:00:00Z` to `2024-03-25T00:00:00Z`
     Resolved 4 packages in [TIME]
     Update anyio v2.0.0 -> v4.3.0
+    Updated requirement: `anyio<=2` -> `anyio<=4.3.0`
     ");
 
     assert_eq!(
-        fs_err::read(context.temp_dir.child("pyproject.toml"))?,
-        pyproject
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        pyproject_toml.replace("anyio<=2", "anyio<=4.3.0")
     );
     assert_eq!(fs_err::read(context.temp_dir.child("uv.lock"))?, lock);
     let lock_contents = context.read("uv.lock");
@@ -183,7 +412,7 @@ fn upgrade_resolves_selected_dependency_without_mutation() -> Result<()> {
         lock_contents.contains("name = \"idna\"\nversion = \"2.10\""),
         "{lock_contents}"
     );
-    assert!(!context.temp_dir.child(".venv").exists());
+    assert!(environment_sentinel.exists());
     Ok(())
 }
 
@@ -349,15 +578,15 @@ fn upgrade_requires_production_dependency() -> Result<()> {
 }
 
 #[test]
-fn upgrade_rejects_duplicate_production_dependencies() -> Result<()> {
+fn upgrade_rejects_duplicate_marked_production_dependencies() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let pyproject_toml = r#"
         [project]
         name = "example"
         version = "0.1.0"
         dependencies = [
-            "Requests>=2",
-            "requests<3",
+            "Requests>=2 ; sys_platform == 'darwin'",
+            "requests<3 ; sys_platform != 'darwin'",
         ]
     "#;
     context
@@ -604,10 +833,17 @@ fn upgrade_allows_registry_source() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
     Add idna v3.6
+    Updated requirement: `idna>=2,<3` -> `idna>=2,<4`
     "
     );
 
-    assert_project_unchanged(&context, &pyproject_toml)
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        pyproject_toml.replace("idna>=2,<3", "idna>=2,<4")
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
 }
 
 #[test]
@@ -644,10 +880,20 @@ fn upgrade_ignores_inapplicable_non_registry_source() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
     Add anyio v4.3.0
+    Updated requirement: `anyio>=2,<3 ; python_version >= '3.12'` -> `anyio>=2,<5 ; python_full_version >= '3.12'`
     "
     );
 
-    assert_project_unchanged(&context, pyproject_toml)
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        pyproject_toml.replace(
+            "anyio>=2,<3 ; python_version >= '3.12'",
+            "anyio>=2,<5 ; python_full_version >= '3.12'"
+        )
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
 }
 
 #[test]
@@ -707,7 +953,7 @@ fn upgrade_rejects_workspace_root_non_registry_source() -> Result<()> {
 }
 
 #[test]
-fn upgrade_resolves_nested_workspace_member_without_mutation() -> Result<()> {
+fn upgrade_updates_nested_workspace_member_only() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let workspace_pyproject_toml = r#"
         [tool.uv.workspace]
@@ -747,6 +993,7 @@ fn upgrade_resolves_nested_workspace_member_without_mutation() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
     Add anyio v4.3.0
+    Updated requirement: `anyio<=2` -> `anyio<=4.3.0`
     "
     );
 
@@ -756,7 +1003,7 @@ fn upgrade_resolves_nested_workspace_member_without_mutation() -> Result<()> {
     );
     assert_eq!(
         fs_err::read_to_string(project.child("pyproject.toml"))?,
-        project_pyproject_toml
+        project_pyproject_toml.replace("anyio<=2", "anyio<=4.3.0")
     );
     assert!(!context.temp_dir.child("uv.lock").exists());
     assert!(!context.temp_dir.child(".venv").exists());
