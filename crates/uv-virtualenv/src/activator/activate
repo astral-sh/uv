@@ -113,7 +113,11 @@ fi
 
 if [ -z "${VIRTUAL_ENV_DISABLE_PROMPT-}" ] ; then
     _OLD_VIRTUAL_PS1="${PS1-}"
-    PS1="(${VIRTUAL_ENV_PROMPT}) ${PS1-}"
+    if [ -n "${BASH_VERSION-}" ] ; then
+        PS1='(${VIRTUAL_ENV_PROMPT}) '"${PS1-}"
+    else
+        PS1="(${VIRTUAL_ENV_PROMPT}) ${PS1-}"
+    fi
     export PS1
 fi
 

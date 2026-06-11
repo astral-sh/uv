@@ -131,6 +131,36 @@ fn custom_prompt_is_escaped() {
     marker.assert(predicates::path::missing());
 }
 
+/// Bash must not evaluate custom prompts when rendering `PS1`.
+#[test]
+#[cfg(unix)]
+fn custom_prompt_is_not_evaluated_by_bash() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let marker = context.temp_dir.child("injected");
+    let prompt = r#"$(touch "$INJECTION_MARKER")"#;
+
+    create_venv_with_prompt(&context, prompt);
+
+    let activation = context.venv.child("bin").child("activate");
+    Command::new("bash")
+        .arg("--noprofile")
+        .arg("--norc")
+        .arg("-i")
+        .env("ACTIVATION", activation.path())
+        .env("EXPECTED_PROMPT", prompt)
+        .env("INJECTION_MARKER", marker.path())
+        .write_stdin(indoc! {r#"
+            . "$ACTIVATION"
+            test "$VIRTUAL_ENV_PROMPT" = "$EXPECTED_PROMPT" || exit 2
+            true
+            exit
+        "#})
+        .assert()
+        .success();
+
+    marker.assert(predicates::path::missing());
+}
+
 #[test]
 fn create_venv_project_environment() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
