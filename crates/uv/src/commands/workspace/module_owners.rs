@@ -48,6 +48,9 @@ pub(crate) async fn collect_module_owners(
     let target = InstallTarget::Workspace { workspace, lock };
     let extras = ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default());
     let groups = DependencyGroups::from_all_groups().with_defaults(DefaultGroups::default());
+    let Some(package_ids) = selected_package_ids(target, venv, &extras, &groups, settings)? else {
+        return Ok(BTreeMap::new());
+    };
 
     let reinstall = Reinstall::None;
     let installer_settings = InstallerSettingsRef {
@@ -92,7 +95,7 @@ pub(crate) async fn collect_module_owners(
     )
     .await?;
 
-    find_module_owners(target, venv, &extras, &groups, settings)
+    find_module_owners_in_environment(venv, &package_ids)
 }
 
 /// Map the modules in an existing environment to package IDs from the lockfile.
@@ -103,6 +106,21 @@ pub(crate) fn find_module_owners(
     groups: &DependencyGroupsWithDefaults,
     settings: &ResolverSettings,
 ) -> Result<BTreeMap<ModuleName, Vec<String>>> {
+    let Some(package_ids) = selected_package_ids(target, venv, extras, groups, settings)? else {
+        return Ok(BTreeMap::new());
+    };
+
+    find_module_owners_in_environment(venv, &package_ids)
+}
+
+/// Select the package IDs that can own modules in the target resolution.
+fn selected_package_ids(
+    target: InstallTarget<'_>,
+    venv: &PythonEnvironment,
+    extras: &ExtrasSpecificationWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
+    settings: &ResolverSettings,
+) -> Result<Option<BTreeMap<PackageName, String>>> {
     let marker_env = resolution_markers(None, None, venv.interpreter());
     let tags = resolution_tags(None, None, venv.interpreter())?;
 
@@ -115,7 +133,7 @@ pub(crate) fn find_module_owners(
         &InstallOptions::default(),
     )?;
     if resolution.is_empty() {
-        return Ok(BTreeMap::new());
+        return Ok(None);
     }
 
     let workspace_root = PortablePathBuf::from(target.install_path());
@@ -126,7 +144,14 @@ pub(crate) fn find_module_owners(
             Metadata::package_node_id(&workspace_root, dist)?,
         );
     }
+    Ok(Some(package_ids))
+}
 
+/// Map modules in an existing environment to their selected package IDs.
+fn find_module_owners_in_environment(
+    venv: &PythonEnvironment,
+    package_ids: &BTreeMap<PackageName, String>,
+) -> Result<BTreeMap<ModuleName, Vec<String>>> {
     let mut owners = BTreeMap::<ModuleName, BTreeSet<String>>::new();
     for dist in SitePackages::from_environment(venv)?.iter() {
         let Some(package_id) = package_ids.get(dist.name()) else {
