@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `cargo run dev generate-sysconfig-metadata`
-//! Targets from <https://github.com/astral-sh/python-build-standalone/blob/20260602/cpython-unix/targets.yml>
+//! Targets from <https://github.com/astral-sh/python-build-standalone/blob/20260610/cpython-unix/targets.yml>
 //!
 #![allow(clippy::all)]
 #![cfg_attr(any(), rustfmt::skip)]
@@ -22,7 +22,6 @@ pub(crate) static DEFAULT_VARIABLE_UPDATES: LazyLock<BTreeMap<String, Vec<Replac
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/mips-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/mipsel-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/powerpc64le-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
-            ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/riscv64-linux-gnu-clang".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/riscv64-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/s390x-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/x86_64-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
@@ -37,7 +36,6 @@ pub(crate) static DEFAULT_VARIABLE_UPDATES: LazyLock<BTreeMap<String, Vec<Replac
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/mips-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/mipsel-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/powerpc64le-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
-            ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/riscv64-linux-gnu-clang".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/riscv64-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/s390x-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/x86_64-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
@@ -52,7 +50,6 @@ pub(crate) static DEFAULT_VARIABLE_UPDATES: LazyLock<BTreeMap<String, Vec<Replac
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/mips-linux-gnu-g++".to_string() }, to: "c++".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/mipsel-linux-gnu-g++".to_string() }, to: "c++".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/powerpc64le-linux-gnu-g++".to_string() }, to: "c++".to_string() },
-            ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/riscv64-linux-gnu-clang++".to_string() }, to: "c++".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/riscv64-linux-gnu-g++".to_string() }, to: "c++".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/s390x-linux-gnu-g++".to_string() }, to: "c++".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/x86_64-linux-gnu-g++".to_string() }, to: "c++".to_string() },
@@ -66,7 +63,6 @@ pub(crate) static DEFAULT_VARIABLE_UPDATES: LazyLock<BTreeMap<String, Vec<Replac
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/mips-linux-gnu-g++".to_string() }, to: "c++".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/mipsel-linux-gnu-g++".to_string() }, to: "c++".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/powerpc64le-linux-gnu-g++".to_string() }, to: "c++".to_string() },
-            ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/riscv64-linux-gnu-clang++".to_string() }, to: "c++".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/riscv64-linux-gnu-g++".to_string() }, to: "c++".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/s390x-linux-gnu-g++".to_string() }, to: "c++".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/x86_64-linux-gnu-g++".to_string() }, to: "c++".to_string() },
@@ -80,7 +76,6 @@ pub(crate) static DEFAULT_VARIABLE_UPDATES: LazyLock<BTreeMap<String, Vec<Replac
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/mips-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/mipsel-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/powerpc64le-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
-            ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/riscv64-linux-gnu-clang".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/riscv64-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/s390x-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/x86_64-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
@@ -95,7 +90,6 @@ pub(crate) static DEFAULT_VARIABLE_UPDATES: LazyLock<BTreeMap<String, Vec<Replac
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/mips-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/mipsel-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/powerpc64le-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
-            ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/riscv64-linux-gnu-clang".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/riscv64-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/s390x-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
             ReplacementEntry { mode: ReplacementMode::Partial { from: "/usr/bin/x86_64-linux-gnu-gcc".to_string() }, to: "cc".to_string() },
