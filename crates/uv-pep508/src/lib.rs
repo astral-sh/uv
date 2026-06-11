@@ -1470,6 +1470,13 @@ mod tests {
     }
 
     #[test]
+    fn reversed_compatible_release_string_marker() {
+        let requirement = Requirement::<Url>::from_str(r#"foo; "3" ~= sys_platform"#).unwrap();
+
+        assert_eq!(requirement.to_string(), "foo");
+    }
+
+    #[test]
     fn error_marker_incomplete1() {
         assert_snapshot!(
             parse_pep508_err(r"numpy; sys_platform"),
