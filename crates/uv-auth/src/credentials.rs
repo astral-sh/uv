@@ -157,6 +157,7 @@ impl Credentials {
         }
     }
 
+    /// Return the username used to identify these credentials in persistent stores.
     pub(crate) fn to_username(&self) -> Username {
         match self {
             Self::Basic { username, .. } => username.clone(),

@@ -43,6 +43,7 @@ use crate::error::{Error as ErrorCode, Result};
 use byteorder::{ByteOrder, LittleEndian};
 use std::collections::HashMap;
 use std::iter::once;
+use std::ptr::NonNull;
 use std::str;
 use windows::Win32::Foundation::{
     ERROR_BAD_USERNAME, ERROR_INVALID_FLAGS, ERROR_INVALID_PARAMETER, ERROR_NO_SUCH_LOGON_SESSION,
@@ -66,6 +67,92 @@ pub struct WinCredential {
     pub target_name: String,
     pub target_alias: String,
     pub comment: String,
+}
+
+/// A credential returned by [`WinCredential::enumerate`].
+///
+/// The copied secret is zeroized when this value is dropped.
+pub struct EnumeratedCredential {
+    credential: WinCredential,
+    secret: Vec<u8>,
+}
+
+impl EnumeratedCredential {
+    /// Return the credential metadata.
+    pub fn credential(&self) -> &WinCredential {
+        &self.credential
+    }
+
+    /// Return the credential secret.
+    ///
+    /// The returned bytes remain valid until this value is dropped, at which point the backing
+    /// buffer is zeroized.
+    pub fn secret(&self) -> &[u8] {
+        &self.secret
+    }
+}
+
+impl std::fmt::Debug for EnumeratedCredential {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("EnumeratedCredential")
+            .field("credential", &self.credential)
+            .field("secret", &"[REDACTED]")
+            .finish()
+    }
+}
+
+impl Drop for EnumeratedCredential {
+    fn drop(&mut self) {
+        self.secret.zeroize();
+    }
+}
+
+/// The allocation returned by [`CredEnumerateW`].
+///
+/// The allocation contains both the array of pointers and the credentials they reference. All
+/// credential blobs are zeroized before the allocation is released.
+struct EnumeratedCredentialBuffer {
+    credentials: NonNull<*mut CREDENTIALW>,
+    count: usize,
+}
+
+impl EnumeratedCredentialBuffer {
+    /// Take ownership of a successful [`CredEnumerateW`] result.
+    ///
+    /// # Safety
+    ///
+    /// `credentials` must point to the allocation returned by [`CredEnumerateW`] and contain
+    /// `count` credential pointers.
+    unsafe fn from_raw(credentials: *mut *mut CREDENTIALW, count: usize) -> Option<Self> {
+        Some(Self {
+            credentials: NonNull::new(credentials)?,
+            count,
+        })
+    }
+
+    /// Return the credential pointers in the allocation.
+    fn credentials(&self) -> &[*mut CREDENTIALW] {
+        // SAFETY: `self.credentials` points to the allocation returned by `CredEnumerateW`, which
+        // contains `self.count` credential pointers and remains live for the lifetime of `self`.
+        unsafe { std::slice::from_raw_parts(self.credentials.as_ptr(), self.count) }
+    }
+}
+
+impl Drop for EnumeratedCredentialBuffer {
+    fn drop(&mut self) {
+        for credential in self.credentials() {
+            // SAFETY: Every non-null pointer in the array belongs to the `CredEnumerateW`
+            // allocation and remains valid until the allocation is released below.
+            if let Some(credential) = unsafe { credential.as_mut() } {
+                erase_secret(credential);
+            }
+        }
+
+        // SAFETY: `self.credentials` is the allocation returned by `CredEnumerateW`, and this
+        // guard owns it.
+        unsafe { CredFree(self.credentials.as_ptr().cast()) };
+    }
 }
 
 // Windows API type mappings:
@@ -190,8 +277,9 @@ impl WinCredential {
     /// Return all Windows Generic credentials with target names matching `target_prefix`.
     ///
     /// Windows credential enumeration accepts a single trailing wildcard, so this method treats
-    /// the provided value as a literal target-name prefix.
-    pub async fn enumerate(target_prefix: &str) -> Result<Vec<Self>> {
+    /// the provided value as a literal target-name prefix. Each returned value includes the secret
+    /// from the enumeration result, avoiding a separate lookup for every credential.
+    pub async fn enumerate(target_prefix: &str) -> Result<Vec<EnumeratedCredential>> {
         if target_prefix.contains('\0') {
             return Err(ErrorCode::Invalid(
                 "target prefix".to_string(),
@@ -226,40 +314,41 @@ impl WinCredential {
                 Err(err) => return Err(Error(err).into()),
             }
 
-            if credentials.is_null() || count == 0 {
-                if !credentials.is_null() {
+            if count == 0 {
+                if let Some(credentials) = NonNull::new(credentials) {
                     // SAFETY: `credentials` is the allocation returned by `CredEnumerateW`.
-                    unsafe { CredFree(credentials.cast()) };
+                    unsafe { CredFree(credentials.as_ptr().cast()) };
                 }
                 return Ok(Vec::new());
             }
 
-            // SAFETY: `CredEnumerateW` returned an array containing `count` credential pointers.
-            let credential_pointers =
-                unsafe { std::slice::from_raw_parts_mut(credentials, count as usize) };
-            let result = credential_pointers
-                .iter()
-                .filter_map(|credential| {
-                    // SAFETY: Each non-null pointer belongs to the allocation returned by
-                    // `CredEnumerateW` and remains valid until the outer allocation is freed.
-                    unsafe { credential.as_ref() }
-                })
-                .filter(|credential| credential.Type == CRED_TYPE_GENERIC)
-                .map(Self::extract_credential)
-                .collect();
+            // SAFETY: `CredEnumerateW` succeeded and returned `count` credential pointers.
+            let Some(credentials) =
+                (unsafe { EnumeratedCredentialBuffer::from_raw(credentials, count as usize) })
+            else {
+                return Err(ErrorCode::PlatformFailure(Box::new(std::io::Error::other(
+                    "CredEnumerateW returned a null credential array",
+                ))));
+            };
 
-            for credential in credential_pointers {
-                // SAFETY: Each non-null pointer belongs to the allocation returned by
-                // `CredEnumerateW` and remains valid until the outer allocation is freed.
-                if let Some(credential) = unsafe { credential.as_mut() } {
-                    erase_secret(credential);
+            let mut enumerated = Vec::with_capacity(credentials.count);
+            for credential in credentials.credentials() {
+                // SAFETY: Every pointer in the array belongs to the `CredEnumerateW` allocation
+                // and remains valid while `credentials` is live.
+                let Some(credential) = (unsafe { credential.as_ref() }) else {
+                    return Err(ErrorCode::PlatformFailure(Box::new(std::io::Error::other(
+                        "CredEnumerateW returned a null credential pointer",
+                    ))));
+                };
+                if credential.Type != CRED_TYPE_GENERIC {
+                    continue;
                 }
+                enumerated.push(EnumeratedCredential {
+                    credential: Self::extract_credential(credential)?,
+                    secret: extract_secret(credential)?,
+                });
             }
-
-            // SAFETY: `credentials` is the single allocation returned by `CredEnumerateW`.
-            unsafe { CredFree(credentials.cast()) };
-
-            result
+            Ok(enumerated)
         })
         .await
     }
@@ -506,24 +595,33 @@ fn extract_password(credential: &CREDENTIALW) -> Result<String> {
     result
 }
 
-#[expect(clippy::unnecessary_wraps)]
 fn extract_secret(credential: &CREDENTIALW) -> Result<Vec<u8>> {
-    let blob_pointer: *const u8 = credential.CredentialBlob;
     let blob_len: usize = credential.CredentialBlobSize as usize;
     if blob_len == 0 {
         return Ok(Vec::new());
     }
-    let blob = unsafe { std::slice::from_raw_parts(blob_pointer, blob_len) };
+    let Some(blob_pointer) = NonNull::new(credential.CredentialBlob) else {
+        return Err(ErrorCode::PlatformFailure(Box::new(std::io::Error::other(
+            "Windows returned a null pointer for a non-empty credential blob",
+        ))));
+    };
+    // SAFETY: Windows guarantees that a non-empty credential blob points to
+    // `CredentialBlobSize` readable bytes for the lifetime of the credential.
+    let blob = unsafe { std::slice::from_raw_parts(blob_pointer.as_ptr(), blob_len) };
     Ok(blob.to_vec())
 }
 
 fn erase_secret(credential: &mut CREDENTIALW) {
-    let blob_pointer: *mut u8 = credential.CredentialBlob;
     let blob_len: usize = credential.CredentialBlobSize as usize;
     if blob_len == 0 {
         return;
     }
-    let blob = unsafe { std::slice::from_raw_parts_mut(blob_pointer, blob_len) };
+    let Some(blob_pointer) = NonNull::new(credential.CredentialBlob) else {
+        return;
+    };
+    // SAFETY: The caller owns the native credential allocation, and Windows guarantees that a
+    // non-empty credential blob points to `CredentialBlobSize` writable bytes in that allocation.
+    let blob = unsafe { std::slice::from_raw_parts_mut(blob_pointer.as_ptr(), blob_len) };
     blob.zeroize();
 }
 
@@ -831,7 +929,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_enumerate_target_prefix() {
+    async fn test_enumerate_target_prefix() -> Result<()> {
         let name = generate_random_string();
         let prefix = format!("uv-keyring-enumerate-{name}-");
         let targets = [
@@ -840,45 +938,64 @@ mod tests {
             format!("uv-keyring-other-{name}"),
         ];
 
-        for (index, target) in targets.iter().enumerate() {
-            let credential =
-                WinCredential::new_with_target(Some(target), "enumeration-test", "test-user")
-                    .unwrap();
-            Entry::new_with_credential(Box::new(credential))
-                .set_secret(format!("secret-{index}").as_bytes())
-                .await
-                .unwrap();
-        }
+        let result = async {
+            for (index, target) in targets.iter().enumerate() {
+                let credential =
+                    WinCredential::new_with_target(Some(target), "enumeration-test", "test-user")?;
+                Entry::new_with_credential(Box::new(credential))
+                    .set_secret(format!("secret-{index}").as_bytes())
+                    .await?;
+            }
 
-        let enumerated = WinCredential::enumerate(&prefix.to_uppercase())
-            .await
-            .unwrap();
+            WinCredential::enumerate(&prefix.to_uppercase()).await
+        }
+        .await;
 
         for target in &targets {
-            let credential =
+            if let Ok(credential) =
                 WinCredential::new_with_target(Some(target), "enumeration-test", "test-user")
-                    .unwrap();
-            Entry::new_with_credential(Box::new(credential))
-                .delete_credential()
-                .await
-                .unwrap();
+            {
+                let _ = Entry::new_with_credential(Box::new(credential))
+                    .delete_credential()
+                    .await;
+            }
         }
 
-        let mut enumerated_targets = enumerated
-            .into_iter()
-            .map(|credential| credential.target_name)
+        let enumerated = result?;
+        let mut enumerated_credentials = enumerated
+            .iter()
+            .map(|credential| {
+                (
+                    credential.credential().target_name.clone(),
+                    credential.secret().to_vec(),
+                )
+            })
             .collect::<Vec<_>>();
-        enumerated_targets.sort();
+        enumerated_credentials.sort();
 
-        let mut expected_targets = targets[..2].to_vec();
-        expected_targets.sort();
-        assert_eq!(enumerated_targets, expected_targets);
+        let mut expected_credentials = targets[..2]
+            .iter()
+            .enumerate()
+            .map(|(index, target)| (target.clone(), format!("secret-{index}").into_bytes()))
+            .collect::<Vec<_>>();
+        expected_credentials.sort();
+        assert_eq!(enumerated_credentials, expected_credentials);
         assert!(
             WinCredential::enumerate(&format!("uv-keyring-missing-{name}"))
-                .await
-                .unwrap()
+                .await?
                 .is_empty()
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_enumerate_rejects_non_literal_prefix() {
+        for prefix in ["uv-keyring-*", "uv-keyring-\0"] {
+            assert!(matches!(
+                WinCredential::enumerate(prefix).await,
+                Err(ErrorCode::Invalid(..))
+            ));
+        }
     }
 
     #[tokio::test]

@@ -11,11 +11,13 @@ use uv_redacted::DisplaySafeUrl;
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 
-use crate::credentials::{Password, Token, Username};
+use crate::credentials::Username;
 use crate::matching;
-use crate::realm::Realm;
+use crate::persistent::PersistentCredential;
 use crate::service::Service;
 use crate::{Credentials, KeyringProvider};
+
+pub use crate::persistent::AuthScheme;
 
 /// The storage backend to use in `uv auth` commands.
 #[derive(Debug)]
@@ -53,21 +55,6 @@ impl AuthBackend {
     }
 }
 
-/// Authentication scheme to use.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum AuthScheme {
-    /// HTTP Basic Authentication
-    ///
-    /// Uses a username and password.
-    #[default]
-    Basic,
-    /// Bearer token authentication.
-    ///
-    /// Uses a token provided as `Bearer <token>` in the `Authorization` header.
-    Bearer,
-}
-
 /// Errors that can occur when working with TOML credential storage.
 #[derive(Debug, Error)]
 pub enum TomlCredentialError {
@@ -79,14 +66,8 @@ pub enum TomlCredentialError {
     ParseError(#[from] toml::de::Error),
     #[error("Failed to serialize credentials to TOML")]
     SerializeError(#[from] toml::ser::Error),
-    #[error(transparent)]
-    BasicAuthError(#[from] BasicAuthError),
-    #[error(transparent)]
-    BearerAuthError(#[from] BearerAuthError),
     #[error("Failed to determine credentials directory")]
     CredentialsDirError,
-    #[error("Token is not valid unicode")]
-    TokenNotUnicode(#[from] std::string::FromUtf8Error),
 }
 
 impl TomlCredentialError {
@@ -94,144 +75,15 @@ impl TomlCredentialError {
         match self {
             Self::Io(err) => Some(err),
             Self::LockedFile(err) => err.as_io_error(),
-            Self::ParseError(_)
-            | Self::SerializeError(_)
-            | Self::BasicAuthError(_)
-            | Self::BearerAuthError(_)
-            | Self::CredentialsDirError
-            | Self::TokenNotUnicode(_) => None,
+            Self::ParseError(_) | Self::SerializeError(_) | Self::CredentialsDirError => None,
         }
     }
-}
-
-#[derive(Debug, Error)]
-pub enum BasicAuthError {
-    #[error("`username` is required with `scheme = basic`")]
-    MissingUsername,
-    #[error("`token` cannot be provided with `scheme = basic`")]
-    UnexpectedToken,
-}
-
-#[derive(Debug, Error)]
-pub enum BearerAuthError {
-    #[error("`token` is required with `scheme = bearer`")]
-    MissingToken,
-    #[error("`username` cannot be provided with `scheme = bearer`")]
-    UnexpectedUsername,
-    #[error("`password` cannot be provided with `scheme = bearer`")]
-    UnexpectedPassword,
 }
 
 #[derive(Debug, Error, PartialEq)]
 pub enum LookupError {
     #[error("Multiple credentials found for URL '{0}', specify which username to use")]
     AmbiguousUsername(DisplaySafeUrl),
-}
-
-/// A persistent credential entry that can be serialized to TOML or JSON.
-///
-/// Used by both the text credential store (serialized to TOML) and the
-/// native keyring store (serialized to JSON). This ensures a consistent
-/// credential format across storage backends.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(
-    try_from = "PersistentCredentialWire",
-    into = "PersistentCredentialWire"
-)]
-pub(crate) struct PersistentCredential {
-    /// The service URL for this credential.
-    pub(crate) service: Service,
-    /// The credentials for this entry.
-    pub(crate) credentials: Credentials,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct PersistentCredentialWire {
-    /// The service URL for this credential.
-    service: Service,
-    /// The username to use. Only allowed with [`AuthScheme::Basic`].
-    username: Username,
-    /// The authentication scheme.
-    #[serde(default)]
-    scheme: AuthScheme,
-    /// The password to use. Only allowed with [`AuthScheme::Basic`].
-    password: Option<Password>,
-    /// The token to use. Only allowed with [`AuthScheme::Bearer`].
-    token: Option<String>,
-}
-
-impl From<PersistentCredential> for PersistentCredentialWire {
-    fn from(value: PersistentCredential) -> Self {
-        match value.credentials {
-            Credentials::Basic { username, password } => Self {
-                service: value.service,
-                username,
-                scheme: AuthScheme::Basic,
-                password,
-                token: None,
-            },
-            Credentials::Bearer { token } => Self {
-                service: value.service,
-                username: Username::new(None),
-                scheme: AuthScheme::Bearer,
-                password: None,
-                token: Some(String::from_utf8(token.into_bytes()).expect("Token is valid UTF-8")),
-            },
-        }
-    }
-}
-
-impl TryFrom<PersistentCredentialWire> for PersistentCredential {
-    type Error = TomlCredentialError;
-
-    fn try_from(value: PersistentCredentialWire) -> Result<Self, Self::Error> {
-        match value.scheme {
-            AuthScheme::Basic => {
-                if value.username.as_deref().is_none() {
-                    return Err(TomlCredentialError::BasicAuthError(
-                        BasicAuthError::MissingUsername,
-                    ));
-                }
-                if value.token.is_some() {
-                    return Err(TomlCredentialError::BasicAuthError(
-                        BasicAuthError::UnexpectedToken,
-                    ));
-                }
-                let credentials = Credentials::Basic {
-                    username: value.username,
-                    password: value.password,
-                };
-                Ok(Self {
-                    service: value.service,
-                    credentials,
-                })
-            }
-            AuthScheme::Bearer => {
-                if value.username.is_some() {
-                    return Err(TomlCredentialError::BearerAuthError(
-                        BearerAuthError::UnexpectedUsername,
-                    ));
-                }
-                if value.password.is_some() {
-                    return Err(TomlCredentialError::BearerAuthError(
-                        BearerAuthError::UnexpectedPassword,
-                    ));
-                }
-                if value.token.is_none() {
-                    return Err(TomlCredentialError::BearerAuthError(
-                        BearerAuthError::MissingToken,
-                    ));
-                }
-                let credentials = Credentials::Bearer {
-                    token: Token::new(value.token.unwrap().into_bytes()),
-                };
-                Ok(Self {
-                    service: value.service,
-                    credentials,
-                })
-            }
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -344,56 +196,22 @@ impl TextCredentialStore {
 
     /// Get credentials for a given URL and username.
     ///
-    /// The most specific URL prefix match in the same [`Realm`] is returned, if any.
+    /// The most specific URL prefix match in the same [`crate::Realm`] is returned, if any.
     pub fn get_credentials(
         &self,
         url: &DisplaySafeUrl,
         username: Option<&str>,
     ) -> Result<Option<&Credentials>, LookupError> {
-        let request_realm = Realm::from(url);
-
-        // Perform an exact lookup first
-        // TODO(zanieb): Consider adding `DisplaySafeUrlRef` so we can avoid this clone
-        // TODO(zanieb): We could also return early here if we can't normalize to a `Service`
-        if let Ok(url_service) = Service::try_from(url.clone()) {
-            if let Some(credential) = self.credentials.get(&(
-                url_service.clone(),
-                Username::from(username.map(str::to_string)),
-            )) {
-                return Ok(Some(credential));
-            }
-        }
-
-        // If that fails, iterate through to find a prefix match
-        let mut best: Option<(usize, &Service, &Credentials)> = None;
-        let mut best_is_ambiguous = false;
-
-        for ((service, stored_username), credential) in &self.credentials {
-            // Check if this credential matches and get its specificity
-            if let Some(specificity) =
-                matching::match_specificity(service, stored_username, url, &request_realm, username)
-            {
-                // Update our best matching credential based on prefix length.
-                if best.is_none_or(|(best_specificity, _, _)| specificity > best_specificity) {
-                    best = Some((specificity, service, credential));
-                    best_is_ambiguous = false;
-                } else if best
-                    .is_some_and(|(best_specificity, _, _)| specificity == best_specificity)
-                {
-                    best_is_ambiguous = true;
-                }
-            }
-        }
-
-        // Return the most specific match
-        if let Some((_, _, credential)) = best {
-            if best_is_ambiguous {
-                return Err(LookupError::AmbiguousUsername(url.clone()));
-            }
-            return Ok(Some(credential));
-        }
-
-        Ok(None)
+        matching::select_credential(
+            self.credentials
+                .iter()
+                .map(|((service, stored_username), credentials)| {
+                    (service, stored_username.as_deref(), credentials)
+                }),
+            url,
+            username,
+        )
+        .map_err(|_| LookupError::AmbiguousUsername(url.clone()))
     }
 
     /// Store credentials for a given service.
@@ -420,6 +238,7 @@ mod tests {
     use tempfile::NamedTempFile;
 
     use super::*;
+    use crate::credentials::Password;
 
     #[test]
     fn test_toml_serialization() {
