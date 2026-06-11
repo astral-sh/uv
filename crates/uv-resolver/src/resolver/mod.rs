@@ -2721,7 +2721,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if let PubGrubPackageInner::Package { name, .. } = &**package
                 && let Some(versions) = incomplete_packages_cache.get(name)
             {
-                for (version, reason) in versions.pin().iter() {
+                for (version, reason) in &versions.pin() {
                     incomplete_packages
                         .entry(name.clone())
                         .or_insert_with(BTreeMap::default)
