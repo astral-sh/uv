@@ -2420,12 +2420,15 @@ fn install_git_workspace_build_requirement() -> Result<()> {
         .write_str(indoc! {r#"
         [project]
         name = "project"
-        version = "0.1.0"
+        dynamic = ["version"]
         requires-python = ">=3.12"
 
         [build-system]
         requires = ["hatchling", "uv-test-stop-discovery-at-build-dependency"]
         build-backend = "hatchling.build"
+
+        [tool.hatch.version]
+        path = "src/project/__init__.py"
     "#})?;
     repository
         .child("packages/project/src/project/__init__.py")
