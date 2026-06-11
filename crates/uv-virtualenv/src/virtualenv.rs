@@ -35,7 +35,7 @@ const ACTIVATE_TEMPLATES: &[(&str, &str, Option<PromptQuoting>)] = &[
     (
         "activate.fish",
         include_str!("activator/activate.fish"),
-        None,
+        Some(PromptQuoting::Fish),
     ),
     ("activate.nu", include_str!("activator/activate.nu"), None),
     ("activate.ps1", include_str!("activator/activate.ps1"), None),
@@ -57,12 +57,18 @@ const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
 #[derive(Clone, Copy)]
 enum PromptQuoting {
     Posix,
+    Fish,
 }
 
 impl PromptQuoting {
     fn quote(self, value: &str) -> String {
         match self {
             Self::Posix => format!("'{}'", escape_posix_for_single_quotes(value)),
+            Self::Fish => {
+                // Fish interprets backslashes inside single quotes, unlike POSIX shells.
+                let value = value.replace('\\', r"\\").replace('\'', r"\'");
+                format!("'{value}'")
+            }
         }
     }
 }
