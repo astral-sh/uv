@@ -91,8 +91,12 @@ impl FilesystemOptions {
     ///
     /// The search starts at the given path and goes up the directory tree until a `uv.toml` file or
     /// `pyproject.toml` file is found.
+    ///
+    /// If a directory is found in place of a `uv.toml` or `pyproject.toml` file, an error is
+    /// returned if it occurs in the starting directory; otherwise, the directory is skipped with
+    /// a warning.
     pub fn find(path: &Path) -> Result<Option<Self>, Error> {
-        for ancestor in path.ancestors() {
+        for (depth, ancestor) in path.ancestors().enumerate() {
             match Self::from_directory(ancestor) {
                 Ok(Some(options)) => {
                     return Ok(Some(options));
@@ -106,6 +110,14 @@ impl FilesystemOptions {
                         "Failed to parse `{}` during settings discovery:\n{}",
                         path.user_display().cyan(),
                         textwrap::indent(&err.to_string(), "  ")
+                    );
+                }
+                Err(Error::Directory(path)) if depth > 0 => {
+                    // If we see a directory in place of a configuration file in a parent
+                    // directory, warn but continue.
+                    tracing::warn!(
+                        "Ignoring `{}` during settings discovery: expected a file, found a directory",
+                        path.user_display()
                     );
                 }
                 Err(err) => {
@@ -154,6 +166,7 @@ impl FilesystemOptions {
                 return Ok(Some(Self(options.with_origin(Origin::Project))));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) if path.is_dir() => return Err(Error::Directory(path)),
             Err(err) => return Err(err.into()),
         }
 
@@ -189,8 +202,7 @@ impl FilesystemOptions {
                 return Ok(Some(Self(options)));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            // A directory named `pyproject.toml` is not a configuration file; skip it.
-            Err(_) if path.is_dir() => {}
+            Err(_) if path.is_dir() => return Err(Error::Directory(path)),
             Err(err) => return Err(err.into()),
         }
 
@@ -667,6 +679,9 @@ pub enum Error {
 
     #[error("Failed to parse: `{}`", _0.user_display())]
     UvToml(PathBuf, #[source] Box<toml::de::Error>),
+
+    #[error("`{}` is a directory, expected a file", _0.user_display())]
+    Directory(PathBuf),
 
     #[error("Failed to parse: `{}`. The `{}` field is not allowed in a `uv.toml` file. `{}` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.", _0.user_display(), _1, _1
     )]

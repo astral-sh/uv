@@ -134,8 +134,6 @@ pub enum WorkspaceErrorKind {
     // Workspace structure errors.
     #[error("No `pyproject.toml` found in current directory or any parent directory")]
     MissingPyprojectToml,
-    #[error("`pyproject.toml` at {} is a directory, expected a file", _0.simplified_display())]
-    PyprojectTomlIsDirectory(PathBuf),
     #[error("Workspace member `{}` is missing a `pyproject.toml` (matches: `{}`)", _0.simplified_display(), _1)]
     MissingPyprojectTomlMember(PathBuf, String),
     #[error("No `project` table found in: {}", _0.simplified_display())]
@@ -265,8 +263,6 @@ impl Workspace {
             .map_err(WorkspaceErrorKind::Normalize)?
             .clone();
         let path = normalize_path(&path);
-
-        check_pyproject_is_not_directory(&path)?;
 
         let project_path = path
             .ancestors()
@@ -1463,7 +1459,6 @@ impl ProjectWorkspace {
             path.is_absolute(),
             "project workspace discovery with relative path"
         );
-        check_pyproject_is_not_directory(path)?;
         let project_root = path
             .ancestors()
             .take_while(|path| {
@@ -1730,18 +1725,6 @@ impl ProjectWorkspace {
     }
 }
 
-/// Returns an error if `path` contains a directory named `pyproject.toml`.
-///
-/// Discovery skips any `pyproject.toml` that isn't a file, so without this a directory with that
-/// name in the starting directory would be silently ignored rather than reported.
-fn check_pyproject_is_not_directory(path: &Path) -> Result<(), WorkspaceErrorKind> {
-    let pyproject_path = path.join("pyproject.toml");
-    if pyproject_path.is_dir() {
-        return Err(WorkspaceErrorKind::PyprojectTomlIsDirectory(pyproject_path));
-    }
-    Ok(())
-}
-
 /// Find the workspace root above the current project, if any.
 async fn find_workspace(
     project_root: &Path,
@@ -1971,7 +1954,6 @@ impl VirtualProject {
             path.is_absolute(),
             "virtual project discovery with relative path"
         );
-        check_pyproject_is_not_directory(path)?;
         let project_root = path
             .ancestors()
             .take_while(|path| {
