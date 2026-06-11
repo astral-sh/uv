@@ -1014,7 +1014,7 @@ pub async fn check_url(
                     );
                     return Err(PublishError::CheckUrlAuthentication {
                         url: index_url.url().clone(),
-                        status_code_detail: status_code_detail.to_string(),
+                        status_code_detail: status_code_detail.clone(),
                     });
                 }
                 _ => Err(PublishError::CheckUrlIndex(err)),
