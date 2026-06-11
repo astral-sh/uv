@@ -102,6 +102,7 @@ fn main() -> Result<()> {
                 metadata_directory.as_deref(),
                 uv_version::version(),
                 false,
+                preview.all_enabled(),
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;

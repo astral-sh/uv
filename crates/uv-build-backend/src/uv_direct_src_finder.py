@@ -7,10 +7,10 @@ from importlib.metadata import DistributionFinder
 
 TYPE_CHECKING = False
 if TYPE_CHECKING:
-    from importlib.metadata import Distribution
     from importlib.machinery import ModuleSpec
-    from typing import Iterable, Sequence
+    from importlib.metadata import Distribution
     from types import ModuleType
+    from typing import Iterable, Sequence
 
 
 class UvDirectSrcFinder(PathFinder, MetaPathFinder):
@@ -37,8 +37,8 @@ class UvDirectSrcFinder(PathFinder, MetaPathFinder):
         path: Sequence[str] | None = None,
         target: ModuleType | None = None,
     ) -> ModuleSpec | None:
-        from pathlib import Path
         from importlib.util import spec_from_file_location
+        from pathlib import Path
 
         if fullname == self.name:
             init_py = Path(self.project_dir).joinpath("__init__.py")
@@ -52,7 +52,7 @@ class UvDirectSrcFinder(PathFinder, MetaPathFinder):
             return spec_from_file_location(fullname, init_py)
 
     def find_distributions(
-        self, context: DistributionFinder.Context = DistributionFinder.Context()
+        self, context: DistributionFinder.Context | None = None
     ) -> Iterable[Distribution]:
         """https://docs.python.org/3/library/importlib.metadata.html#extending-the-search-algorithm
 
@@ -60,6 +60,9 @@ class UvDirectSrcFinder(PathFinder, MetaPathFinder):
         iterator with our Distribution object."""
         from importlib.metadata import PathDistribution
         from pathlib import Path
+
+        if context is None:
+            context = DistributionFinder.Context()
 
         if context.name is None or context.name == self.name:
             return iter([PathDistribution(Path(self.project_dir))])
