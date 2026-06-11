@@ -54,44 +54,36 @@ const LATEST_PYTHON_3_10: &str = "3.10.20";
 /// Create a new [`TestContext`] with the given Python version.
 ///
 /// Creates a virtual environment for the test.
-///
-/// This macro captures the uv binary path at compile time using `env!("CARGO_BIN_EXE_uv")`,
-/// which is only available in the test crate.
 #[macro_export]
 macro_rules! test_context {
     ($python_version:expr) => {
-        $crate::TestContext::new_with_bin(
-            $python_version,
-            std::path::PathBuf::from(env!("CARGO_BIN_EXE_uv")),
-        )
+        $crate::TestContext::new_with_bin($python_version, $crate::uv_bin())
     };
 }
 
 /// Create a new [`TestContext`] with zero or more Python versions.
 ///
 /// Unlike [`test_context!`], this does not create a virtual environment.
-///
-/// This macro captures the uv binary path at compile time using `env!("CARGO_BIN_EXE_uv")`,
-/// which is only available in the test crate.
 #[macro_export]
 macro_rules! test_context_with_versions {
     ($python_versions:expr) => {
-        $crate::TestContext::new_with_versions_and_bin(
-            $python_versions,
-            std::path::PathBuf::from(env!("CARGO_BIN_EXE_uv")),
-        )
+        $crate::TestContext::new_with_versions_and_bin($python_versions, $crate::uv_bin())
     };
 }
 
 /// Return the path to the uv binary.
-///
-/// This macro captures the uv binary path at compile time using `env!("CARGO_BIN_EXE_uv")`,
-/// which is only available in the test crate.
 #[macro_export]
 macro_rules! get_bin {
     () => {
-        std::path::PathBuf::from(env!("CARGO_BIN_EXE_uv"))
+        $crate::uv_bin()
     };
+}
+
+/// Return the path to the uv binary under test.
+pub fn uv_bin() -> PathBuf {
+    env::var_os(EnvVars::UV_TEST_BIN)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| panic!("UV_TEST_BIN must be set to the uv executable under test"))
 }
 
 #[doc(hidden)] // Macro and test context only, don't use directly.
