@@ -7,15 +7,16 @@
 
 Released on 2026-06-11.
 
-### Enhancements
+### Python
 
-- Package by default: Add in preview ([#17841](https://github.com/astral-sh/uv/pull/17841))
+- Add CPython 3.13.14 and 3.14.6 ([#19787](https://github.com/astral-sh/uv/pull/19787))
 
 ### Preview features
 
 - Add `environment.root` to `uv workspace metadata --sync` ([#19760](https://github.com/astral-sh/uv/pull/19760))
 - Allow `uv upgrade` to update a single dependency constraint ([#19738](https://github.com/astral-sh/uv/pull/19738))
 - Compute and pass `uv workspace metadata` payload in `ty check` ([#19763](https://github.com/astral-sh/uv/pull/19763))
+- Make packaged applications the default for `uv init` in preview ([#17841](https://github.com/astral-sh/uv/pull/17841))
 
 ### Performance
 
@@ -24,31 +25,10 @@ Released on 2026-06-11.
 
 ### Bug fixes
 
-- Allow CI cache pruning without an sdist bucket ([#19802](https://github.com/astral-sh/uv/pull/19802))
-- Allow trailing commas in version specifiers ([#19806](https://github.com/astral-sh/uv/pull/19806))
-- Avoid overflow when reading malformed cache entries ([#19799](https://github.com/astral-sh/uv/pull/19799))
-- Avoid panics for Unicode Python version requests ([#19797](https://github.com/astral-sh/uv/pull/19797))
-- Avoid panics for invalid UTF-8 URL credentials ([#19800](https://github.com/astral-sh/uv/pull/19800))
-- Avoid panics for malformed source distribution filenames ([#19776](https://github.com/astral-sh/uv/pull/19776))
-- Avoid panics for trailing extra separators ([#19779](https://github.com/astral-sh/uv/pull/19779))
-- Avoid stack overflow for recursive requirements path aliases ([#19777](https://github.com/astral-sh/uv/pull/19777))
-- Fix handling of non-critical errors in `uv python list` with path requests ([#19774](https://github.com/astral-sh/uv/pull/19774))
-- Fix stop-discovery-at regression ([#19769](https://github.com/astral-sh/uv/pull/19769))
-- Ignore reversed string compatible-release markers ([#19782](https://github.com/astral-sh/uv/pull/19782))
-- Preserve cached Python downloads during cache pruning ([#19795](https://github.com/astral-sh/uv/pull/19795))
-- Propagate errors when reading wheel entry points ([#19794](https://github.com/astral-sh/uv/pull/19794))
-- Quote virtual environment activation paths with shell metacharacters ([#19798](https://github.com/astral-sh/uv/pull/19798))
-- Reject duplicate entries in conflict sets ([#19801](https://github.com/astral-sh/uv/pull/19801))
-- Reject malformed hash options in requirements files ([#19783](https://github.com/astral-sh/uv/pull/19783))
-- Reject running inside the cache ([#19659](https://github.com/astral-sh/uv/pull/19659))
-- Reject source distribution filenames without a separator ([#19803](https://github.com/astral-sh/uv/pull/19803))
-- Use UTF-8 lengths for requirement errors ([#19781](https://github.com/astral-sh/uv/pull/19781))
-- Use UTF-8 lengths for trailing marker errors ([#19796](https://github.com/astral-sh/uv/pull/19796))
-- Use byte offsets when peeking over requirements ([#19780](https://github.com/astral-sh/uv/pull/19780))
-
-### Other changes
-
-- Sync Python 3.13.14 and 3.14.6 ([#19787](https://github.com/astral-sh/uv/pull/19787))
+- Improve cache robustness and pruning behavior ([#19659](https://github.com/astral-sh/uv/pull/19659), [#19795](https://github.com/astral-sh/uv/pull/19795), [#19799](https://github.com/astral-sh/uv/pull/19799), [#19802](https://github.com/astral-sh/uv/pull/19802))
+- Fix Python discovery and version request edge cases ([#19769](https://github.com/astral-sh/uv/pull/19769), [#19774](https://github.com/astral-sh/uv/pull/19774), [#19797](https://github.com/astral-sh/uv/pull/19797))
+- Harden parsing and validation for package metadata, requirements, markers, URLs, and conflict sets ([#19776](https://github.com/astral-sh/uv/pull/19776), [#19777](https://github.com/astral-sh/uv/pull/19777), [#19779](https://github.com/astral-sh/uv/pull/19779), [#19780](https://github.com/astral-sh/uv/pull/19780), [#19781](https://github.com/astral-sh/uv/pull/19781), [#19782](https://github.com/astral-sh/uv/pull/19782), [#19783](https://github.com/astral-sh/uv/pull/19783), [#19796](https://github.com/astral-sh/uv/pull/19796), [#19800](https://github.com/astral-sh/uv/pull/19800), [#19801](https://github.com/astral-sh/uv/pull/19801), [#19803](https://github.com/astral-sh/uv/pull/19803), [#19806](https://github.com/astral-sh/uv/pull/19806))
+- Improve wheel entry-point error handling and virtual environment activation quoting ([#19794](https://github.com/astral-sh/uv/pull/19794), [#19798](https://github.com/astral-sh/uv/pull/19798))
 
 ## 0.11.20
 
