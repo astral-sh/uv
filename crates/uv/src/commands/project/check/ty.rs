@@ -1,8 +1,11 @@
 use std::path::Path;
+use std::process::Stdio;
 use std::str::FromStr;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
-use tokio::process::Command;
+use tokio::io::AsyncWriteExt;
+use tokio::process::{ChildStdin, Command};
 use tracing::debug;
 
 use uv_bin_install::{BinVersion, Binary, ResolvedVersion, bin_install, find_matching_version};
@@ -14,11 +17,29 @@ use crate::commands::ExitStatus;
 use crate::commands::reporters::BinaryDownloadReporter;
 use crate::printer::Printer;
 
+/// Limit how long uv can block if a version of ty does not consume metadata from stdin.
+const WORKSPACE_METADATA_WRITE_TIMEOUT: Duration = Duration::from_mins(1);
+
+async fn write_workspace_metadata(mut stdin: ChildStdin, workspace_metadata: String) -> Result<()> {
+    match tokio::time::timeout(
+        WORKSPACE_METADATA_WRITE_TIMEOUT,
+        stdin.write_all(workspace_metadata.as_bytes()),
+    )
+    .await
+    {
+        Err(err) => Err(err).context("Timed out while writing workspace metadata to `ty check`"),
+        Ok(Err(err)) if err.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+        Ok(Err(err)) => Err(err).context("Failed to write workspace metadata to `ty check`"),
+        Ok(Ok(())) => Ok(()),
+    }
+}
+
 /// Run a type check powered by ty.
 pub(super) async fn run(
     version: Option<String>,
     target_dir: &Path,
     venv_path: Option<&Path>,
+    workspace_metadata: Option<String>,
     exclude_newer: Option<jiff::Timestamp>,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
@@ -103,6 +124,33 @@ pub(super) async fn run(
         command.env("VIRTUAL_ENV", venv_path);
     }
 
-    let handle = command.spawn().context("Failed to spawn `ty check`")?;
-    run_to_completion(handle).await
+    if workspace_metadata.is_some() {
+        // Tell `ty` to expect uv metadata on stdin.
+        // This is an environment variable so older ty's don't complain about an unknown CLI flag.
+        command.env("TY_UV_METADATA", "1");
+        command.stdin(Stdio::piped());
+        command.kill_on_drop(true);
+    } else {
+        // Do not let the calling environment opt ty into a protocol uv cannot supply.
+        command.env_remove("TY_UV_METADATA");
+    }
+
+    let mut handle = command.spawn().context("Failed to spawn `ty check`")?;
+    let writer = if let Some(workspace_metadata) = workspace_metadata {
+        debug!("Passing workspace metadata to `ty check` via stdin");
+        let stdin = handle
+            .stdin
+            .take()
+            .context("Failed to open stdin for `ty check`")?;
+        Some(write_workspace_metadata(stdin, workspace_metadata))
+    } else {
+        None
+    };
+
+    if let Some(writer) = writer {
+        let (status, ()) = tokio::try_join!(run_to_completion(handle), writer)?;
+        Ok(status)
+    } else {
+        run_to_completion(handle).await
+    }
 }

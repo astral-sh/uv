@@ -6,15 +6,18 @@ use owo_colors::OwoColorize;
 
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun};
+use uv_configuration::{
+    Concurrency, DependencyGroupsWithDefaults, DryRun, ExtrasSpecificationWithDefaults,
+};
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_resolver::Metadata;
+use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_resolver::{Installable, Metadata};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
+use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
@@ -24,7 +27,7 @@ use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
-use super::module_owners::collect_module_owners;
+use super::module_owners::{collect_module_owners, find_module_owners};
 
 /// Display metadata about the workspace.
 pub(crate) async fn metadata(
@@ -180,6 +183,27 @@ pub(crate) async fn metadata(
         }
         Err(err) => Err(err.into()),
     }
+}
+
+/// Build workspace metadata from an existing lock and environment without synchronizing it.
+pub(crate) fn metadata_from_target(
+    workspace: &Workspace,
+    environment: Option<&PythonEnvironment>,
+    target: InstallTarget<'_>,
+    extras: &ExtrasSpecificationWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
+    settings: &ResolverSettings,
+) -> Result<Metadata> {
+    let mut export = Metadata::from_lock(workspace, target.lock())?;
+    if let Some(environment) = environment {
+        let module_owners = find_module_owners(target, environment, extras, groups, settings)
+            .context("Failed to collect module owners")?;
+        export = export
+            .with_environment_root(environment.root())
+            .with_module_owners(module_owners);
+    }
+
+    Ok(export)
 }
 
 fn print_metadata(export: &Metadata, printer: Printer) -> Result<ExitStatus> {
