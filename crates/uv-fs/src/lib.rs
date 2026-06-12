@@ -125,11 +125,8 @@ fn create_junction(target: &Path, path: &Path) -> std::io::Result<()> {
                 )
             ) =>
         {
-            // Broken reparse point. Once junction::delete strips the reparse data, only an empty
-            // directory shell remains.
-            if junction::delete(path).is_ok() {
-                let _ = fs_err::remove_dir(path);
-            }
+            // Broken reparse point.
+            let _ = fs_err::remove_dir(path);
             Err(create_result.err().unwrap_or(err))
         }
         Err(err) => Err(create_result.err().unwrap_or(err)),
@@ -175,12 +172,8 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 #[cfg(windows)]
 fn replace_with_junction(src: &Path, dst: &Path) -> std::io::Result<()> {
     // Remove the existing junction, if any.
-    match junction::delete(dunce::simplified(dst)) {
-        Ok(()) => match fs_err::remove_dir_all(dst) {
-            Ok(()) => {}
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => return Err(err),
-        },
+    match fs_err::remove_dir(dst) {
+        Ok(()) => {}
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
         Err(err) => return Err(err),
     }
@@ -319,7 +312,10 @@ mod tests {
 
         let err = create_junction(&target, &link).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidFilename);
-        assert!(!link.exists());
+        assert!(matches!(
+            fs_err::symlink_metadata(&link),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound
+        ));
         Ok(())
     }
 }
