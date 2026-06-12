@@ -227,7 +227,7 @@ fn dubious_filenames() {
 }
 
 #[tokio::test]
-async fn publish_sdist_before_wheel() {
+async fn publish_wheel_before_sdist() {
     let context = uv_test::test_context!("3.12");
     let server = MockServer::start().await;
     let sdist = basic_package_sdist();
@@ -241,9 +241,9 @@ async fn publish_sdist_before_wheel() {
         .await;
 
     uv_snapshot!(context.filters(), context.publish()
-        // Pass the wheel first to ensure distribution type determines the upload order.
-        .arg(wheel)
+        // Pass the source distribution first to ensure type determines the upload order.
         .arg(sdist)
+        .arg(wheel)
         .arg("--username")
         .arg("dummy")
         .arg("--password")
@@ -256,10 +256,10 @@ async fn publish_sdist_before_wheel() {
 
     ----- stderr -----
     Publishing 2 files to http://[LOCALHOST]/upload
-    Hashing basic_package-0.1.0.tar.gz ([SIZE])
-    Uploading basic_package-0.1.0.tar.gz ([SIZE])
     Hashing basic_package-0.1.0-py3-none-any.whl ([SIZE])
     Uploading basic_package-0.1.0-py3-none-any.whl ([SIZE])
+    Hashing basic_package-0.1.0.tar.gz ([SIZE])
+    Uploading basic_package-0.1.0.tar.gz ([SIZE])
     "
     );
 }

@@ -104,8 +104,8 @@ pub(crate) async fn publish(
     };
 
     let mut groups = group_files_for_publishing(paths, no_attestations)?;
-    // Sort by distribution type, with source distributions before wheels.
-    groups.sort_by_key(|group| matches!(&group.filename, DistFilename::WheelFilename(_)));
+    // Sort by distribution type, with wheels before source distributions.
+    groups.sort_by_key(|group| matches!(&group.filename, DistFilename::SourceDistFilename(_)));
     match groups.len() {
         0 => bail!("No files found to publish"),
         1 => {
