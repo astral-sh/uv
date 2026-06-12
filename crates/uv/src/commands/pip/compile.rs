@@ -159,7 +159,7 @@ pub(crate) async fn pip_compile(
         {
             if !is_pylock_toml(file_name) {
                 return Err(anyhow!(
-                    "Expected the output filename to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`); `{file_name}` won't be recognized as a `pylock.toml` file in subsequent commands",
+                    "Expected the output filename to be `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots; `{file_name}` won't be recognized as a `pylock.toml` file in subsequent commands",
                 ));
             }
         }
