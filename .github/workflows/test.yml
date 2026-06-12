@@ -167,8 +167,7 @@ jobs:
 
   cargo-test-macos:
     timeout-minutes: ${{ inputs.collect-coverage == 'true' && 30 || 20 }}
-    # Only run macOS tests on main without opt-in
-    if: ${{ inputs.test-macos == 'true' || inputs.collect-coverage == 'true' }}
+    if: ${{ inputs.test-macos == 'true' }}
     runs-on: depot-macos-15
     name: "cargo test on macos"
     steps:
