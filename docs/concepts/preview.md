@@ -84,6 +84,12 @@ The following preview features are available:
 - `workspace-metadata`: Allows using `uv workspace metadata`.
 - `workspace-dir`: Allows using `uv workspace dir`.
 - `workspace-list`: Allows using `uv workspace list`.
+- `target-workspace-discovery`: Uses the directory containing a local `uv run` target, rather than
+  the current working directory, as the starting point for project and workspace discovery. This
+  feature takes effect before configuration is loaded.
+- `project-directory-must-exist`: Rejects an invalid `--project` path instead of warning and
+  continuing. Except for `uv init`, the path must already exist as a directory or point to a
+  `pyproject.toml` file. This feature takes effect before configuration is loaded.
 - `malware-check`: Allows `uv sync` and other commands to check for malware using
   [OSV](https://osv.dev) before installing packages.
 
