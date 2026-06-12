@@ -8,6 +8,7 @@ use anstream::println;
 use anyhow::{Context, Result, bail};
 use clap::Parser;
 use serde_json::Value;
+use uv_configuration::Concurrency;
 use uv_fastid::Id;
 
 use crate::ROOT_DIR;
@@ -64,8 +65,12 @@ pub(crate) fn coverage(args: CoverageArgs) -> Result<()> {
     println!("Coverage tracking ID: {tracking_id}");
     println!("Raw profiles: {}", raw_profiles.display());
 
-    // Bound disk usage while retaining enough merge slots for concurrent test processes.
-    let profile_pattern = raw_profiles.join("%16m.profraw");
+    // Match the merge pool to available parallelism to reduce profile lock contention without
+    // creating unnecessary files.
+    let profile_pool_size = Concurrency::threads();
+    println!("Using a pool of {profile_pool_size} profile files");
+
+    let profile_pattern = raw_profiles.join(format!("%{profile_pool_size}m.profraw"));
     let mut child = Command::new("cargo")
         .args([
             "nextest",
