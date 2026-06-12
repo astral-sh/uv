@@ -11,7 +11,7 @@ use toml_edit::{
 };
 
 use uv_cache_key::CanonicalUrl;
-use uv_distribution_types::Index;
+use uv_distribution_types::{Index, IndexFormat};
 use uv_fs::PortablePath;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
@@ -504,12 +504,14 @@ impl PyProjectTomlMut {
             table.insert("name", Value::String(formatted).into());
         }
 
-        // If necessary, update the URL.
-        if table
+        // Determine whether the URL is changing so that format can be updated accordingly.
+        let url_changed = table
             .get("url")
             .and_then(|item| item.as_str())
-            .is_none_or(|url| url != index.url.without_credentials().as_str())
-        {
+            .is_none_or(|url| url != index.url.without_credentials().as_str());
+
+        // If necessary, update the URL.
+        if url_changed {
             let mut formatted = Formatted::new(index.url.without_credentials().to_string());
             if let Some(value) = table.get("url").and_then(Item::as_value) {
                 if let Some(prefix) = value.decor().prefix() {
@@ -539,6 +541,35 @@ impl PyProjectTomlMut {
                     }
                 }
                 table.insert("default", Value::Boolean(formatted).into());
+            }
+        }
+
+        // If the URL changed, sync the format to match the incoming index.
+        // A format is tied to a URL; when the URL changes, the old format may be incompatible.
+        if url_changed {
+            match index.format {
+                IndexFormat::Flat => {
+                    if table
+                        .get("format")
+                        .and_then(Item::as_str)
+                        .is_none_or(|format| format != "flat")
+                    {
+                        let mut formatted = Formatted::new("flat".to_string());
+                        if let Some(value) = table.get("format").and_then(Item::as_value) {
+                            if let Some(prefix) = value.decor().prefix() {
+                                formatted.decor_mut().set_prefix(prefix.clone());
+                            }
+                            if let Some(suffix) = value.decor().suffix() {
+                                formatted.decor_mut().set_suffix(suffix.clone());
+                            }
+                        }
+                        table.insert("format", Value::String(formatted).into());
+                    }
+                }
+                IndexFormat::Simple => {
+                    // Remove the format key if it exists (Simple is the default).
+                    table.remove("format");
+                }
             }
         }
 
@@ -1831,6 +1862,7 @@ mod test {
     use insta::assert_snapshot;
     use std::str::FromStr;
     use toml_edit::DocumentMut;
+    use uv_distribution_types::Index;
     use uv_normalize::PackageName;
     use uv_pep440::Version;
     use uv_pep508::Requirement;
@@ -2282,5 +2314,75 @@ dependencies = [
 ]
 "#
         );
+    }
+
+    #[test]
+    fn add_index_clears_format_on_url_update() {
+        let toml = r#"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []
+
+[[tool.uv.index]]
+name = "index"
+url = "https://example.com/flat"
+format = "flat"
+"#;
+
+        let mut doc = PyProjectTomlMut::from_toml(toml, DependencyTarget::PyProjectToml).unwrap();
+
+        let new_index = Index::from_str("index=https://pypi.org/simple").unwrap();
+        doc.add_index(&new_index).unwrap();
+
+        assert_snapshot!(doc.to_string(), @r#"
+
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []
+
+[[tool.uv.index]]
+name = "index"
+url = "https://pypi.org/simple"
+"#);
+    }
+
+    #[test]
+    fn add_index_preserves_format_when_url_unchanged() {
+        let toml = r#"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []
+
+[[tool.uv.index]]
+name = "index"
+url = "https://example.com/flat"
+format = "flat"
+"#;
+
+        let mut doc = PyProjectTomlMut::from_toml(toml, DependencyTarget::PyProjectToml).unwrap();
+
+        // Same URL, same name — URL is not changing so format should be preserved.
+        let new_index = Index::from_str("index=https://example.com/flat").unwrap();
+        doc.add_index(&new_index).unwrap();
+
+        assert_snapshot!(doc.to_string(), @r#"
+
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []
+
+[[tool.uv.index]]
+name = "index"
+url = "https://example.com/flat"
+format = "flat"
+"#);
     }
 }
