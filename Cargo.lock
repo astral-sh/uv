@@ -6861,6 +6861,7 @@ dependencies = [
  "glob",
  "insta",
  "itertools 0.14.0",
+ "owo-colors",
  "reqwest",
  "rustc-hash",
  "serde",

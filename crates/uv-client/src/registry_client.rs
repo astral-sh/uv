@@ -10,7 +10,7 @@ use futures::{FutureExt, StreamExt, TryStreamExt};
 use http::{HeaderMap, StatusCode};
 use itertools::Either;
 use reqwest::{Proxy, Response};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
@@ -348,6 +348,7 @@ impl RegistryClient {
         };
 
         let mut results = Vec::new();
+        let status_code_errors = Arc::new(Mutex::new(FxHashSet::default()));
 
         match self.index_strategy_for(package_name) {
             // If we're searching for the first index that contains the package, fetch serially.
@@ -379,6 +380,7 @@ impl RegistryClient {
                                     debug!(
                                         "Indexes search failed because of status code failure: {status_code}"
                                     );
+                                    status_code_errors.lock().await.insert(status_code);
                                     break;
                                 }
                             }
@@ -414,7 +416,11 @@ impl RegistryClient {
                                     .await?
                                 {
                                     SimpleMetadataSearchOutcome::Found(metadata) => Some(metadata),
-                                    _ => None,
+                                    SimpleMetadataSearchOutcome::NotFound => None,
+                                    SimpleMetadataSearchOutcome::StatusCodeFailure(status_code) => {
+                                        status_code_errors.lock().await.insert(status_code);
+                                        None
+                                    }
                                 };
                                 Ok((index.url, metadata.map(MetadataFormat::Simple)))
                             }
@@ -439,7 +445,16 @@ impl RegistryClient {
         if results.is_empty() {
             return match self.connectivity {
                 Connectivity::Online => {
-                    Err(ErrorKind::RemotePackageNotFound(package_name.clone()).into())
+                    let status_code_errors = status_code_errors.lock().await;
+                    if !status_code_errors.is_empty() {
+                        Err(ErrorKind::RemotePackageStatusCodeError(
+                            package_name.clone(),
+                            status_code_errors.clone(),
+                        )
+                        .into())
+                    } else {
+                        Err(ErrorKind::RemotePackageNotFound(package_name.clone()).into())
+                    }
                 }
                 Connectivity::Offline => Err(ErrorKind::Offline(package_name.to_string()).into()),
             };
