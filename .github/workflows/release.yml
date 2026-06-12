@@ -17,35 +17,19 @@ name: Release
 permissions:
   "contents": "write"
 
-# This task will run whenever you workflow_dispatch with a tag that looks like a version
-# like "1.0.0", "v0.1.0-prerelease.1", "my-app/0.1.0", "releases/v1.0.0", etc.
-# Various formats will be parsed into a VERSION and an optional PACKAGE_NAME, where
-# PACKAGE_NAME must be the name of a Cargo package in your workspace, and VERSION
-# must be a Cargo-style SemVer Version (must have at least major.minor.patch).
-#
-# If PACKAGE_NAME is specified, then the announcement will be for that
-# package (erroring out if it doesn't have the given version or isn't dist-able).
-#
-# If PACKAGE_NAME isn't specified, then the announcement will be for all
-# (dist-able) packages in the workspace with that version (this mode is
-# intended for workspaces with only one dist-able package, or with all dist-able
-# packages versioned/released in lockstep).
-#
-# If you push multiple tags at once, separate instances of this workflow will
-# spin up, creating an independent announcement for each one. However, GitHub
-# will hard limit this to 3 tags per commit, as it will assume more tags is a
-# mistake.
-#
-# If there's a prerelease-style suffix to the version, then the release(s)
-# will be marked as a prerelease.
+# This task runs when workflow_dispatch is invoked after release metadata has been updated.
+# The release tag is read from project metadata with `uv version --short` unless dry-run is selected.
+# The shared release version must remain a Cargo-style SemVer version with at least
+# major.minor.patch. cargo-dist uses the derived tag to decide whether the release
+# should be marked as a prerelease.
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: Release Tag
+      dry-run:
+        description: Build release artifacts without publishing
         required: true
-        default: dry-run
-        type: string
+        default: true
+        type: boolean
 
 env:
   CARGO_DIST_VERSION: "0.31.0"
@@ -55,7 +39,7 @@ jobs:
   release-gate:
     # N.B. This name should not change, it is used for downstream checks.
     name: release-gate
-    if: ${{ inputs.tag != 'dry-run' }}
+    if: ${{ !inputs.dry-run }}
     runs-on: ubuntu-latest
     # This environment requires a 2-factor approval, i.e., the workflow must be approved by another
     # team member. GitHub fires approval events on every job that deploys to an environment, so we
@@ -73,9 +57,10 @@ jobs:
     runs-on: "depot-ubuntu-latest-4"
     outputs:
       val: ${{ steps.plan.outputs.manifest }}
-      tag: ${{ (inputs.tag != 'dry-run' && inputs.tag) || '' }}
-      tag-flag: ${{ inputs.tag && inputs.tag != 'dry-run' && format('--tag={0}', inputs.tag) || '' }}
-      publishing: ${{ inputs.tag && inputs.tag != 'dry-run' }}
+      tag: ${{ !inputs.dry-run && steps.release-tag.outputs.tag || '' }}
+      tag-flag: ${{ !inputs.dry-run && format('--tag={0}', steps.release-tag.outputs.tag) || '' }}
+      publishing: ${{ !inputs.dry-run }}
+      dry-run: ${{ inputs.dry-run }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -95,14 +80,27 @@ jobs:
         with:
           name: cargo-dist-cache
           path: ~/.cargo/bin/dist
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        if: ${{ !inputs.dry-run }}
+      - name: Resolve release tag
+        if: ${{ !inputs.dry-run }}
+        id: release-tag
+        run: echo "tag=$(uv version --short --color never)" >> "$GITHUB_OUTPUT"
       # sure would be cool if github gave us proper conditionals...
       # so here's a doubly-nested ternary-via-truthiness to try to provide the best possible
       # functionality based on whether this is a pull_request, and whether it's from a fork.
       # (PRs run on the *source* but secrets are usually on the *target* -- that's *good*
       # but also really annoying to build CI around when it needs secrets to work right.)
       - id: plan
+        env:
+          PUBLISHING: ${{ !inputs.dry-run }}
+          TAG_FLAG: ${{ !inputs.dry-run && format('--tag={0}', steps.release-tag.outputs.tag) || '' }}
         run: |
-          dist ${{ (inputs.tag && inputs.tag != 'dry-run' && format('host --steps=create --tag={0}', inputs.tag)) || 'plan' }} --output-format=json > plan-dist-manifest.json
+          if [ "$PUBLISHING" = "true" ]; then
+            dist host --steps=create "$TAG_FLAG" --output-format=json > plan-dist-manifest.json
+          else
+            dist plan --output-format=json > plan-dist-manifest.json
+          fi
           echo "dist ran successfully"
           cat plan-dist-manifest.json
           echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
@@ -115,7 +113,7 @@ jobs:
   custom-build-release-binaries:
     needs:
       - plan
-    if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
+    if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || needs.plan.outputs.dry-run == 'true' }}
     uses: ./.github/workflows/build-release-binaries.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
@@ -125,7 +123,7 @@ jobs:
     needs:
       - plan
       - release-gate
-    if: ${{ always() && needs.plan.result == 'success' && (needs.release-gate.result == 'success' || needs.release-gate.result == 'skipped') && (needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run') }}
+    if: ${{ always() && needs.plan.result == 'success' && (needs.release-gate.result == 'success' || needs.release-gate.result == 'skipped') && (needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || needs.plan.outputs.dry-run == 'true') }}
     uses: ./.github/workflows/build-docker.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
@@ -140,7 +138,7 @@ jobs:
     needs:
       - plan
       - custom-build-release-binaries
-    if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
+    if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || needs.plan.outputs.dry-run == 'true' }}
     runs-on: "depot-ubuntu-latest-4"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
