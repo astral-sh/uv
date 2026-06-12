@@ -15,6 +15,8 @@ use tracing::{debug, warn};
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
+#[cfg(windows)]
+use uv_fs::verbatim_path;
 use uv_fs::{
     LockedFile, LockedFileError, LockedFileMode, Simplified, normalize_absolute_path,
     replace_symlink, symlink_or_copy_file,
@@ -843,9 +845,9 @@ impl PythonMinorVersionLink {
                     // is a symlink or junction.
                     (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0) != 0
                 })
-                && self
-                    .read_target()
-                    .is_some_and(|target| target == self.target_directory)
+                && self.read_target().is_some_and(|target| {
+                    verbatim_path(&target) == verbatim_path(&self.target_directory)
+                })
         }
     }
 
@@ -860,7 +862,7 @@ impl PythonMinorVersionLink {
         }
         #[cfg(windows)]
         {
-            uv_fs::read_link(&self.symlink_directory).ok()
+            fs_err::read_link(&self.symlink_directory).ok()
         }
     }
 }
