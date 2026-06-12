@@ -114,6 +114,7 @@ fn upgrade_help() {
 }
 
 #[test]
+#[cfg(feature = "test-pypi")]
 fn upgrade_selects_normalized_production_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject_toml = r#"
@@ -344,6 +345,7 @@ fn upgrade_expands_compatible_constraint_for_multiple_fork_versions() -> Result<
 }
 
 #[test]
+#[cfg(feature = "test-pypi")]
 fn upgrade_updates_requirement_without_updating_lockfile_or_environment() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let initial_pyproject_toml = r#"
@@ -417,6 +419,7 @@ fn upgrade_updates_requirement_without_updating_lockfile_or_environment() -> Res
 }
 
 #[test]
+#[cfg(feature = "test-pypi")]
 fn upgrade_reports_no_solution_without_mutation() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject_toml = r#"
@@ -450,6 +453,7 @@ fn upgrade_reports_no_solution_without_mutation() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "test-pypi")]
 fn upgrade_reports_no_version_change_without_mutation() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject_toml = r#"
@@ -784,6 +788,7 @@ fn upgrade_rejects_non_registry_source_for_top_level_extra() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "test-pypi")]
 fn upgrade_allows_registry_source() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let empty_index = context.temp_dir.child("empty-index");
@@ -847,6 +852,7 @@ fn upgrade_allows_registry_source() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "test-pypi")]
 fn upgrade_ignores_inapplicable_non_registry_source() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject_toml = r#"
@@ -953,6 +959,7 @@ fn upgrade_rejects_workspace_root_non_registry_source() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "test-pypi")]
 fn upgrade_updates_nested_workspace_member_only() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let workspace_pyproject_toml = r#"
