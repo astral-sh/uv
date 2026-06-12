@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use tracing::debug;
@@ -38,6 +38,7 @@ mod ty;
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn check(
     project_dir: &Path,
+    ty_path: Option<PathBuf>,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     no_sync: bool,
@@ -381,6 +382,7 @@ pub(crate) async fn check(
 
     ty::run(
         ty_version,
+        ty_path,
         &target_dir,
         venv_path.as_deref(),
         workspace_metadata,

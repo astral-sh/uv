@@ -19,6 +19,14 @@ impl EnvVars {
     #[attr_added_in("0.6.0")]
     pub const UV: &'static str = "UV";
 
+    /// The path to the Ruff binary used by `uv format`.
+    #[attr_added_in("next release")]
+    pub const RUFF: &'static str = "RUFF";
+
+    /// The path to the ty binary used by `uv check`.
+    #[attr_added_in("next release")]
+    pub const TY: &'static str = "TY";
+
     /// Equivalent to the `--offline` command-line argument. If set, uv will disable network access.
     #[attr_added_in("0.5.9")]
     pub const UV_OFFLINE: &'static str = "UV_OFFLINE";
