@@ -9,6 +9,10 @@ on:
         required: false
         type: string
         default: "false"
+      collect-coverage:
+        required: false
+        type: string
+        default: "false"
 
 permissions: {}
 
@@ -18,7 +22,6 @@ env:
   CARGO_TERM_COLOR: always
   PYTHON_VERSION: "3.12"
   RUSTUP_MAX_RETRIES: 10
-  COLLECT_COVERAGE: ${{ github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'coverage') }}
 
 jobs:
   # We use the large GitHub actions runners
@@ -26,7 +29,7 @@ jobs:
   # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
 
   cargo-test-linux:
-    timeout-minutes: ${{ (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'coverage')) && 20 || 10 }}
+    timeout-minutes: ${{ inputs.collect-coverage == 'true' && 20 || 10 }}
     runs-on: depot-ubuntu-24.04-16
     name: "cargo test on linux"
     steps:
@@ -49,7 +52,7 @@ jobs:
           version: "0.11.19"
 
       - name: "Install LLVM tools"
-        if: ${{ env.COLLECT_COVERAGE == 'true' }}
+        if: ${{ inputs.collect-coverage == 'true' }}
         run: rustup component add llvm-tools
 
       - name: "Install required Python versions"
@@ -114,7 +117,7 @@ jobs:
             --workspace
             --profile ci-linux
           )
-          if [[ "$COLLECT_COVERAGE" == "true" ]]; then
+          if ${{ inputs.collect-coverage == 'true' }}; then
             tracking_id="${GITHUB_SHA:0:16}"
             cargo dev coverage --id "$tracking_id" -- "${test_args[@]}"
             echo "tracking_id=$tracking_id" >> "$GITHUB_OUTPUT"
@@ -123,7 +126,7 @@ jobs:
           fi
 
       - name: "Generate HTML coverage report"
-        if: ${{ env.COLLECT_COVERAGE == 'true' }}
+        if: ${{ inputs.collect-coverage == 'true' }}
         env:
           COVERAGE_ID: ${{ steps.test.outputs.tracking_id }}
         run: |
@@ -132,7 +135,7 @@ jobs:
           test -f "target/coverage/html/$COVERAGE_ID/index.html"
 
       - name: "Upload coverage report"
-        if: ${{ env.COLLECT_COVERAGE == 'true' }}
+        if: ${{ inputs.collect-coverage == 'true' }}
         id: upload-coverage
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -144,7 +147,7 @@ jobs:
           retention-days: 14
 
       - name: "Summarize coverage"
-        if: ${{ env.COLLECT_COVERAGE == 'true' }}
+        if: ${{ inputs.collect-coverage == 'true' }}
         env:
           ARTIFACT_URL: ${{ steps.upload-coverage.outputs.artifact-url }}
           COVERAGE_ID: ${{ steps.test.outputs.tracking_id }}
@@ -176,9 +179,9 @@ jobs:
           retention-days: 14
 
   cargo-test-macos:
-    timeout-minutes: ${{ (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'coverage')) && 30 || 20 }}
+    timeout-minutes: ${{ inputs.collect-coverage == 'true' && 30 || 20 }}
     # Only run macOS tests on main without opt-in
-    if: ${{ inputs.test-macos == 'true' || github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'coverage') }}
+    if: ${{ inputs.test-macos == 'true' || inputs.collect-coverage == 'true' }}
     runs-on: depot-macos-15
     name: "cargo test on macos"
     steps:
@@ -194,7 +197,7 @@ jobs:
         run: rustup show
 
       - name: "Install LLVM tools"
-        if: ${{ env.COLLECT_COVERAGE == 'true' }}
+        if: ${{ inputs.collect-coverage == 'true' }}
         run: rustup component add llvm-tools
 
       - name: "Create HFS+ disk image (no reflink support)"
@@ -237,7 +240,7 @@ jobs:
             --workspace
             --profile ci-macos
           )
-          if [[ "$COLLECT_COVERAGE" == "true" ]]; then
+          if ${{ inputs.collect-coverage == 'true' }}; then
             tracking_id="${GITHUB_SHA:0:16}"
             cargo dev coverage --id "$tracking_id" -- "${test_args[@]}"
             echo "tracking_id=$tracking_id" >> "$GITHUB_OUTPUT"
@@ -246,7 +249,7 @@ jobs:
           fi
 
       - name: "Generate HTML coverage report"
-        if: ${{ env.COLLECT_COVERAGE == 'true' }}
+        if: ${{ inputs.collect-coverage == 'true' }}
         env:
           COVERAGE_ID: ${{ steps.test.outputs.tracking_id }}
         run: |
@@ -255,7 +258,7 @@ jobs:
           test -f "target/coverage/html/$COVERAGE_ID/index.html"
 
       - name: "Upload coverage report"
-        if: ${{ env.COLLECT_COVERAGE == 'true' }}
+        if: ${{ inputs.collect-coverage == 'true' }}
         id: upload-coverage
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -267,7 +270,7 @@ jobs:
           retention-days: 14
 
       - name: "Summarize coverage"
-        if: ${{ env.COLLECT_COVERAGE == 'true' }}
+        if: ${{ inputs.collect-coverage == 'true' }}
         env:
           ARTIFACT_URL: ${{ steps.upload-coverage.outputs.artifact-url }}
           COVERAGE_ID: ${{ steps.test.outputs.tracking_id }}
@@ -299,7 +302,7 @@ jobs:
           retention-days: 14
 
   cargo-test-windows:
-    timeout-minutes: ${{ (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'coverage')) && 30 || 15 }}
+    timeout-minutes: ${{ inputs.collect-coverage == 'true' && 30 || 15 }}
     runs-on: namespace-profile-windows-2022-x86-64-16
     name: "cargo test on windows ${{ matrix.partition }} of 3"
     strategy:
@@ -338,7 +341,7 @@ jobs:
         run: rustup show
 
       - name: "Install LLVM tools"
-        if: ${{ env.COLLECT_COVERAGE == 'true' }}
+        if: ${{ inputs.collect-coverage == 'true' }}
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup component add llvm-tools
 
@@ -381,7 +384,7 @@ jobs:
             --profile ci-windows
             --partition hash:${{ matrix.partition }}/3
           )
-          if [[ "$COLLECT_COVERAGE" == "true" ]]; then
+          if ${{ inputs.collect-coverage == 'true' }}; then
             tracking_id="${GITHUB_SHA:0:16}"
             cargo dev coverage --id "$tracking_id" -- "${test_args[@]}"
             echo "tracking_id=$tracking_id" >> "$GITHUB_OUTPUT"
@@ -390,7 +393,7 @@ jobs:
           fi
 
       - name: "Generate HTML coverage report"
-        if: ${{ env.COLLECT_COVERAGE == 'true' }}
+        if: ${{ inputs.collect-coverage == 'true' }}
         working-directory: ${{ env.UV_WORKSPACE }}
         shell: bash
         env:
@@ -401,7 +404,7 @@ jobs:
           test -f "target/coverage/html/$COVERAGE_ID/index.html"
 
       - name: "Upload coverage report"
-        if: ${{ env.COLLECT_COVERAGE == 'true' }}
+        if: ${{ inputs.collect-coverage == 'true' }}
         id: upload-coverage
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -413,7 +416,7 @@ jobs:
           retention-days: 14
 
       - name: "Summarize coverage"
-        if: ${{ env.COLLECT_COVERAGE == 'true' }}
+        if: ${{ inputs.collect-coverage == 'true' }}
         working-directory: ${{ env.UV_WORKSPACE }}
         shell: bash
         env:
