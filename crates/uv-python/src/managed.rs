@@ -15,11 +15,9 @@ use tracing::{debug, warn};
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
-#[cfg(windows)]
-use uv_fs::verbatim_path;
 use uv_fs::{
     LockedFile, LockedFileError, LockedFileMode, Simplified, normalize_absolute_path,
-    replace_symlink, symlink_or_copy_file,
+    replace_symlink, symlink_or_copy_file, verbatim_path,
 };
 use uv_platform::{Error as PlatformError, Os};
 use uv_platform::{LibcDetectionError, Platform};
@@ -827,14 +825,17 @@ impl PythonMinorVersionLink {
     /// may exist but point to a different installation (e.g., after an upgrade), in which
     /// case we should not use the link for the current installation.
     pub fn exists(&self) -> bool {
+        let points_to_target = || {
+            fs_err::read_link(&self.symlink_directory)
+                .is_ok_and(|target| verbatim_path(&target) == verbatim_path(&self.target_directory))
+        };
+
         #[cfg(unix)]
         {
             self.symlink_directory
                 .symlink_metadata()
                 .is_ok_and(|metadata| metadata.file_type().is_symlink())
-                && self
-                    .read_target()
-                    .is_some_and(|target| target == self.target_directory)
+                && points_to_target()
         }
         #[cfg(windows)]
         {
@@ -845,24 +846,7 @@ impl PythonMinorVersionLink {
                     // is a symlink or junction.
                     (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0) != 0
                 })
-                && self.read_target().is_some_and(|target| {
-                    verbatim_path(&target) == verbatim_path(&self.target_directory)
-                })
-        }
-    }
-
-    /// Read the target of the minor version link.
-    ///
-    /// On Unix, this reads the symlink target. On Windows, this reads the directory link
-    /// target, whether uv created it as a junction or as a directory symlink under Wine.
-    fn read_target(&self) -> Option<PathBuf> {
-        #[cfg(unix)]
-        {
-            self.symlink_directory.read_link().ok()
-        }
-        #[cfg(windows)]
-        {
-            fs_err::read_link(&self.symlink_directory).ok()
+                && points_to_target()
         }
     }
 }
