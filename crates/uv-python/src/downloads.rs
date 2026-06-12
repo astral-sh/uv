@@ -1131,7 +1131,7 @@ impl ManagedPythonDownload {
     /// For CPython without a user-configured mirror, the default Astral mirror is tried first.
     /// Each attempt tries all URLs in sequence without backoff between them; backoff is only
     /// applied after all URLs have been exhausted.
-    #[instrument(skip(client, installation_dir, scratch_dir, reporter), fields(download = % self.key()))]
+    #[instrument(skip_all, fields(download = % self.key()))]
     pub async fn fetch_with_retry(
         &self,
         client: &BaseClient,
