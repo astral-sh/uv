@@ -41,7 +41,8 @@ fn check_project() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn check_uses_ty_from_environment() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"));
     let tool_dir = context.root.child("tools");
     let bin_dir = context.root.child("tool-bin");
 
@@ -75,7 +76,7 @@ fn check_uses_ty_from_environment() -> Result<()> {
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    DEBUG Using `ty 0.0.17 (8cec85718 2026-02-13)`
+    DEBUG Using `ty 0.0.17`
     "
     );
 
