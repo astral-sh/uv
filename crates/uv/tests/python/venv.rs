@@ -75,6 +75,74 @@ fn create_venv() {
 }
 
 #[test]
+fn create_venv_centralized_envs_warning() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    // The feature is project-scoped, so it does not warn outside a project.
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview-features")
+        .arg("centralized-envs")
+        .arg("--python")
+        .arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    fs_err::remove_dir_all(&context.venv)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview-features")
+        .arg("centralized-envs")
+        .arg("--python")
+        .arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `centralized-envs` preview feature currently has no effect on `uv venv`
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.venv()
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "explicit")
+        .arg("--preview-features")
+        .arg("centralized-envs")
+        .arg("--python")
+        .arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: explicit
+    Activate with: source explicit/[BIN]/activate
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
 fn create_venv_313() {
     let context = uv_test::test_context_with_versions!(&["3.13"]);
 
