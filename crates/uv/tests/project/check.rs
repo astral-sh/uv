@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
@@ -33,6 +33,53 @@ fn check_project() -> Result<()> {
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     ");
+
+    Ok(())
+}
+
+#[test]
+fn check_uses_ty_from_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    context.temp_dir.child("main.py").write_str("x: int = 1")?;
+    context
+        .temp_dir
+        .child("check")
+        .write_str("print('custom ty')")?;
+
+    let python = context
+        .python_versions
+        .first()
+        .map(|(_, path)| path)
+        .context("Expected a Python interpreter")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--ty-version")
+            .arg(">=999.0.0")
+            .env(EnvVars::TY, python),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    custom ty
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "
+    );
 
     Ok(())
 }

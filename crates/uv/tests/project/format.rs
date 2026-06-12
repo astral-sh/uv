@@ -1,8 +1,9 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
 
+use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
 #[test]
@@ -37,6 +38,52 @@ fn format_project() -> Result<()> {
     // Check that the file was formatted
     let formatted_content = fs_err::read_to_string(&main_py)?;
     assert_snapshot!(formatted_content, @"x = 1");
+
+    Ok(())
+}
+
+#[test]
+fn format_uses_ruff_from_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    context
+        .temp_dir
+        .child("format")
+        .write_str("print('custom ruff')")?;
+
+    let python = context
+        .python_versions
+        .first()
+        .map(|(_, path)| path)
+        .context("Expected a Python interpreter")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .format()
+            .arg("--version")
+            .arg(">=999.0.0")
+            .env(EnvVars::RUFF, python),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    custom ruff
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
+    "
+    );
 
     Ok(())
 }
