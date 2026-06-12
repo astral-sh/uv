@@ -2736,7 +2736,7 @@ async fn run_project(
         }
         ProjectCommand::Format(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::FormatSettings::resolve(args, filesystem);
+            let args = settings::FormatSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -2744,6 +2744,7 @@ async fn run_project(
 
             Box::pin(commands::format(
                 project_dir,
+                args.ruff_path,
                 args.check,
                 args.diff,
                 args.extra_args,
@@ -2777,6 +2778,7 @@ async fn run_project(
 
             Box::pin(commands::check(
                 project_dir,
+                args.ty_path,
                 args.lock_check,
                 args.frozen,
                 args.no_sync,

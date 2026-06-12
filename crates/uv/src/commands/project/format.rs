@@ -10,7 +10,6 @@ use uv_bin_install::{BinVersion, Binary, ResolvedVersion, bin_install, find_matc
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_preview::{Preview, PreviewFeature};
-use uv_static::EnvVars;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
@@ -23,6 +22,7 @@ use crate::printer::Printer;
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn format(
     project_dir: &Path,
+    ruff_path: Option<PathBuf>,
     check: bool,
     diff: bool,
     extra_args: Vec<String>,
@@ -76,10 +76,23 @@ pub(crate) async fn format(
     };
 
     // Determine the version to use and get the path to Ruff.
-    let ruff_path = if let Some(ruff_path) =
-        std::env::var_os(EnvVars::RUFF).filter(|path| !path.is_empty())
-    {
-        PathBuf::from(ruff_path)
+    let ruff_path = if let Some(ruff_path) = ruff_path {
+        if show_version {
+            let output = Command::new(&ruff_path)
+                .arg("--version")
+                .output()
+                .await
+                .context("Failed to query Ruff version")?;
+            if !output.status.success() {
+                anyhow::bail!("Failed to query Ruff version");
+            }
+            write!(
+                printer.stderr(),
+                "{}",
+                String::from_utf8_lossy(&output.stdout)
+            )?;
+        }
+        ruff_path
     } else {
         let retry_policy = client_builder.retry_policy();
         // Python downloads are performing their own retries to catch stream errors, disable the

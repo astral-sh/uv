@@ -2916,6 +2916,7 @@ impl ExportSettings {
 /// The resolved settings to use for a `format` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct FormatSettings {
+    pub(crate) ruff_path: Option<PathBuf>,
     pub(crate) check: bool,
     pub(crate) diff: bool,
     pub(crate) extra_args: Vec<String>,
@@ -2927,7 +2928,11 @@ pub(crate) struct FormatSettings {
 
 impl FormatSettings {
     /// Resolve the [`FormatSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: FormatArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: FormatArgs,
+        _filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let FormatArgs {
             check,
             diff,
@@ -2939,6 +2944,7 @@ impl FormatSettings {
         } = args;
 
         Self {
+            ruff_path: environment.ruff_path,
             check,
             diff,
             extra_args,
@@ -2953,6 +2959,7 @@ impl FormatSettings {
 /// The resolved settings to use for a `check` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct CheckSettings {
+    pub(crate) ty_path: Option<PathBuf>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,
     pub(crate) lock_check: LockCheck,
@@ -3027,6 +3034,7 @@ impl CheckSettings {
         let malware_settings = MalwareCheckSettings::from(&environment);
 
         Self {
+            ty_path: environment.ty_path,
             extras: ExtrasSpecification::from_args(
                 extra.unwrap_or_default(),
                 no_extra,

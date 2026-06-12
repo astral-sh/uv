@@ -1,4 +1,5 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
+#[cfg(feature = "test-pypi")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
@@ -38,46 +39,43 @@ fn check_project() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "test-pypi")]
 fn check_uses_ty_from_environment() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let tool_dir = context.root.child("tools");
+    let bin_dir = context.root.child("tool-bin");
 
     context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-    "#})?;
-    context.temp_dir.child("main.py").write_str("x: int = 1")?;
-    context
-        .temp_dir
-        .child("check")
-        .write_str("print('custom ty')")?;
+        .tool_install()
+        .arg("ty==0.0.17")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2026-02-15T00:00:00Z")
+        .assert()
+        .success();
 
-    let python = context
-        .python_versions
-        .first()
-        .map(|(_, path)| path)
-        .context("Expected a Python interpreter")?;
+    let ty = bin_dir.child(format!("ty{}", std::env::consts::EXE_SUFFIX));
+    context.temp_dir.child("main.py").write_str("x = 1")?;
 
     uv_snapshot!(
         context.filters(),
         context
             .check()
+            .arg("--no-project")
             .arg("--ty-version")
             .arg(">=999.0.0")
-            .env(EnvVars::TY, python),
+            .arg("--verbose")
+            .env(EnvVars::RUST_LOG, "uv::commands::project::check::ty=debug")
+            .env(EnvVars::TY, ty.as_os_str()),
         @"
     success: true
     exit_code: 0
     ----- stdout -----
-    custom ty
+    All checks passed!
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    DEBUG Using `ty 0.0.17 (8cec85718 2026-02-13)`
     "
     );
 

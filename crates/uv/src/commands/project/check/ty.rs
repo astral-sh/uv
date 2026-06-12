@@ -11,7 +11,6 @@ use tracing::debug;
 use uv_bin_install::{BinVersion, Binary, ResolvedVersion, bin_install, find_matching_version};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_static::EnvVars;
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
@@ -38,6 +37,7 @@ async fn write_workspace_metadata(mut stdin: ChildStdin, workspace_metadata: Str
 /// Run a type check powered by ty.
 pub(super) async fn run(
     version: Option<String>,
+    ty_path: Option<PathBuf>,
     target_dir: &Path,
     venv_path: Option<&Path>,
     workspace_metadata: Option<String>,
@@ -46,10 +46,19 @@ pub(super) async fn run(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let ty_path = if let Some(ty_path) =
-        std::env::var_os(EnvVars::TY).filter(|path| !path.is_empty())
-    {
-        PathBuf::from(ty_path)
+    let ty_path = if let Some(ty_path) = ty_path {
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            let output = Command::new(&ty_path)
+                .arg("--version")
+                .output()
+                .await
+                .context("Failed to query ty version")?;
+            if !output.status.success() {
+                anyhow::bail!("Failed to query ty version");
+            }
+            debug!("Using `{}`", String::from_utf8_lossy(&output.stdout).trim());
+        }
+        ty_path
     } else {
         let retry_policy = client_builder.retry_policy();
         let ty_client = client_builder.clone().retries(0).build()?;
