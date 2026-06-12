@@ -16,3 +16,4 @@ jobs:
     uses: ./.github/workflows/test.yml
     with:
       save-rust-cache: "false"
+      collect-coverage: "true"
