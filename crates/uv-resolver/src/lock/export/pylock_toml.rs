@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -44,6 +45,8 @@ use crate::{Installable, LockError, ResolverOutput};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PylockTomlErrorKind {
+    #[error("Multiple active package entries found for `{0}`")]
+    DuplicateActivePackage(PackageName),
     #[error("Package `{0}` requires Python {2}, but the target Python version is {1}")]
     IncompatibleRequiresPython(PackageName, Version, RequiresPython),
     #[error(
@@ -1051,11 +1054,17 @@ impl<'lock> PylockToml {
 
         // Add the root node.
         let root = graph.add_node(Node::Root);
+        let mut active_packages = HashSet::new();
 
         for package in self.packages {
             // Omit packages that aren't relevant to the current environment.
             if !package.marker.evaluate_pep751(markers, extras, groups) {
                 continue;
+            }
+            if !active_packages.insert(package.name.clone()) {
+                return Err(
+                    PylockTomlErrorKind::DuplicateActivePackage(package.name.clone()).into(),
+                );
             }
 
             if let Some(requires_python) = package.requires_python.as_ref()
