@@ -2044,7 +2044,7 @@ impl LockSettings {
 /// The resolved settings to use for an `upgrade` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct UpgradeSettings {
-    pub(crate) package: PackageName,
+    pub(crate) patterns: Vec<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) settings: ResolverSettings,
 }
@@ -2060,13 +2060,12 @@ impl UpgradeSettings {
             .clone()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
-        let package = args.package;
-        let mut settings =
+        let patterns = args.patterns;
+        let settings =
             ResolverSettings::combine(ResolverOptions::default(), filesystem, &environment);
-        settings.upgrade = Upgrade::package(package.clone());
 
         Self {
-            package,
+            patterns,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -5115,19 +5114,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn upgrade_settings_target_only_requested_package() -> anyhow::Result<()> {
-        let package = PackageName::from_str("anyio")?;
+    fn upgrade_settings_preserve_requested_patterns() -> anyhow::Result<()> {
         let settings = UpgradeSettings::resolve(
             UpgradeArgs {
-                package: package.clone(),
+                patterns: vec!["a*".to_string(), "idna".to_string()],
             },
             None,
             EnvironmentOptions::new()?,
         );
-        let expected = FxHashSet::from_iter([package]);
 
-        assert!(!settings.settings.upgrade.is_all());
-        assert_eq!(settings.settings.upgrade.packages(), Some(&expected));
+        assert_eq!(settings.patterns, ["a*", "idna"]);
+        assert!(settings.settings.upgrade.is_none());
         Ok(())
     }
 }

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result, anyhow, bail};
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun};
+use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun, Upgrade};
 use uv_distribution::{ArchiveMetadata, Metadata};
 use uv_distribution_types::Identifier;
 use uv_normalize::PackageName;
@@ -34,6 +34,179 @@ use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
 pub(crate) async fn upgrade(
+    project_dir: &Path,
+    patterns: Vec<String>,
+    install_mirrors: PythonInstallMirrors,
+    settings: ResolverSettings,
+    client_builder: BaseClientBuilder<'_>,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    concurrency: Concurrency,
+    no_config: bool,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+    printer: Printer,
+    preview: Preview,
+) -> Result<ExitStatus> {
+    if let [pattern] = patterns.as_slice()
+        && !contains_glob_meta(pattern)
+        && let Ok(package) = PackageName::from_str(pattern)
+    {
+        let mut settings = settings;
+        settings.upgrade = Upgrade::package(package.clone());
+        return Box::pin(upgrade_one(
+            project_dir,
+            package,
+            install_mirrors,
+            settings,
+            client_builder,
+            python_preference,
+            python_downloads,
+            concurrency,
+            no_config,
+            cache,
+            workspace_cache,
+            printer,
+            preview,
+        ))
+        .await;
+    }
+
+    let packages = selected_packages(project_dir, &patterns, cache, workspace_cache).await?;
+    if packages.is_empty() {
+        bail!("No dependencies matched the requested upgrade patterns");
+    }
+
+    let mut blocked = false;
+    for package in packages {
+        let package_workspace_cache = WorkspaceCache::default();
+        let project = discover_project(project_dir, cache, &package_workspace_cache).await?;
+        if let Err(err) = select_requirement(&project, &package) {
+            writeln!(printer.stderr(), "Skipped {package}: {err}")?;
+            continue;
+        }
+        let pyproject_path = project.project_root().join("pyproject.toml");
+        let before = fs_err::read_to_string(&pyproject_path)?;
+        let mut package_settings = settings.clone();
+        package_settings.upgrade = Upgrade::package(package.clone());
+        match Box::pin(upgrade_one(
+            project_dir,
+            package.clone(),
+            install_mirrors.clone(),
+            package_settings,
+            client_builder.clone(),
+            python_preference,
+            python_downloads,
+            concurrency.clone(),
+            no_config,
+            cache,
+            &package_workspace_cache,
+            printer,
+            preview,
+        ))
+        .await
+        {
+            Ok(ExitStatus::Success) => {
+                let after = fs_err::read_to_string(&pyproject_path)?;
+                let outcome = if before == after {
+                    "Unchanged"
+                } else {
+                    "Changed"
+                };
+                writeln!(printer.stderr(), "{outcome} {package}")?;
+            }
+            Ok(ExitStatus::Failure | ExitStatus::Error | ExitStatus::External(_)) => {
+                blocked = true;
+                writeln!(printer.stderr(), "Blocked {package}")?;
+            }
+            Err(err) => {
+                blocked = true;
+                writeln!(printer.stderr(), "Blocked {package}: {err}")?;
+            }
+        }
+    }
+
+    Ok(if blocked {
+        ExitStatus::Failure
+    } else {
+        ExitStatus::Success
+    })
+}
+
+async fn discover_project(
+    project_dir: &Path,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+) -> Result<ProjectWorkspace> {
+    match VirtualProject::discover(
+        project_dir,
+        &DiscoveryOptions::default(),
+        cache,
+        workspace_cache,
+    )
+    .await
+    {
+        Ok(VirtualProject::Project(project)) => Ok(project),
+        Ok(VirtualProject::NonProject(_)) => {
+            bail!("`uv upgrade` requires a project with a `[project]` table")
+        }
+        Err(err)
+            if matches!(
+                err.as_ref(),
+                WorkspaceErrorKind::MissingPyprojectToml | WorkspaceErrorKind::MissingProject(_)
+            ) =>
+        {
+            bail!("`uv upgrade` requires a project with a `[project]` table");
+        }
+        Err(err) => Err(err.into()),
+    }
+}
+
+async fn selected_packages(
+    project_dir: &Path,
+    patterns: &[String],
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+) -> Result<Vec<PackageName>> {
+    let project = discover_project(project_dir, cache, workspace_cache).await?;
+    if project.workspace().packages().len() != 1 {
+        bail!("`uv upgrade` does not support workspaces with multiple members yet");
+    }
+    let patterns = patterns
+        .iter()
+        .map(|pattern| {
+            glob::Pattern::new(pattern)
+                .with_context(|| format!("Invalid dependency pattern `{pattern}`"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let mut packages = BTreeSet::new();
+    for dependency in project
+        .current_project()
+        .project()
+        .dependencies
+        .as_deref()
+        .unwrap_or_default()
+    {
+        let requirement =
+            Requirement::<VerbatimParsedUrl>::from_str(dependency).with_context(|| {
+                format!("Failed to parse dependency `{dependency}` from `project.dependencies`")
+            })?;
+        if patterns.is_empty()
+            || patterns
+                .iter()
+                .any(|pattern| pattern.matches(requirement.name.as_str()))
+        {
+            packages.insert(requirement.name);
+        }
+    }
+    Ok(packages.into_iter().collect())
+}
+
+fn contains_glob_meta(pattern: &str) -> bool {
+    pattern.contains(['*', '?', '['])
+}
+
+async fn upgrade_one(
     project_dir: &Path,
     package: PackageName,
     install_mirrors: PythonInstallMirrors,

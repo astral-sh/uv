@@ -2392,7 +2392,7 @@ async fn run_project(
 
             Box::pin(commands::upgrade(
                 project_dir,
-                args.package,
+                args.patterns,
                 args.install_mirrors,
                 args.settings,
                 client_builder.subcommand(vec!["upgrade".to_owned()]),

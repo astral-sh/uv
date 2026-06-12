@@ -77,6 +77,7 @@ axoupdater = { workspace = true, features = [
 ], optional = true }
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 console = { workspace = true }
+glob = { workspace = true }
 ctrlc = { workspace = true }
 diskus = { workspace = true }
 dotenvy = { workspace = true }

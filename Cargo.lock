@@ -5679,6 +5679,7 @@ dependencies = [
  "flate2",
  "fs-err",
  "futures",
+ "glob",
  "http",
  "http-body-util",
  "hyper",

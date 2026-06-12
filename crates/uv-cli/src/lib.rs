@@ -4278,9 +4278,12 @@ pub struct LockArgs {
 
 #[derive(Args)]
 pub struct UpgradeArgs {
-    /// The package to upgrade.
+    /// The dependency patterns to upgrade.
+    ///
+    /// Supports package names and glob patterns. If omitted, upgrades every eligible direct
+    /// dependency in the selected package.
     #[arg(value_hint = ValueHint::Other)]
-    pub package: PackageName,
+    pub patterns: Vec<String>,
 }
 
 #[derive(Args)]

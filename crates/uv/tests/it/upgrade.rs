@@ -65,10 +65,10 @@ fn upgrade_help() {
     ----- stdout -----
     Upgrade a dependency in the project
 
-    Usage: uv upgrade [OPTIONS] <PACKAGE>
+    Usage: uv upgrade [OPTIONS] [PATTERNS]...
 
     Arguments:
-      <PACKAGE>  The package to upgrade
+      [PATTERNS]...  The dependency patterns to upgrade
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -111,6 +111,98 @@ fn upgrade_help() {
     ----- stderr -----
     "#
     );
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn upgrade_reports_independent_mixed_outcomes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio<=2", "idna==9999", "project", "sniffio"]
+
+        [tool.uv]
+        exclude-newer = "2024-03-25T00:00:00Z"
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context.upgrade(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of idna==9999 and your project depends on idna==9999, we can conclude that your project's requirements are unsatisfiable.
+    Blocked anyio
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add idna v3.6
+    Updated requirement: `idna==9999` -> `idna==3.6`
+    Changed idna
+    Skipped project: Dependency `project` refers to the current project and cannot be upgraded
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add sniffio v1.3.1
+    Unchanged sniffio
+    ");
+
+    let pyproject = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+    assert!(pyproject.contains("idna==3.6"), "{pyproject}");
+    assert!(pyproject.contains("anyio<=2"), "{pyproject}");
+    assert!(pyproject.contains("project"), "{pyproject}");
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn upgrade_accepts_multiple_dependency_patterns() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio<=2", "idna"]
+
+        [tool.uv]
+        exclude-newer = "2024-03-25T00:00:00Z"
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context.upgrade().arg("a*").arg("i*"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add anyio v4.3.0
+    Updated requirement: `anyio<=2` -> `anyio<=4.3.0`
+    Changed anyio
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add idna v3.6
+    Unchanged idna
+    ");
+
+    let pyproject = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+    assert!(pyproject.contains("anyio<=4.3.0"), "{pyproject}");
+    assert!(pyproject.contains("idna"), "{pyproject}");
+    Ok(())
 }
 
 #[test]
