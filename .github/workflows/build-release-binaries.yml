@@ -1205,7 +1205,7 @@ jobs:
           path: crates/uv-build/dist
 
   check-wheels:
-    name: "Check wheel contents"
+    name: "check wheel contents"
     runs-on: ubuntu-slim
     needs:
       - macos-x86_64
@@ -1229,5 +1229,5 @@ jobs:
           pattern: wheels_*-*
           path: wheels
           merge-multiple: true
-      - name: "Check wheel contents"
+      - name: "check wheel contents"
         run: uv run --no-project scripts/check_uv_wheel_contents.py wheels/*
