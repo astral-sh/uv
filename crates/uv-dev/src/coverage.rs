@@ -2,7 +2,7 @@ use std::env;
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 
 use anstream::println;
 use anyhow::{Context, Result, bail};
@@ -11,7 +11,7 @@ use serde_json::Value;
 use uv_configuration::Concurrency;
 use uv_fastid::Id;
 
-use crate::ROOT_DIR;
+use crate::{COVERAGE_RUSTC_WRAPPER_ENV, ROOT_DIR};
 
 const CARGO_MESSAGE_REASONS: [&str; 4] = [
     "compiler-artifact",
@@ -71,6 +71,10 @@ pub(crate) fn coverage(args: CoverageArgs) -> Result<()> {
     println!("Using a pool of {profile_pool_size} profile files");
 
     let profile_pattern = raw_profiles.join(format!("%{profile_pool_size}m.profraw"));
+    let current_executable =
+        env::current_exe().context("failed to locate the current executable")?;
+    // Cargo applies `RUSTC_WORKSPACE_WRAPPER` only to workspace members, so dependency coverage
+    // is omitted without changing how third-party crates are compiled.
     let mut child = Command::new("cargo")
         .args([
             "nextest",
@@ -82,6 +86,8 @@ pub(crate) fn coverage(args: CoverageArgs) -> Result<()> {
         ])
         .args(args.nextest_args)
         .current_dir(&root)
+        .env("RUSTC_WORKSPACE_WRAPPER", current_executable)
+        .env(COVERAGE_RUSTC_WRAPPER_ENV, "1")
         .env("LLVM_PROFILE_FILE", profile_pattern)
         .stdout(Stdio::piped())
         .spawn()
@@ -156,6 +162,25 @@ pub(crate) fn coverage(args: CoverageArgs) -> Result<()> {
     );
 
     Ok(())
+}
+
+pub(crate) fn rustc_wrapper() -> Option<Result<ExitStatus>> {
+    env::var_os(COVERAGE_RUSTC_WRAPPER_ENV)?;
+
+    // Cargo passes the real `rustc` path first, followed by the original compiler arguments.
+    let mut arguments = env::args_os().skip(1);
+    let rustc = arguments.next()?;
+    if Path::new(&rustc).file_stem()? != "rustc" {
+        return None;
+    }
+
+    Some(
+        Command::new(&rustc)
+            .args(["-C", "instrument-coverage"])
+            .args(arguments)
+            .status()
+            .with_context(|| format!("failed to run `{}`", Path::new(&rustc).display())),
+    )
 }
 
 fn collect_coverage_binaries(reader: impl BufRead) -> Result<Vec<PathBuf>> {

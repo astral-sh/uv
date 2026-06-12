@@ -1,4 +1,5 @@
 use std::env;
+use std::process::ExitStatus;
 
 use anyhow::Result;
 use clap::Parser;
@@ -38,6 +39,11 @@ mod validate_zip;
 mod wheel_metadata;
 
 const ROOT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../");
+pub const COVERAGE_RUSTC_WRAPPER_ENV: &str = "UV_INTERNAL__COVERAGE_RUSTC_WRAPPER";
+
+pub fn coverage_rustc_wrapper() -> Option<Result<ExitStatus>> {
+    coverage::rustc_wrapper()
+}
 
 #[derive(Parser)]
 enum Cli {
