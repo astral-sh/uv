@@ -21,7 +21,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -33,7 +33,9 @@ use uv_types::{
 };
 use uv_virtualenv::OnExisting;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
+use uv_workspace::{
+    DiscoveryOptions, ProjectEnvironmentTarget, VirtualProject, WorkspaceCache, WorkspaceErrorKind,
+};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
@@ -119,24 +121,30 @@ pub(crate) async fn venv(
         }
     };
 
-    // Determine the default path; either the virtual environment for the project or `.venv`
-    let path = path.unwrap_or(
-        project
+    // Only use the project environment path if we're invoked from the root. This isn't strictly
+    // necessary and we may want to change it later, but this avoids a breaking change when adding
+    // project environment support to `uv venv`.
+    let project_environment = project.as_ref().and_then(|project| {
+        (project.workspace().install_path() == project_dir)
+            .then(|| project.workspace().venv(Some(false)))
+    });
+
+    if path.is_none()
+        && project_environment
             .as_ref()
-            .and_then(|project| {
-                // Only use the project environment path if we're invoked from the root
-                // This isn't strictly necessary and we may want to change it later, but this
-                // avoids a breaking change when adding project environment support to `uv venv`.
-                (project.workspace().install_path() == project_dir).then(|| {
-                    project
-                        .workspace()
-                        .venv(Some(false))
-                        .project_path(project.workspace().install_path())
-                        .into_owned()
-                })
-            })
-            .unwrap_or(PathBuf::from(".venv")),
-    );
+            .is_some_and(ProjectEnvironmentTarget::is_default)
+        && preview.is_enabled(PreviewFeature::CentralizedEnvs)
+    {
+        warn_user!("The `centralized-envs` preview feature currently has no effect on `uv venv`");
+    }
+
+    // Determine the default path; either the virtual environment for the project or `.venv`.
+    let path = path.unwrap_or_else(|| {
+        project_environment.map_or_else(
+            || PathBuf::from(".venv"),
+            |target| target.project_path(project_dir).into_owned(),
+        )
+    });
 
     let reporter = PythonDownloadReporter::single(printer);
 
