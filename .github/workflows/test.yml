@@ -146,19 +146,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: "Summarize coverage"
-        if: ${{ inputs.collect-coverage == 'true' }}
-        env:
-          ARTIFACT_URL: ${{ steps.upload-coverage.outputs.artifact-url }}
-          COVERAGE_ID: ${{ steps.test.outputs.tracking_id }}
-        run: |
-          {
-            echo "## Linux coverage"
-            echo
-            echo "- Tracking ID: \`$COVERAGE_ID\`"
-            echo "- Artifact: [$ARTIFACT_URL]($ARTIFACT_URL)"
-          } >> "$GITHUB_STEP_SUMMARY"
-
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -268,19 +255,6 @@ jobs:
             target/coverage/lcov/${{ steps.test.outputs.tracking_id }}.lcov
           if-no-files-found: error
           retention-days: 14
-
-      - name: "Summarize coverage"
-        if: ${{ inputs.collect-coverage == 'true' }}
-        env:
-          ARTIFACT_URL: ${{ steps.upload-coverage.outputs.artifact-url }}
-          COVERAGE_ID: ${{ steps.test.outputs.tracking_id }}
-        run: |
-          {
-            echo "## macOS coverage"
-            echo
-            echo "- Tracking ID: \`$COVERAGE_ID\`"
-            echo "- Artifact: [$ARTIFACT_URL]($ARTIFACT_URL)"
-          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
@@ -414,21 +388,6 @@ jobs:
             ${{ env.UV_WORKSPACE }}/target/coverage/lcov/${{ steps.test.outputs.tracking_id }}.lcov
           if-no-files-found: error
           retention-days: 14
-
-      - name: "Summarize coverage"
-        if: ${{ inputs.collect-coverage == 'true' }}
-        working-directory: ${{ env.UV_WORKSPACE }}
-        shell: bash
-        env:
-          ARTIFACT_URL: ${{ steps.upload-coverage.outputs.artifact-url }}
-          COVERAGE_ID: ${{ steps.test.outputs.tracking_id }}
-        run: |
-          {
-            echo "## Windows coverage partition ${{ matrix.partition }}"
-            echo
-            echo "- Tracking ID: \`$COVERAGE_ID\`"
-            echo "- Artifact: [$ARTIFACT_URL]($ARTIFACT_URL)"
-          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
