@@ -610,6 +610,19 @@ impl SourceBuild {
             .build_system
             .as_ref()
             .and_then(|build_system| build_system.build_backend.as_deref());
+
+        if let Some(backend_path) = pyproject_toml
+            .build_system
+            .as_ref()
+            .and_then(|build_system| build_system.backend_path.as_ref())
+        {
+            for path in backend_path.iter() {
+                if !source_tree.join(path).is_dir() {
+                    return Err(Box::new(Error::InvalidBackendPath(path.to_string())));
+                }
+            }
+        }
+
         // Only show the warning for first party and URL dependencies, not for registry dependencies
         // (which have sources disabled).
         if !no_sources.all()

@@ -148,6 +148,45 @@ fn build_basic() -> Result<()> {
     Ok(())
 }
 
+/// A source distribution must include an in-tree build backend referenced by `backend-path`.
+/// Regression test for <https://github.com/astral-sh/uv/issues/19771>.
+#[test]
+fn build_sdist_missing_backend_path() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        description = "A test project"
+
+        [build-system]
+        requires = ["flit_core >=3.4,<4"]
+        build-backend = "my_backend:builder"
+        backend-path = ["backend_dir"]
+    "#})?;
+    project.child("src/project/__init__.py").touch()?;
+    project
+        .child("backend_dir/my_backend.py")
+        .write_str("from flit_core import buildapi\n\nbuilder = buildapi\n")?;
+
+    uv_snapshot!(context.filters(), context.build().arg(project.path()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+      × Failed to build `[TEMP_DIR]/project`
+      ╰─▶ `backend-path` entry 'backend_dir' does not exist or is not a directory
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn build_sdist() -> Result<()> {
     let context = uv_test::test_context!("3.12");
