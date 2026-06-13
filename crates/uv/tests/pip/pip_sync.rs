@@ -860,9 +860,10 @@ fn install_sdist_url() -> Result<()> {
     Ok(())
 }
 
-/// Install a package with source archive format `.tar.bz2`.
+/// Attempt to install a direct URL source distribution with a non-PEP 625-compliant
+/// archive format (e.g., `.tar.bz2`). This should hard-error.
 #[test]
-fn install_sdist_archive_type_bz2() -> Result<()> {
+fn reject_sdist_archive_type_bz2() -> Result<()> {
     let context = uv_test::test_context!("3.9");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -876,17 +877,13 @@ fn install_sdist_archive_type_bz2() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @"
-    success: true
-    exit_code: 0
+        .arg("--strict"), @r"
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    warning: bz2 @ file://[WORKSPACE]/test/links/bz2-1.0.0.tar.bz2 is not a standards-compliant source distribution: expected '.tar.gz' but found '.tar.bz2'. A future version of uv will reject source distributions that do not meet the requirements specified in PEP 625
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + bz2==1.0.0 (from file://[WORKSPACE]/test/links/bz2-1.0.0.tar.bz2)
+    error: Source distribution `[WORKSPACE]/test/links/bz2-1.0.0.tar.bz2` has a non-PEP 625-compliant filename; only `.tar.gz` and `.zip` archives are accepted
     "
     );
 

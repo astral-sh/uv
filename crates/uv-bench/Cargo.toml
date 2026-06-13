@@ -55,6 +55,3 @@ jiff = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
-
-[features]
-static = ["uv-extract/static"]
