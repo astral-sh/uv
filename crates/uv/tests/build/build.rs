@@ -181,7 +181,7 @@ fn build_sdist_missing_backend_path() -> Result<()> {
     Building source distribution...
     Building wheel from source distribution...
       × Failed to build `[TEMP_DIR]/project`
-      ╰─▶ `backend-path` entry 'backend_dir' does not exist or is not a directory
+      ╰─▶ `backend-path` entry `backend_dir` does not exist or is not a directory
     ");
 
     Ok(())
