@@ -10333,6 +10333,88 @@ fn lock_peer_member() -> Result<()> {
     Ok(())
 }
 
+/// Lock a workspace with a member whose directory contains a URL fragment delimiter.
+#[test]
+fn lock_workspace_member_with_fragment_delimiter() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+
+        [tool.uv.workspace]
+        members = ["member#x"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("member#x")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+        )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "member",
+            "project",
+        ]
+
+        [[package]]
+        name = "member"
+        version = "0.1.0"
+        source = { editable = "member#x" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "member" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "member", editable = "member#x" }]
+        "#);
+    });
+
+    Ok(())
+}
+
 /// Lock a workspace in which a member defines an explicit index that requires authentication.
 #[tokio::test]
 async fn lock_index_workspace_member() -> Result<()> {
