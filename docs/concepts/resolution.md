@@ -539,6 +539,11 @@ error: extra `extra1`, extra `extra2` are incompatible with the declared conflic
 This error occurs because installing both `extra1` and `extra2` would result in installing two
 different versions of a package into the same environment.
 
+Each inner list in `tool.uv.conflicts` declares a set of mutually exclusive items. Items in
+different lists are independent; uv does not automatically combine separate conflict sets. If
+conflicts span multiple extras, groups, or workspace members, include each mutually exclusive pair
+that should not be installed together.
+
 The above strategy for dealing with conflicting optional dependencies also works with dependency
 groups:
 
