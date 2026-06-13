@@ -25,8 +25,8 @@ use url::Url;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{
-    BaseClient, CacheControl, CachedClient, CachedClientError, RetriableError, WrappedReqwestError,
-    fetch_with_url_fallback, retryable_on_request_failure,
+    BaseClient, CacheControl, CachedClient, CachedClientError, Connectivity, RetriableError,
+    WrappedReqwestError, fetch_with_url_fallback, retryable_on_request_failure,
 };
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
@@ -1113,7 +1113,10 @@ async fn fetch_bytes_from_url(
         "downloads-json",
         format!("{}.msgpack", cache_digest(&url.as_str())),
     );
-    let cache_control = CacheControl::from(cache.freshness(&cache_entry, None, None)?);
+    let cache_control = match client.uncached().connectivity() {
+        Connectivity::Online => CacheControl::from(cache.freshness(&cache_entry, None, None)?),
+        Connectivity::Offline => CacheControl::AllowStale,
+    };
 
     let request = client
         .uncached()
