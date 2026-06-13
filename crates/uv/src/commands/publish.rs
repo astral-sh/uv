@@ -104,6 +104,8 @@ pub(crate) async fn publish(
     };
 
     let mut groups = group_files_for_publishing(paths, no_attestations)?;
+    // Sort by filename first so the stable type sort preserves filename order within each type.
+    groups.sort_by(|left, right| left.raw_filename.cmp(&right.raw_filename));
     // Sort by distribution type, with wheels before source distributions.
     groups.sort_by_key(|group| matches!(&group.filename, DistFilename::SourceDistFilename(_)));
     match groups.len() {

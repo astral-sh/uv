@@ -26,6 +26,10 @@ fn dummy_wheel() -> PathBuf {
     test_link("ok-1.0.0-py3-none-any.whl")
 }
 
+fn basic_app_wheel() -> PathBuf {
+    test_link("basic_app-0.1.0-py3-none-any.whl")
+}
+
 fn basic_package_sdist() -> PathBuf {
     test_link("basic_package-0.1.0.tar.gz")
 }
@@ -227,23 +231,25 @@ fn dubious_filenames() {
 }
 
 #[tokio::test]
-async fn publish_wheel_before_sdist() {
+async fn publish_wheels_before_sdist_in_filename_order() {
     let context = uv_test::test_context!("3.12");
     let server = MockServer::start().await;
+    let app_wheel = basic_app_wheel();
     let sdist = basic_package_sdist();
-    let wheel = basic_package_wheel();
+    let package_wheel = basic_package_wheel();
 
     Mock::given(method("POST"))
         .and(path("/upload"))
         .respond_with(ResponseTemplate::new(200))
-        .expect(2)
+        .expect(3)
         .mount(&server)
         .await;
 
     uv_snapshot!(context.filters(), context.publish()
-        // Pass the source distribution first to ensure type determines the upload order.
+        // Pass the source distribution first and the wheels in reverse filename order.
         .arg(sdist)
-        .arg(wheel)
+        .arg(package_wheel)
+        .arg(app_wheel)
         .arg("--username")
         .arg("dummy")
         .arg("--password")
@@ -255,7 +261,9 @@ async fn publish_wheel_before_sdist() {
     ----- stdout -----
 
     ----- stderr -----
-    Publishing 2 files to http://[LOCALHOST]/upload
+    Publishing 3 files to http://[LOCALHOST]/upload
+    Hashing basic_app-0.1.0-py3-none-any.whl ([SIZE])
+    Uploading basic_app-0.1.0-py3-none-any.whl ([SIZE])
     Hashing basic_package-0.1.0-py3-none-any.whl ([SIZE])
     Uploading basic_package-0.1.0-py3-none-any.whl ([SIZE])
     Hashing basic_package-0.1.0.tar.gz ([SIZE])
