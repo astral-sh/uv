@@ -1167,19 +1167,21 @@ impl ProjectInterpreter {
             Self::Environment(venv) => venv.into_interpreter(),
         }
     }
+}
 
-    /// Grab a file lock for the environment to prevent concurrent writes across processes.
-    async fn lock(workspace: &Workspace) -> Result<LockedFile, LockedFileError> {
-        LockedFile::acquire(
-            std::env::temp_dir().join(format!(
-                "uv-{}.lock",
-                cache_digest(workspace.install_path())
-            )),
-            LockedFileMode::Exclusive,
-            workspace.install_path().simplified_display(),
-        )
-        .await
-    }
+/// Grab a file lock for the project environment to prevent concurrent writes across processes.
+pub(crate) async fn lock_project_environment(
+    workspace: &Workspace,
+) -> Result<LockedFile, LockedFileError> {
+    LockedFile::acquire(
+        std::env::temp_dir().join(format!(
+            "uv-{}.lock",
+            cache_digest(workspace.install_path())
+        )),
+        LockedFileMode::Exclusive,
+        workspace.install_path().simplified_display(),
+    )
+    .await
 }
 
 /// The source of a `Requires-Python` specifier.
@@ -1449,7 +1451,7 @@ impl ProjectEnvironment {
         printer: Printer,
     ) -> Result<Self, ProjectError> {
         // Lock the project environment to avoid synchronization issues.
-        let _lock = ProjectInterpreter::lock(workspace)
+        let _lock = lock_project_environment(workspace)
             .await
             .inspect_err(|err| {
                 warn!("Failed to acquire project environment lock: {err}");
