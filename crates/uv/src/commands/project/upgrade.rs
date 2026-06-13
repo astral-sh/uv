@@ -132,6 +132,7 @@ pub(crate) async fn upgrade(
         Some(false),
         cache,
         printer,
+        true,
     )
     .await?
     .into_interpreter();

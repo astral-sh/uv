@@ -168,6 +168,7 @@ pub(crate) async fn lock(
                     Some(false),
                     cache,
                     printer,
+                    false,
                 )
                 .await?
                 .into_interpreter()

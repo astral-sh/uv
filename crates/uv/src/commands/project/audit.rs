@@ -152,6 +152,7 @@ pub(crate) async fn audit(
                     Some(false),
                     &cache,
                     printer,
+                    true,
                 )
                 .await?
                 .into_interpreter()

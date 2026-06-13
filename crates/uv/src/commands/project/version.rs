@@ -514,6 +514,7 @@ async fn print_frozen_version(
         active,
         cache,
         printer,
+        true,
     )
     .await?
     .into_interpreter();
@@ -632,6 +633,7 @@ async fn lock_and_sync(
             active,
             cache,
             printer,
+            true,
         )
         .await?
         .into_interpreter();

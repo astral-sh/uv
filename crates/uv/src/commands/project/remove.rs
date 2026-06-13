@@ -245,6 +245,7 @@ pub(crate) async fn remove(
                     active,
                     cache,
                     printer,
+                    true,
                 )
                 .await?
                 .into_interpreter();
