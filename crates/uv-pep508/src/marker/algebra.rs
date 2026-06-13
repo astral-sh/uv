@@ -218,7 +218,7 @@ impl InternerGuard<'_> {
             //
             // Note that in the presence of the `in` operator, we may not be able to simplify
             // some marker trees to a constant `true` or `false`. For example, it is not trivial to
-            // detect that `os_name > 'z' and os_name in 'Linux'` is unsatisfiable.
+            // detect that `os_name == 'Windows' and os_name in 'Linux'` is unsatisfiable.
             MarkerExpression::String {
                 key,
                 operator: MarkerOperator::In,
@@ -313,7 +313,10 @@ impl InternerGuard<'_> {
                     ),
                     _ => (key.into(), value),
                 };
-                (Variable::String(key), Edges::from_string(operator, value))
+                (
+                    Variable::String(key),
+                    Edges::from_string(key, operator, value),
+                )
             }
             MarkerExpression::List { pair, operator } => (
                 Variable::List(pair),
@@ -1225,15 +1228,47 @@ impl Edges {
     ///
     /// This function will panic for the `In` and `Contains` marker operators, which
     /// should be represented as separate boolean variables.
-    fn from_string(operator: MarkerOperator, value: ArcStr) -> Self {
-        let range: Ranges<ArcStr> = match operator {
-            MarkerOperator::Equal => Ranges::singleton(value),
-            MarkerOperator::NotEqual => Ranges::singleton(value).complement(),
-            MarkerOperator::GreaterThan => Ranges::strictly_higher_than(value),
-            MarkerOperator::GreaterEqual => Ranges::higher_than(value),
-            MarkerOperator::LessThan => Ranges::strictly_lower_than(value),
-            MarkerOperator::LessEqual => Ranges::lower_than(value),
-            MarkerOperator::TildeEqual => unreachable!("string comparisons with ~= are ignored"),
+    fn from_string(
+        key: CanonicalMarkerValueString,
+        operator: MarkerOperator,
+        value: ArcStr,
+    ) -> Self {
+        let range: Ranges<ArcStr> = match (key, operator) {
+            // `platform_release` and `platform_version` are `Version | String` fields. Preserve
+            // their existing lexicographic behavior here; their version-aware semantics are
+            // outside the pure string field behavior handled by this change.
+            (
+                CanonicalMarkerValueString::PlatformRelease
+                | CanonicalMarkerValueString::PlatformVersion,
+                MarkerOperator::GreaterThan,
+            ) => Ranges::strictly_higher_than(value),
+            (
+                CanonicalMarkerValueString::PlatformRelease
+                | CanonicalMarkerValueString::PlatformVersion,
+                MarkerOperator::GreaterEqual,
+            ) => Ranges::higher_than(value),
+            (
+                CanonicalMarkerValueString::PlatformRelease
+                | CanonicalMarkerValueString::PlatformVersion,
+                MarkerOperator::LessThan,
+            ) => Ranges::strictly_lower_than(value),
+            (
+                CanonicalMarkerValueString::PlatformRelease
+                | CanonicalMarkerValueString::PlatformVersion,
+                MarkerOperator::LessEqual,
+            ) => Ranges::lower_than(value),
+            (_, MarkerOperator::Equal) => Ranges::singleton(value),
+            (_, MarkerOperator::NotEqual) => Ranges::singleton(value).complement(),
+            // The marker specification defines strict ordering comparisons for string-valued
+            // fields as always false, while inclusive ordering comparisons are equivalent to
+            // equality.
+            (_, MarkerOperator::GreaterThan | MarkerOperator::LessThan) => Ranges::empty(),
+            (_, MarkerOperator::GreaterEqual | MarkerOperator::LessEqual) => {
+                Ranges::singleton(value)
+            }
+            (_, MarkerOperator::TildeEqual) => {
+                unreachable!("string comparisons with ~= are ignored")
+            }
             _ => unreachable!("`in` and `contains` are treated as boolean variables"),
         };
 
@@ -1784,15 +1819,17 @@ mod tests {
         assert!(m().or(extra_foo, extra_not_foo).is_true());
 
         let os_geq_bar = expr("os_name >= 'bar'");
-        assert!(!os_geq_bar.is_false());
+        assert_eq!(os_geq_bar, expr("os_name == 'bar'"));
 
-        let os_le_bar = expr("os_name < 'bar'");
-        assert!(m().and(os_geq_bar, os_le_bar).is_false());
-        assert!(m().or(os_geq_bar, os_le_bar).is_true());
+        let os_lt_bar = expr("os_name < 'bar'");
+        assert!(os_lt_bar.is_false());
+        assert!(m().and(os_geq_bar, os_lt_bar).is_false());
+        assert_eq!(m().or(os_geq_bar, os_lt_bar), os_geq_bar);
 
         let os_leq_bar = expr("os_name <= 'bar'");
-        assert!(!m().and(os_geq_bar, os_leq_bar).is_false());
-        assert!(m().or(os_geq_bar, os_leq_bar).is_true());
+        assert_eq!(os_leq_bar, os_geq_bar);
+        assert_eq!(m().and(os_geq_bar, os_leq_bar), os_geq_bar);
+        assert_eq!(m().or(os_geq_bar, os_leq_bar), os_geq_bar);
     }
 
     #[test]

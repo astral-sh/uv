@@ -1046,7 +1046,12 @@ impl MarkerTree {
                 for (range, tree) in marker.children() {
                     let l_string = env.get_string(marker.key());
 
-                    if range.as_singleton().is_none() {
+                    if matches!(
+                        marker.key(),
+                        CanonicalMarkerValueString::PlatformRelease
+                            | CanonicalMarkerValueString::PlatformVersion
+                    ) && range.as_singleton().is_none()
+                    {
                         if let Some((start, end)) = range.bounding_range() {
                             if let Bound::Included(value) | Bound::Excluded(value) = start {
                                 reporter.report(
@@ -1989,6 +1994,62 @@ mod test {
     }
 
     #[test]
+    fn test_string_ordering_comparisons() {
+        let env = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+            implementation_name: "cpython",
+            implementation_version: "3.13",
+            os_name: "posix",
+            platform_machine: "x86_64",
+            platform_python_implementation: "CPython",
+            platform_release: "10",
+            platform_system: "Plan9",
+            platform_version: "10",
+            python_full_version: "3.13",
+            python_version: "3.13",
+            sys_platform: "plan9",
+        })
+        .unwrap();
+
+        for (key, value) in [
+            ("implementation_name", "cpython"),
+            ("os_name", "posix"),
+            ("platform_machine", "x86_64"),
+            ("platform_python_implementation", "CPython"),
+            ("platform_system", "Plan9"),
+            ("sys_platform", "plan9"),
+        ] {
+            for operator in [">", "<"] {
+                let marker = m(&format!("{key} {operator} '{value}'"));
+                assert!(marker.is_false(), "{marker:?}");
+                assert!(!marker.evaluate(&env, &[]));
+
+                let marker = m(&format!("'{value}' {operator} {key}"));
+                assert!(marker.is_false(), "{marker:?}");
+                assert!(!marker.evaluate(&env, &[]));
+            }
+
+            for operator in [">=", "<="] {
+                let marker = m(&format!("{key} {operator} '{value}'"));
+                assert_eq!(marker, m(&format!("{key} == '{value}'")));
+                assert!(marker.evaluate(&env, &[]));
+
+                let marker = m(&format!("{key} {operator} 'different'"));
+                assert_eq!(marker, m(&format!("{key} == 'different'")));
+                assert!(!marker.evaluate(&env, &[]));
+
+                let marker = m(&format!("'{value}' {operator} {key}"));
+                assert_eq!(marker, m(&format!("{key} == '{value}'")));
+                assert!(marker.evaluate(&env, &[]));
+            }
+        }
+
+        // `platform_release` and `platform_version` are `Version | String` fields, not pure
+        // strings. Preserve their existing ordering behavior in this change.
+        assert!(m("platform_release < '2'").evaluate(&env, &[]));
+        assert!(m("platform_version <= '2'").evaluate(&env, &[]));
+    }
+
+    #[test]
     fn test_version_in_evaluation() {
         let env27 = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
             implementation_name: "",
@@ -2107,7 +2168,6 @@ mod test {
                 "WARN warnings4: uv_pep508: platform.python_implementation is deprecated in favor of platform_python_implementation",
                 "WARN warnings4: uv_pep508: platform.version is deprecated in favor of platform_version",
                 "WARN warnings4: uv_pep508: sys.platform is deprecated in favor of sys_platform",
-                "WARN warnings4: uv_pep508: Comparing linux and posix lexicographically",
             ];
             if lines == expected {
                 Ok(())
@@ -2115,6 +2175,16 @@ mod test {
                 Err(format!("{lines:#?}"))
             }
         });
+    }
+
+    #[test]
+    #[cfg(feature = "tracing")]
+    #[tracing_test::traced_test]
+    fn warnings5() {
+        let env = env37().with_platform_release("10");
+        let marker = MarkerTree::from_str("platform_release < '2'").unwrap();
+        assert!(marker.evaluate(&env, &[]));
+        logs_contain("Comparing 10 and 2 lexicographically");
     }
 
     #[test]
