@@ -17,19 +17,18 @@ env:
 jobs:
   build-binary-linux-libc:
     name: "linux libc"
-    timeout-minutes: 10
+    timeout-minutes: 20
     runs-on: github-ubuntu-24.04-x86_64-8
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
-
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - name: "Setup srs"
+        id: srs
+        uses: ./.github/actions/setup-srs
         with:
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
+          artifact-cache-scope: github-linux-no-debug
 
       - name: "Build"
         run: cargo build --profile no-debug
@@ -42,6 +41,13 @@ jobs:
             ./target/no-debug/uv
             ./target/no-debug/uvx
           retention-days: 1
+      - name: "Save srs build cache"
+        if: ${{ inputs.save-rust-cache == 'true' }}
+        uses: ./.github/actions/save-srs-cache
+        with:
+          artifact-cache-hit: ${{ steps.srs.outputs.artifact-cache-hit }}
+          artifact-cache-primary-key: ${{ steps.srs.outputs.artifact-cache-primary-key }}
+          save-artifact-cache: "true"
 
   build-binary-linux-aarch64:
     name: "linux aarch64"
@@ -142,17 +148,19 @@ jobs:
 
   build-binary-macos-aarch64:
     name: "macos aarch64"
-    timeout-minutes: 10
+    timeout-minutes: 20
     runs-on: macos-14 # github-macos-14-aarch64-3
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - name: "Setup srs"
+        id: srs
+        uses: ./.github/actions/setup-srs
         with:
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
-          cache-bin: false
+          artifact-cache-scope: github-macos-no-debug
+          target-path: ${{ github.workspace }}/target/no-debug
       - name: "Build"
         run: cargo build --profile no-debug --bin uv --bin uvx
 
@@ -164,6 +172,17 @@ jobs:
             ./target/no-debug/uv
             ./target/no-debug/uvx
           retention-days: 1
+
+      - name: "Save srs build cache"
+        if: ${{ inputs.save-rust-cache == 'true' }}
+        uses: ./.github/actions/save-srs-cache
+        with:
+          artifact-cache-hit: ${{ steps.srs.outputs.artifact-cache-hit }}
+          artifact-cache-primary-key: ${{ steps.srs.outputs.artifact-cache-primary-key }}
+          save-artifact-cache: "true"
+          target-cache-hit: ${{ steps.srs.outputs.target-cache-hit }}
+          target-cache-primary-key: ${{ steps.srs.outputs.target-cache-primary-key }}
+          target-path: ${{ github.workspace }}/target/no-debug
 
   build-binary-macos-x86_64:
     name: "macos x86_64"
