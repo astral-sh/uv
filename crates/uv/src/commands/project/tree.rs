@@ -127,6 +127,7 @@ pub(crate) async fn tree(
                     Some(false),
                     cache,
                     printer,
+                    true,
                 )
                 .await?
                 .into_interpreter()

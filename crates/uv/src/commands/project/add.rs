@@ -298,6 +298,7 @@ pub(crate) async fn add(
                 active,
                 cache,
                 printer,
+                true,
             )
             .await?
             .into_interpreter();
