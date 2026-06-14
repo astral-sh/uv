@@ -214,6 +214,23 @@ For example, to use `flask`:
 
 ```console
 $ uv add flask
+```
+
+Then, create a minimal Flask application:
+
+```python title="app.py"
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Hello, Flask!"
+```
+
+And run it:
+
+```console
 $ uv run -- flask run -p 3000
 ```
 
