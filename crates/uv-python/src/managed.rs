@@ -320,7 +320,9 @@ impl ManagedPythonInstallation {
             path,
             key: download.key().clone(),
             url: Some(download.url().clone()),
-            sha256: download.sha256().cloned(),
+            sha256: download
+                .sha256()
+                .map(|sha256| Cow::Owned(sha256.to_string())),
             build: download.build().map(Cow::Borrowed),
         }
     }
