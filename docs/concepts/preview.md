@@ -41,7 +41,20 @@ The `UV_PREVIEW_FEATURES` environment variable can be used similarly, e.g.:
 $ UV_PREVIEW_FEATURES=foo,bar uv run ...
 ```
 
-For backwards compatibility, enabling preview features that do not exist will warn, but not error.
+Preview features can also be enabled in `uv.toml`, or under `[tool.uv]` in `pyproject.toml` and PEP
+723 metadata:
+
+```toml
+preview-features = ["foo", "bar"]
+```
+
+Set `preview-features = true` to enable all preview features.
+
+Some preview features take effect before configuration files are loaded and cannot be enabled from
+configuration.
+
+For backwards compatibility, enabling preview features that do not exist will warn, but not error,
+regardless of the source.
 
 ## Using preview features
 
@@ -71,6 +84,12 @@ The following preview features are available:
 - `workspace-metadata`: Allows using `uv workspace metadata`.
 - `workspace-dir`: Allows using `uv workspace dir`.
 - `workspace-list`: Allows using `uv workspace list`.
+- `target-workspace-discovery`: Uses the directory containing a local `uv run` target, rather than
+  the current working directory, as the starting point for project and workspace discovery. This
+  feature takes effect before configuration is loaded.
+- `project-directory-must-exist`: Rejects an invalid `--project` path instead of warning and
+  continuing. Except for `uv init`, the path must already exist as a directory or point to a
+  `pyproject.toml` file. This feature takes effect before configuration is loaded.
 - `malware-check`: Allows `uv sync` and other commands to check for malware using
   [OSV](https://osv.dev) before installing packages.
 
