@@ -50,13 +50,15 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
             .get(Url::from(audience_url.clone()))
             .send()
             .await
-            .map_err(|err| TrustedPublishingError::ReqwestMiddleware(audience_url.clone(), err))?;
+            .map_err(|err| {
+                TrustedPublishingError::ReqwestMiddleware(audience_url.clone(), err.into())
+            })?;
         let audience = response
             .error_for_status()
-            .map_err(|err| TrustedPublishingError::Reqwest(audience_url.clone(), err))?
+            .map_err(|err| TrustedPublishingError::Reqwest(audience_url.clone(), err.into()))?
             .json::<Audience>()
             .await
-            .map_err(|err| TrustedPublishingError::Reqwest(audience_url.clone(), err))?;
+            .map_err(|err| TrustedPublishingError::Reqwest(audience_url.clone(), err.into()))?;
         trace!("The audience is `{}`", &audience.audience);
         Ok(audience.audience)
     }
@@ -87,7 +89,7 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
             .send()
             .await
             .map_err(|err| {
-                TrustedPublishingError::ReqwestMiddleware(mint_token_url.clone(), err)
+                TrustedPublishingError::ReqwestMiddleware(mint_token_url.clone(), err.into())
             })?;
 
         // reqwest's implementation of `.json()` also goes through `.bytes()`
@@ -95,7 +97,7 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
         let body = response
             .bytes()
             .await
-            .map_err(|err| TrustedPublishingError::Reqwest(mint_token_url.clone(), err))?;
+            .map_err(|err| TrustedPublishingError::Reqwest(mint_token_url.clone(), err.into()))?;
 
         if status.is_success() {
             let publish_token: PublishToken = serde_json::from_slice(&body)?;
