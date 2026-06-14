@@ -3025,7 +3025,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             };
 
             if let Some(builder) = self.build_context.build_arena().remove(&build_key) {
-                debug!("Creating build environment for: {source}");
+                debug!("Reusing existing build environment for: {source}");
                 let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
 
                 // Store the build context.
@@ -3033,7 +3033,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 wheel
             } else {
-                debug!("Reusing existing build environment for: {source}");
+                debug!("Creating build environment for: {source}");
 
                 let builder = self
                     .build_context

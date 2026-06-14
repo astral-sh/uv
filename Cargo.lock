@@ -3080,6 +3080,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d211803b9b6b570f68772237e415a029d5a50c65d382910b879fb19d3271f94d"
 
 [[package]]
+name = "papaya"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "997ee03cd38c01469a7046643714f0ad28880bcb9e6679ff0666e24817ca19b7"
+dependencies = [
+ "equivalent",
+ "seize",
+]
+
+[[package]]
 name = "parking"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4394,6 +4404,16 @@ checksum = "6ce2691df843ecc5d231c0b14ece2acc3efb62c0a398c7e1d875f3983ce020e3"
 dependencies = [
  "core-foundation-sys",
  "libc",
+]
+
+[[package]]
+name = "seize"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b55fb86dfd3a2f5f76ea78310a88f96c4ea21a3031f8d212443d56123fd0521"
+dependencies = [
+ "libc",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6526,9 +6546,9 @@ dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
  "cargo-util",
- "dashmap",
  "fs-err",
  "owo-colors",
+ "papaya",
  "reqwest",
  "thiserror",
  "tokio",
@@ -7070,7 +7090,6 @@ dependencies = [
  "astral-pubgrub",
  "clap",
  "cyclonedx-bom",
- "dashmap",
  "either",
  "fs-err",
  "futures",
@@ -7080,6 +7099,7 @@ dependencies = [
  "itertools 0.14.0",
  "jiff",
  "owo-colors",
+ "papaya",
  "percent-encoding",
  "petgraph",
  "rkyv",
@@ -7360,7 +7380,7 @@ name = "uv-types"
 version = "0.0.54"
 dependencies = [
  "anyhow",
- "dashmap",
+ "papaya",
  "rustc-hash",
  "thiserror",
  "uv-cache",
