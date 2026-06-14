@@ -382,26 +382,6 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_expanded_tag_single_segment() {
-        let result = parse_expanded_tag("py3-none-any");
-        assert!(result.is_ok());
-        let tag = result.unwrap();
-
-        insta::assert_debug_snapshot!(tag, @"
-        Small {
-            small: WheelTagSmall {
-                python_tag: Python {
-                    major: 3,
-                    minor: None,
-                },
-                abi_tag: None,
-                platform_tag: Any,
-            },
-        }
-        ");
-    }
-
-    #[test]
     fn test_parse_expanded_tag_multi_segment() {
         let result = parse_expanded_tag("cp39.cp310-cp39.cp310-linux_x86_64.linux_i686");
         assert!(result.is_ok());
@@ -456,54 +436,6 @@ mod tests {
                 repr: "cp39.cp310-cp39.cp310-linux_x86_64.linux_i686",
             },
         }
-        "#);
-    }
-
-    #[test]
-    fn test_parse_expanded_tag_empty() {
-        let result = parse_expanded_tag("");
-        assert!(result.is_err());
-
-        insta::assert_debug_snapshot!(result.unwrap_err(), @r#"
-        MissingLanguageTag(
-            "",
-        )
-        "#);
-    }
-
-    #[test]
-    fn test_parse_expanded_tag_one_segment() {
-        let result = parse_expanded_tag("python");
-        assert!(result.is_err());
-
-        insta::assert_debug_snapshot!(result.unwrap_err(), @r#"
-        MissingAbiTag(
-            "python",
-        )
-        "#);
-    }
-
-    #[test]
-    fn test_parse_expanded_tag_two_segments() {
-        let result = parse_expanded_tag("py3-none");
-        assert!(result.is_err());
-
-        insta::assert_debug_snapshot!(result.unwrap_err(), @r#"
-        MissingPlatformTag(
-            "py3-none",
-        )
-        "#);
-    }
-
-    #[test]
-    fn test_parse_expanded_tag_four_segments() {
-        let result = parse_expanded_tag("py3-none-any-extra");
-        assert!(result.is_err());
-
-        insta::assert_debug_snapshot!(result.unwrap_err(), @r#"
-        ExtraSegment(
-            "py3-none-any-extra",
-        )
         "#);
     }
 

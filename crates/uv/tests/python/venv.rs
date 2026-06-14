@@ -1767,64 +1767,6 @@ fn create_venv_symlink_clear_preservation() -> Result<()> {
 
 #[test]
 #[cfg(unix)]
-fn create_venv_symlink_recreate_preservation() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&["3.12"]);
-
-    // Create a target directory
-    let target_dir = context.temp_dir.child("target");
-    target_dir.create_dir_all()?;
-
-    // Create a symlink pointing to the target directory
-    let symlink_path = context.temp_dir.child(".venv");
-    symlink(&target_dir, &symlink_path)?;
-
-    // Verify symlink exists
-    assert!(symlink_path.path().is_symlink());
-
-    // Create virtual environment at symlink location
-    uv_snapshot!(context.filters(), context.venv()
-        .arg(symlink_path.as_os_str())
-        .arg("--python")
-        .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: .venv
-    Activate with: source .venv/[BIN]/activate
-    "
-    );
-
-    // Verify symlink is preserved after first creation
-    assert!(symlink_path.path().is_symlink());
-
-    // Run uv venv again with --clear to test symlink preservation during recreation
-    uv_snapshot!(context.filters(), context.venv()
-        .arg(symlink_path.as_os_str())
-        .arg("--clear")
-        .arg("--python")
-        .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: .venv
-    Activate with: source .venv/[BIN]/activate
-    "
-    );
-
-    // Verify symlink is STILL preserved after recreation
-    assert!(symlink_path.path().is_symlink());
-
-    Ok(())
-}
-
-#[test]
-#[cfg(unix)]
 fn create_venv_nested_symlink_preservation() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
 

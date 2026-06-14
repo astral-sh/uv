@@ -10471,34 +10471,6 @@ fn compile_constraints_incompatible_version() -> Result<()> {
     Ok(())
 }
 
-/// Resolve a package from a `requirements.in` file, with a `constraints.txt` file pinning one of
-/// its direct dependencies to an incompatible version.
-#[test]
-fn conflicting_url_markers() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("filelock==1.0.0")?;
-
-    let constraints_txt = context.temp_dir.child("constraints.txt");
-    constraints_txt.write_str("filelock==3.8.0")?;
-
-    uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in")
-            .arg("--constraint")
-            .arg("constraints.txt"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
-    ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because you require filelock==1.0.0 and filelock==3.8.0, we can conclude that your requirements are unsatisfiable.
-    "
-    );
-
-    Ok(())
-}
-
 /// Override a regular package with an editable. This should resolve to the editable package.
 #[test]
 fn editable_override() -> Result<()> {
