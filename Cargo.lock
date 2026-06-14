@@ -5866,6 +5866,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-util",
+ "toml",
  "uv-cache",
  "uv-client",
  "uv-configuration",
