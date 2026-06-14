@@ -27,7 +27,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_types::HashStrategy;
 
 use crate::satisfies::RequirementSatisfaction;
-use crate::{InstallationStrategy, SitePackages};
+use crate::{InstallationStrategy, InstalledPackages};
 
 /// A wheel dependency is incompatible with the current platform.
 #[derive(Debug)]
@@ -256,7 +256,7 @@ impl<'a> Planner<'a> {
     /// return an _installed_ distribution that does not match the required hash.
     pub fn build(
         self,
-        mut site_packages: SitePackages,
+        mut installed_packages: InstalledPackages,
         installation: InstallationStrategy,
         reinstall: &Reinstall,
         build_options: &BuildOptions,
@@ -318,18 +318,26 @@ impl<'a> Planner<'a> {
             let no_binary = build_options.no_binary_package(dist.name());
             let no_build = build_options.no_build_package(dist.name());
 
-            // Determine whether the distribution is already installed.
-            let installed_dists = site_packages.remove_packages(dist.name());
+            // Determine which distribution is effective at runtime. Read-only distributions can
+            // satisfy the resolution or be shadowed by a new local installation, but must never be
+            // uninstalled.
+            let installed_dists = installed_packages
+                .get_indexed_packages(dist.name())
+                .into_iter()
+                .cloned()
+                .collect::<Vec<_>>();
             if reinstall {
-                reinstalls.extend(installed_dists);
+                ensure_replacement_is_safe(&installed_packages, dist, true)?;
+                reinstalls.extend(installed_packages.remove_mutable_packages(dist.name()));
             } else {
                 match installed_dists.as_slice() {
                     [] => {}
                     [installed] => {
+                        let installed_dist = installed.distribution();
                         let source = RequirementSource::from(dist);
                         match RequirementSatisfaction::check(
                             dist.name(),
-                            installed,
+                            installed_dist,
                             &source,
                             dist.version(),
                             installation,
@@ -341,15 +349,16 @@ impl<'a> Planner<'a> {
                         ) {
                             RequirementSatisfaction::Mismatch => {
                                 debug!(
-                                    "Requirement installed, but mismatched:\n  Installed: {installed:?}\n  Requested: {source:?}"
+                                    "Requirement installed, but mismatched:\n  Installed: {installed_dist:?}\n  Requested: {source:?}"
                                 );
                             }
                             RequirementSatisfaction::Satisfied => {
-                                debug!("Requirement already installed: {installed}");
+                                debug!("Requirement already installed: {installed_dist}");
+                                installed_packages.remove_effective_mutable_packages(dist.name());
                                 continue;
                             }
                             RequirementSatisfaction::OutOfDate => {
-                                debug!("Requirement installed, but not fresh: {installed}");
+                                debug!("Requirement installed, but not fresh: {installed_dist}");
 
                                 // If we made it here, something went wrong in the resolver, because it returned an
                                 // already-installed distribution that we "shouldn't" use. Typically, this means the
@@ -366,6 +375,8 @@ impl<'a> Planner<'a> {
                                     warn!(
                                         "Installed distribution was considered out-of-date, but returned by the resolver: {dist}"
                                     );
+                                    installed_packages
+                                        .remove_effective_mutable_packages(dist.name());
                                     continue;
                                 }
                             }
@@ -373,12 +384,17 @@ impl<'a> Planner<'a> {
                                 // Already logged
                             }
                         }
-                        reinstalls.push(installed.clone());
+
+                        ensure_replacement_is_safe(&installed_packages, dist, false)?;
+                        reinstalls.extend(installed_packages.remove_mutable_packages(dist.name()));
                     }
                     // We reinstall installed distributions with multiple versions because
                     // we do not want to keep multiple incompatible versions but removing
                     // one version is likely to break another.
-                    _ => reinstalls.extend(installed_dists),
+                    _ => {
+                        ensure_replacement_is_safe(&installed_packages, dist, false)?;
+                        reinstalls.extend(installed_packages.remove_mutable_packages(dist.name()));
+                    }
                 }
             }
 
@@ -763,11 +779,11 @@ impl<'a> Planner<'a> {
         }
 
         // Remove any unnecessary packages.
-        if site_packages.any() {
+        if installed_packages.any() {
             // Retain seed packages unless: (1) the virtual environment was created by uv and
             // (2) the `--seed` argument was not passed to `uv venv`.
             let seed_packages = !venv.cfg().is_ok_and(|cfg| cfg.is_uv() && !cfg.is_seed());
-            for dist_info in site_packages {
+            for dist_info in installed_packages {
                 if seed_packages && is_seed_package(&dist_info, venv) {
                     debug!("Preserving seed package: {dist_info}");
                     continue;
@@ -785,6 +801,28 @@ impl<'a> Planner<'a> {
             extraneous,
         })
     }
+}
+
+/// Reject a replacement that cannot be guaranteed to take precedence over every read-only copy.
+fn ensure_replacement_is_safe(
+    installed_packages: &InstalledPackages,
+    distribution: &ResolvedDist,
+    reinstall: bool,
+) -> Result<()> {
+    let action = if reinstall { "reinstall" } else { "replace" };
+    if distribution.is_editable() && installed_packages.has_read_only_package(distribution.name()) {
+        bail!(
+            "Cannot install `{}` as editable because it cannot be guaranteed to shadow the read-only installation",
+            distribution.name()
+        );
+    }
+    if !installed_packages.can_guarantee_wheel_replacement(distribution.name()) {
+        bail!(
+            "Cannot {action} `{}` because the effective installation cannot be shadowed",
+            distribution.name()
+        );
+    }
+    Ok(())
 }
 
 /// Returns `true` if the given distribution is a seed package.

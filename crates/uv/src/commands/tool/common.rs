@@ -22,7 +22,7 @@ use uv_errors::{ErrorWithHints, Hint, Hints};
 use uv_fs::replace_symlink;
 use uv_fs::{CWD, Simplified};
 use uv_git::GitResolver;
-use uv_installer::SitePackages;
+use uv_installer::InstalledPackages;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_python::{
@@ -100,11 +100,14 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 
 /// Return all packages which contain an executable with the given name.
-pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec<InstalledDist> {
-    site_packages
+pub(super) fn matching_packages(
+    name: &str,
+    installed_packages: &InstalledPackages,
+) -> Vec<InstalledDist> {
+    installed_packages
         .iter()
         .filter_map(|package| {
-            entrypoint_paths(site_packages, package.name(), package.version())
+            entrypoint_paths(installed_packages, package.name(), package.version())
                 .ok()
                 .and_then(|entrypoints| {
                     entrypoints
@@ -373,7 +376,7 @@ pub(crate) fn finalize_tool_install(
     );
 
     let mut installed_entrypoints = Vec::new();
-    let site_packages = SitePackages::from_environment(environment)?;
+    let installed_packages = InstalledPackages::from_environment(environment)?;
     let ordered_packages = entrypoints
         // Install dependencies first
         .iter()
@@ -390,11 +393,11 @@ pub(crate) fn finalize_tool_install(
             debug!("Installing entrypoints for `{package}` as part of tool `{name}`");
         }
 
-        let installed = site_packages.get_packages(package);
-        let dist = installed
-            .first()
-            .context("Expected at least one requirement")?;
-        let dist_entrypoints = entrypoint_paths(&site_packages, dist.name(), dist.version())?;
+        let installed = installed_packages.get_packages(package);
+        let dist = installed.first().with_context(|| {
+            format!("Expected at least one installed distribution for executables for {package}")
+        })?;
+        let dist_entrypoints = entrypoint_paths(&installed_packages, dist.name(), dist.version())?;
 
         // Determine the entry points targets. Use a sorted collection for deterministic output.
         let target_entrypoints = dist_entrypoints
@@ -420,7 +423,7 @@ pub(crate) fn finalize_tool_install(
                     package: package.clone(),
                     matching_dependency_packages: matching_packages(
                         package.as_ref(),
-                        &site_packages,
+                        &installed_packages,
                     )
                     .into_iter()
                     .map(|dist| dist.name().clone())

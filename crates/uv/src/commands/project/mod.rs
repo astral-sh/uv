@@ -24,7 +24,7 @@ use uv_distribution_types::{
 };
 use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified};
 use uv_git::ResolvedRepositoryReference;
-use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
+use uv_installer::{InstallationStrategy, InstalledPackages, SatisfiesResult};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
@@ -2291,7 +2291,7 @@ pub(crate) async fn sync_environment(
 
     let client_builder = client_builder.clone().keyring(keyring_provider);
 
-    let site_packages = SitePackages::from_environment(&venv)?;
+    let installed_packages = InstalledPackages::from_environment(&venv)?;
 
     // Determine the markers tags to use for resolution.
     let interpreter = venv.interpreter();
@@ -2365,7 +2365,7 @@ pub(crate) async fn sync_environment(
     // Sync the environment.
     pip::operations::install(
         resolution,
-        site_packages,
+        installed_packages,
         InstallationStrategy::Permissive,
         modifications,
         reinstall,
@@ -2481,13 +2481,13 @@ pub(crate) async fn update_environment(
     let tags = pip::resolution_tags(None, python_platform, interpreter)?;
 
     // Check if the current environment satisfies the requirements
-    let site_packages = SitePackages::from_environment(&venv)?;
+    let installed_packages = InstalledPackages::from_environment(&venv)?;
     if reinstall.is_none()
         && upgrade.is_none()
         && source_trees.is_empty()
         && matches!(modifications, Modifications::Sufficient)
     {
-        match site_packages.satisfies_spec(
+        match installed_packages.satisfies_spec(
             &requirements,
             &constraints,
             &overrides,
@@ -2636,7 +2636,7 @@ pub(crate) async fn update_environment(
         &extras,
         &groups,
         preferences,
-        site_packages.clone(),
+        installed_packages.clone(),
         &hasher,
         reinstall,
         upgrade,
@@ -2662,7 +2662,7 @@ pub(crate) async fn update_environment(
     // Sync the environment.
     let changelog = pip::operations::install(
         &resolution,
-        site_packages,
+        installed_packages,
         InstallationStrategy::Permissive,
         modifications,
         reinstall,

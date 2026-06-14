@@ -457,6 +457,29 @@ jobs:
           .venv/bin/pypy3 --version
           .venv/bin/python --version
 
+      - name: "Check vendored distributions"
+        run: |
+          vendored_cffi=$(.venv/bin/pypy -c 'import cffi; print(cffi.__version__)')
+          ./uv pip list --python .venv/bin/pypy --format json > installed.json
+          .venv/bin/pypy - "$vendored_cffi" <<'PY'
+          import json
+          import sys
+
+          installed = {package["name"]: package["version"] for package in json.load(open("installed.json"))}
+          assert installed["cffi"] == sys.argv[1], installed
+          PY
+
+          alternate_cffi=1.17.1
+          if [[ "$alternate_cffi" == "$vendored_cffi" ]]; then
+            alternate_cffi=1.16.0
+          fi
+          if ./uv pip install --python .venv/bin/pypy "cffi==$alternate_cffi" --dry-run 2> error.txt; then
+            echo "Expected the vendored cffi replacement to fail"
+            exit 1
+          fi
+          grep 'effective installation cannot be shadowed' error.txt
+          .venv/bin/pypy -c 'import cffi, sys; assert cffi.__version__ == sys.argv[1]' "$vendored_cffi"
+
       - name: "Check install"
         run: |
           ./uv pip install anyio

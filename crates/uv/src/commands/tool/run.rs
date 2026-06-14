@@ -23,7 +23,7 @@ use uv_distribution_types::{
     IndexCapabilities, IndexUrl, Name, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
+use uv_installer::{InstallationStrategy, InstalledPackages, SatisfiesResult};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
@@ -314,7 +314,7 @@ pub(crate) async fn run(
 
     // TODO(zanieb): Determine the executable command via the package entry points
     let executable = from.executable();
-    let site_packages = SitePackages::from_environment(&environment)?;
+    let installed_packages = InstalledPackages::from_environment(&environment)?;
 
     // Check if the provided command is not part of the executables for the `from` package,
     // and if it's provided by another package in the environment.
@@ -323,7 +323,7 @@ pub(crate) async fn run(
         ToolRequirement::Package { requirement, .. } => Some(ExecutableProviderHints::new(
             executable,
             requirement,
-            &site_packages,
+            &installed_packages,
             invocation_source,
         )),
     };
@@ -402,15 +402,15 @@ pub(crate) async fn run(
 /// Return the entry points for the specified package.
 fn get_entrypoints(
     from: &PackageName,
-    site_packages: &SitePackages,
+    installed_packages: &InstalledPackages,
 ) -> anyhow::Result<Vec<(String, PathBuf)>> {
-    let installed = site_packages.get_packages(from);
+    let installed = installed_packages.get_packages(from);
     let Some(installed_dist) = installed.first().copied() else {
-        bail!("Expected at least one requirement")
+        bail!("Expected at least one installed distribution for entrypoints for {from}")
     };
 
     Ok(entrypoint_paths(
-        site_packages,
+        installed_packages,
         installed_dist.name(),
         installed_dist.version(),
     )?)
@@ -495,7 +495,7 @@ struct ExecutableProviderHints<'a> {
     /// The package from which the executable is expected to come from
     from: &'a Requirement,
     /// The packages in the [`PythonEnvironment`] the command will run in
-    site_packages: &'a SitePackages,
+    installed_packages: &'a InstalledPackages,
     /// The packages with matching executable names
     packages: Vec<InstalledDist>,
     /// The source of the invocation, for suggestions to the user
@@ -506,14 +506,14 @@ impl<'a> ExecutableProviderHints<'a> {
     fn new(
         executable: &'a str,
         from: &'a Requirement,
-        site_packages: &'a SitePackages,
+        installed_packages: &'a InstalledPackages,
         invocation_source: ToolRunCommand,
     ) -> Self {
-        let packages = matching_packages(executable, site_packages);
+        let packages = matching_packages(executable, installed_packages);
         ExecutableProviderHints {
             executable,
             from,
-            site_packages,
+            installed_packages,
             packages,
             invocation_source,
         }
@@ -538,14 +538,14 @@ impl std::fmt::Display for ExecutableProviderHints<'_> {
         let Self {
             executable,
             from,
-            site_packages,
+            installed_packages,
             packages,
             invocation_source,
         } = self;
 
         match packages.as_slice() {
             [] => {
-                let entrypoints = match get_entrypoints(&from.name, site_packages) {
+                let entrypoints = match get_entrypoints(&from.name, installed_packages) {
                     Ok(entrypoints) => entrypoints,
                     Err(err) => {
                         warn!("Failed to get entrypoints for `{from}`: {err}");
@@ -1048,9 +1048,10 @@ async fn get_or_create_environment(
                     let tags = pip::resolution_tags(None, python_platform.as_ref(), &interpreter)?;
 
                     // Check if the installed packages meet the requirements.
-                    let site_packages = SitePackages::from_environment(environment.environment())?;
+                    let installed_packages =
+                        InstalledPackages::from_environment(environment.environment())?;
                     if matches!(
-                        site_packages.satisfies_requirements(
+                        installed_packages.satisfies_requirements(
                             requirements.iter(),
                             constraints.iter().chain(latest.iter()),
                             overrides.iter(),
