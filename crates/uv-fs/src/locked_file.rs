@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::Duration;
 use std::{env, io};
+use std::{fs::TryLockError, result::Result};
 
 use thiserror::Error;
 use tracing::{debug, error, info, trace, warn};
@@ -107,11 +108,13 @@ impl LockedFileMode {
     /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
     #[cfg(not(target_os = "android"))]
     fn try_lock(self, file: &fs_err::File) -> Result<(), std::fs::TryLockError> {
-        match self {
-            Self::Exclusive => file.try_lock()?,
-            Self::Shared => file.try_lock_shared()?,
-        }
-        Ok(())
+        retry_try_lock_on_interrupted(|| {
+            match self {
+                Self::Exclusive => file.try_lock()?,
+                Self::Shared => file.try_lock_shared()?,
+            }
+            Ok(())
+        })
     }
 
     /// Try to lock the file and return an error if the lock is already acquired by another process
@@ -147,11 +150,37 @@ impl LockedFileMode {
     /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
     #[cfg(not(target_os = "android"))]
     fn lock(self, file: &fs_err::File) -> Result<(), io::Error> {
-        match self {
-            Self::Exclusive => file.lock()?,
-            Self::Shared => file.lock_shared()?,
+        retry_io_on_interrupted(|| {
+            match self {
+                Self::Exclusive => file.lock()?,
+                Self::Shared => file.lock_shared()?,
+            }
+            Ok(())
+        })
+    }
+}
+
+fn retry_io_on_interrupted<T>(
+    mut operation: impl FnMut() -> Result<T, io::Error>,
+) -> Result<T, io::Error> {
+    loop {
+        match operation() {
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            result => return result,
         }
-        Ok(())
+    }
+}
+
+fn retry_try_lock_on_interrupted(
+    mut operation: impl FnMut() -> Result<(), TryLockError>,
+) -> Result<(), TryLockError> {
+    loop {
+        match operation() {
+            Err(TryLockError::Error(error)) if error.kind() == io::ErrorKind::Interrupted => {
+                continue;
+            }
+            result => return result,
+        }
     }
 
     /// Lock the file, blocking until the lock becomes available if necessary.
@@ -418,6 +447,43 @@ impl LockedFile {
 
         rustix::fs::flock(self.0.as_fd(), rustix::fs::FlockOperation::Unlock)
             .map_err(|errno| io::Error::from_raw_os_error(errno.raw_os_error()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{retry_io_on_interrupted, retry_try_lock_on_interrupted};
+    use std::fs::TryLockError;
+    use std::io;
+
+    #[test]
+    fn retry_io_retries_interrupted_error() {
+        let mut attempts = 0;
+        let result = retry_io_on_interrupted(|| {
+            attempts += 1;
+            if attempts == 1 {
+                return Err(io::Error::from(io::ErrorKind::Interrupted));
+            }
+            Ok::<_, io::Error>(())
+        });
+        assert!(result.is_ok());
+        assert_eq!(attempts, 2);
+    }
+
+    #[test]
+    fn retry_try_lock_retries_interrupted_error() {
+        let mut attempts = 0;
+        let result = retry_try_lock_on_interrupted(|| {
+            attempts += 1;
+            if attempts == 1 {
+                return Err(TryLockError::Error(io::Error::from(
+                    io::ErrorKind::Interrupted,
+                )));
+            }
+            Ok(())
+        });
+        assert!(result.is_ok());
+        assert_eq!(attempts, 2);
     }
 }
 
