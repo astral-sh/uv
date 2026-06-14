@@ -2119,3 +2119,32 @@ fn no_clear_conflicts_with_allow_existing() {
     "
     );
 }
+
+/// A _directory_ named `pyproject.toml` in the current directory should produce a clear error
+/// during settings discovery, even for commands that don't require a project.
+///
+/// See: <https://github.com/astral-sh/uv/issues/14584>
+#[test]
+fn create_venv_pyproject_toml_directory_in_cwd() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    // Create a *directory* named `pyproject.toml` in the current directory.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .create_dir_all()
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `pyproject.toml` is a directory, expected a file
+    "
+    );
+}
