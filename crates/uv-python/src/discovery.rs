@@ -11,7 +11,7 @@ use std::{path::Path, path::PathBuf, str::FromStr};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, CachedClient};
 use uv_distribution_types::RequiresPython;
 use uv_fs::Simplified;
 use uv_fs::which::is_executable;
@@ -1496,9 +1496,10 @@ pub(crate) async fn find_best_python_installation(
                 if let Some(download_state) = &mut download_state {
                     download_state
                 } else {
-                    let download_list_client = client_builder.build()?;
+                    let download_list_client = CachedClient::new(client_builder.build()?);
                     let download_list = ManagedPythonDownloadList::new(
                         &download_list_client,
+                        cache,
                         python_downloads_json_url,
                     )
                     .await?;

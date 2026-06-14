@@ -11,19 +11,22 @@ use std::{env, io};
 use futures::TryStreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use reqwest::Response;
 use reqwest_retry::RetryError;
 use reqwest_retry::policies::ExponentialBackoff;
 use serde::Deserialize;
 use thiserror::Error;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufWriter, ReadBuf};
+use tokio::io::{AsyncRead, AsyncWriteExt, BufWriter, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
 
+use uv_cache::{Cache, CacheBucket};
+use uv_cache_key::cache_digest;
 use uv_client::{
-    BaseClient, RetriableError, WrappedReqwestError, fetch_with_url_fallback,
-    retryable_on_request_failure,
+    BaseClient, CacheControl, CachedClient, CachedClientError, Connectivity, RetriableError,
+    WrappedReqwestError, fetch_with_url_fallback, retryable_on_request_failure,
 };
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
@@ -117,6 +120,8 @@ pub enum Error {
     UnsupportedPythonDownloadsJSON(String),
     #[error("Error while fetching remote python downloads json from '{0}'")]
     FetchingPythonDownloadsJSONError(String, #[source] Box<Self>),
+    #[error(transparent)]
+    RemotePythonDownloadsJSONClient(Box<uv_client::Error>),
     #[error("An offline Python installation was requested, but {file} (from {url}) is missing in {}", python_builds_dir.user_display())]
     OfflinePythonMissing {
         file: Box<PythonInstallationKey>,
@@ -1011,14 +1016,15 @@ impl ManagedPythonDownloadList {
 
     /// Load available Python distributions from a provided source or the compiled-in list.
     ///
-    /// `python_downloads_json_url` can be either `None`, to use the default list (taken from
-    /// `crates/uv-python/download-metadata.json`), or `Some` local path
-    /// or file://, http://, or https:// URL.
+    /// `http`/`https` URLs are fetched through the [`CachedClient`], so the response is cached and,
+    /// on subsequent calls, reused or revalidated according to the server's HTTP cache policy;
+    /// `--no-cache` bypasses the cache.
     ///
     /// Returns an error if the provided list could not be opened, if the JSON is invalid, or if it
     /// does not parse into the expected data structure.
     pub async fn new(
-        client: &BaseClient,
+        client: &CachedClient,
+        cache: &Cache,
         python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
         // Although read_url() handles file:// URLs and converts them to local file reads, here we
@@ -1050,7 +1056,7 @@ impl ManagedPythonDownloadList {
         let buf: Cow<'_, [u8]> = match json_source {
             Source::BuiltIn => BUILTIN_PYTHON_DOWNLOADS_JSON.into(),
             Source::Path(ref path) => fs_err::read(path.as_ref())?.into(),
-            Source::Http(ref url) => fetch_bytes_from_url(client, url)
+            Source::Http(ref url) => fetch_bytes_from_url(client, cache, url)
                 .await
                 .map_err(|e| Error::FetchingPythonDownloadsJSONError(url.to_string(), Box::new(e)))?
                 .into(),
@@ -1097,12 +1103,43 @@ impl ManagedPythonDownloadList {
     }
 }
 
-async fn fetch_bytes_from_url(client: &BaseClient, url: &DisplaySafeUrl) -> Result<Vec<u8>, Error> {
-    let (mut reader, size) = read_url(url, client).await?;
-    let capacity = size.and_then(|s| s.try_into().ok()).unwrap_or(1_048_576);
-    let mut buf = Vec::with_capacity(capacity);
-    reader.read_to_end(&mut buf).await?;
-    Ok(buf)
+async fn fetch_bytes_from_url(
+    client: &CachedClient,
+    cache: &Cache,
+    url: &DisplaySafeUrl,
+) -> Result<Vec<u8>, Error> {
+    let cache_entry = cache.entry(
+        CacheBucket::Python,
+        "downloads-json",
+        format!("{}.msgpack", cache_digest(&url.as_str())),
+    );
+    let cache_control = match client.uncached().connectivity() {
+        Connectivity::Online => CacheControl::from(cache.freshness(&cache_entry, None, None)?),
+        Connectivity::Offline => CacheControl::AllowStale,
+    };
+
+    let request = client
+        .uncached()
+        .for_host(url)
+        .get(Url::from(url.clone()))
+        .build()
+        .map_err(|err| Error::from_reqwest(url.clone(), err, None, Instant::now()))?;
+
+    let response_callback = async |response: Response| {
+        response
+            .bytes()
+            .await
+            .map(|bytes| bytes.to_vec())
+            .map_err(|err| Error::from_reqwest(url.clone(), err, None, Instant::now()))
+    };
+
+    client
+        .get_serde_with_retry(request, &cache_entry, cache_control, response_callback)
+        .await
+        .map_err(|err| match err {
+            CachedClientError::Client(err) => Error::RemotePythonDownloadsJSONClient(Box::new(err)),
+            CachedClientError::Callback { err, .. } => err,
+        })
 }
 
 impl ManagedPythonDownload {
@@ -2020,10 +2057,15 @@ mod tests {
             .with_implementation(ImplementationName::CPython);
         request.build = Some("20240814".to_string());
 
-        let client = uv_client::BaseClientBuilder::default()
-            .build()
-            .expect("failed to build base client");
-        let download_list = ManagedPythonDownloadList::new(&client, None).await.unwrap();
+        let client = uv_client::CachedClient::new(
+            uv_client::BaseClientBuilder::default()
+                .build()
+                .expect("failed to build base client"),
+        );
+        let cache = uv_cache::Cache::temp().expect("failed to create temp cache");
+        let download_list = ManagedPythonDownloadList::new(&client, &cache, None)
+            .await
+            .unwrap();
 
         let downloads: Vec<_> = download_list
             .iter_all()
@@ -2048,10 +2090,15 @@ mod tests {
             .with_implementation(ImplementationName::CPython);
         request.build = Some("99999999".to_string());
 
-        let client = uv_client::BaseClientBuilder::default()
-            .build()
-            .expect("failed to build base client");
-        let download_list = ManagedPythonDownloadList::new(&client, None).await.unwrap();
+        let client = uv_client::CachedClient::new(
+            uv_client::BaseClientBuilder::default()
+                .build()
+                .expect("failed to build base client"),
+        );
+        let cache = uv_cache::Cache::temp().expect("failed to create temp cache");
+        let download_list = ManagedPythonDownloadList::new(&client, &cache, None)
+            .await
+            .unwrap();
 
         // Should find no matching downloads
         let downloads: Vec<_> = download_list
