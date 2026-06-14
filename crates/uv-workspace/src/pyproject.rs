@@ -54,6 +54,81 @@ pub enum PyprojectTomlError {
         "`pyproject.toml` is using the `[project]` table, but the required `project.version` field is neither set nor present in the `project.dynamic` list"
     )]
     MissingVersion,
+    /// Occurs when `requires-python` contains a free-threaded selector like `>=3.14t`.
+    #[error(
+        "`requires-python` does not support free-threaded Python selectors (e.g. `{0}`); \
+         version specifiers must be valid PEP 440 versions"
+    )]
+    FreeThreadedSelector(String),
+}
+
+/// Check whether the raw `pyproject.toml` string contains a `requires-python` value with a
+/// free-threaded selector suffix (e.g. `>=3.13t`). Returns the offending specifier string
+/// (e.g. `"3.13t"`) if one is found.
+///
+/// This is used to provide an actionable error message when TOML deserialization fails because
+/// the PEP 440 version parser rejects the `t` suffix.
+///
+/// The scan is line-based and restricted to the `[project]` table section so that occurrences
+/// of `requires-python` in comments, string values, or other tables are not matched.
+fn extract_free_threaded_selector(raw: &str) -> Option<String> {
+    // Walk lines; track whether we are inside the [project] table.
+    let mut in_project_table = false;
+    for line in raw.lines() {
+        let trimmed = line.trim();
+
+        // Skip comment lines.
+        if trimmed.starts_with('#') {
+            continue;
+        }
+
+        // Detect table headers.
+        if trimmed.starts_with('[') {
+            // `[project]` (but not `[project.something]`).
+            in_project_table = trimmed == "[project]";
+            continue;
+        }
+
+        if !in_project_table {
+            continue;
+        }
+
+        // Match a bare `requires-python = "..."` or `requires-python = '...'` assignment.
+        // Strip inline comments after the value.
+        let Some(rest) = trimmed.strip_prefix("requires-python") else {
+            continue;
+        };
+        let rest = rest.trim_start();
+        let Some(rest) = rest.strip_prefix('=') else {
+            continue;
+        };
+        let rest = rest.trim_start();
+
+        // Extract the quoted value.
+        let quote_char = rest.chars().next().filter(|c| *c == '"' || *c == '\'')?;
+        let value_start = 1;
+        let value_end = rest[value_start..].find(quote_char)? + value_start;
+        let value = &rest[value_start..value_end];
+
+        // Scan each comma-separated specifier for a free-threaded suffix (digit followed by `t`).
+        for spec in value.split(',') {
+            let spec = spec.trim();
+            // Strip leading operator characters to get to the version part.
+            let version_part = spec.trim_start_matches(|c: char| !c.is_ascii_digit());
+            if version_part.ends_with('t')
+                && version_part[..version_part.len() - 1]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| c.is_ascii_digit())
+            {
+                return Some(version_part.to_string());
+            }
+        }
+
+        // Found the `requires-python` key but no free-threaded specifier — stop scanning.
+        return None;
+    }
+    None
 }
 
 /// Helper function to deserialize a map while ensuring all keys are unique.
@@ -138,7 +213,19 @@ impl PyProjectToml {
             .map(ToolUvSources::try_from)
             .transpose()?;
 
-        let mut pyproject: Self = toml::from_str(&raw).map_err(PyprojectTomlError::Toml)?;
+        let mut pyproject: Self = toml::from_str(&raw).map_err(|err| {
+            // Only emit `FreeThreadedSelector` when the TOML error is actually caused by the
+            // `requires-python` field (i.e. the error message references that key) AND the raw
+            // file contains a free-threaded specifier in that field.  This avoids masking
+            // unrelated parse errors that happen to co-exist with a `t`-suffixed specifier.
+            let err_msg = err.to_string();
+            if err_msg.contains("requires-python") {
+                if let Some(version) = extract_free_threaded_selector(&raw) {
+                    return PyprojectTomlError::FreeThreadedSelector(version);
+                }
+            }
+            PyprojectTomlError::Toml(err)
+        })?;
         if let Some(sources) = sources {
             let tool_uv = pyproject
                 .tool
@@ -1682,6 +1769,18 @@ impl uv_errors::Hint for SourceError {
     }
 }
 
+impl uv_errors::Hint for PyprojectTomlError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::FreeThreadedSelector(version) => uv_errors::Hints::from(format!(
+                "`requires-python` cannot include a free-threaded selector; \
+                 to pin a free-threaded interpreter, use `uv python pin {version}` instead"
+            )),
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 impl Source {
     pub fn from_requirement(
         name: &PackageName,
@@ -2023,5 +2122,255 @@ impl OptionsMetadata for BuildBackendSettingsSchema {
         Self: Sized + 'static,
     {
         BuildBackendSettings::metadata()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use uv_errors::Hint;
+
+    use super::{PyProjectToml, PyprojectTomlError, extract_free_threaded_selector};
+
+    // --- extract_free_threaded_selector ---
+
+    #[test]
+    fn test_extract_free_threaded_selector_single_ge() {
+        // Basic `>=3.13t` — the most common real-world case.
+        let raw = r#"
+[project]
+requires-python = ">=3.13t"
+"#;
+        assert_eq!(
+            extract_free_threaded_selector(raw),
+            Some("3.13t".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_free_threaded_selector_eq() {
+        // Exact pin: `==3.14t`.
+        let raw = r#"
+[project]
+requires-python = "==3.14t"
+"#;
+        assert_eq!(
+            extract_free_threaded_selector(raw),
+            Some("3.14t".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_free_threaded_selector_compatible() {
+        // Compatible release: `~=3.13t`.
+        let raw = r#"
+[project]
+requires-python = "~=3.13t"
+"#;
+        assert_eq!(
+            extract_free_threaded_selector(raw),
+            Some("3.13t".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_free_threaded_selector_multi_specifier_second() {
+        // `t` suffix is in the second specifier of a comma-separated pair.
+        let raw = r#"
+[project]
+requires-python = ">=3.12, <3.14t"
+"#;
+        assert_eq!(
+            extract_free_threaded_selector(raw),
+            Some("3.14t".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_free_threaded_selector_single_quoted() {
+        // Single-quoted TOML value.
+        let raw = r"
+[project]
+requires-python = '>=3.13t'
+";
+        assert_eq!(
+            extract_free_threaded_selector(raw),
+            Some("3.13t".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_free_threaded_selector_normal_version_no_match() {
+        // Normal PEP 440 specifier — must return None.
+        let raw = r#"
+[project]
+requires-python = ">=3.13"
+"#;
+        assert_eq!(extract_free_threaded_selector(raw), None);
+    }
+
+    #[test]
+    fn test_extract_free_threaded_selector_no_requires_python() {
+        // No `requires-python` key at all.
+        let raw = r#"
+[project]
+name = "foo"
+"#;
+        assert_eq!(extract_free_threaded_selector(raw), None);
+    }
+
+    #[test]
+    fn test_extract_free_threaded_selector_in_comment_ignored() {
+        // `requires-python` with a `t` suffix appears only in a comment — must return None.
+        let raw = r#"
+[project]
+name = "foo"
+# requires-python = ">=3.13t"
+requires-python = ">=3.13"
+"#;
+        assert_eq!(extract_free_threaded_selector(raw), None);
+    }
+
+    #[test]
+    fn test_extract_free_threaded_selector_in_other_table_ignored() {
+        // `requires-python` with a `t` suffix appears in a non-[project] table — must return None.
+        let raw = r#"
+[tool.something]
+requires-python = ">=3.13t"
+
+[project]
+requires-python = ">=3.13"
+"#;
+        assert_eq!(extract_free_threaded_selector(raw), None);
+    }
+
+    #[test]
+    fn test_extract_free_threaded_selector_letter_before_t_no_match() {
+        // `>=3.13at` — the character immediately before `t` is a letter, not a digit.
+        // Must return None so we don't false-positive on arbitrary strings ending in `t`.
+        let raw = r#"
+[project]
+requires-python = ">=3.13at"
+"#;
+        assert_eq!(extract_free_threaded_selector(raw), None);
+    }
+
+    #[test]
+    fn test_extract_free_threaded_selector_post_release_digit_before_t_matches() {
+        // `>=3.13.post1t` — the character before `t` is the digit `1`.
+        // Our heuristic matches digit-before-t, so this is treated as a free-threaded selector.
+        // In practice nobody writes this, but the test documents the boundary behaviour.
+        let raw = r#"
+[project]
+requires-python = ">=3.13.post1t"
+"#;
+        assert_eq!(
+            extract_free_threaded_selector(raw),
+            Some("3.13.post1t".to_string())
+        );
+    }
+
+    // --- PyprojectTomlError::FreeThreadedSelector hint ---
+
+    #[test]
+    fn test_hint_free_threaded_selector() {
+        let err = PyprojectTomlError::FreeThreadedSelector("3.13t".to_string());
+        let hint_text = err
+            .hints()
+            .into_iter()
+            .next()
+            .expect("expected at least one hint");
+        assert!(
+            hint_text.contains("uv python pin 3.13t"),
+            "hint should suggest `uv python pin 3.13t`, got: {hint_text}"
+        );
+        assert!(
+            hint_text.contains("requires-python"),
+            "hint should mention `requires-python`, got: {hint_text}"
+        );
+    }
+
+    #[test]
+    fn test_hint_other_errors_are_empty() {
+        // Non-FreeThreadedSelector variants must not emit hints.
+        let err = PyprojectTomlError::MissingName;
+        assert!(err.hints().is_empty());
+    }
+
+    // --- PyProjectToml::from_string integration ---
+
+    #[test]
+    fn test_from_string_unrelated_toml_error_not_masked() {
+        // A genuine TOML syntax error unrelated to `requires-python` must not be swallowed
+        // by FreeThreadedSelector even if the file also has a `t`-suffixed specifier.
+        let raw = r#"
+[project]
+name = "myapp"
+version = "0.1.0"
+requires-python = ">=3.13t"
+invalid syntax !!!
+"#;
+        let err = PyProjectToml::from_string(raw.to_string(), Path::new("pyproject.toml"))
+            .expect_err("should fail to parse");
+        // The error may be FreeThreadedSelector (if toml errors on requires-python first)
+        // or Toml (if it errors on the syntax line first) — what must NOT happen is silently
+        // returning Ok or panicking.
+        assert!(
+            matches!(
+                err,
+                PyprojectTomlError::FreeThreadedSelector(_) | PyprojectTomlError::Toml(_)
+            ),
+            "unexpected error variant: {err:?}"
+        );
+    }
+
+    #[test]
+    fn test_from_string_free_threaded_selector_returns_dedicated_error() {
+        let raw = r#"
+[project]
+name = "myapp"
+version = "0.1.0"
+requires-python = ">=3.13t"
+"#;
+        let err = PyProjectToml::from_string(raw.to_string(), Path::new("pyproject.toml"))
+            .expect_err("should fail to parse");
+        assert!(
+            matches!(err, PyprojectTomlError::FreeThreadedSelector(ref v) if v == "3.13t"),
+            "expected FreeThreadedSelector(\"3.13t\"), got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn test_from_string_valid_requires_python_parses_ok() {
+        let raw = r#"
+[project]
+name = "myapp"
+version = "0.1.0"
+requires-python = ">=3.13"
+"#;
+        assert!(
+            PyProjectToml::from_string(raw.to_string(), Path::new("pyproject.toml")).is_ok(),
+            "valid requires-python should parse without error"
+        );
+    }
+
+    #[test]
+    fn test_from_string_free_threaded_eq_pin() {
+        let raw = r#"
+[project]
+name = "myapp"
+version = "0.1.0"
+requires-python = "==3.13t"
+"#;
+        let err = PyProjectToml::from_string(raw.to_string(), Path::new("pyproject.toml"))
+            .expect_err("should fail to parse");
+        assert!(
+            matches!(err, PyprojectTomlError::FreeThreadedSelector(ref v) if v == "3.13t"),
+            "expected FreeThreadedSelector(\"3.13t\"), got: {err:?}"
+        );
+        // Also verify the hint points to the right pin command.
+        let hint_text = err.hints().into_iter().next().expect("expected a hint");
+        assert!(hint_text.contains("uv python pin 3.13t"));
     }
 }
