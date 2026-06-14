@@ -1,6 +1,7 @@
 //! Create a virtual environment.
 
 use std::env::consts::EXE_SUFFIX;
+use std::fmt::Write as _;
 use std::io;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -25,21 +26,90 @@ use uv_version::version;
 use uv_warnings::warn_user_once;
 
 /// Activation scripts for the environment, with dependent paths templated out.
-const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
-    ("activate", include_str!("activator/activate")),
-    ("activate.csh", include_str!("activator/activate.csh")),
-    ("activate.fish", include_str!("activator/activate.fish")),
-    ("activate.nu", include_str!("activator/activate.nu")),
-    ("activate.ps1", include_str!("activator/activate.ps1")),
-    ("activate.bat", include_str!("activator/activate.bat")),
-    ("deactivate.bat", include_str!("activator/deactivate.bat")),
-    ("pydoc.bat", include_str!("activator/pydoc.bat")),
+const ACTIVATE_TEMPLATES: &[(&str, &str, Option<PromptQuoting>)] = &[
+    (
+        "activate",
+        include_str!("activator/activate"),
+        Some(PromptQuoting::Posix),
+    ),
+    ("activate.csh", include_str!("activator/activate.csh"), None),
+    (
+        "activate.fish",
+        include_str!("activator/activate.fish"),
+        Some(PromptQuoting::Fish),
+    ),
+    ("activate.nu", include_str!("activator/activate.nu"), None),
+    (
+        "activate.ps1",
+        include_str!("activator/activate.ps1"),
+        Some(PromptQuoting::PowerShell),
+    ),
+    ("activate.bat", include_str!("activator/activate.bat"), None),
+    (
+        "deactivate.bat",
+        include_str!("activator/deactivate.bat"),
+        None,
+    ),
+    ("pydoc.bat", include_str!("activator/pydoc.bat"), None),
     (
         "activate_this.py",
         include_str!("activator/activate_this.py"),
+        Some(PromptQuoting::Python),
     ),
 ];
 const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
+
+#[derive(Clone, Copy)]
+enum PromptQuoting {
+    Posix,
+    Fish,
+    PowerShell,
+    Python,
+}
+
+impl PromptQuoting {
+    fn quote(self, value: &str) -> String {
+        match self {
+            Self::Posix => format!("'{}'", escape_posix_for_single_quotes(value)),
+            Self::Fish => {
+                // Fish interprets backslashes inside single quotes, unlike POSIX shells.
+                let value = value.replace('\\', r"\\").replace('\'', r"\'");
+                format!("'{value}'")
+            }
+            Self::PowerShell => format!(
+                "'{}'",
+                value
+                    .replace('\'', "''")
+                    .replace('‘', "‘‘")
+                    .replace('’', "’’")
+                    .replace('‚', "‚‚")
+                    .replace('‛', "‛‛")
+            ),
+            Self::Python => quote_python(value),
+        }
+    }
+}
+
+fn quote_python(value: &str) -> String {
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('"');
+    for character in value.chars() {
+        match character {
+            '\\' => quoted.push_str(r"\\"),
+            '"' => quoted.push_str(r#"\""#),
+            '\n' => quoted.push_str(r"\n"),
+            '\r' => quoted.push_str(r"\r"),
+            '\t' => quoted.push_str(r"\t"),
+            character if character.is_control() => {
+                write!(quoted, r"\u{:04x}", u32::from(character))
+                    .expect("writing to a string cannot fail");
+            }
+            _ => quoted.push(character),
+        }
+    }
+    quoted.push('"');
+    quoted
+}
 
 /// Very basic `.cfg` file format writer.
 fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
@@ -459,11 +529,11 @@ pub(crate) fn create(
     }
 
     // Add all the activate scripts for different shells
-    for (name, template) in ACTIVATE_TEMPLATES {
+    for &(name, template, prompt_quoting) in ACTIVATE_TEMPLATES {
         // csh has no way to determine its own script location, so a relocatable
         // activate.csh is not possible. Skip it entirely instead of generating a
         // non-functional script.
-        if relocatable && *name == "activate.csh" {
+        if relocatable && name == "activate.csh" {
             continue;
         }
 
@@ -482,7 +552,7 @@ pub(crate) fn create(
         .map(|path| path.simplified().to_str().unwrap().replace('\\', "\\\\"))
         .join(path_sep);
 
-        let virtual_env_dir = match (relocatable, name.to_owned()) {
+        let virtual_env_dir = match (relocatable, name) {
             (true, "activate") => {
                 r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#.to_string()
             }
@@ -501,16 +571,18 @@ pub(crate) fn create(
             _ => escape_posix_for_single_quotes(location.simplified().to_str().unwrap()),
         };
 
-        let activator = template
+        let prompt = prompt.as_deref().unwrap_or_default();
+        let virtual_prompt = prompt_quoting
+            .map(|quoting| quoting.quote(prompt))
+            .unwrap_or_else(|| prompt.to_string());
+
+        let contents = template
             .replace("{{ VIRTUAL_ENV_DIR }}", &virtual_env_dir)
             .replace("{{ BIN_NAME }}", bin_name)
-            .replace(
-                "{{ VIRTUAL_PROMPT }}",
-                prompt.as_deref().unwrap_or_default(),
-            )
+            .replace("{{ VIRTUAL_PROMPT }}", &virtual_prompt)
             .replace("{{ PATH_SEP }}", path_sep)
             .replace("{{ RELATIVE_SITE_PACKAGES }}", &relative_site_packages);
-        fs_err::write(scripts.join(name), activator)?;
+        fs_err::write(scripts.join(name), contents)?;
     }
 
     let mut pyvenv_cfg_data: Vec<(String, String)> = vec![
