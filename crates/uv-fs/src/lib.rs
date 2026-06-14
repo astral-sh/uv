@@ -840,7 +840,25 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
 }
 
 /// Perform a safe removal of a virtual environment.
+///
+/// Links at `location` are removed without following them. On Windows, removal is deferred when
+/// the current executable is inside the environment. For directories, `pyvenv.cfg` is removed last
+/// so a partially removed environment remains identifiable.
 pub fn remove_virtualenv(location: &Path) -> io::Result<()> {
+    let file_type = fs_err::symlink_metadata(location)?.file_type();
+    if file_type.is_symlink() {
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::FileTypeExt;
+
+            // On Windows, symlinks/junctions to directories must be removed using `remove_dir`.
+            if file_type.is_symlink_dir() {
+                return fs_err::remove_dir(location);
+            }
+        }
+        return fs_err::remove_file(location);
+    }
+
     // On Windows, if the current executable is in the directory, defer self-deletion since Windows
     // won't let you unlink a running executable.
     #[cfg(windows)]
@@ -889,4 +907,56 @@ pub fn remove_virtualenv(location: &Path) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+/// Remove and recreate a virtual environment directory.
+///
+/// If a final directory link can be resolved, its target is recreated and the link is preserved.
+/// Otherwise, `location` itself is recreated. Returns whether an existing entry was cleared.
+pub fn clear_virtualenv(location: &Path) -> io::Result<bool> {
+    let location = location
+        .canonicalize()
+        .unwrap_or_else(|_| location.to_path_buf());
+    let cleared = match remove_virtualenv(&location) {
+        Ok(()) => true,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => false,
+        Err(err) => return Err(err),
+    };
+    fs_err::create_dir_all(location)?;
+    Ok(cleared)
+}
+
+#[cfg(test)]
+mod remove_virtualenv_tests {
+    use super::*;
+
+    #[test]
+    fn removes_directory_link_without_removing_target() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let target = tempdir.path().join("target");
+        fs_err::create_dir(&target)?;
+        let marker = target.join("marker");
+        fs_err::write(&marker, "")?;
+        let environment = tempdir.path().join("environment");
+        create_symlink(&target, &environment)?;
+
+        remove_virtualenv(&environment)?;
+
+        assert!(matches!(
+            fs_err::symlink_metadata(environment),
+            Err(err) if err.kind() == io::ErrorKind::NotFound
+        ));
+        assert!(marker.is_file());
+        Ok(())
+    }
+
+    #[test]
+    fn clear_recreates_missing_directory() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let environment = tempdir.path().join("environment");
+
+        assert!(!clear_virtualenv(&environment)?);
+        assert!(environment.is_dir());
+        Ok(())
+    }
 }

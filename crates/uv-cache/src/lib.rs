@@ -614,8 +614,8 @@ impl Cache {
             }
         }
 
-        // Second, remove any cached environments. These are never referenced by symlinks, so we can
-        // remove them directly.
+        // Second, remove all cached environments. Centralized project environments can be
+        // referenced by `.venv` links, but are recreated on demand when their project is next used.
         match fs_err::read_dir(self.bucket(CacheBucket::Environments)) {
             Ok(entries) => {
                 for entry in entries {

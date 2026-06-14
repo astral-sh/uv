@@ -194,6 +194,17 @@ Use the `UV_PROJECT_ENVIRONMENT` environment variable to override this location.
 see the
 [projects environment documentation](../concepts/projects/config.md#project-environment-path).
 
+With the [`centralized-envs` preview feature](../concepts/preview.md), uv stores the default project
+environment in its cache. uv attempts to maintain a `.venv` directory link to the cached environment
+so existing activation and editor workflows can continue to use the usual path. If link creation
+fails, uv continues using the cached environment directly, but tools relying on `.venv` may not
+discover it. Switching interpreters can reuse their respective cached environments.
+
+Explicit project environment paths, including `UV_PROJECT_ENVIRONMENT` and environments selected
+with `--active`, are not centralized. Centralized environments are not supported with `--no-cache`.
+Like other cache data, they can be removed by `uv cache clean` or `uv cache prune` and are recreated
+when next needed.
+
 ### Script virtual environments
 
 When running [scripts with inline metadata](../guides/scripts.md), uv creates a dedicated virtual

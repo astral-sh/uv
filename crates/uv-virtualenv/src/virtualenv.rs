@@ -150,14 +150,7 @@ pub(crate) fn create(
                         }
                     }
                     debug!("Removing existing {name} ({reason})");
-                    // Before removing the virtual environment, we need to canonicalize the path
-                    // because `Path::metadata` will follow the symlink but we're still operating on
-                    // the unresolved path and will remove the symlink itself.
-                    let location = location
-                        .canonicalize()
-                        .unwrap_or_else(|_| location.to_path_buf());
-                    uv_fs::remove_virtualenv(&location)?;
-                    fs_err::create_dir_all(&location)?;
+                    uv_fs::clear_virtualenv(location)?;
                 }
                 OnExisting::Fail => return err,
                 // If not a virtual environment, fail without prompting.
@@ -166,14 +159,7 @@ pub(crate) fn create(
                     match confirm_clear(location, name)? {
                         Some(true) => {
                             debug!("Removing existing {name} due to confirmation");
-                            // Before removing the virtual environment, we need to canonicalize the
-                            // path because `Path::metadata` will follow the symlink but we're still
-                            // operating on the unresolved path and will remove the symlink itself.
-                            let location = location
-                                .canonicalize()
-                                .unwrap_or_else(|_| location.to_path_buf());
-                            uv_fs::remove_virtualenv(&location)?;
-                            fs_err::create_dir_all(&location)?;
+                            uv_fs::clear_virtualenv(location)?;
                         }
                         Some(false) => return err,
                         // When we don't have a TTY, require `--clear` explicitly.
