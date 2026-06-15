@@ -9,13 +9,16 @@ use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun, Upgrade};
 use uv_distribution::{ArchiveMetadata, Metadata};
-use uv_distribution_types::Identifier;
+use uv_distribution_types::{Identifier, RequiresPython};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{MarkerTree, Requirement, VerbatimUrl, VersionOrUrl};
+use uv_pep508::{
+    MarkerExpression, MarkerTree, MarkerValueVersion, Pep508ErrorSource, Requirement, VerbatimUrl,
+    VersionOrUrl,
+};
 use uv_preview::Preview;
 use uv_pypi_types::{PyProjectToml, ResolutionMetadata, SupportedEnvironments, VerbatimParsedUrl};
-use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference};
+use uv_python::{ConfigDiscovery, Interpreter, PythonDownloads, PythonPreference};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{MetadataResponse, implicit_constraints_marker};
 use uv_settings::PythonInstallMirrors;
@@ -64,13 +67,81 @@ struct DeclarationSelection {
     packages: Vec<PackageName>,
 }
 
+#[derive(Clone)]
+struct DeclarationIdentity {
+    package: PackageName,
+    dependency_type: DependencyType,
+    text: String,
+}
+
 /// An existing requirement and its proposed replacement.
+#[derive(Clone)]
 struct RequirementUpdate {
     package: PackageName,
     dependency_type: DependencyType,
     original_text: String,
     existing: Requirement<VerbatimUrl>,
     replacement: Requirement<VerbatimUrl>,
+}
+
+enum DeclarationOutcome {
+    Changed(Box<RequirementUpdate>),
+    Unchanged(DeclarationIdentity),
+    Blocked {
+        declaration: DeclarationIdentity,
+        reason: BlockedReason,
+    },
+}
+
+enum BlockedReason {
+    UnrepresentableRequirement { message: String },
+    ConflictExtra { extra: String },
+}
+
+impl DeclarationOutcome {
+    fn package(&self) -> &PackageName {
+        match self {
+            Self::Changed(update) => &update.package,
+            Self::Unchanged(declaration) | Self::Blocked { declaration, .. } => {
+                &declaration.package
+            }
+        }
+    }
+
+    fn supports_lock_event(&self) -> bool {
+        matches!(self, Self::Changed(_) | Self::Unchanged(_))
+    }
+
+    fn invalidates_relaxed_solve(&self) -> bool {
+        matches!(
+            self,
+            Self::Blocked {
+                reason: BlockedReason::UnrepresentableRequirement { .. },
+                ..
+            }
+        )
+    }
+}
+
+impl BlockedReason {
+    fn message(&self) -> String {
+        match self {
+            Self::UnrepresentableRequirement { message } => message.clone(),
+            Self::ConflictExtra { extra } => {
+                format!("declared under conflicting extra `{extra}`")
+            }
+        }
+    }
+}
+
+impl UpgradableRequirement {
+    fn identity(&self) -> DeclarationIdentity {
+        DeclarationIdentity {
+            package: self.package.clone(),
+            dependency_type: self.dependency_type.clone(),
+            text: self.original_text.clone(),
+        }
+    }
 }
 
 pub(crate) async fn upgrade(
@@ -111,13 +182,74 @@ pub(crate) async fn upgrade(
         }
         Err(err) => return Err(err.into()),
     };
+    let fallback_interpreter = if requires_fallback_interpreter(&project, &packages, &exclude)? {
+        let groups = DependencyGroupsWithDefaults::none();
+        let workspace_python = WorkspacePython::from_request(
+            None,
+            Some(project.workspace()),
+            &groups,
+            project_dir,
+            config_discovery,
+        )
+        .await?;
+        match ProjectInterpreter::discover(
+            project.workspace(),
+            &groups,
+            workspace_python,
+            &client_builder,
+            python_preference,
+            python_downloads,
+            &install_mirrors,
+            false,
+            Some(false),
+            cache,
+            printer,
+        )
+        .await
+        {
+            Ok(interpreter) => Some(interpreter.into_interpreter()),
+            Err(error) => {
+                select_requirements(&project, &packages, &exclude, None)?;
+                return Err(error.into());
+            }
+        }
+    } else {
+        None
+    };
     let DeclarationSelection {
-        active: mut requirements,
+        active: requirements,
         skipped,
-        packages: selected_packages,
-    } = select_requirements(&project, &packages, &exclude)?;
+        packages: mut selected_packages,
+    } = select_requirements(&project, &packages, &exclude, fallback_interpreter.as_ref())?;
     render_skipped_requirements(&skipped, printer)?;
+    let mut declaration_outcomes = Vec::new();
+    let conflicts = project.workspace().conflicts()?;
+    let mut requirements = requirements
+        .into_iter()
+        .filter_map(|selected| {
+            let Some(extra) = selected.requirement.marker.top_level_extra_name() else {
+                return Some(selected);
+            };
+            if conflicts.contains(project.project_name(), extra.as_ref()) {
+                declaration_outcomes.push(DeclarationOutcome::Blocked {
+                    declaration: selected.identity(),
+                    reason: BlockedReason::ConflictExtra {
+                        extra: extra.to_string(),
+                    },
+                });
+                None
+            } else {
+                Some(selected)
+            }
+        })
+        .collect::<Vec<_>>();
+    selected_packages.retain(|package| {
+        requirements
+            .iter()
+            .any(|selected| selected.package == *package)
+    });
     if requirements.is_empty() {
+        render_declaration_outcomes(&declaration_outcomes, printer)?;
         return Ok(ExitStatus::Success);
     }
     settings.upgrade = Upgrade::from_packages(selected_packages.clone());
@@ -200,30 +332,34 @@ pub(crate) async fn upgrade(
     )
     .await?;
 
-    let groups = DependencyGroupsWithDefaults::none();
-    let workspace_python = WorkspacePython::from_request(
-        None,
-        Some(project.workspace()),
-        &groups,
-        project_dir,
-        config_discovery,
-    )
-    .await?;
-    let interpreter = ProjectInterpreter::discover(
-        project.workspace(),
-        &groups,
-        workspace_python,
-        &client_builder,
-        python_preference,
-        python_downloads,
-        &install_mirrors,
-        false,
-        Some(false),
-        &cache,
-        printer,
-    )
-    .await?
-    .into_interpreter();
+    let interpreter = if let Some(interpreter) = fallback_interpreter {
+        interpreter
+    } else {
+        let groups = DependencyGroupsWithDefaults::none();
+        let workspace_python = WorkspacePython::from_request(
+            None,
+            Some(project.workspace()),
+            &groups,
+            project_dir,
+            config_discovery,
+        )
+        .await?;
+        ProjectInterpreter::discover(
+            project.workspace(),
+            &groups,
+            workspace_python,
+            &client_builder,
+            python_preference,
+            python_downloads,
+            &install_mirrors,
+            false,
+            Some(false),
+            &cache,
+            printer,
+        )
+        .await?
+        .into_interpreter()
+    };
 
     let state = UniversalState::default();
     let distribution_id = DisplaySafeUrl::from_file_path(project.project_root())
@@ -262,19 +398,6 @@ pub(crate) async fn upgrade(
     };
 
     let lock = result.lock();
-    for selected in &requirements {
-        if let Some(extra) = selected.requirement.marker.top_level_extra_name()
-            && lock
-                .conflicts()
-                .contains(project.project_name(), extra.as_ref())
-        {
-            let package = &selected.package;
-            bail!(
-                "Dependency `{package}` is declared under conflicting extra `{extra}` and cannot be upgraded yet"
-            );
-        }
-    }
-
     for resolved_package in lock.packages() {
         if !requirements
             .iter()
@@ -303,28 +426,53 @@ pub(crate) async fn upgrade(
     let mut updated_requirements = Vec::new();
     for selected in &requirements {
         let proposed_requirement =
-            propose_requirement(&selected.requirement, &selected.resolved_versions)?;
+            match propose_requirement(&selected.requirement, &selected.resolved_versions) {
+                Ok(proposed_requirement) => proposed_requirement,
+                Err(err) => {
+                    declaration_outcomes.push(DeclarationOutcome::Blocked {
+                        declaration: selected.identity(),
+                        reason: BlockedReason::UnrepresentableRequirement {
+                            message: err.to_string(),
+                        },
+                    });
+                    continue;
+                }
+            };
         if proposed_requirement != selected.requirement {
             let existing =
                 into_verbatim_requirement(selected.requirement.clone(), &selected.package)?;
             let replacement = into_verbatim_requirement(proposed_requirement, &selected.package)?;
+            let update = RequirementUpdate {
+                package: selected.package.clone(),
+                dependency_type: selected.dependency_type.clone(),
+                original_text: selected.original_text.clone(),
+                existing,
+                replacement,
+            };
+            declaration_outcomes.push(DeclarationOutcome::Changed(Box::new(update.clone())));
             if !updated_requirements
                 .iter()
-                .any(|update: &RequirementUpdate| {
-                    update.dependency_type == selected.dependency_type
-                        && update.existing == existing
-                        && update.replacement == replacement
+                .any(|existing_update: &RequirementUpdate| {
+                    existing_update.dependency_type == selected.dependency_type
+                        && existing_update.existing == update.existing
+                        && existing_update.replacement == update.replacement
                 })
             {
-                updated_requirements.push(RequirementUpdate {
-                    package: selected.package.clone(),
-                    dependency_type: selected.dependency_type.clone(),
-                    original_text: selected.original_text.clone(),
-                    existing,
-                    replacement,
-                });
+                updated_requirements.push(update);
             }
+        } else {
+            declaration_outcomes.push(DeclarationOutcome::Unchanged(selected.identity()));
         }
+    }
+
+    let unsafe_blocked = declaration_outcomes
+        .iter()
+        .any(DeclarationOutcome::invalidates_relaxed_solve);
+    if unsafe_blocked && !updated_requirements.is_empty() {
+        render_declaration_outcomes(&declaration_outcomes, printer)?;
+        bail!(
+            "Could not safely apply dependency updates because one or more selected requirements could not be represented"
+        );
     }
 
     if !updated_requirements.is_empty() {
@@ -350,12 +498,19 @@ pub(crate) async fn upgrade(
         LockResult::Unchanged(_) => Vec::new(),
     };
     for package in &selected_packages {
+        if !declaration_outcomes
+            .iter()
+            .any(|outcome| outcome.package() == package && outcome.supports_lock_event())
+        {
+            continue;
+        }
         if let Some(event) = events.iter().find(|event| event.package() == package) {
             writeln!(printer.stderr(), "{event}")?;
         } else {
             writeln!(printer.stderr(), "No version change for {package}")?;
         }
     }
+    render_declaration_outcomes(&declaration_outcomes, printer)?;
     for update in updated_requirements {
         writeln!(
             printer.stderr(),
@@ -368,18 +523,95 @@ pub(crate) async fn upgrade(
     Ok(ExitStatus::Success)
 }
 
-/// Select the dependency requirements targeted by `uv upgrade`.
+/// Return whether selected declarations need an interpreter-derived Python bound.
+fn requires_fallback_interpreter(
+    project: &ProjectWorkspace,
+    packages: &[PackageName],
+    exclude: &[PackageName],
+) -> Result<bool> {
+    let target = LockTarget::from(project.workspace());
+    if target.requires_python()?.is_some() {
+        return Ok(false);
+    }
+
+    let is_explicit_selection = !packages.is_empty();
+    let pyproject_path = project.project_root().join("pyproject.toml");
+    let mut has_selected_declaration = false;
+    for dependency in project
+        .current_project()
+        .project()
+        .dependencies
+        .as_deref()
+        .unwrap_or_default()
+    {
+        let requirement = parse_dependency(dependency, "`project.dependencies`", &pyproject_path)?;
+        if exclude.contains(&requirement.name)
+            || (is_explicit_selection && !packages.contains(&requirement.name))
+        {
+            continue;
+        }
+        has_selected_declaration = true;
+        if marker_uses_python_version(requirement.marker) {
+            return Ok(true);
+        }
+    }
+
+    Ok(has_selected_declaration
+        && target.environments().is_some_and(|environments| {
+            environments
+                .as_markers()
+                .iter()
+                .copied()
+                .any(marker_uses_python_version)
+        }))
+}
+
+fn marker_uses_python_version(marker: MarkerTree) -> bool {
+    marker.to_dnf().into_iter().flatten().any(|expression| {
+        matches!(
+            expression,
+            MarkerExpression::Version {
+                key: MarkerValueVersion::PythonVersion | MarkerValueVersion::PythonFullVersion,
+                ..
+            } | MarkerExpression::VersionIn {
+                key: MarkerValueVersion::PythonVersion | MarkerValueVersion::PythonFullVersion,
+                ..
+            }
+        )
+    })
+}
+
+fn parse_dependency(
+    dependency: &str,
+    table_name: &str,
+    pyproject_path: &Path,
+) -> Result<Requirement<VerbatimParsedUrl>> {
+    Requirement::<VerbatimParsedUrl>::from_str(dependency).map_err(|error| {
+        let message = match error.message {
+            Pep508ErrorSource::String(message)
+            | Pep508ErrorSource::UnsupportedRequirement(message) => message,
+            Pep508ErrorSource::UrlError(_) => "Invalid URL requirement".to_string(),
+        };
+        anyhow!(
+            "Failed to parse dependency from {table_name} in `{}`: {message}",
+            pyproject_path.display()
+        )
+    })
+}
+
+/// Select the dependency declarations targeted by `uv upgrade`.
 fn select_requirements(
     project: &ProjectWorkspace,
     packages: &[PackageName],
     exclude: &[PackageName],
+    fallback_interpreter: Option<&Interpreter>,
 ) -> Result<DeclarationSelection> {
     if project.workspace().packages().len() != 1 {
         bail!("`uv upgrade` does not support workspaces with multiple members yet");
     }
 
     let is_explicit_selection = !packages.is_empty();
-    let resolution_marker = project_resolution_marker(project)?;
+    let resolution_marker = project_resolution_marker(project, fallback_interpreter)?;
     let dependencies = project
         .current_project()
         .project()
@@ -397,13 +629,7 @@ fn select_requirements(
     let mut found_packages = BTreeSet::new();
     let mut selected_packages = Vec::new();
     for dependency in dependencies {
-        let requirement =
-            Requirement::<VerbatimParsedUrl>::from_str(dependency).with_context(|| {
-                format!(
-                    "Failed to parse dependency `{dependency}` from `project.dependencies` in `{}`",
-                    pyproject_path.display()
-                )
-            })?;
+        let requirement = parse_dependency(dependency, "`project.dependencies`", &pyproject_path)?;
         if exclude.contains(&requirement.name)
             || (is_explicit_selection && !packages.contains(&requirement.name))
         {
@@ -467,7 +693,7 @@ fn select_requirements(
         {
             if to_upgrade
                 .iter()
-                .any(|requirement| requirement.package == *package)
+                .any(|selected| selected.package == *package)
                 && !selected_packages.contains(package)
             {
                 selected_packages.push(package.clone());
@@ -578,14 +804,41 @@ fn render_skipped_requirements(skipped: &[SkippedRequirement], printer: Printer)
     Ok(())
 }
 
+fn render_declaration_outcomes(outcomes: &[DeclarationOutcome], printer: Printer) -> Result<()> {
+    for outcome in outcomes {
+        match outcome {
+            DeclarationOutcome::Blocked {
+                declaration,
+                reason,
+            } => {
+                writeln!(
+                    printer.stderr(),
+                    "warning: Could not update dependency `{}` in {}: `{}` ({})",
+                    declaration.package,
+                    declaration.dependency_type.toml_table_name(),
+                    declaration.text,
+                    reason.message()
+                )?;
+            }
+            DeclarationOutcome::Changed(_) | DeclarationOutcome::Unchanged(_) => {}
+        }
+    }
+    Ok(())
+}
+
 /// Return the marker domain that the project will resolve for dependency declarations.
-fn project_resolution_marker(project: &ProjectWorkspace) -> Result<MarkerTree> {
+fn project_resolution_marker(
+    project: &ProjectWorkspace,
+    fallback_interpreter: Option<&Interpreter>,
+) -> Result<MarkerTree> {
     let target = LockTarget::from(project.workspace());
-    let requires_python = target
-        .requires_python()?
-        .map_or(MarkerTree::TRUE, |requires_python| {
-            requires_python.to_marker_tree()
-        });
+    let requires_python = match target.requires_python()? {
+        Some(requires_python) => requires_python.to_marker_tree(),
+        None => fallback_interpreter.map_or(MarkerTree::TRUE, |interpreter| {
+            RequiresPython::greater_than_equal_version(&interpreter.python_minor_version())
+                .to_marker_tree()
+        }),
+    };
     let environments = target
         .environments()
         .map(SupportedEnvironments::as_markers)
