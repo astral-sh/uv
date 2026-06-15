@@ -17,8 +17,7 @@ use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    DependencyMetadata, Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name,
-    RequiresPython,
+    DependencyMetadata, Diagnostic, IndexCapabilities, IndexLocations, Name, RequiresPython,
 };
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
@@ -195,7 +194,8 @@ pub(crate) async fn pip_list(
                         .map(FileType::from),
                     editable_project_location: dist
                         .as_editable()
-                        .map(|url| url.to_file_path().unwrap().simplified_display().to_string()),
+                        .and_then(|url| url.to_file_path().ok())
+                        .map(|path| path.simplified_display().to_string()),
                 })
                 .collect_vec();
             let output = serde_json::to_string(&rows)?;
@@ -255,18 +255,20 @@ pub(crate) async fn pip_list(
                 });
             }
 
-            // Editable column is only displayed if at least one editable package is found.
-            if results.iter().copied().any(InstalledDist::is_editable) {
+            // Editable column is only displayed if at least one editable path is found.
+            if results.iter().any(|dist| {
+                dist.as_editable()
+                    .is_some_and(|url| url.to_file_path().is_ok())
+            }) {
                 columns.push(Column {
                     header: String::from("Editable project location"),
                     rows: results
                         .iter()
                         .map(|dist| dist.as_editable())
                         .map(|url| {
-                            url.map(|url| {
-                                url.to_file_path().unwrap().simplified_display().to_string()
-                            })
-                            .unwrap_or_default()
+                            url.and_then(|url| url.to_file_path().ok())
+                                .map(|path| path.simplified_display().to_string())
+                                .unwrap_or_default()
                         })
                         .collect_vec(),
                 });
