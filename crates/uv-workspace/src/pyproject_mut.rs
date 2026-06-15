@@ -1633,37 +1633,7 @@ fn remove_dependency(name: &PackageName, deps: &mut Array) -> Vec<Requirement> {
     let removed = find_dependencies(name, None, deps)
         .into_iter()
         .rev()
-        .filter_map(|(i, _)| {
-            if let Some(prefix) = deps
-                .get(i)
-                .and_then(|item| item.decor().prefix().and_then(|s| s.as_str()))
-                .filter(|s| !s.is_empty())
-            {
-                let prefix = prefix.to_string();
-                if let Some(next) = deps.get(i + 1)
-                    && let Some(existing) = next.decor().prefix().and_then(|s| s.as_str())
-                {
-                    // Transfer removed item's prefix to the next item's prefix.
-                    let existing = existing.to_string();
-                    deps.get_mut(i + 1)
-                        .unwrap()
-                        .decor_mut()
-                        .set_prefix(format!("{prefix}{existing}"));
-                } else if let Some(next) = deps.get_mut(i + 1) {
-                    // Next item exists but has no prefix; use ours directly.
-                    next.decor_mut().set_prefix(&prefix);
-                } else if let Some(existing) = deps.trailing().as_str() {
-                    // No next item; move comments to the array trailing.
-                    deps.set_trailing(format!("{prefix}{existing}"));
-                } else {
-                    deps.set_trailing(&prefix);
-                }
-            }
-
-            deps.remove(i)
-                .as_str()
-                .and_then(|req| Requirement::from_str(req).ok())
-        })
+        .filter_map(|(i, _)| remove_dependency_at(i, deps))
         .collect::<Vec<_>>();
 
     if !removed.is_empty() {
@@ -1671,6 +1641,37 @@ fn remove_dependency(name: &PackageName, deps: &mut Array) -> Vec<Requirement> {
     }
 
     removed
+}
+
+fn remove_dependency_at(index: usize, deps: &mut Array) -> Option<Requirement> {
+    if let Some(prefix) = deps
+        .get(index)
+        .and_then(|item| item.decor().prefix().and_then(|s| s.as_str()))
+        .filter(|s| !s.is_empty())
+    {
+        let prefix = prefix.to_string();
+        if let Some(next) = deps.get(index + 1)
+            && let Some(existing) = next.decor().prefix().and_then(|s| s.as_str())
+        {
+            // Transfer removed item's prefix to the next item's prefix.
+            let existing = existing.to_string();
+            if let Some(next) = deps.get_mut(index + 1) {
+                next.decor_mut().set_prefix(format!("{prefix}{existing}"));
+            }
+        } else if let Some(next) = deps.get_mut(index + 1) {
+            // Next item exists but has no prefix; use ours directly.
+            next.decor_mut().set_prefix(&prefix);
+        } else if let Some(existing) = deps.trailing().as_str() {
+            // No next item; move comments to the array trailing.
+            deps.set_trailing(format!("{prefix}{existing}"));
+        } else {
+            deps.set_trailing(&prefix);
+        }
+    }
+
+    deps.remove(index)
+        .as_str()
+        .and_then(|req| Requirement::from_str(req).ok())
 }
 
 /// Returns a `Vec` containing the all dependencies with the given name, along with their positions

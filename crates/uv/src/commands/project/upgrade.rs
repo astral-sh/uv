@@ -14,10 +14,10 @@ use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Requirement, VerbatimUrl, VersionOrUrl};
 use uv_preview::Preview;
-use uv_pypi_types::{PyProjectToml, ResolutionMetadata, VerbatimParsedUrl};
+use uv_pypi_types::{PyProjectToml, ResolutionMetadata, SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference};
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::MetadataResponse;
+use uv_resolver::{MetadataResponse, implicit_constraints_marker};
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::pyproject::Source;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
@@ -36,6 +36,7 @@ use crate::settings::ResolverSettings;
 struct SelectedRequirement {
     text: String,
     requirement: Requirement<VerbatimParsedUrl>,
+    applicability: MarkerTree,
     resolved_versions: BTreeSet<Version>,
 }
 
@@ -191,15 +192,17 @@ pub(crate) async fn upgrade(
     };
 
     let lock = result.lock();
-    let mut resolution_marker = lock.requires_python().to_marker_tree();
-    if !lock.supported_environments().is_empty() {
-        let mut supported_environments = MarkerTree::FALSE;
-        for environment in lock.supported_environments() {
-            supported_environments.or(*environment);
+    for selected in &requirements {
+        if let Some(extra) = selected.requirement.marker.top_level_extra_name()
+            && lock
+                .conflicts()
+                .contains(project.project_name(), extra.as_ref())
+        {
+            bail!(
+                "Dependency `{package}` is declared under conflicting extra `{extra}` and cannot be upgraded yet"
+            );
         }
-        resolution_marker.and(supported_environments);
     }
-    requirements.retain(|selected| !selected.requirement.marker.is_disjoint(resolution_marker));
 
     for resolved_package in lock.packages() {
         if resolved_package.name() == &package
@@ -211,7 +214,7 @@ pub(crate) async fn upgrade(
             // A universal lock can contain versions from disjoint forks, so collect each version
             // only for the declarations that apply to its fork.
             for selected in &mut requirements {
-                if resolved_package.is_included_by_marker(selected.requirement.marker) {
+                if resolved_package.is_included_by_marker(selected.applicability) {
                     selected.resolved_versions.insert(version.clone());
                 }
             }
@@ -283,6 +286,7 @@ fn select_requirements(
         bail!("`uv upgrade` does not support workspaces with multiple members yet");
     }
 
+    let resolution_marker = project_resolution_marker(project)?;
     let dependencies = project
         .current_project()
         .project()
@@ -300,9 +304,17 @@ fn select_requirements(
                 )
             })?;
         if requirement.name == *package {
+            let mut applicability = requirement.marker;
+            applicability.and(resolution_marker);
+            if applicability.is_false() {
+                bail!(
+                    "Dependency `{package}` has declarations excluded by the project's Python or environment constraints and cannot be upgraded"
+                );
+            }
             matching.push(SelectedRequirement {
                 text: dependency.clone(),
                 requirement,
+                applicability,
                 resolved_versions: BTreeSet::new(),
             });
         }
@@ -337,7 +349,7 @@ fn select_requirements(
     let applies_to_selected_requirement = |source| {
         matching
             .iter()
-            .any(|selected| source_is_applicable(source, selected.requirement.marker))
+            .any(|selected| source_is_applicable(source, selected.applicability))
     };
     if sources.is_some_and(|sources| {
         sources.iter().any(|source| {
@@ -360,6 +372,21 @@ fn select_requirements(
     }
 
     Ok(matching)
+}
+
+/// Return the marker domain that the project will resolve for dependency declarations.
+fn project_resolution_marker(project: &ProjectWorkspace) -> Result<MarkerTree> {
+    let target = LockTarget::from(project.workspace());
+    let requires_python = target
+        .requires_python()?
+        .map_or(MarkerTree::TRUE, |requires_python| {
+            requires_python.to_marker_tree()
+        });
+    let environments = target
+        .environments()
+        .map(SupportedEnvironments::as_markers)
+        .unwrap_or_default();
+    Ok(implicit_constraints_marker(requires_python, environments))
 }
 
 /// Apply exact requirement replacements, coalescing repeated identical declarations.

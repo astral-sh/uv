@@ -223,8 +223,8 @@ fn upgrade_preserves_constraint_that_admits_multiple_fork_versions() -> Result<(
 }
 
 #[test]
-fn upgrade_preserves_inapplicable_marked_dependency() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+fn upgrade_rejects_inapplicable_marked_dependency() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
     let pyproject_toml = r#"
         [project]
         name = "project"
@@ -236,20 +236,77 @@ fn upgrade_preserves_inapplicable_marked_dependency() -> Result<()> {
         .temp_dir
         .child("pyproject.toml")
         .write_str(pyproject_toml)?;
+    uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Dependency `anyio` has declarations excluded by the project's Python or environment constraints and cannot be upgraded
+    ");
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_rejects_conflicting_extra_declarations() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "bar<1 ; extra == 'cpu'",
+            "bar<2 ; extra == 'gpu'",
+            "foo==1",
+        ]
+
+        [project.optional-dependencies]
+        cpu = []
+        gpu = []
+
+        [tool.uv]
+        conflicts = [
+            [
+                {{ extra = "cpu" }},
+                {{ extra = "gpu" }},
+            ],
+        ]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
     fs_err::remove_dir_all(&context.venv)?;
 
-    uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
-    success: true
-    exit_code: 0
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Resolved 1 package in [TIME]
-    No version change for anyio
-    ");
+    Resolved 4 packages in [TIME]
+    error: Dependency `bar` is declared under conflicting extra `cpu` and cannot be upgraded yet
+    "
+    );
 
-    assert_project_unchanged(&context, pyproject_toml)
+    assert_project_unchanged(&context, &pyproject_toml)
 }
 
 #[test]
@@ -669,90 +726,6 @@ default = true
 }
 
 #[test]
-fn upgrade_updates_duplicate_production_dependencies_in_resolution_domain() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let server = PackseServer::new("fork/fork-upgrade.toml");
-    let pyproject_toml = format!(
-        r#"
-        [project]
-        name = "example"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = [
-            "bar<1 ; python_version < '3.12' or sys_platform == 'win32'",
-            "bar>=1",
-            "bar<2",
-            "bar<2",
-            "foo==2",
-        ]
-
-        [tool.uv]
-        environments = ["sys_platform != 'win32'"]
-
-        [[tool.uv.index]]
-        url = "{}"
-        default = true
-    "#,
-        server.index_url()
-    );
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(&pyproject_toml)?;
-    fs_err::remove_dir_all(&context.venv)?;
-
-    uv_snapshot!(
-        packse_filters(&context),
-        context
-            .upgrade()
-            .arg("bar")
-            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
-        @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Resolved 3 packages in [TIME]
-    Add bar v2.0.0
-    Updated requirement: `bar<2` -> `bar<3`
-    "
-    );
-
-    let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
-    insta::with_settings!({ filters => packse_filters(&context) }, {
-        insta::assert_snapshot!(
-            updated_pyproject_toml,
-            @r#"
-
-[project]
-name = "example"
-version = "0.1.0"
-requires-python = ">=3.12"
-dependencies = [
-    "bar<1 ; python_version < '3.12' or sys_platform == 'win32'",
-    "bar>=1",
-    "bar<3",
-    "bar<3",
-    "foo==2",
-]
-
-[tool.uv]
-environments = ["sys_platform != 'win32'"]
-
-[[tool.uv.index]]
-url = "http://[LOCALHOST]/simple/"
-default = true
-"#
-        );
-    });
-    assert!(!context.temp_dir.child("uv.lock").exists());
-    assert!(!context.temp_dir.child(".venv").exists());
-    Ok(())
-}
-
-#[test]
 fn upgrade_rejects_direct_url_requirement() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let pyproject_toml = r#"
@@ -1038,6 +1011,43 @@ fn upgrade_ignores_inapplicable_non_registry_source() -> Result<()> {
     assert!(!context.temp_dir.child("uv.lock").exists());
     assert!(!context.temp_dir.child(".venv").exists());
     Ok(())
+}
+
+#[test]
+fn upgrade_rejects_excluded_declaration() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "bar<2",
+            "bar @ https://example.com/bar-1.0.0-py3-none-any.whl ; python_version < '3.12' or sys_platform == 'win32'",
+        ]
+
+        [tool.uv]
+        environments = ["sys_platform != 'win32'"]
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.upgrade().arg("bar"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Dependency `bar` has declarations excluded by the project's Python or environment constraints and cannot be upgraded
+    "
+    );
+
+    assert_project_unchanged(&context, pyproject_toml)
 }
 
 #[test]
