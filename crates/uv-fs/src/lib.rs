@@ -125,11 +125,8 @@ fn create_junction(target: &Path, path: &Path) -> std::io::Result<()> {
                 )
             ) =>
         {
-            // Broken reparse point. Once junction::delete strips the reparse data, only an empty
-            // directory shell remains.
-            if junction::delete(path).is_ok() {
-                let _ = fs_err::remove_dir(path);
-            }
+            // Broken reparse point.
+            let _ = fs_err::remove_dir(path);
             Err(create_result.err().unwrap_or(err))
         }
         Err(err) => Err(create_result.err().unwrap_or(err)),
@@ -175,12 +172,8 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 #[cfg(windows)]
 fn replace_with_junction(src: &Path, dst: &Path) -> std::io::Result<()> {
     // Remove the existing junction, if any.
-    match junction::delete(dunce::simplified(dst)) {
-        Ok(()) => match fs_err::remove_dir_all(dst) {
-            Ok(()) => {}
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => return Err(err),
-        },
+    match fs_err::remove_dir(dst) {
+        Ok(()) => {}
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
         Err(err) => return Err(err),
     }
@@ -205,25 +198,6 @@ fn replace_with_symlink_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
     }
 
     fs_err::os::windows::fs::symlink_dir(dunce::simplified(src), dunce::simplified(dst))
-}
-
-/// Read the target of a directory link created by [`create_symlink`] or
-/// [`replace_symlink`].
-///
-/// On Windows, uv normally creates junctions for directory links, but creates
-/// directory symbolic links under Wine. This function reads the appropriate link
-/// type for the current environment. For junctions, this uses the `junction`
-/// crate, which handles the `\??\` prefix that Windows uses internally for
-/// junction targets.
-#[cfg(windows)]
-pub fn read_link(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
-    let path = path.as_ref();
-
-    if uv_windows::is_wine() {
-        fs_err::read_link(path)
-    } else {
-        junction::get_target(dunce::simplified(path))
-    }
 }
 
 /// Create a symlink at `dst` pointing to `src`, replacing any existing symlink if necessary.
@@ -288,10 +262,12 @@ pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::
 
 #[cfg(all(test, windows))]
 mod tests {
+    use std::os::windows::ffi::OsStrExt;
+
     use super::*;
 
     #[test]
-    fn read_link_reads_created_directory_link() -> std::io::Result<()> {
+    fn fs_err_read_link_reads_created_directory_link() -> std::io::Result<()> {
         let tempdir = tempfile::tempdir()?;
         let target = tempdir.path().join("target");
         fs_err::create_dir(&target)?;
@@ -299,7 +275,27 @@ mod tests {
 
         create_symlink(&target, &link)?;
 
-        assert_eq!(read_link(&link)?, dunce::simplified(&target));
+        assert_eq!(
+            verbatim_path(&fs_err::read_link(&link)?),
+            verbatim_path(&target)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn fs_err_read_link_reads_long_junction_target() -> std::io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let mut target = tempdir.path().join("target");
+        while target.as_os_str().encode_wide().count() < 257 {
+            target.push("long-path-component");
+        }
+        fs_err::create_dir_all(&target)?;
+        let link = tempdir.path().join("link");
+
+        create_symlink(&target, &link)?;
+
+        let link_target = fs_err::read_link(&link)?;
+        assert_eq!(verbatim_path(&link_target), verbatim_path(&target));
         Ok(())
     }
 
@@ -319,7 +315,10 @@ mod tests {
 
         let err = create_junction(&target, &link).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidFilename);
-        assert!(!link.exists());
+        assert!(matches!(
+            fs_err::symlink_metadata(&link),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound
+        ));
         Ok(())
     }
 }
