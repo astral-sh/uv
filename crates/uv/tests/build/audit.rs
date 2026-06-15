@@ -1,3 +1,4 @@
+use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
@@ -7,8 +8,8 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_test::uv_snapshot;
 
-fn write_audit_output_project(context: &uv_test::TestContext, index_url: &str) {
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+fn write_audit_output_project(project_dir: &impl PathChild, index_url: &str) {
+    let pyproject_toml = project_dir.child("pyproject.toml");
     pyproject_toml
         .write_str(&formatdoc! {r#"
         [project]
@@ -23,7 +24,7 @@ fn write_audit_output_project(context: &uv_test::TestContext, index_url: &str) {
     "#})
         .unwrap();
 
-    let lockfile = context.temp_dir.child("uv.lock");
+    let lockfile = project_dir.child("uv.lock");
     lockfile
         .write_str(&formatdoc! {r#"
         version = 1
@@ -107,7 +108,7 @@ async fn audit_no_vulnerabilities() {
 async fn audit_json_no_vulnerabilities() {
     let context = uv_test::test_context!("3.12");
     let proxy = crate::pypi_proxy::start().await;
-    write_audit_output_project(&context, &proxy.url("/simple"));
+    write_audit_output_project(&context.temp_dir, &proxy.url("/simple"));
 
     let server = MockServer::start().await;
 
@@ -153,7 +154,7 @@ async fn audit_json_no_vulnerabilities() {
 async fn audit_json_preview_warning() {
     let context = uv_test::test_context!("3.12");
     let proxy = crate::pypi_proxy::start().await;
-    write_audit_output_project(&context, &proxy.url("/simple"));
+    write_audit_output_project(&context.temp_dir, &proxy.url("/simple"));
 
     let server = MockServer::start().await;
 
@@ -2260,7 +2261,7 @@ async fn audit_vulnerability_and_project_status() {
 async fn audit_json_vulnerability_and_project_status() {
     let context = uv_test::test_context!("3.12");
     let proxy = crate::pypi_proxy::start().await;
-    write_audit_output_project(&context, &proxy.url("/status/archived/simple"));
+    write_audit_output_project(&context.temp_dir, &proxy.url("/status/archived/simple"));
 
     let server = MockServer::start().await;
     Mock::given(method("POST"))
@@ -2353,7 +2354,7 @@ async fn audit_json_vulnerability_and_project_status() {
 async fn audit_sarif_vulnerability_and_project_status() {
     let context = uv_test::test_context!("3.12").with_filter((uv_version::version(), "[VERSION]"));
     let proxy = crate::pypi_proxy::start().await;
-    write_audit_output_project(&context, &proxy.url("/status/archived/simple"));
+    write_audit_output_project(&context.temp_dir, &proxy.url("/status/archived/simple"));
 
     let server = MockServer::start().await;
     Mock::given(method("POST"))
@@ -2537,4 +2538,61 @@ async fn audit_sarif_vulnerability_and_project_status() {
 
     ----- stderr -----
     "#);
+}
+
+/// SARIF artifact locations are relative to the invocation directory, even
+/// when the project is selected with `--project`.
+#[tokio::test]
+async fn audit_sarif_project_artifact_uri() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+    let project_dir = context.temp_dir.child("packages/project");
+    project_dir.create_dir_all()?;
+    write_audit_output_project(&project_dir, &proxy.url("/simple"));
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "PYSEC-2023-0001"}]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/PYSEC-2023-0001"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "PYSEC-2023-0001",
+            "modified": "2026-01-01T00:00:00Z",
+            "affected": [{
+                "ranges": [{
+                    "type": "ECOSYSTEM",
+                    "events": [{"introduced": "0"}]
+                }]
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    let assert = context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--output-format")
+        .arg("sarif")
+        .arg("--frozen")
+        .arg("--project")
+        .arg(project_dir.path())
+        .arg("--service-url")
+        .arg(server.uri())
+        .assert()
+        .failure()
+        .code(1);
+    let report: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let artifact_uri =
+        report.pointer("/runs/0/results/0/locations/0/physicalLocation/artifactLocation/uri");
+
+    insta::assert_json_snapshot!(artifact_uri, @r#""packages/project/uv.lock""#);
+
+    Ok(())
 }

@@ -29,6 +29,7 @@ use uv_cli::AuditOutputFormat;
 use uv_client::{BaseClientBuilder, CachedClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple};
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
+use uv_fs::CWD;
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -323,7 +324,7 @@ pub(crate) async fn audit(
             } else {
                 lock_path.as_path()
             };
-            let artifact_path = if let Ok(relative) = artifact_path.strip_prefix(project_dir) {
+            let artifact_path = if let Ok(relative) = artifact_path.strip_prefix(&*CWD) {
                 relative
             } else {
                 artifact_path
