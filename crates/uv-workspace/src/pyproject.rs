@@ -105,6 +105,19 @@ where
     deserializer.deserialize_map(Visitor(error_msg, std::marker::PhantomData))
 }
 
+fn deserialize_optional_dependencies<'de, D, V>(
+    deserializer: D,
+) -> Result<Option<BTreeMap<ExtraName, V>>, D::Error>
+where
+    D: Deserializer<'de>,
+    V: Deserialize<'de>,
+{
+    deserialize_unique_map(deserializer, |key: &ExtraName| {
+        format!("duplicate normalized extra name `{key}`")
+    })
+    .map(Some)
+}
+
 /// A `pyproject.toml` as specified in PEP 517.
 #[derive(Deserialize, Debug, Clone)]
 #[cfg_attr(test, derive(Serialize))]
@@ -248,6 +261,7 @@ struct ProjectWire {
     dynamic: Option<Vec<String>>,
     requires_python: Option<VersionSpecifiers>,
     dependencies: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_dependencies")]
     optional_dependencies: Option<BTreeMap<ExtraName, Vec<String>>>,
     gui_scripts: Option<serde::de::IgnoredAny>,
     scripts: Option<serde::de::IgnoredAny>,

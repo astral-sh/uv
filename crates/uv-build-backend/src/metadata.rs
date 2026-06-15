@@ -34,6 +34,52 @@ pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
 /// the fast path for them too.
 const COMPATIBLE_VERSIONS: &[&str] = &["0.9.30", "0.10.12"];
 
+fn deserialize_optional_dependencies<'de, D, V>(
+    deserializer: D,
+) -> Result<Option<BTreeMap<ExtraName, V>>, D::Error>
+where
+    D: Deserializer<'de>,
+    V: Deserialize<'de>,
+{
+    struct Visitor<V>(std::marker::PhantomData<V>);
+
+    impl<'de, V> serde::de::Visitor<'de> for Visitor<V>
+    where
+        V: Deserialize<'de>,
+    {
+        type Value = Option<BTreeMap<ExtraName, V>>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a map with unique normalized extra names")
+        }
+
+        fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+        where
+            M: serde::de::MapAccess<'de>,
+        {
+            use std::collections::btree_map::Entry;
+
+            let mut optional_dependencies = BTreeMap::new();
+            while let Some((extra, requirements)) = access.next_entry::<ExtraName, V>()? {
+                match optional_dependencies.entry(extra) {
+                    Entry::Occupied(entry) => {
+                        return Err(serde::de::Error::custom(format!(
+                            "duplicate normalized extra name `{}`",
+                            entry.key()
+                        )));
+                    }
+                    Entry::Vacant(entry) => {
+                        entry.insert(requirements);
+                    }
+                }
+            }
+            Ok(Some(optional_dependencies))
+        }
+    }
+
+    deserializer.deserialize_map(Visitor(std::marker::PhantomData))
+}
+
 #[derive(Debug, Error)]
 pub enum ValidationError {
     /// The spec isn't clear about what the values in that field would be, and we only support the
@@ -984,6 +1030,7 @@ struct Project {
     /// The dependencies of the project.
     dependencies: Option<Vec<Requirement>>,
     /// The optional dependencies of the project.
+    #[serde(default, deserialize_with = "deserialize_optional_dependencies")]
     optional_dependencies: Option<BTreeMap<ExtraName, Vec<Requirement>>>,
     /// Import names exclusively provided by the project.
     ///
@@ -1806,6 +1853,24 @@ mod tests {
         Name: hello-world
         Version: 0.1.0
         ");
+    }
+
+    #[test]
+    fn reject_colliding_optional_dependency_names() {
+        let contents = extend_project(indoc! {r#"
+            [project.optional-dependencies]
+            foo-bar = ["anyio"]
+            foo_bar = ["iniconfig"]
+        "#});
+
+        let err = toml::from_str::<PyProjectToml>(&contents).unwrap_err();
+        assert_snapshot!(err.to_string(), @r#"
+        TOML parse error at line 4, column 1
+          |
+        4 | [project.optional-dependencies]
+          | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        duplicate normalized extra name `foo-bar`
+        "#);
     }
 
     #[test]
