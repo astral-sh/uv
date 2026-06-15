@@ -23,6 +23,7 @@ use uv_pep508::{
 use uv_pypi_types::{
     Identifier, IdentifierParseError, Keywords, Metadata23, ProjectUrls, VerbatimParsedUrl,
 };
+use uv_toml::deserialize_unique_map;
 
 use crate::serde_verbatim::SerdeVerbatim;
 use crate::{BuildBackendSettings, Error, error_on_venv};
@@ -41,43 +42,10 @@ where
     D: Deserializer<'de>,
     V: Deserialize<'de>,
 {
-    struct Visitor<V>(std::marker::PhantomData<V>);
-
-    impl<'de, V> serde::de::Visitor<'de> for Visitor<V>
-    where
-        V: Deserialize<'de>,
-    {
-        type Value = Option<BTreeMap<ExtraName, V>>;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("a map with unique normalized extra names")
-        }
-
-        fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
-        where
-            M: serde::de::MapAccess<'de>,
-        {
-            use std::collections::btree_map::Entry;
-
-            let mut optional_dependencies = BTreeMap::new();
-            while let Some((extra, requirements)) = access.next_entry::<ExtraName, V>()? {
-                match optional_dependencies.entry(extra) {
-                    Entry::Occupied(entry) => {
-                        return Err(serde::de::Error::custom(format!(
-                            "duplicate normalized extra name `{}`",
-                            entry.key()
-                        )));
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(requirements);
-                    }
-                }
-            }
-            Ok(Some(optional_dependencies))
-        }
-    }
-
-    deserializer.deserialize_map(Visitor(std::marker::PhantomData))
+    deserialize_unique_map(deserializer, |key: &ExtraName| {
+        format!("duplicate normalized extra name `{key}`")
+    })
+    .map(Some)
 }
 
 #[derive(Debug, Error)]
