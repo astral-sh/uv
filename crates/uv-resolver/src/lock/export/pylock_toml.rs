@@ -45,6 +45,8 @@ use crate::{Installable, LockError, ResolverOutput};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PylockTomlErrorKind {
+    #[error("Package `{0}` requires Python {2}, but the target Python version is {1}")]
+    IncompatibleRequiresPython(PackageName, Version, RequiresPython),
     #[error(
         "Package `{0}` includes both a registry (`packages.wheels`) and a directory source (`packages.directory`)"
     )]
@@ -1043,6 +1045,17 @@ impl<'lock> PylockToml {
             // Omit packages that aren't relevant to the current environment.
             if !package.marker.evaluate_pep751(markers, extras, groups) {
                 continue;
+            }
+
+            if let Some(requires_python) = package.requires_python.as_ref()
+                && !requires_python.contains(&markers.python_full_version().version)
+            {
+                return Err(PylockTomlErrorKind::IncompatibleRequiresPython(
+                    package.name.clone(),
+                    markers.python_full_version().version.clone(),
+                    requires_python.clone(),
+                )
+                .into());
             }
 
             match (
