@@ -194,6 +194,7 @@ where
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PylockToml {
+    #[serde(deserialize_with = "deserialize_lock_version")]
     lock_version: Version,
     created_by: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -208,6 +209,20 @@ pub struct PylockToml {
     pub packages: Vec<PylockTomlPackage>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     attestation_identities: Vec<PylockTomlAttestationIdentity>,
+}
+
+fn deserialize_lock_version<'de, D>(deserializer: D) -> Result<Version, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let version = Version::deserialize(deserializer)?;
+    if version.release().first() != Some(&1) {
+        return Err(serde::de::Error::custom(format_args!(
+            "unsupported lock version (`{version}`, but only major version 1 is supported)"
+        )));
+    }
+
+    Ok(version)
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
