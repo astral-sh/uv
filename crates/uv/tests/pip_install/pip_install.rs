@@ -13394,6 +13394,66 @@ requires_python = "==3.13.*"
 }
 
 #[test]
+fn pep_751_package_requires_python() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pylock_toml = context.temp_dir.child("pylock.toml");
+    pylock_toml.write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "example"
+        marker = "python_version < '3.0'"
+        requires-python = ">=99"
+        directory = { path = "." }
+        "#,
+    )?;
+
+    // Skip the Python requirement for packages excluded by their marker.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked in [TIME]
+    "#
+    );
+
+    pylock_toml.write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "example"
+        requires-python = ">=99"
+        directory = { path = "." }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `example` requires Python >=99, but the target Python version is 3.12.[X]
+    "#
+    );
+
+    Ok(())
+}
+
+#[test]
 fn pep_751_requires_python() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12", "3.13"]);
 
