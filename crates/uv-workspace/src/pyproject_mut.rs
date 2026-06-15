@@ -363,26 +363,17 @@ impl PyProjectTomlMut {
         Ok(edit)
     }
 
-    /// Replaces every exact match for a dependency in `project.dependencies` without modifying
-    /// its source.
+    /// Replaces every exact match for a dependency declaration without modifying its source.
     ///
     /// Returns the position of every dependency that was replaced.
-    pub fn replace_dependency(
+    pub fn replace_dependency_declaration(
         &mut self,
+        dependency_type: &DependencyType,
         existing: &Requirement,
         replacement: &Requirement,
         raw: bool,
     ) -> Result<Vec<ArrayEdit>, Error> {
-        let Some(dependencies) = self
-            .project_mut()?
-            .and_then(|project| project.get_mut("dependencies"))
-            .map(|dependencies| {
-                dependencies
-                    .as_array_mut()
-                    .ok_or(Error::MalformedDependencies)
-            })
-            .transpose()?
-        else {
+        let Some(dependencies) = self.dependency_type_array_mut(dependency_type)? else {
             return Ok(Vec::new());
         };
 
@@ -968,6 +959,89 @@ impl PyProjectTomlMut {
             .ok_or(Error::MalformedDependencies)?;
 
         Ok(group)
+    }
+
+    /// Get an existing TOML array for a dependency type.
+    fn dependency_type_array_mut(
+        &mut self,
+        dependency_type: &DependencyType,
+    ) -> Result<Option<&mut Array>, Error> {
+        let dependencies = match dependency_type {
+            DependencyType::Production => self
+                .project_mut()?
+                .and_then(|project| project.get_mut("dependencies"))
+                .map(|dependencies| {
+                    dependencies
+                        .as_array_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?,
+            DependencyType::Dev => self
+                .doc
+                .get_mut("tool")
+                .map(|tool| tool.as_table_mut().ok_or(Error::MalformedDependencies))
+                .transpose()?
+                .and_then(|tool| tool.get_mut("uv"))
+                .map(|tool_uv| tool_uv.as_table_mut().ok_or(Error::MalformedDependencies))
+                .transpose()?
+                .and_then(|tool_uv| tool_uv.get_mut("dev-dependencies"))
+                .map(|dependencies| {
+                    dependencies
+                        .as_array_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?,
+            DependencyType::Optional(extra) => self
+                .project_mut()?
+                .and_then(|project| project.get_mut("optional-dependencies"))
+                .map(|extras| {
+                    extras
+                        .as_table_like_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?
+                .and_then(|extras| {
+                    extras.iter_mut().find_map(|(key, value)| {
+                        if ExtraName::from_str(key.get()).is_ok_and(|name| name == *extra) {
+                            Some(value)
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .map(|dependencies| {
+                    dependencies
+                        .as_array_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?,
+            DependencyType::Group(group) => self
+                .doc
+                .get_mut("dependency-groups")
+                .map(|groups| {
+                    groups
+                        .as_table_like_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?
+                .and_then(|groups| {
+                    groups.iter_mut().find_map(|(key, value)| {
+                        if GroupName::from_str(key.get()).is_ok_and(|name| name == *group) {
+                            Some(value)
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .map(|dependencies| {
+                    dependencies
+                        .as_array_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?,
+        };
+
+        Ok(dependencies)
     }
 
     /// Adds a source to `tool.uv.sources`.
@@ -1870,6 +1944,8 @@ fn split_specifiers(req: &str) -> (&str, &str) {
 
 #[cfg(test)]
 mod test {
+    use crate::pyproject::DependencyType;
+
     use super::{
         AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut, reformat_array_multiline,
         remove_dependency, split_specifiers,
@@ -1880,7 +1956,7 @@ mod test {
     use std::str::FromStr;
     use toml_edit::DocumentMut;
     use uv_distribution_types::Index;
-    use uv_normalize::PackageName;
+    use uv_normalize::{ExtraName, GroupName, PackageName};
     use uv_pep440::Version;
     use uv_pep508::{Requirement, RequirementOrigin};
 
@@ -2071,7 +2147,12 @@ anyio = { index = "internal" }
         let existing = Requirement::from_str("anyio<=2")?.with_origin(RequirementOrigin::Workspace);
         let replacement = Requirement::from_str("anyio<3")?;
 
-        let replaced = pyproject.replace_dependency(&existing, &replacement, false)?;
+        let replaced = pyproject.replace_dependency_declaration(
+            &DependencyType::Production,
+            &existing,
+            &replacement,
+            false,
+        )?;
         assert_eq!(replaced, vec![ArrayEdit::Update(0), ArrayEdit::Update(2)]);
 
         assert_snapshot!(
@@ -2082,6 +2163,56 @@ dependencies = ["anyio<3", "anyio>=1", "anyio<3"]
 
 [tool.uv.sources]
 anyio = { index = "internal" }
+"#
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn replace_dependency_declaration_updates_selected_type() -> Result<()> {
+        let mut pyproject = PyProjectTomlMut::from_toml(
+            r#"[project]
+dependencies = ["anyio<=2"]
+
+[project.optional-dependencies]
+test = ["anyio<=2"]
+
+[dependency-groups]
+dev = ["anyio<=2"]
+            "#,
+            DependencyTarget::PyProjectToml,
+        )?;
+        let existing = Requirement::from_str("anyio<=2")?;
+        let optional_replacement = Requirement::from_str("anyio<3")?;
+        let group_replacement = Requirement::from_str("anyio<4")?;
+
+        let replaced = pyproject.replace_dependency_declaration(
+            &DependencyType::Optional(ExtraName::from_str("test")?),
+            &existing,
+            &optional_replacement,
+            false,
+        )?;
+        assert_eq!(replaced, vec![ArrayEdit::Update(0)]);
+
+        let replaced = pyproject.replace_dependency_declaration(
+            &DependencyType::Group(GroupName::from_str("dev")?),
+            &existing,
+            &group_replacement,
+            false,
+        )?;
+        assert_eq!(replaced, vec![ArrayEdit::Update(0)]);
+
+        assert_snapshot!(
+            pyproject.to_string(),
+            @r#"
+[project]
+dependencies = ["anyio<=2"]
+
+[project.optional-dependencies]
+test = ["anyio<3"]
+
+[dependency-groups]
+dev = ["anyio<4"]
 "#
         );
         Ok(())
