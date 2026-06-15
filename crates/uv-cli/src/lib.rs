@@ -4309,6 +4309,14 @@ pub struct UpgradeArgs {
     /// Upgrade dependencies in a specific package in the workspace.
     #[arg(long, conflicts_with = "all_packages", value_hint = ValueHint::Other)]
     pub package: Option<PackageName>,
+
+    /// Perform a dry run, without writing the project manifest.
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = SyncFormat::default())]
+    pub output_format: SyncFormat,
 }
 
 #[derive(Args)]

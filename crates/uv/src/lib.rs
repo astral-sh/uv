@@ -2477,6 +2477,8 @@ async fn run_project(
                 args.exclude,
                 args.package,
                 args.all_packages,
+                args.dry_run,
+                args.output_format,
                 args.install_mirrors,
                 args.settings,
                 client_builder.subcommand(vec!["upgrade".to_owned()]),

@@ -71,9 +71,12 @@ fn upgrade_help() {
       [PACKAGES]...  The packages to upgrade
 
     Options:
-          --exclude <EXCLUDE>  Exclude the named package from upgrades
-          --all-packages       Upgrade dependencies in all workspace members
-          --package <PACKAGE>  Upgrade dependencies in a specific package in the workspace
+          --exclude <EXCLUDE>              Exclude the named package from upgrades
+          --all-packages                   Upgrade dependencies in all workspace members
+          --package <PACKAGE>              Upgrade dependencies in a specific package in the workspace
+          --dry-run                        Perform a dry run, without writing the project manifest
+          --output-format <OUTPUT_FORMAT>  Select the output format [default: text] [possible values:
+                                           text, json]
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -170,6 +173,173 @@ exclude-newer = "2024-03-25T00:00:00Z"
     assert!(!context.temp_dir.child("uv.lock").exists());
     assert!(!context.temp_dir.child(".venv").exists());
     Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn upgrade_dry_run_reports_changed_requirement_without_mutation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["AnyIO>=2,<3,!=2.1 ; python_version >= '3.12'"]
+
+        [tool.uv]
+        exclude-newer = "2024-03-25T00:00:00Z"
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.upgrade().arg("--dry-run").arg("anyio"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add anyio v4.3.0
+    Would update requirement: `AnyIO>=2,<3,!=2.1 ; python_version >= '3.12'` -> `anyio>=2,!=2.1,<5 ; python_full_version >= '3.12'`
+    "
+    );
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn upgrade_dry_run_outputs_json_without_mutation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["AnyIO>=2,<3,!=2.1 ; python_version >= '3.12'"]
+
+        [tool.uv]
+        exclude-newer = "2024-03-25T00:00:00Z"
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .upgrade()
+            .arg("--dry-run")
+            .arg("--output-format")
+            .arg("json")
+            .arg("anyio"),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "dry_run": true,
+      "packages": [
+        "anyio"
+      ],
+      "declarations": [
+        {
+          "member": "example",
+          "package": "anyio",
+          "dependency_type": "production",
+          "location": "project.dependencies",
+          "original_requirement": "AnyIO>=2,<3,!=2.1 ; python_version >= '3.12'",
+          "new_requirement": "anyio>=2,!=2.1,<5 ; python_full_version >= '3.12'",
+          "resolved_versions": [
+            "4.3.0"
+          ],
+          "status": "changed"
+        }
+      ]
+    }
+
+    ----- stderr -----
+    warning: The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features json-output` to disable this warning.
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    "#
+    );
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn upgrade_quiet_json_reports_unchanged_declaration() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio>=2"]
+
+        [tool.uv]
+        exclude-newer = "2024-03-25T00:00:00Z"
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .upgrade()
+            .arg("--quiet")
+            .arg("--output-format")
+            .arg("json")
+            .arg("anyio"),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "dry_run": false,
+      "packages": [
+        "anyio"
+      ],
+      "declarations": [
+        {
+          "member": "example",
+          "package": "anyio",
+          "dependency_type": "production",
+          "location": "project.dependencies",
+          "original_requirement": "anyio>=2",
+          "resolved_versions": [
+            "4.3.0"
+          ],
+          "status": "unchanged"
+        }
+      ]
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    assert_project_unchanged(&context, pyproject_toml)
 }
 
 #[test]
@@ -1621,6 +1791,108 @@ fn upgrade_updates_safe_declarations_and_warns_for_blocked_declarations() -> Res
     assert!(!context.temp_dir.child("uv.lock").exists());
     assert!(!context.temp_dir.child(".venv").exists());
     Ok(())
+}
+
+#[test]
+fn upgrade_json_reports_partial_blocked_outcome() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/upgrade-outcomes.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "foo==1",
+            "bar>=1 ; extra == 'cpu'",
+            "baz<2",
+        ]
+
+        [project.optional-dependencies]
+        cpu = []
+        gpu = []
+
+        [tool.uv]
+        conflicts = [
+            [
+                {{ extra = "cpu" }},
+                {{ extra = "gpu" }},
+            ],
+        ]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("--dry-run")
+            .arg("--output-format")
+            .arg("json")
+            .arg("bar")
+            .arg("baz")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "dry_run": true,
+      "packages": [
+        "bar",
+        "baz"
+      ],
+      "declarations": [
+        {
+          "member": "example",
+          "package": "bar",
+          "dependency_type": "production",
+          "location": "project.dependencies",
+          "original_requirement": "bar>=1 ; extra == 'cpu'",
+          "status": "blocked",
+          "reason": {
+            "code": "conflict_extra",
+            "message": "declared under conflicting extra `cpu`"
+          }
+        },
+        {
+          "member": "example",
+          "package": "baz",
+          "dependency_type": "production",
+          "location": "project.dependencies",
+          "original_requirement": "baz<2",
+          "new_requirement": "baz<3",
+          "resolved_versions": [
+            "2.0.0"
+          ],
+          "status": "changed"
+        }
+      ]
+    }
+
+    ----- stderr -----
+    warning: The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features json-output` to disable this warning.
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 5 packages in [TIME]
+    warning: Could not update dependency `bar` in `project.dependencies`: `bar>=1 ; extra == 'cpu'` (declared under conflicting extra `cpu`)
+    "#
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)
 }
 
 #[test]
@@ -3261,6 +3533,78 @@ fn upgrade_redacts_malformed_direct_url_optional_and_group_dependencies() -> Res
 }
 
 #[test]
+fn upgrade_json_preview_feature_suppresses_warning() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar<2"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("--preview-features")
+            .arg("json-output")
+            .arg("--dry-run")
+            .arg("--output-format")
+            .arg("json")
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "dry_run": true,
+      "packages": [
+        "bar"
+      ],
+      "declarations": [
+        {
+          "member": "project",
+          "package": "bar",
+          "dependency_type": "production",
+          "location": "project.dependencies",
+          "original_requirement": "bar<2",
+          "new_requirement": "bar<3",
+          "resolved_versions": [
+            "2.0.0"
+          ],
+          "status": "changed"
+        }
+      ]
+    }
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    "#
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)
+}
+
+#[test]
 fn upgrade_rejects_workspace_root_non_registry_source() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let workspace_pyproject_toml = r#"
@@ -3936,6 +4280,131 @@ fn upgrade_without_package_skips_current_workspace_member_self_reference() -> Re
     assert_eq!(
         fs_err::read_to_string(member_a.child("pyproject.toml"))?,
         member_a_pyproject_toml.replace("foo==1", "foo==2.0.0")
+    );
+    assert_eq!(
+        fs_err::read_to_string(member_b.child("pyproject.toml"))?,
+        member_b_pyproject_toml
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    assert!(!member_a.child("uv.lock").exists());
+    assert!(!member_a.child(".venv").exists());
+    assert!(!member_b.child("uv.lock").exists());
+    assert!(!member_b.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_workspace_json_reports_member_locations_without_mutation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let workspace_pyproject_toml = format!(
+        r#"
+        [tool.uv.workspace]
+        members = ["member-a", "member-b"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&workspace_pyproject_toml)?;
+
+    let member_a = context.temp_dir.child("member-a");
+    member_a.create_dir_all()?;
+    let member_a_pyproject_toml = r#"
+        [project]
+        name = "member-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo==1"]
+    "#;
+    member_a
+        .child("pyproject.toml")
+        .write_str(member_a_pyproject_toml)?;
+
+    let member_b = context.temp_dir.child("member-b");
+    member_b.create_dir_all()?;
+    let member_b_pyproject_toml = r#"
+        [project]
+        name = "member-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo==1"]
+    "#;
+    member_b
+        .child("pyproject.toml")
+        .write_str(member_b_pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("--all-packages")
+            .arg("--dry-run")
+            .arg("--output-format")
+            .arg("json")
+            .arg("foo")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "dry_run": true,
+      "packages": [
+        "foo"
+      ],
+      "declarations": [
+        {
+          "member": "member-a",
+          "package": "foo",
+          "dependency_type": "production",
+          "location": "project.dependencies",
+          "original_requirement": "foo==1",
+          "new_requirement": "foo==2.0.0",
+          "resolved_versions": [
+            "2.0.0"
+          ],
+          "status": "changed"
+        },
+        {
+          "member": "member-b",
+          "package": "foo",
+          "dependency_type": "production",
+          "location": "project.dependencies",
+          "original_requirement": "foo==1",
+          "new_requirement": "foo==2.0.0",
+          "resolved_versions": [
+            "2.0.0"
+          ],
+          "status": "changed"
+        }
+      ]
+    }
+
+    ----- stderr -----
+    warning: The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features json-output` to disable this warning.
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    "#
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        workspace_pyproject_toml
+    );
+    assert_eq!(
+        fs_err::read_to_string(member_a.child("pyproject.toml"))?,
+        member_a_pyproject_toml
     );
     assert_eq!(
         fs_err::read_to_string(member_b.child("pyproject.toml"))?,

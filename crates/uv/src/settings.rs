@@ -2065,6 +2065,8 @@ pub(crate) struct UpgradeSettings {
     pub(crate) exclude: Vec<PackageName>,
     pub(crate) package: Option<PackageName>,
     pub(crate) all_packages: bool,
+    pub(crate) dry_run: DryRun,
+    pub(crate) output_format: SyncFormat,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) settings: ResolverSettings,
 }
@@ -2084,6 +2086,8 @@ impl UpgradeSettings {
         let exclude = args.exclude;
         let package = args.package;
         let all_packages = args.all_packages;
+        let dry_run = DryRun::from_args(args.dry_run);
+        let output_format = args.output_format;
         let mut settings =
             ResolverSettings::combine(ResolverOptions::default(), filesystem, &environment);
         settings.upgrade = if packages.is_empty() {
@@ -2097,6 +2101,8 @@ impl UpgradeSettings {
             exclude,
             package,
             all_packages,
+            dry_run,
+            output_format,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -5200,6 +5206,8 @@ mod tests {
                 exclude: Vec::new(),
                 all_packages: false,
                 package: None,
+                dry_run: false,
+                output_format: SyncFormat::Text,
             },
             None,
             EnvironmentOptions::new()?,
