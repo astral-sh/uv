@@ -13394,6 +13394,57 @@ requires_python = "==3.13.*"
 }
 
 #[test]
+fn pep_751_lock_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pylock_toml = context.temp_dir.child("pylock.toml");
+    pylock_toml.write_str(
+        r#"
+        lock-version = "2.0"
+        created-by = "uv"
+        packages = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The `pylock.toml` file uses an unsupported lock version (`2.0`, but only major version 1 is supported)
+    "#
+    );
+
+    // Later minor versions are forwards-compatible with the supported major version.
+    pylock_toml.write_str(
+        r#"
+        lock-version = "1.1"
+        created-by = "uv"
+        packages = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked in [TIME]
+    "#
+    );
+
+    Ok(())
+}
+
+#[test]
 fn pep_751_package_requires_python() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

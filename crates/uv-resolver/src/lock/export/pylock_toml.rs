@@ -48,6 +48,10 @@ pub enum PylockTomlErrorKind {
     #[error("Package `{0}` requires Python {2}, but the target Python version is {1}")]
     IncompatibleRequiresPython(PackageName, Version, RequiresPython),
     #[error(
+        "The `pylock.toml` file uses an unsupported lock version (`{0}`, but only major version 1 is supported)"
+    )]
+    UnsupportedLockVersion(Version),
+    #[error(
         "Package `{0}` includes both a registry (`packages.wheels`) and a directory source (`packages.directory`)"
     )]
     WheelWithDirectory(PackageName),
@@ -340,6 +344,17 @@ struct PylockTomlAttestationIdentity {
 }
 
 impl<'lock> PylockToml {
+    /// Validate that the lock version is supported.
+    pub fn validate_version(&self) -> Result<(), PylockTomlErrorKind> {
+        if self.lock_version.release().first() != Some(&1) {
+            return Err(PylockTomlErrorKind::UnsupportedLockVersion(
+                self.lock_version.clone(),
+            ));
+        }
+
+        Ok(())
+    }
+
     /// Construct a [`PylockToml`] from a [`ResolverOutput`].
     ///
     /// If `tags` is provided, only wheels compatible with the given tags will be included.
