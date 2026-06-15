@@ -26256,12 +26256,8 @@ fn lock_group_include_with_extra_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 9, column 16
-      |
-    9 |         foo = [{include-group = "bar", unknown = "value"}]
-      |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    an `include-group` dependency object specifier must contain exactly one key
+    error: Project `project` has malformed dependency groups
+      Caused by: Group `foo` contains an unknown dependency object specifier: {"include-group": "bar", "unknown": "value"}
     "#);
 
     Ok(())

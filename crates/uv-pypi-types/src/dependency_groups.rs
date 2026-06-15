@@ -129,18 +129,13 @@ impl<'de> Deserialize<'de> for DependencyGroupSpecifier {
                     return Err(serde::de::Error::custom("missing field `include-group`"));
                 }
 
-                if map_data.len() > 1 && map_data.contains_key("include-group") {
-                    return Err(serde::de::Error::custom(
-                        "an `include-group` dependency object specifier must contain exactly one key",
-                    ));
-                }
-
-                if let Some(include_group) = map_data
-                    .get("include-group")
-                    .map(String::as_str)
-                    .map(GroupName::from_str)
-                    .transpose()
-                    .map_err(serde::de::Error::custom)?
+                if map_data.len() == 1
+                    && let Some(include_group) = map_data
+                        .get("include-group")
+                        .map(String::as_str)
+                        .map(GroupName::from_str)
+                        .transpose()
+                        .map_err(serde::de::Error::custom)?
                 {
                     Ok(DependencyGroupSpecifier::IncludeGroup { include_group })
                 } else {

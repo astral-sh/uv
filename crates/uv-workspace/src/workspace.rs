@@ -2178,6 +2178,7 @@ impl VirtualProject {
 #[cfg(test)]
 #[cfg(unix)] // Avoid path escaping for the unit tests
 mod tests {
+    use std::collections::BTreeMap;
     use std::env;
     use std::path::Path;
     use std::str::FromStr;
@@ -3244,6 +3245,7 @@ mod tests {
 [dependency-groups]
 foo = ["a", {include-group = "bar"}]
 bar = ["b"]
+future = [{include-group = "bar", unknown = "value"}]
 "#;
 
         let result = PyProjectToml::from_string(toml.to_string(), "pyproject.toml")
@@ -3271,6 +3273,17 @@ bar = ["b"]
         assert_eq!(
             bar,
             &[DependencyGroupSpecifier::Requirement("b".to_string())]
+        );
+
+        let future = groups
+            .get(&GroupName::from_str("future").unwrap())
+            .expect("Group `future` should be present");
+        assert_eq!(
+            future,
+            &[DependencyGroupSpecifier::Object(BTreeMap::from([
+                ("include-group".to_string(), "bar".to_string()),
+                ("unknown".to_string(), "value".to_string()),
+            ]))]
         );
     }
 
