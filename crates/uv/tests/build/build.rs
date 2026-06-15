@@ -2073,6 +2073,42 @@ fn build_named_index_config_file_hint() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn build_named_index_marker_disjoint_source_requires_declared_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling ; sys_platform == 'linux'"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.sources]
+        hatchling = { index = "privindex", marker = "sys_platform == 'win32'" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.build().current_dir(project.path()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: Failed to parse entry: `hatchling`
+      Caused by: Package `hatchling` references an undeclared index: `privindex`
+    ");
+
+    Ok(())
+}
+
 /// Check that we have a working git boundary for builds from source dist to wheel in `dist/`.
 #[test]
 fn build_git_boundary_in_dist_build() -> Result<()> {
