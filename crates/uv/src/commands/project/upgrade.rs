@@ -7,7 +7,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result, anyhow, bail};
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun};
+use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun, Upgrade};
 use uv_distribution::{ArchiveMetadata, Metadata};
 use uv_distribution_types::Identifier;
 use uv_normalize::PackageName;
@@ -58,9 +58,10 @@ enum SkippedReason {
 }
 
 /// The requirements selected for upgrade and those that cannot apply.
-struct RequirementSelection {
-    to_upgrade: Vec<UpgradableRequirement>,
+struct DeclarationSelection {
+    active: Vec<UpgradableRequirement>,
     skipped: Vec<SkippedRequirement>,
+    packages: Vec<PackageName>,
 }
 
 /// An existing requirement and its proposed replacement.
@@ -74,9 +75,10 @@ struct RequirementUpdate {
 
 pub(crate) async fn upgrade(
     project_dir: &Path,
-    package: PackageName,
+    packages: Vec<PackageName>,
+    exclude: Vec<PackageName>,
     install_mirrors: PythonInstallMirrors,
-    settings: ResolverSettings,
+    mut settings: ResolverSettings,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -109,15 +111,18 @@ pub(crate) async fn upgrade(
         }
         Err(err) => return Err(err.into()),
     };
-    let RequirementSelection {
-        to_upgrade: mut requirements,
+    let DeclarationSelection {
+        active: mut requirements,
         skipped,
-    } = select_requirements(&project, &package)?;
+        packages: selected_packages,
+    } = select_requirements(&project, &packages, &exclude)?;
     render_skipped_requirements(&skipped, printer)?;
     if requirements.is_empty() {
         return Ok(ExitStatus::Success);
     }
-    validate_requirements(&project, &package, &requirements)?;
+    settings.upgrade = Upgrade::from_packages(selected_packages.clone());
+    let refresh = Refresh::from(settings.upgrade.clone());
+    let cache = cache.clone().with_refresh(refresh.clone());
 
     // Relax the selected requirements in a temporary manifest so the resolver can select newer
     // versions without changing the user's manifest.
@@ -189,7 +194,7 @@ pub(crate) async fn upgrade(
         &settings.index_locations,
         settings.sources.clone(),
         true,
-        cache,
+        &cache,
         workspace_cache,
         client_builder.credentials_cache(),
     )
@@ -214,7 +219,7 @@ pub(crate) async fn upgrade(
         &install_mirrors,
         false,
         Some(false),
-        cache,
+        &cache,
         printer,
     )
     .await?
@@ -229,7 +234,6 @@ pub(crate) async fn upgrade(
         Arc::new(MetadataResponse::Found(ArchiveMetadata::from(metadata))),
     );
 
-    let refresh = Refresh::from(settings.upgrade.clone());
     let result = match Box::pin(
         LockOperation::new(
             LockMode::DryRun(&interpreter),
@@ -238,7 +242,7 @@ pub(crate) async fn upgrade(
             &state,
             Box::new(DefaultResolveLogger),
             &concurrency,
-            cache,
+            &cache,
             workspace_cache,
             printer,
             preview,
@@ -333,17 +337,24 @@ pub(crate) async fn upgrade(
         fs_err::write(pyproject_path, pyproject.to_string())?;
     }
 
-    let event = match &result {
+    let events = match &result {
         LockResult::Changed(previous, lock) => {
             LockEvent::detect_changes(previous.as_ref(), lock, DryRun::Enabled)
-                .find(|event| event.package() == &package)
+                .filter(|event| {
+                    selected_packages
+                        .iter()
+                        .any(|package| event.package() == package)
+                })
+                .collect::<Vec<_>>()
         }
-        LockResult::Unchanged(_) => None,
+        LockResult::Unchanged(_) => Vec::new(),
     };
-    if let Some(event) = event {
-        writeln!(printer.stderr(), "{event}")?;
-    } else {
-        writeln!(printer.stderr(), "No version change for {package}")?;
+    for package in &selected_packages {
+        if let Some(event) = events.iter().find(|event| event.package() == package) {
+            writeln!(printer.stderr(), "{event}")?;
+        } else {
+            writeln!(printer.stderr(), "No version change for {package}")?;
+        }
     }
     for update in updated_requirements {
         writeln!(
@@ -360,12 +371,14 @@ pub(crate) async fn upgrade(
 /// Select the dependency requirements targeted by `uv upgrade`.
 fn select_requirements(
     project: &ProjectWorkspace,
-    package: &PackageName,
-) -> Result<RequirementSelection> {
+    packages: &[PackageName],
+    exclude: &[PackageName],
+) -> Result<DeclarationSelection> {
     if project.workspace().packages().len() != 1 {
         bail!("`uv upgrade` does not support workspaces with multiple members yet");
     }
 
+    let is_explicit_selection = !packages.is_empty();
     let resolution_marker = project_resolution_marker(project)?;
     let dependencies = project
         .current_project()
@@ -381,7 +394,8 @@ fn select_requirements(
         .as_ref();
     let mut to_upgrade = Vec::new();
     let mut skipped = Vec::new();
-    let mut found_matching_name = false;
+    let mut found_packages = BTreeSet::new();
+    let mut selected_packages = Vec::new();
     for dependency in dependencies {
         let requirement =
             Requirement::<VerbatimParsedUrl>::from_str(dependency).with_context(|| {
@@ -390,110 +404,146 @@ fn select_requirements(
                     pyproject_path.display()
                 )
             })?;
-        if requirement.name == *package {
-            found_matching_name = true;
-            let mut effective_marker = requirement.marker;
-            effective_marker.and(resolution_marker);
-            if effective_marker.is_false() {
-                skipped.push(SkippedRequirement {
-                    package: package.clone(),
-                    dependency_type: DependencyType::Production,
-                    original_text: dependency.clone(),
-                    display_text: display_requirement(&requirement),
-                    reason: SkippedReason::EnvironmentOrPythonRequirement,
-                });
-                continue;
-            }
+        if exclude.contains(&requirement.name)
+            || (is_explicit_selection && !packages.contains(&requirement.name))
+        {
+            continue;
+        }
 
-            effective_marker = effective_marker.simplify_not_extras_with(|extra| {
-                optional_dependencies
-                    .is_none_or(|optional_dependencies| !optional_dependencies.contains_key(extra))
-            });
-            if effective_marker.is_false() {
-                skipped.push(SkippedRequirement {
-                    package: package.clone(),
-                    dependency_type: DependencyType::Production,
-                    original_text: dependency.clone(),
-                    display_text: display_requirement(&requirement),
-                    reason: SkippedReason::UndefinedExtra,
-                });
-                continue;
-            }
-
-            to_upgrade.push(UpgradableRequirement {
-                package: package.clone(),
+        found_packages.insert(requirement.name.clone());
+        let mut effective_marker = requirement.marker;
+        effective_marker.and(resolution_marker);
+        if effective_marker.is_false() {
+            skipped.push(SkippedRequirement {
+                package: requirement.name.clone(),
                 dependency_type: DependencyType::Production,
                 original_text: dependency.clone(),
-                requirement,
-                effective_marker,
-                resolved_versions: BTreeSet::new(),
+                display_text: display_requirement(&requirement),
+                reason: SkippedReason::EnvironmentOrPythonRequirement,
             });
+            continue;
+        }
+
+        effective_marker = effective_marker.simplify_not_extras_with(|extra| {
+            optional_dependencies
+                .is_none_or(|optional_dependencies| !optional_dependencies.contains_key(extra))
+        });
+        if effective_marker.is_false() {
+            skipped.push(SkippedRequirement {
+                package: requirement.name.clone(),
+                dependency_type: DependencyType::Production,
+                original_text: dependency.clone(),
+                display_text: display_requirement(&requirement),
+                reason: SkippedReason::UndefinedExtra,
+            });
+            continue;
+        }
+        if !selected_packages.contains(&requirement.name) {
+            selected_packages.push(requirement.name.clone());
+        }
+        to_upgrade.push(UpgradableRequirement {
+            package: requirement.name.clone(),
+            dependency_type: DependencyType::Production,
+            original_text: dependency.clone(),
+            requirement,
+            effective_marker,
+            resolved_versions: BTreeSet::new(),
+        });
+    }
+
+    for package in packages
+        .iter()
+        .filter(|package| !exclude.contains(*package))
+    {
+        if !found_packages.contains(package) {
+            bail!("Dependency `{package}` was not found in `project.dependencies`");
+        }
+    }
+    if is_explicit_selection {
+        selected_packages.clear();
+        for package in packages
+            .iter()
+            .filter(|package| !exclude.contains(*package))
+        {
+            if to_upgrade
+                .iter()
+                .any(|requirement| requirement.package == *package)
+                && !selected_packages.contains(package)
+            {
+                selected_packages.push(package.clone());
+            }
         }
     }
 
-    if !found_matching_name {
-        bail!("Dependency `{package}` was not found in `project.dependencies`");
+    if selected_packages.is_empty() && skipped.is_empty() {
+        bail!("No dependencies selected for upgrade");
     }
 
-    Ok(RequirementSelection {
-        to_upgrade,
+    for package in &selected_packages {
+        if to_upgrade.iter().any(|selected| {
+            selected.package == *package
+                && matches!(
+                    selected.requirement.version_or_url,
+                    Some(VersionOrUrl::Url(_))
+                )
+        }) {
+            bail!("Dependency `{package}` is a direct URL requirement and cannot be upgraded");
+        }
+    }
+
+    for package in &selected_packages {
+        if package == project.project_name() {
+            bail!("Dependency `{package}` refers to the current project and cannot be upgraded");
+        }
+    }
+
+    for package in &selected_packages {
+        let sources = project
+            .current_project()
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sources.as_ref())
+            .and_then(|sources| sources.inner().get(package))
+            .or_else(|| project.workspace().sources().get(package));
+        let applies_to_selected_requirement = |source| {
+            to_upgrade.iter().any(|selected| {
+                selected.package == *package
+                    && source_is_applicable(
+                        source,
+                        &selected.dependency_type,
+                        selected.effective_marker,
+                    )
+            })
+        };
+        if sources.is_some_and(|sources| {
+            sources.iter().any(|source| {
+                applies_to_selected_requirement(source)
+                    && matches!(source, Source::Git { rev: Some(_), .. })
+            })
+        }) {
+            bail!(
+                "Dependency `{package}` is pinned to a Git revision and cannot be upgraded commit-to-commit"
+            );
+        }
+        if sources.is_some_and(|sources| {
+            sources.iter().any(|source| {
+                applies_to_selected_requirement(source)
+                    && !matches!(source, Source::Registry { .. })
+            })
+        }) {
+            bail!(
+                "Dependency `{package}` uses a non-registry source in `tool.uv.sources` and cannot be upgraded"
+            );
+        }
+    }
+
+    Ok(DeclarationSelection {
+        active: to_upgrade,
         skipped,
+        packages: selected_packages,
     })
-}
-
-fn validate_requirements(
-    project: &ProjectWorkspace,
-    package: &PackageName,
-    requirements: &[UpgradableRequirement],
-) -> Result<()> {
-    if requirements.iter().any(|selected| {
-        matches!(
-            selected.requirement.version_or_url,
-            Some(VersionOrUrl::Url(_))
-        )
-    }) {
-        bail!("Dependency `{package}` is a direct URL requirement and cannot be upgraded");
-    }
-
-    if package == project.project_name() {
-        bail!("Dependency `{package}` refers to the current project and cannot be upgraded");
-    }
-
-    let sources = project
-        .current_project()
-        .pyproject_toml()
-        .tool
-        .as_ref()
-        .and_then(|tool| tool.uv.as_ref())
-        .and_then(|uv| uv.sources.as_ref())
-        .and_then(|sources| sources.inner().get(package))
-        .or_else(|| project.workspace().sources().get(package));
-    let applies_to_selected_requirement = |source| {
-        requirements.iter().any(|selected| {
-            source_is_applicable(source, &selected.dependency_type, selected.effective_marker)
-        })
-    };
-    if sources.is_some_and(|sources| {
-        sources.iter().any(|source| {
-            applies_to_selected_requirement(source)
-                && matches!(source, Source::Git { rev: Some(_), .. })
-        })
-    }) {
-        bail!(
-            "Dependency `{package}` is pinned to a Git revision and cannot be upgraded commit-to-commit"
-        );
-    }
-    if sources.is_some_and(|sources| {
-        sources.iter().any(|source| {
-            applies_to_selected_requirement(source) && !matches!(source, Source::Registry { .. })
-        })
-    }) {
-        bail!(
-            "Dependency `{package}` uses a non-registry source in `tool.uv.sources` and cannot be upgraded"
-        );
-    }
-
-    Ok(())
 }
 
 /// Return a requirement suitable for diagnostics without exposing URL query parameters.
