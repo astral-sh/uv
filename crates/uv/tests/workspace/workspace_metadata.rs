@@ -86,6 +86,10 @@ fn workspace_metadata_simple() {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/foo",
+      "workspace": {
+        "path": "[TEMP_DIR]/foo",
+        "id": "workspace+[TEMP_DIR]/foo"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -105,6 +109,11 @@ fn workspace_metadata_simple() {
             "virtual": "[TEMP_DIR]/foo/"
           },
           "kind": "package",
+          "dependencies": []
+        },
+        "workspace+[TEMP_DIR]/foo": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/foo",
           "dependencies": []
         }
       }
@@ -478,6 +487,10 @@ dependencies = [
       "environment": {
         "root": "[VENV]/"
       },
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -589,6 +602,11 @@ dependencies = [
               "filename": "typing_extensions-0.1.0-py3-none-any.whl"
             }
           ]
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
         }
       }
     }
@@ -781,6 +799,10 @@ fn workspace_metadata_root_workspace() -> Result<()> {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/workspace",
+      "workspace": {
+        "path": "[TEMP_DIR]/workspace",
+        "id": "workspace+[TEMP_DIR]/workspace"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -907,6 +929,11 @@ fn workspace_metadata_root_workspace() -> Result<()> {
               "id": "idna==3.6@registry+https://pypi.org/simple"
             }
           ]
+        },
+        "workspace+[TEMP_DIR]/workspace": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/workspace",
+          "dependencies": []
         }
       }
     }
@@ -944,6 +971,10 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/workspace",
+      "workspace": {
+        "path": "[TEMP_DIR]/workspace",
+        "id": "workspace+[TEMP_DIR]/workspace"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -1137,12 +1168,19 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
               "filename": "sniffio-1.3.1-py3-none-any.whl"
             }
           ]
+        },
+        "workspace+[TEMP_DIR]/workspace": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/workspace",
+          "dependencies": []
         }
       }
     }
 
     ----- stderr -----
+    WARN Ignoring non-directory workspace member: `[TEMP_DIR]/workspace/packages/Unrelated.md`
     warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    WARN Ignoring non-directory workspace member: `[TEMP_DIR]/workspace/packages/Unrelated.md`
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 7 packages in [TIME]
     "#
@@ -1176,6 +1214,10 @@ fn workspace_metadata_from_member() -> Result<()> {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/workspace",
+      "workspace": {
+        "path": "[TEMP_DIR]/workspace",
+        "id": "workspace+[TEMP_DIR]/workspace"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -1302,6 +1344,11 @@ fn workspace_metadata_from_member() -> Result<()> {
               "id": "idna==3.6@registry+https://pypi.org/simple"
             }
           ]
+        },
+        "workspace+[TEMP_DIR]/workspace": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/workspace",
+          "dependencies": []
         }
       }
     }
@@ -1350,6 +1397,10 @@ fn workspace_metadata_multiple_members() {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/pkg-a",
+      "workspace": {
+        "path": "[TEMP_DIR]/pkg-a",
+        "id": "workspace+[TEMP_DIR]/pkg-a"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -1398,6 +1449,11 @@ fn workspace_metadata_multiple_members() {
           },
           "kind": "package",
           "dependencies": []
+        },
+        "workspace+[TEMP_DIR]/pkg-a": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/pkg-a",
+          "dependencies": []
         }
       }
     }
@@ -1428,6 +1484,10 @@ fn workspace_metadata_single_project() {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/my-project",
+      "workspace": {
+        "path": "[TEMP_DIR]/my-project",
+        "id": "workspace+[TEMP_DIR]/my-project"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -1447,6 +1507,11 @@ fn workspace_metadata_single_project() {
             "virtual": "[TEMP_DIR]/my-project/"
           },
           "kind": "package",
+          "dependencies": []
+        },
+        "workspace+[TEMP_DIR]/my-project": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/my-project",
           "dependencies": []
         }
       }
@@ -1483,6 +1548,10 @@ fn workspace_metadata_with_excluded() -> Result<()> {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/workspace",
+      "workspace": {
+        "path": "[TEMP_DIR]/workspace",
+        "id": "workspace+[TEMP_DIR]/workspace"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -1537,6 +1606,11 @@ fn workspace_metadata_with_excluded() -> Result<()> {
               "filename": "iniconfig-2.0.0-py3-none-any.whl"
             }
           ]
+        },
+        "workspace+[TEMP_DIR]/workspace": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/workspace",
+          "dependencies": []
         }
       }
     }
@@ -1551,7 +1625,7 @@ fn workspace_metadata_with_excluded() -> Result<()> {
     Ok(())
 }
 
-/// Test metadata with excluded packages.
+/// Test metadata for dependency groups defined on a non-package workspace root.
 #[test]
 #[cfg(feature = "test-pypi")]
 fn workspace_metadata_group_only() -> Result<()> {
@@ -1574,6 +1648,10 @@ fn workspace_metadata_group_only() -> Result<()> {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/workspace",
+      "workspace": {
+        "path": "[TEMP_DIR]/workspace",
+        "id": "workspace+[TEMP_DIR]/workspace"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -1606,6 +1684,28 @@ fn workspace_metadata_group_only() -> Result<()> {
               "size": 5892,
               "upload_time": "2023-01-07T11:08:09.864Z",
               "filename": "iniconfig-2.0.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/workspace": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/workspace",
+          "dependencies": [],
+          "dependency_groups": [
+            {
+              "name": "dev",
+              "id": "workspace+[TEMP_DIR]/workspace:dev"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/workspace:dev": {
+          "kind": {
+            "group": "dev"
+          },
+          "path": "[TEMP_DIR]/workspace",
+          "dependencies": [
+            {
+              "id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
             }
           ]
         }
@@ -1663,6 +1763,10 @@ fn workspace_metadata_various_dependency_rainbow() -> Result<()> {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/workspace",
+      "workspace": {
+        "path": "[TEMP_DIR]/workspace",
+        "id": "workspace+[TEMP_DIR]/workspace"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -1859,6 +1963,11 @@ fn workspace_metadata_various_dependency_rainbow() -> Result<()> {
               "filename": "sniffio-1.3.1-py3-none-any.whl"
             }
           ]
+        },
+        "workspace+[TEMP_DIR]/workspace": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/workspace",
+          "dependencies": []
         }
       }
     }
