@@ -230,6 +230,12 @@ struct Result {
     level: ResultLevel,
     locations: Vec<Location>,
     message: Message,
+    /// Tool-specific values that identify findings independently of their source location.
+    ///
+    /// GitHub code scanning only consumes `primaryLocationLineHash`. We intentionally do not use
+    /// that key for the semantic package identities below: all findings currently point at line 1,
+    /// so those values would not actually be location hashes. Other SARIF consumers can still use
+    /// these stable uv-specific keys.
     partial_fingerprints: BTreeMap<String, String>,
     properties: PropertyBag,
     rule_id: String,
@@ -376,6 +382,11 @@ impl Location {
                 kind: Some("package".to_string()),
                 name: Some(name.to_string()),
             }],
+            // TODO: Point each finding at its `[[package]]` table instead of line 1.
+            // This requires us to have a spanning view of a lockfile similar to
+            // how `pyproject.toml` spans are emitted. We'd also need to figure out
+            // how to represent a discarded lockfile, e.g. from a audit of an
+            // unlocked script.
             physical_location: PhysicalLocation {
                 artifact_location: ArtifactLocation {
                     uri: artifact_uri.to_string(),

@@ -317,9 +317,11 @@ pub(crate) async fn audit(
         findings: all_findings,
         artifact_uri: {
             let lock_path = target.lock_path();
-            let artifact_path = if lock_path.is_file() {
-                lock_path.as_path()
-            } else if let LockTarget::Script(script) = target {
+            // If we've run `uv audit --script`, we might only have an in-memory lockfile.
+            // In that case, use the script's own path as the artifact path.
+            let artifact_path = if let LockTarget::Script(script) = target
+                && !lock_path.is_file()
+            {
                 script.path.as_path()
             } else {
                 lock_path.as_path()
