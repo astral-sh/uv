@@ -58,6 +58,42 @@ fn list_empty_json() {
 }
 
 #[test]
+fn list_editable_non_file_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let dist_info = ChildPath::new(context.site_packages()).child("project-1.0.0.dist-info");
+    dist_info.create_dir_all()?;
+    dist_info
+        .child("METADATA")
+        .write_str("Metadata-Version: 2.1\nName: project\nVersion: 1.0.0\n")?;
+    dist_info
+        .child("direct_url.json")
+        .write_str(r#"{"url":"https://example.com/project","dir_info":{"editable":true}}"#)?;
+
+    uv_snapshot!(context.pip_list(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package Version
+    ------- -------
+    project 1.0.0
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.pip_list().arg("--format=json"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [{"name":"project","version":"1.0.0"}]
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
 #[cfg(feature = "test-pypi")]
 fn list_single_no_editable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
