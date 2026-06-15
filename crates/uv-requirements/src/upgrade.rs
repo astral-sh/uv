@@ -118,7 +118,6 @@ pub async fn read_pylock_toml_requirements(
     let content = fs_err::tokio::read_to_string(&output_file).await?;
     let lock = info_span!("toml::from_str upgrade", path = %output_file.display())
         .in_scope(|| toml::from_str::<PylockToml>(&content))?;
-    lock.validate_version()?;
 
     let upgrade_packages = UpgradePackages::for_non_project(upgrade);
 

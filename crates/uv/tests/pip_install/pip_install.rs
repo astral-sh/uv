@@ -13415,7 +13415,12 @@ fn pep_751_lock_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The `pylock.toml` file uses an unsupported lock version (`2.0`, but only major version 1 is supported)
+    error: Not a valid `pylock.toml` file: pylock.toml
+      Caused by: TOML parse error at line 2, column 24
+      |
+    2 |         lock-version = "2.0"
+      |                        ^^^^^
+    unsupported lock version (`2.0`, but only major version 1 is supported)
     "#
     );
 
