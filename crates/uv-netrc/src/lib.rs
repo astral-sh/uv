@@ -89,9 +89,10 @@ impl Netrc {
     /// Look up the `NETRC` environment variable if it is defined else use the .netrc (or _netrc
     /// file on windows) in the user's home directory.
     fn get_file() -> Option<PathBuf> {
-        let env_var = std::env::var("NETRC")
-            .map(PathBuf::from)
-            .map(|f| shellexpand::path::tilde(&f).into_owned());
+        if let Some(file) = std::env::var_os("NETRC") {
+            let file = shellexpand::path::tilde(Path::new(&file)).into_owned();
+            return Some(file);
+        }
 
         #[cfg(windows)]
         let default = std::env::var("USERPROFILE")
@@ -102,7 +103,7 @@ impl Netrc {
         #[cfg(not(windows))]
         let default = std::env::var("HOME").map(|home| PathBuf::from(home).join(".netrc"));
 
-        env_var.into_iter().chain(default).find(|f| f.exists())
+        default.into_iter().find(|file| file.exists())
     }
 }
 
@@ -134,6 +135,14 @@ password hY5>yKqU&$vq&0
         dest
     }
 
+    fn create_netrc_home() -> PathBuf {
+        let id = NETRC_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let home = std::env::temp_dir().join(format!("netrc-home-{}-{id}", std::process::id()));
+        fs_err::create_dir_all(&home).unwrap();
+        fs_err::write(home.join(".netrc"), CONTENT).unwrap();
+        home
+    }
+
     fn check_nrc(nrc: &Netrc) {
         assert_eq!(nrc.hosts.len(), 3);
         assert_eq!(
@@ -157,6 +166,43 @@ password hY5>yKqU&$vq&0
             let nrc = Netrc::new().unwrap();
             check_nrc(&nrc);
         });
+    }
+
+    #[test]
+    fn test_new_default() {
+        let home = create_netrc_home();
+        let home_env = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+        temp_env::with_vars(
+            [("NETRC", None), (home_env, Some(home.as_os_str()))],
+            || {
+                let nrc = Netrc::new().unwrap();
+                check_nrc(&nrc);
+            },
+        );
+
+        fs_err::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn test_new_missing_env_does_not_fall_back() {
+        let home = create_netrc_home();
+        let missing = home.join("missing");
+        let home_env = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+        temp_env::with_vars(
+            [
+                ("NETRC", Some(missing.as_os_str())),
+                (home_env, Some(home.as_os_str())),
+            ],
+            || {
+                let err = Netrc::new().unwrap_err();
+                assert!(
+                    matches!(&err, Error::Io(err) if err.kind() == ErrorKind::NotFound),
+                    "expected NotFound I/O error, got {err}",
+                );
+            },
+        );
+
+        fs_err::remove_dir_all(home).unwrap();
     }
 
     #[test]
