@@ -26232,6 +26232,38 @@ fn lock_group_invalid_entry_table() -> Result<()> {
 }
 
 #[test]
+fn lock_group_include_with_extra_key() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        foo = [{include-group = "bar", unknown = "value"}]
+        bar = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project `project` has malformed dependency groups
+      Caused by: Group `foo` contains an unknown dependency object specifier: {"include-group": "bar", "unknown": "value"}
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn lock_group_invalid_entry_type() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
