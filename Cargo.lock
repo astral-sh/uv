@@ -7287,6 +7287,7 @@ dependencies = [
 name = "uv-toml"
 version = "0.0.54"
 dependencies = [
+ "serde",
  "toml_datetime",
  "toml_parser",
 ]
@@ -7475,6 +7476,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-redacted",
  "uv-static",
+ "uv-toml",
  "uv-warnings",
 ]
 

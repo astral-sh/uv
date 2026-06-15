@@ -3287,6 +3287,32 @@ future = [{include-group = "bar", unknown = "value"}]
         );
     }
 
+    #[test]
+    fn reject_colliding_optional_dependency_names() {
+        let err = PyProjectToml::from_string(
+            r#"
+[project]
+name = "example"
+version = "1.0.0"
+
+[project.optional-dependencies]
+foo-bar = ["anyio"]
+foo_bar = ["iniconfig"]
+"#
+            .to_string(),
+            "pyproject.toml",
+        )
+        .unwrap_err();
+
+        assert_snapshot!(err.to_string(), @r#"
+        TOML parse error at line 6, column 1
+          |
+        6 | [project.optional-dependencies]
+          | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        duplicate normalized extra name `foo-bar`
+        "#);
+    }
+
     #[tokio::test]
     async fn nested_workspace() -> Result<()> {
         let root = tempfile::TempDir::new()?;

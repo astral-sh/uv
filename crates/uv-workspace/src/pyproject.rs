@@ -35,6 +35,7 @@ use uv_pypi_types::{
     VerbatimParsedUrl,
 };
 use uv_redacted::DisplaySafeUrl;
+use uv_toml::deserialize_unique_map;
 
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
@@ -56,53 +57,17 @@ pub enum PyprojectTomlError {
     MissingVersion,
 }
 
-/// Helper function to deserialize a map while ensuring all keys are unique.
-fn deserialize_unique_map<'de, D, K, V, F>(
+fn deserialize_optional_dependencies<'de, D, V>(
     deserializer: D,
-    error_msg: F,
-) -> Result<BTreeMap<K, V>, D::Error>
+) -> Result<Option<BTreeMap<ExtraName, V>>, D::Error>
 where
     D: Deserializer<'de>,
-    K: Deserialize<'de> + Ord + std::fmt::Display,
     V: Deserialize<'de>,
-    F: FnOnce(&K) -> String,
 {
-    struct Visitor<K, V, F>(F, std::marker::PhantomData<(K, V)>);
-
-    impl<'de, K, V, F> serde::de::Visitor<'de> for Visitor<K, V, F>
-    where
-        K: Deserialize<'de> + Ord + std::fmt::Display,
-        V: Deserialize<'de>,
-        F: FnOnce(&K) -> String,
-    {
-        type Value = BTreeMap<K, V>;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("a map with unique keys")
-        }
-
-        fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
-        where
-            M: serde::de::MapAccess<'de>,
-        {
-            use std::collections::btree_map::Entry;
-
-            let mut map = BTreeMap::new();
-            while let Some((key, value)) = access.next_entry::<K, V>()? {
-                match map.entry(key) {
-                    Entry::Occupied(entry) => {
-                        return Err(serde::de::Error::custom((self.0)(entry.key())));
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(value);
-                    }
-                }
-            }
-            Ok(map)
-        }
-    }
-
-    deserializer.deserialize_map(Visitor(error_msg, std::marker::PhantomData))
+    deserialize_unique_map(deserializer, |key: &ExtraName| {
+        format!("duplicate normalized extra name `{key}`")
+    })
+    .map(Some)
 }
 
 /// A `pyproject.toml` as specified in PEP 517.
@@ -248,6 +213,7 @@ struct ProjectWire {
     dynamic: Option<Vec<String>>,
     requires_python: Option<VersionSpecifiers>,
     dependencies: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_dependencies")]
     optional_dependencies: Option<BTreeMap<ExtraName, Vec<String>>>,
     gui_scripts: Option<serde::de::IgnoredAny>,
     scripts: Option<serde::de::IgnoredAny>,
