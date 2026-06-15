@@ -72,6 +72,8 @@ fn upgrade_help() {
 
     Options:
           --exclude <EXCLUDE>  Exclude the named package from upgrades
+          --all-packages       Upgrade dependencies in all workspace members
+          --package <PACKAGE>  Upgrade dependencies in a specific package in the workspace
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -3382,6 +3384,752 @@ fn upgrade_preserves_workspace_root_dependency_groups() -> Result<()> {
 }
 
 #[test]
+fn upgrade_updates_current_workspace_member_by_default() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let workspace_pyproject_toml = format!(
+        r#"
+        [tool.uv.workspace]
+        members = ["member-a", "member-b"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&workspace_pyproject_toml)?;
+
+    let member_a = context.temp_dir.child("member-a");
+    member_a.create_dir_all()?;
+    let member_a_pyproject_toml = r#"
+        [project]
+        name = "member-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo==1"]
+    "#;
+    member_a
+        .child("pyproject.toml")
+        .write_str(member_a_pyproject_toml)?;
+
+    let member_b = context.temp_dir.child("member-b");
+    member_b.create_dir_all()?;
+    let member_b_pyproject_toml = r#"
+        [project]
+        name = "member-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo>=1"]
+    "#;
+    member_b
+        .child("pyproject.toml")
+        .write_str(member_b_pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .current_dir(&member_a)
+            .arg("foo")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add foo v2.0.0
+    Updated requirement: `foo==1` -> `foo==2.0.0`
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        workspace_pyproject_toml
+    );
+    assert_eq!(
+        fs_err::read_to_string(member_a.child("pyproject.toml"))?,
+        member_a_pyproject_toml.replace("foo==1", "foo==2.0.0")
+    );
+    assert_eq!(
+        fs_err::read_to_string(member_b.child("pyproject.toml"))?,
+        member_b_pyproject_toml
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    assert!(!member_a.child("uv.lock").exists());
+    assert!(!member_a.child(".venv").exists());
+    assert!(!member_b.child("uv.lock").exists());
+    assert!(!member_b.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_package_selects_member_from_virtual_workspace_root() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let workspace_pyproject_toml = format!(
+        r#"
+        [tool.uv.workspace]
+        members = ["member-a", "member-b"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&workspace_pyproject_toml)?;
+
+    let member_a = context.temp_dir.child("member-a");
+    member_a.create_dir_all()?;
+    let member_a_pyproject_toml = r#"
+        [project]
+        name = "member-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo==1"]
+    "#;
+    member_a
+        .child("pyproject.toml")
+        .write_str(member_a_pyproject_toml)?;
+
+    let member_b = context.temp_dir.child("member-b");
+    member_b.create_dir_all()?;
+    let member_b_pyproject_toml = r#"
+        [project]
+        name = "member-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#;
+    member_b
+        .child("pyproject.toml")
+        .write_str(member_b_pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("--package")
+            .arg("member-a")
+            .arg("foo")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add foo v2.0.0
+    Updated requirement: `foo==1` -> `foo==2.0.0`
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        workspace_pyproject_toml
+    );
+    assert_eq!(
+        fs_err::read_to_string(member_a.child("pyproject.toml"))?,
+        member_a_pyproject_toml.replace("foo==1", "foo==2.0.0")
+    );
+    assert_eq!(
+        fs_err::read_to_string(member_b.child("pyproject.toml"))?,
+        member_b_pyproject_toml
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_package_skips_inapplicable_member_without_requires_python() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let workspace_pyproject_toml = r#"
+        [tool.uv.workspace]
+        members = ["member-a"]
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(workspace_pyproject_toml)?;
+
+    let member_a = context.temp_dir.child("member-a");
+    member_a.create_dir_all()?;
+    let member_a_pyproject_toml = r#"
+        [project]
+        name = "member-a"
+        version = "0.1.0"
+        dependencies = ["bar<2 ; python_version < '3.12'"]
+    "#;
+    member_a
+        .child("pyproject.toml")
+        .write_str(member_a_pyproject_toml)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .upgrade()
+            .arg("--package")
+            .arg("member-a")
+            .arg("bar"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    warning: Skipping dependency `bar` in `project.dependencies`: `bar<2 ; python_full_version < '3.12'` (excluded by the project's environments or Python requirement)
+    "
+    );
+
+    assert_project_unchanged(&context, workspace_pyproject_toml)?;
+    assert_eq!(
+        fs_err::read_to_string(member_a.child("pyproject.toml"))?,
+        member_a_pyproject_toml
+    );
+    Ok(())
+}
+
+#[test]
+fn upgrade_all_packages_updates_matching_declarations_across_members() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let workspace_pyproject_toml = format!(
+        r#"
+        [tool.uv.workspace]
+        members = ["member-a", "member-b"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&workspace_pyproject_toml)?;
+
+    let member_a = context.temp_dir.child("member-a");
+    member_a.create_dir_all()?;
+    let member_a_pyproject_toml = r#"
+        [project]
+        name = "member-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo==1"]
+    "#;
+    member_a
+        .child("pyproject.toml")
+        .write_str(member_a_pyproject_toml)?;
+
+    let member_b = context.temp_dir.child("member-b");
+    member_b.create_dir_all()?;
+    let member_b_pyproject_toml = r#"
+        [project]
+        name = "member-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo==1"]
+    "#;
+    member_b
+        .child("pyproject.toml")
+        .write_str(member_b_pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("--all-packages")
+            .arg("foo")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add foo v2.0.0
+    Updated requirement in package `member-a`: `foo==1` -> `foo==2.0.0`
+    Updated requirement in package `member-b`: `foo==1` -> `foo==2.0.0`
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(member_a.child("pyproject.toml"))?,
+        member_a_pyproject_toml.replace("foo==1", "foo==2.0.0")
+    );
+    assert_eq!(
+        fs_err::read_to_string(member_b.child("pyproject.toml"))?,
+        member_b_pyproject_toml.replace("foo==1", "foo==2.0.0")
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_all_packages_skips_inapplicable_member_and_updates_other() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let workspace_pyproject_toml = format!(
+        r#"
+        [tool.uv.workspace]
+        members = ["member-a", "member-b"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&workspace_pyproject_toml)?;
+
+    let member_a = context.temp_dir.child("member-a");
+    member_a.create_dir_all()?;
+    let member_a_pyproject_toml = r#"
+        [project]
+        name = "member-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar @ https://example.com/bar-1.0.0-py3-none-any.whl ; python_version < '3.12'"]
+    "#;
+    member_a
+        .child("pyproject.toml")
+        .write_str(member_a_pyproject_toml)?;
+
+    let member_b = context.temp_dir.child("member-b");
+    member_b.create_dir_all()?;
+    let member_b_pyproject_toml = r#"
+        [project]
+        name = "member-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar<2"]
+    "#;
+    member_b
+        .child("pyproject.toml")
+        .write_str(member_b_pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("--all-packages")
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Skipping dependency `bar` in package `member-a` `project.dependencies`: `bar @ https://example.com/bar-1.0.0-py3-none-any.whl ; python_full_version < '3.12'` (excluded by the project's environments or Python requirement)
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    Add bar v2.0.0
+    Updated requirement in package `member-b`: `bar<2` -> `bar<3`
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(member_a.child("pyproject.toml"))?,
+        member_a_pyproject_toml
+    );
+    assert_eq!(
+        fs_err::read_to_string(member_b.child("pyproject.toml"))?,
+        member_b_pyproject_toml.replace("bar<2", "bar<3")
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_unselected_workspace_member_constraint_remains_hard() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let workspace_pyproject_toml = format!(
+        r#"
+        [tool.uv.workspace]
+        members = ["member-a", "member-b"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&workspace_pyproject_toml)?;
+
+    let member_a = context.temp_dir.child("member-a");
+    member_a.create_dir_all()?;
+    let member_a_pyproject_toml = r#"
+        [project]
+        name = "member-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo==1"]
+    "#;
+    member_a
+        .child("pyproject.toml")
+        .write_str(member_a_pyproject_toml)?;
+
+    let member_b = context.temp_dir.child("member-b");
+    member_b.create_dir_all()?;
+    let member_b_pyproject_toml = r#"
+        [project]
+        name = "member-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar<2"]
+    "#;
+    member_b
+        .child("pyproject.toml")
+        .write_str(member_b_pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .current_dir(&member_a)
+            .arg("foo")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+      × No solution found when resolving dependencies for split (markers: sys_platform != 'linux'):
+      ╰─▶ Because only the following versions of foo are available:
+              foo==1.0.0
+              foo==2.0.0
+          and foo==1.0.0 depends on bar{sys_platform != 'linux'}==2, we can conclude that foo<2.0.0 depends on bar==2.
+          And because foo==2.0.0 depends on bar==2, we can conclude that all versions of foo depend on bar==2.
+          And because member-b depends on bar<2 and member-a depends on foo, we can conclude that member-a and member-b are incompatible.
+          And because your workspace requires member-a and member-b, we can conclude that your workspace's requirements are unsatisfiable.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(member_a.child("pyproject.toml"))?,
+        member_a_pyproject_toml
+    );
+    assert_eq!(
+        fs_err::read_to_string(member_b.child("pyproject.toml"))?,
+        member_b_pyproject_toml
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_ignores_unselected_member_non_registry_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let workspace_pyproject_toml = format!(
+        r#"
+        [tool.uv.workspace]
+        members = ["member-a", "member-b"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&workspace_pyproject_toml)?;
+
+    let member_a = context.temp_dir.child("member-a");
+    member_a.create_dir_all()?;
+    let member_a_pyproject_toml = r#"
+        [project]
+        name = "member-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar<2"]
+    "#;
+    member_a
+        .child("pyproject.toml")
+        .write_str(member_a_pyproject_toml)?;
+
+    let member_b = context.temp_dir.child("member-b");
+    member_b.create_dir_all()?;
+    let member_b_pyproject_toml = r#"
+        [project]
+        name = "member-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        test = ["bar<2"]
+
+        [tool.uv.sources]
+        bar = { path = "vendor/bar", extra = "test" }
+    "#;
+    member_b
+        .child("pyproject.toml")
+        .write_str(member_b_pyproject_toml)?;
+    member_b.child("vendor").child("bar").create_dir_all()?;
+    member_b
+        .child("vendor")
+        .child("bar")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+            [project]
+            name = "bar"
+            version = "1.0.0"
+            "#,
+        )?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("--package")
+            .arg("member-a")
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    Add bar v1.0.0
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(member_a.child("pyproject.toml"))?,
+        member_a_pyproject_toml
+    );
+    assert_eq!(
+        fs_err::read_to_string(member_b.child("pyproject.toml"))?,
+        member_b_pyproject_toml
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_rejects_selected_member_non_registry_source() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let workspace_pyproject_toml = r#"
+        [tool.uv.workspace]
+        members = ["member-a", "member-b"]
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(workspace_pyproject_toml)?;
+
+    let member_a = context.temp_dir.child("member-a");
+    member_a.create_dir_all()?;
+    let member_a_pyproject_toml = r#"
+        [project]
+        name = "member-a"
+        version = "0.1.0"
+        dependencies = ["requests>=2"]
+
+        [tool.uv.sources]
+        requests = { path = "vendor/requests" }
+    "#;
+    member_a
+        .child("pyproject.toml")
+        .write_str(member_a_pyproject_toml)?;
+
+    let member_b = context.temp_dir.child("member-b");
+    member_b.create_dir_all()?;
+    let member_b_pyproject_toml = r#"
+        [project]
+        name = "member-b"
+        version = "0.1.0"
+        dependencies = []
+    "#;
+    member_b
+        .child("pyproject.toml")
+        .write_str(member_b_pyproject_toml)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .upgrade()
+            .arg("--package")
+            .arg("member-a")
+            .arg("requests"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Dependency `requests` uses a non-registry source in `tool.uv.sources` and cannot be upgraded
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(member_a.child("pyproject.toml"))?,
+        member_a_pyproject_toml
+    );
+    assert_eq!(
+        fs_err::read_to_string(member_b.child("pyproject.toml"))?,
+        member_b_pyproject_toml
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_stale_unselected_lockfile_entry_is_preference() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let workspace_pyproject_toml = format!(
+        r#"
+        [tool.uv.workspace]
+        members = ["member-a", "member-b"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&workspace_pyproject_toml)?;
+
+    let member_a = context.temp_dir.child("member-a");
+    member_a.create_dir_all()?;
+    let member_a_initial_pyproject_toml = r#"
+        [project]
+        name = "member-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#;
+    member_a
+        .child("pyproject.toml")
+        .write_str(member_a_initial_pyproject_toml)?;
+
+    let member_b = context.temp_dir.child("member-b");
+    member_b.create_dir_all()?;
+    let member_b_initial_pyproject_toml = r#"
+        [project]
+        name = "member-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar<2"]
+    "#;
+    member_b
+        .child("pyproject.toml")
+        .write_str(member_b_initial_pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    "
+    );
+    let lock = fs_err::read(context.temp_dir.child("uv.lock"))?;
+
+    let member_a_pyproject_toml = member_a_initial_pyproject_toml
+        .replace("dependencies = []", r#"dependencies = ["foo==1"]"#);
+    member_a
+        .child("pyproject.toml")
+        .write_str(&member_a_pyproject_toml)?;
+    let member_b_pyproject_toml =
+        member_b_initial_pyproject_toml.replace(r#"dependencies = ["bar<2"]"#, "dependencies = []");
+    member_b
+        .child("pyproject.toml")
+        .write_str(&member_b_pyproject_toml)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("--package")
+            .arg("member-a")
+            .arg("foo")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add foo v2.0.0
+    Updated requirement: `foo==1` -> `foo==2.0.0`
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(member_a.child("pyproject.toml"))?,
+        member_a_pyproject_toml.replace("foo==1", "foo==2.0.0")
+    );
+    assert_eq!(
+        fs_err::read_to_string(member_b.child("pyproject.toml"))?,
+        member_b_pyproject_toml
+    );
+    assert_eq!(fs_err::read(context.temp_dir.child("uv.lock"))?, lock);
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
 fn upgrade_requires_current_project() {
     let context = uv_test::test_context_with_versions!(&[]);
 
@@ -3423,7 +4171,7 @@ fn upgrade_rejects_virtual_workspace_root() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: `uv upgrade` requires a project with a `[project]` table
+    error: `uv upgrade` requires a project with a `[project]` table; use `--package` or `--all-packages` to select workspace members
     "
     );
 
@@ -3431,14 +4179,81 @@ fn upgrade_rejects_virtual_workspace_root() -> Result<()> {
 }
 
 #[test]
-fn upgrade_rejects_multi_member_workspace() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]);
-    let pyproject_toml = r#"
+fn upgrade_updates_workspace_root_project_by_default() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
         [project]
         name = "example"
         version = "0.1.0"
-        dependencies = ["requests>=2"]
+        requires-python = ">=3.12"
+        dependencies = ["foo==1"]
 
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    let member_pyproject_toml = r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#;
+    member
+        .child("pyproject.toml")
+        .write_str(member_pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("foo")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add foo v2.0.0
+    Updated requirement: `foo==1` -> `foo==2.0.0`
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        pyproject_toml.replace("foo==1", "foo==2.0.0")
+    );
+    assert_eq!(
+        fs_err::read_to_string(member.child("pyproject.toml"))?,
+        member_pyproject_toml
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_reports_missing_workspace_package() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = r#"
         [tool.uv.workspace]
         members = ["member"]
     "#;
@@ -3446,7 +4261,8 @@ fn upgrade_rejects_multi_member_workspace() -> Result<()> {
         .temp_dir
         .child("pyproject.toml")
         .write_str(pyproject_toml)?;
-    context.temp_dir.child("member").create_dir_all()?;
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
     context
         .temp_dir
         .child("member")
@@ -3461,14 +4277,18 @@ fn upgrade_rejects_multi_member_workspace() -> Result<()> {
 
     uv_snapshot!(
         context.filters(),
-        context.upgrade().arg("requests"),
+        context
+            .upgrade()
+            .arg("--package")
+            .arg("missing")
+            .arg("requests"),
         @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: `uv upgrade` does not support workspaces with multiple members yet
+    error: The workspace does not have a member missing: [TEMP_DIR]/
     "
     );
 
