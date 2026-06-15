@@ -49,6 +49,7 @@ impl LoweredRequirement {
         project_indexes: &'data [Index],
         extra: Option<&ExtraName>,
         group: Option<&GroupName>,
+        source_applicability: Option<MarkerTree>,
         locations: &'data IndexLocations,
         workspace: &'data Workspace,
         git_member: Option<&'data GitWorkspaceMember<'data>>,
@@ -66,7 +67,9 @@ impl LoweredRequirement {
             (None, RequirementOrigin::Project)
         };
 
-        // If the source only applies to a given extra or dependency group, filter it out.
+        // If the source only applies to a given extra or dependency group, filter it out. `uv
+        // upgrade` also filters sources that are outside the temporary resolution domain, while
+        // ordinary metadata lowering keeps source validation independent of applicability markers.
         let sources = sources.map(|sources| {
             sources
                 .iter()
@@ -83,7 +86,10 @@ impl LoweredRequirement {
                         return false;
                     }
 
-                    true
+                    source_applicability.is_none_or(|source_applicability| {
+                        let requirement_marker = requirement.marker.and(source_applicability);
+                        !source.marker().is_disjoint(requirement_marker)
+                    })
                 })
                 .cloned()
                 .collect::<Sources>()
