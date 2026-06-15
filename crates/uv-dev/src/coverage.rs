@@ -176,7 +176,7 @@ pub(crate) fn rustc_wrapper() -> Option<Result<ExitStatus>> {
 
     Some(
         Command::new(&rustc)
-            .args(["-C", "instrument-coverage"])
+            .args(["-Cinstrument-coverage"])
             .args(arguments)
             .status()
             .with_context(|| format!("failed to run `{}`", Path::new(&rustc).display())),
