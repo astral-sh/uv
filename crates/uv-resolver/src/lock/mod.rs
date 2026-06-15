@@ -3785,6 +3785,10 @@ impl PackageWire {
         requires_python: &RequiresPython,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Package, LockError> {
+        if matches!(&self.id.source, Source::Registry(_)) && self.id.version.is_none() {
+            return Err(LockErrorKind::MissingPackageVersion { name: self.id.name }.into());
+        }
+
         // Consistency check
         if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
             if let Some(version) = &self.id.version {
@@ -6541,6 +6545,12 @@ enum LockErrorKind {
     #[error("Dependency `{name}` has missing `version` field but has more than one matching package", name = name.cyan())]
     MissingDependencyVersion {
         /// The name of the dependency that is missing a `version` field.
+        name: PackageName,
+    },
+    /// An error that occurs when a package sourced from a registry is missing a `version` field.
+    #[error("Package `{name}` has missing `version` field but is sourced from a registry", name = name.cyan())]
+    MissingPackageVersion {
+        /// The name of the package that is missing a `version` field.
         name: PackageName,
     },
     /// An error that occurs when an ambiguous `package.dependency` is

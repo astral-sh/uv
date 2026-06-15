@@ -5437,6 +5437,51 @@ fn sync_ignore_extras_check_when_no_provides_extras() -> Result<()> {
     Ok(())
 }
 
+/// Regression test for: <https://github.com/astral-sh/uv/issues/19854>
+#[test]
+fn sync_frozen_rejects_registry_package_missing_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 1
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [{ name = "anyio" }]
+
+        [[package]]
+        name = "anyio"
+        source = { registry = "https://example.invalid/simple" }
+        sdist = { url = "https://example.invalid/anyio-4.0.0.tar.gz", hash = "sha256:0000000000000000000000000000000000000000000000000000000000000000", size = 1 }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--offline"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      Caused by: Package `anyio` has missing `version` field but is sourced from a registry
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn sync_workspace_members_with_transitive_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
