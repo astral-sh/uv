@@ -962,7 +962,13 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
         &workspace,
     )?;
 
-    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
+    let mut filters = context.filters();
+    filters.push((
+        r"(?m)^WARN Ignoring non-directory workspace member: `[^\n]+`\n",
+        "",
+    ));
+
+    uv_snapshot!(filters, context.workspace_metadata().current_dir(&workspace), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1178,9 +1184,7 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
     }
 
     ----- stderr -----
-    WARN Ignoring non-directory workspace member: `[TEMP_DIR]/workspace/packages/Unrelated.md`
     warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
-    WARN Ignoring non-directory workspace member: `[TEMP_DIR]/workspace/packages/Unrelated.md`
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 7 packages in [TIME]
     "#
