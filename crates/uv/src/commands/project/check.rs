@@ -253,11 +253,20 @@ pub(crate) async fn check(
 
         let state = UniversalState::default();
         let lock_target = LockTarget::Script(script);
-        let (lock, environment) = if no_sync {
+        let _environment_lock;
+        let lock = if no_sync {
             debug!("Skipping environment synchronization due to `--no-sync`");
-            (lock_target.read().await?, None)
+
+            match lock_target.read().await {
+                Ok(lock) => lock,
+                Err(err) => {
+                    debug!("Failed to read lockfile; skipping workspace metadata: {err}");
+                    None
+                }
+            }
         } else {
-            let _lock = venv
+            // Keep the environment locked through synchronization and metadata collection.
+            _environment_lock = venv
                 .lock()
                 .await
                 .inspect_err(|err| {
@@ -340,12 +349,12 @@ pub(crate) async fn check(
                 }
                 Err(err) => return Err(err.into()),
             }
-            (Some(result.into_lock()), Some(&venv))
+            Some(result.into_lock())
         };
 
         if let Some(lock) = lock {
             let metadata = crate::commands::workspace::metadata::metadata_from_target(
-                environment,
+                (!no_sync).then_some(&venv),
                 InstallTarget::Script {
                     script,
                     lock: &lock,

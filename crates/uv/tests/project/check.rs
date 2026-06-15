@@ -565,6 +565,12 @@ fn check_script() -> Result<()> {
     let context =
         uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
 
+    // If `ty` accidentally uses the workspace environment, it will see this incompatible stub
+    // instead of the script dependency and report that `IniConfig` is not callable.
+    let workspace_iniconfig = context.site_packages().join("iniconfig");
+    fs_err::create_dir_all(&workspace_iniconfig)?;
+    fs_err::write(workspace_iniconfig.join("__init__.pyi"), "IniConfig: int\n")?;
+
     let script = context.temp_dir.child("-script.py");
     script.write_str(indoc! {r#"
         # /// script
@@ -574,7 +580,7 @@ fn check_script() -> Result<()> {
 
         import iniconfig
 
-        value: str = iniconfig.__name__
+        iniconfig.IniConfig("config.ini")
     "#})?;
     context
         .temp_dir
@@ -682,6 +688,48 @@ fn check_no_sync_errors_on_invalid_lockfile() -> Result<()> {
     1 | invalid
       |        ^
     key with no value, expected `=`
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn check_script_no_sync_ignores_invalid_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+        x: int = 1
+    "#})?;
+    context
+        .temp_dir
+        .child("script.py.lock")
+        .write_str("invalid")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--no-sync")
+            .arg("--ty-version")
+            .arg("0.0.17")
+            .env(EnvVars::RUST_LOG, "error"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     "
     );
 

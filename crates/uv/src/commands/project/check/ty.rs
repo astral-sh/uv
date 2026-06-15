@@ -147,6 +147,8 @@ pub(super) async fn run(
     command.current_dir(target_dir);
     command.arg("check");
     if let Some(check_target) = check_target {
+        // Check only the requested script. Keep the path relative to the working directory for
+        // stable diagnostics, and use `--` so option-like filenames are treated as paths.
         command.arg("--");
         command.arg(
             check_target
