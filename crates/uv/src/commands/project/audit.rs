@@ -1,6 +1,5 @@
 use itertools::Itertools as _;
 use owo_colors::OwoColorize;
-use serde::Serialize;
 use std::fmt::Write as _;
 use std::path::Path;
 
@@ -37,6 +36,9 @@ use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
+
+mod json;
+mod sarif;
 
 pub(crate) async fn audit(
     project_dir: &Path,
@@ -312,6 +314,22 @@ pub(crate) async fn audit(
         n_packages: auditable.len(),
         output_format,
         findings: all_findings,
+        artifact_uri: {
+            let lock_path = target.lock_path();
+            let artifact_path = if lock_path.is_file() {
+                lock_path.as_path()
+            } else if let LockTarget::Script(script) = target {
+                script.path.as_path()
+            } else {
+                lock_path.as_path()
+            };
+            let artifact_path = if let Ok(relative) = artifact_path.strip_prefix(project_dir) {
+                relative
+            } else {
+                artifact_path
+            };
+            artifact_path.to_string_lossy().replace('\\', "/")
+        },
     };
     display.render()
 }
@@ -321,6 +339,7 @@ struct AuditResults {
     n_packages: usize,
     output_format: AuditOutputFormat,
     findings: Vec<Finding>,
+    artifact_uri: String,
 }
 
 impl AuditResults {
@@ -328,6 +347,7 @@ impl AuditResults {
         match self.output_format {
             AuditOutputFormat::Text => self.render_text(),
             AuditOutputFormat::Json => self.render_json(),
+            AuditOutputFormat::Sarif => self.render_sarif(),
         }
     }
 
@@ -491,7 +511,7 @@ impl AuditResults {
 
     fn render_json(&self) -> Result<ExitStatus> {
         let (vulnerabilities, statuses) = self.split_findings();
-        let report = JsonReport::from_findings(self.n_packages, &vulnerabilities, &statuses);
+        let report = json::Report::from_findings(self.n_packages, &vulnerabilities, &statuses);
 
         writeln!(
             self.printer.stdout_important(),
@@ -501,156 +521,17 @@ impl AuditResults {
 
         Ok(self.exit_status())
     }
-}
 
-#[derive(Debug, Serialize)]
-struct JsonReport {
-    schema: JsonSchema,
-    summary: JsonSummary,
-    vulnerabilities: Vec<JsonVulnerability>,
-    adverse_statuses: Vec<JsonAdverseStatus>,
-}
+    fn render_sarif(&self) -> Result<ExitStatus> {
+        let (vulnerabilities, statuses) = self.split_findings();
+        let report = sarif::Report::from_findings(&vulnerabilities, &statuses, &self.artifact_uri);
 
-impl JsonReport {
-    fn from_findings(
-        n_packages: usize,
-        vulnerabilities: &[&Vulnerability],
-        statuses: &[&ProjectStatus],
-    ) -> Self {
-        let mut vulnerabilities = vulnerabilities
-            .iter()
-            .copied()
-            .map(JsonVulnerability::from)
-            .collect::<Vec<_>>();
-        vulnerabilities.sort_by(|first, second| {
-            first
-                .dependency
-                .name
-                .cmp(&second.dependency.name)
-                .then_with(|| first.dependency.version.cmp(&second.dependency.version))
-                .then_with(|| first.display_id.cmp(&second.display_id))
-        });
+        writeln!(
+            self.printer.stdout_important(),
+            "{}",
+            serde_json::to_string_pretty(&report)?
+        )?;
 
-        let mut adverse_statuses = statuses
-            .iter()
-            .copied()
-            .map(JsonAdverseStatus::from)
-            .collect::<Vec<_>>();
-        adverse_statuses.sort_by(|first, second| {
-            first
-                .name
-                .cmp(&second.name)
-                .then_with(|| first.status.cmp(&second.status))
-        });
-
-        Self {
-            schema: JsonSchema::default(),
-            summary: JsonSummary {
-                audited_packages: n_packages,
-                vulnerabilities: vulnerabilities.len(),
-                adverse_statuses: adverse_statuses.len(),
-            },
-            vulnerabilities,
-            adverse_statuses,
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Default)]
-struct JsonSchema {
-    version: JsonSchemaVersion,
-}
-
-#[derive(Debug, Serialize, Default)]
-#[serde(rename_all = "snake_case")]
-enum JsonSchemaVersion {
-    #[default]
-    Preview,
-}
-
-#[derive(Debug, Serialize)]
-struct JsonSummary {
-    audited_packages: usize,
-    vulnerabilities: usize,
-    adverse_statuses: usize,
-}
-
-#[derive(Debug, Serialize)]
-struct JsonDependency {
-    name: String,
-    version: String,
-}
-
-impl From<&Dependency> for JsonDependency {
-    fn from(dependency: &Dependency) -> Self {
-        Self {
-            name: dependency.name().to_string(),
-            version: dependency.version().to_string(),
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct JsonVulnerability {
-    dependency: JsonDependency,
-    id: String,
-    display_id: String,
-    aliases: Vec<String>,
-    summary: Option<String>,
-    description: Option<String>,
-    link: Option<String>,
-    fix_versions: Vec<String>,
-    published: Option<String>,
-    modified: Option<String>,
-}
-
-impl From<&Vulnerability> for JsonVulnerability {
-    fn from(vulnerability: &Vulnerability) -> Self {
-        Self {
-            dependency: JsonDependency::from(&vulnerability.dependency),
-            id: vulnerability.id.as_str().to_string(),
-            display_id: vulnerability.best_id().as_str().to_string(),
-            aliases: vulnerability
-                .aliases
-                .iter()
-                .map(|id| id.as_str().to_string())
-                .collect(),
-            summary: vulnerability.summary.clone(),
-            description: vulnerability.description.clone(),
-            link: vulnerability
-                .link
-                .as_ref()
-                .map(|link| link.as_str().to_string()),
-            fix_versions: vulnerability
-                .fix_versions
-                .iter()
-                .map(std::string::ToString::to_string)
-                .collect(),
-            published: vulnerability
-                .published
-                .as_ref()
-                .map(std::string::ToString::to_string),
-            modified: vulnerability
-                .modified
-                .as_ref()
-                .map(std::string::ToString::to_string),
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct JsonAdverseStatus {
-    name: String,
-    status: String,
-    reason: Option<String>,
-}
-
-impl From<&ProjectStatus> for JsonAdverseStatus {
-    fn from(status: &ProjectStatus) -> Self {
-        Self {
-            name: status.name.to_string(),
-            status: status.status.to_string(),
-            reason: status.reason.clone(),
-        }
+        Ok(self.exit_status())
     }
 }
