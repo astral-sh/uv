@@ -12,6 +12,20 @@ use crate::{
     MarkerValueVersion, MarkerWarningKind, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
 };
 
+struct VersionWarningReporter<'a, R> {
+    reporter: &'a mut R,
+    invalid_version: bool,
+}
+
+impl<R: Reporter> Reporter for VersionWarningReporter<'_, R> {
+    fn report(&mut self, kind: MarkerWarningKind, warning: String) {
+        if kind == MarkerWarningKind::Pep440Error {
+            self.invalid_version = true;
+        }
+        self.reporter.report(kind, warning);
+    }
+}
+
 /// ```text
 /// version_cmp   = wsp* <'<=' | '<' | '!=' | '==' | '>=' | '>' | '~=' | '==='>
 /// marker_op     = version_cmp | (wsp* 'in') | (wsp* 'not' wsp+ 'in')
@@ -193,7 +207,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                     MarkerWarningKind::Pep440Error,
                     format!(
                         "Expected double quoted PEP 440 version to compare with {key},
-                        found {r_value}, will be ignored"
+                        found {r_value}, will evaluate to false"
                     ),
                 );
 
@@ -417,7 +431,7 @@ fn parse_version_in_expr(
                     MarkerWarningKind::Pep440Error,
                     format!(
                         "Expected PEP 440 versions to compare with {key}, found {value},
-                        will be ignored: {err}"
+                        will evaluate to false: {err}"
                     ),
                 );
 
@@ -451,7 +465,7 @@ fn parse_version_expr(
                 MarkerWarningKind::Pep440Error,
                 format!(
                     "Expected PEP 440 version to compare with {key}, found {value},
-                    will be ignored: {err}"
+                    will evaluate to false: {err}"
                 ),
             );
 
@@ -464,7 +478,7 @@ fn parse_version_expr(
             MarkerWarningKind::Pep440Error,
             format!(
                 "Expected PEP 440 version operator to compare {key} with `{version}`,
-                    found `{marker_operator}`, will be ignored",
+                    found `{marker_operator}`, will evaluate to false",
                 version = pattern.version()
             ),
         );
@@ -506,7 +520,7 @@ fn parse_inverted_version_expr(
                 MarkerWarningKind::Pep440Error,
                 format!(
                     "Expected PEP 440 version to compare with {key}, found {value},
-                    will be ignored: {err}"
+                    will evaluate to false: {err}"
                 ),
             );
 
@@ -519,7 +533,7 @@ fn parse_inverted_version_expr(
             MarkerWarningKind::Pep440Error,
             format!(
                 "Expected PEP 440 version operator to compare {key} with `{version}`,
-                    found `{marker_operator}`, will be ignored"
+                    found `{marker_operator}`, will evaluate to false"
             ),
         );
 
@@ -585,7 +599,16 @@ fn parse_marker_expr<T: Pep508Url>(
         cursor.next_expect_char(')', start_pos)?;
         Ok(marker)
     } else {
-        Ok(parse_marker_key_op_value(cursor, reporter)?.map(MarkerTree::expression))
+        let mut reporter = VersionWarningReporter {
+            reporter,
+            invalid_version: false,
+        };
+        let expression = parse_marker_key_op_value(cursor, &mut reporter)?;
+        if reporter.invalid_version {
+            Ok(Some(MarkerTree::FALSE))
+        } else {
+            Ok(expression.map(MarkerTree::expression))
+        }
     }
 }
 

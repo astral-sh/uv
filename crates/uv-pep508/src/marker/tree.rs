@@ -2113,6 +2113,19 @@ mod test {
     }
 
     #[test]
+    fn invalid_version_marker_evaluates_to_false() {
+        assert_eq!(m("python_version >= '3.9.'"), MarkerTree::FALSE);
+        assert_eq!(
+            m("python_version >= '3.9.' and sys_platform == 'linux'"),
+            MarkerTree::FALSE
+        );
+        assert_eq!(
+            m("python_version >= '3.9.' or sys_platform == 'linux'"),
+            m("sys_platform == 'linux'")
+        );
+    }
+
+    #[test]
     #[cfg(feature = "tracing")]
     #[tracing_test::traced_test]
     fn warnings1() {
@@ -2205,11 +2218,11 @@ mod test {
             .evaluate(&env37, &[]);
         assert!(!result);
 
-        // Meaningless expressions are ignored, so this is always true.
+        // Invalid version expressions evaluate to false.
         let result = MarkerTree::from_str("'3.*' == python_version")
             .unwrap()
             .evaluate(&env37, &[]);
-        assert!(result);
+        assert!(!result);
     }
 
     #[test]
@@ -2459,14 +2472,12 @@ mod test {
             "python_version in '3.9.0'",
             "python_full_version == '3.9.*'",
         );
-        // e.g., using a version that is not PEP 440 compliant is considered arbitrary
-        assert_true("python_version in 'foo'");
-        // e.g., including `*` versions, which would require tracking a version specifier
-        assert_true("python_version in '3.9.*'");
-        // e.g., when non-whitespace separators are present
-        assert_true("python_version in '3.9, 3.10'");
-        assert_true("python_version in '3.9,3.10'");
-        assert_true("python_version in '3.9 or 3.10'");
+        // Invalid PEP 440 versions evaluate to false.
+        assert_false("python_version in 'foo'");
+        assert_false("python_version in '3.9.*'");
+        assert_false("python_version in '3.9, 3.10'");
+        assert_false("python_version in '3.9,3.10'");
+        assert_false("python_version in '3.9 or 3.10'");
 
         // This is an edge case that happens to be supported, but is not critical to support.
         assert_simplifies(
@@ -3031,9 +3042,8 @@ mod test {
 
     #[test]
     fn test_arbitrary_disjointness() {
-        // `python_version == 'Linux'` is nonsense and ignored, thus the first marker
-        // is always `true` and not disjoint.
-        assert!(!is_disjoint(
+        // Invalid version expressions evaluate to false, so they are disjoint from all markers.
+        assert!(is_disjoint(
             "python_version == 'Linux'",
             "python_full_version == '3.7.1'"
         ));
@@ -3204,8 +3214,8 @@ mod test {
     fn test_arbitrary() {
         assert!(m("'wat' == 'wat'").is_true());
         assert!(m("os_name ~= 'wat'").is_true());
-        assert!(m("python_version == 'Linux'").is_true());
-        assert!(m("os_name ~= 'wat' or 'wat' == 'wat' and python_version == 'Linux'").is_true());
+        assert!(m("python_version == 'Linux'").is_false());
+        assert!(m("os_name ~= 'wat' or 'wat' == 'wat' and python_version == 'Linux'").is_false());
     }
 
     #[test]
