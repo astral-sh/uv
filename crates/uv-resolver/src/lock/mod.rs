@@ -3804,6 +3804,15 @@ impl PackageWire {
             }
         }
 
+        // A registry-source package must carry a version; downstream conversions
+        // (e.g. `to_source_dist`, `satisfies`) rely on it.
+        if matches!(self.id.source, Source::Registry(_)) && self.id.version.is_none() {
+            return Err(LockErrorKind::MissingPackageVersion {
+                name: self.id.name.clone(),
+            }
+            .into());
+        }
+
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
                 .map(|dep| dep.unwire(requires_python, unambiguous_package_ids))
@@ -6543,6 +6552,13 @@ enum LockErrorKind {
         /// The name of the dependency that is missing a `version` field.
         name: PackageName,
     },
+    /// An error that occurs when a registry-source package is missing a
+    /// `version` field.
+    #[error("Package `{name}` from a registry source has a missing `version` field", name = name.cyan())]
+    MissingPackageVersion {
+        /// The name of the package that is missing a `version` field.
+        name: PackageName,
+    },
     /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `source` field.
     #[error("Dependency `{name}` has missing `source` field but has more than one matching package", name = name.cyan())]
@@ -7144,6 +7160,21 @@ source = { registry = "https://pypi.org/simple" }
 "#;
         let result = toml::from_str::<Lock>(data).unwrap_err();
         assert_stripped_snapshot!(result, @"Dependency `a` has missing `version` field but has more than one matching package");
+    }
+
+    #[test]
+    fn missing_package_version_registry() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"Package `a` from a registry source has a missing `version` field");
     }
 
     #[test]
