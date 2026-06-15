@@ -66,6 +66,9 @@ pub struct Metadata {
     /// Information about the synchronized environment, when `--sync` was used.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     environment: Option<MetadataEnvironment>,
+    /// Information about the script root, when metadata was requested for a script.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    script: Option<MetadataScript>,
     /// The version of python required by the workspace
     ///
     /// Every `marker` we emit implicitly assumes this constraint to keep things clean
@@ -108,6 +111,15 @@ struct MetadataEnvironment {
     root: PortablePathBuf,
 }
 
+/// The script entry-point.
+#[derive(Debug, serde::Serialize)]
+struct MetadataScript {
+    /// Absolute path to the script.
+    path: PortablePathBuf,
+    /// Key for the script's node in the `resolution` graph.
+    id: MetadataNodeIdFlat,
+}
+
 /// Info for looking up workspace members, most information is stored in the node behind `id`
 #[derive(Debug, serde::Serialize)]
 struct MetadataWorkspaceMember {
@@ -126,7 +138,7 @@ struct MetadataModuleOwner {
     package_id: MetadataNodeIdFlat,
 }
 
-/// A node in the dependency graph
+/// A node in the dependency graph.
 ///
 /// There are 4 kinds of nodes:
 ///
@@ -216,6 +228,15 @@ impl MetadataNode {
         Self::new(MetadataNodeId::from_package_id(workspace_root, id, kind))
     }
 
+    fn from_script(path: PortablePathBuf, dependencies: Vec<MetadataDependency>) -> Self {
+        let mut node = Self::new(MetadataNodeId::Script(MetadataScriptNodeId {
+            kind: MetadataScriptNodeKind::Script,
+            path,
+        }));
+        node.dependencies = dependencies;
+        node
+    }
+
     fn add_dependency(&mut self, workspace_root: &PortablePathBuf, dependency: &Dependency) {
         let extras = dependency.extra();
         if extras.is_empty() {
@@ -244,11 +265,79 @@ impl MetadataNode {
     }
 }
 
-/// The unique key for every node in the graph
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+enum MetadataScriptNodeKind {
+    Script,
+}
+
+fn script_root_dependencies(
+    workspace_root: &PortablePathBuf,
+    lock: &Lock,
+) -> Vec<MetadataDependency> {
+    let mut dependencies = Vec::new();
+
+    // Root requirements retain names, extras, and markers rather than resolved package IDs. Match
+    // them to the locked packages using the same name and fork-marker logic as lock export.
+    for requirement in lock.requirements() {
+        for package in lock
+            .packages()
+            .iter()
+            .filter(|package| package.name() == &requirement.name)
+        {
+            let Some(marker) = lock.root_requirement_marker(requirement, package) else {
+                continue;
+            };
+
+            let marker = marker.try_to_string();
+            let mut has_extra_node = false;
+            for extra in requirement
+                .extras
+                .iter()
+                .filter(|extra| package.optional_dependencies.contains_key(*extra))
+            {
+                let id = MetadataNodeId::from_package_id(
+                    workspace_root,
+                    &package.id,
+                    MetadataNodeKind::Extra(extra.clone()),
+                );
+                dependencies.push(MetadataDependency {
+                    id: id.to_flat(),
+                    marker: marker.clone(),
+                });
+                has_extra_node = true;
+            }
+
+            if !has_extra_node {
+                let id = MetadataNodeId::from_package_id(
+                    workspace_root,
+                    &package.id,
+                    MetadataNodeKind::Package,
+                );
+                dependencies.push(MetadataDependency {
+                    id: id.to_flat(),
+                    marker,
+                });
+            }
+        }
+    }
+
+    dependencies
+}
+
+/// The unique key for every node in the graph.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(untagged)]
+enum MetadataNodeId {
+    Package(MetadataPackageNodeId),
+    Script(MetadataScriptNodeId),
+}
+
+/// The unique key for a package-derived node.
 ///
 /// (It's not entirely clear to me that two nodes can differ only by `source` but it doesn't hurt.)
 #[derive(Debug, Clone, serde::Serialize)]
-struct MetadataNodeId {
+struct MetadataPackageNodeId {
     /// The name of the package
     name: PackageName,
     /// The version of the package, if any could be found (source trees may have no version)
@@ -260,11 +349,17 @@ struct MetadataNodeId {
     kind: MetadataNodeKind,
 }
 
+/// The unique key for a script node.
+#[derive(Debug, Clone, serde::Serialize)]
+struct MetadataScriptNodeId {
+    kind: MetadataScriptNodeKind,
+    /// Absolute path to the script.
+    path: PortablePathBuf,
+}
+
 /// This is intended to be an opaque unique id for referring to a node
 ///
 /// It's human readable for convenience but parsing it or relying on it is inadvisable.
-/// As currently implemented this is just a concatenation of the 4 fields in `MetadataNodeId`
-/// which every node includes, so parsing it is just making more work for yourself.
 type MetadataNodeIdFlat = String;
 
 impl MetadataNodeId {
@@ -277,11 +372,18 @@ impl MetadataNodeId {
         let version = id.version.clone();
         let source = MetadataSource::from_source(workspace_root, id.source.clone());
 
-        Self {
+        Self::Package(MetadataPackageNodeId {
             name,
             version,
             source,
             kind,
+        })
+    }
+
+    fn as_package(&self) -> Option<&MetadataPackageNodeId> {
+        match self {
+            Self::Package(package) => Some(package),
+            Self::Script(_) => None,
         }
     }
 
@@ -292,9 +394,16 @@ impl MetadataNodeId {
 
 impl Display for MetadataNodeId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.version {
-            Some(version) => write!(f, "{}{}=={version}@{}", self.name, self.kind, self.source),
-            None => write!(f, "{}{}@{}", self.name, self.kind, self.source),
+        match self {
+            Self::Package(package) => match &package.version {
+                Some(version) => write!(
+                    f,
+                    "{}{}=={version}@{}",
+                    package.name, package.kind, package.source
+                ),
+                None => write!(f, "{}{}@{}", package.name, package.kind, package.source),
+            },
+            Self::Script(script) => write!(f, "script+{}", script.path),
         }
     }
 }
@@ -704,11 +813,11 @@ impl MetadataConflictItem {
             .iter()
             .find(|member| &member.name == item.package())
             .and_then(|member| {
-                let package_node = resolve.get(&member.id)?;
-                let id = MetadataNodeId {
+                let package_id = resolve.get(&member.id)?.id.as_package()?;
+                let id = MetadataNodeId::Package(MetadataPackageNodeId {
                     kind: kind.to_node_kind(),
-                    ..package_node.id.clone()
-                };
+                    ..package_id.clone()
+                });
                 Some(id.to_flat())
             });
         Self {
@@ -750,16 +859,28 @@ impl Metadata {
         Ok(Self::from_lock_target(
             workspace.install_path(),
             Some(workspace),
+            None,
             lock,
         ))
     }
 
-    /// Construct [`Metadata`] for a non-workspace target from a uv lockfile.
-    pub fn from_lock_root(workspace_root: &Path, lock: &Lock) -> Result<Self, MetadataError> {
-        Ok(Self::from_lock_target(workspace_root, None, lock))
+    /// Construct [`Metadata`] for a script from a uv lockfile.
+    pub fn from_script(script_path: &Path, lock: &Lock) -> Result<Self, MetadataError> {
+        let workspace_root = script_path.parent().unwrap_or_else(|| Path::new(""));
+        Ok(Self::from_lock_target(
+            workspace_root,
+            None,
+            Some(script_path),
+            lock,
+        ))
     }
 
-    fn from_lock_target(workspace_root: &Path, workspace: Option<&Workspace>, lock: &Lock) -> Self {
+    fn from_lock_target(
+        workspace_root: &Path,
+        workspace: Option<&Workspace>,
+        script_path: Option<&Path>,
+        lock: &Lock,
+    ) -> Self {
         let mut resolve = BTreeMap::new();
         let mut members = Vec::new();
         let workspace_root = PortablePathBuf::from(workspace_root);
@@ -825,7 +946,7 @@ impl Metadata {
                 workspace.and_then(|workspace| workspace.packages().get(lock_package.name()))
             {
                 let member = MetadataWorkspaceMember {
-                    name: meta_package.id.name.clone(),
+                    name: lock_package.name().clone(),
                     path: normalize_workspace_relative_path(
                         &workspace_root,
                         workspace_package.root().as_path(),
@@ -849,6 +970,16 @@ impl Metadata {
             resolve.insert(meta_package.id.to_flat(), meta_package);
         }
 
+        let script = script_path.map(|path| {
+            let path = PortablePathBuf::from(path);
+            let node = MetadataNode::from_script(
+                path.clone(),
+                script_root_dependencies(&workspace_root, lock),
+            );
+            let id = node.id.to_flat();
+            resolve.insert(id.clone(), node);
+            MetadataScript { path, id }
+        });
         let conflicts = MetadataConflicts::from_conflicts(&members, &resolve, &lock.conflicts);
 
         Self {
@@ -857,6 +988,7 @@ impl Metadata {
             },
             conflicts,
             environment: None,
+            script,
             module_owners: BTreeMap::new(),
             workspace_root,
             requires_python: lock.requires_python.clone(),
@@ -870,12 +1002,12 @@ impl Metadata {
         dist: &ResolvedDist,
     ) -> Result<String, MetadataError> {
         let source = Source::from_resolved_dist(dist, workspace_root.as_ref())?;
-        Ok(MetadataNodeId {
+        Ok(MetadataNodeId::Package(MetadataPackageNodeId {
             name: dist.name().clone(),
             version: dist.version().cloned(),
             source: MetadataSource::from_source(workspace_root, source),
             kind: MetadataNodeKind::Package,
-        }
+        })
         .to_flat())
     }
 

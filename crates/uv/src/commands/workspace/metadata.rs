@@ -249,7 +249,7 @@ pub(crate) async fn metadata(
     }
 }
 
-/// Build workspace metadata from an existing lock and environment without synchronizing it.
+/// Build metadata from an existing lock and environment without synchronizing it.
 pub(crate) fn metadata_from_target(
     environment: Option<&PythonEnvironment>,
     target: InstallTarget<'_>,
@@ -281,10 +281,7 @@ fn metadata_for_target(target: InstallTarget<'_>) -> Result<Metadata> {
         | InstallTarget::NonProjectWorkspace { workspace, lock } => {
             Ok(Metadata::from_lock(workspace, lock)?)
         }
-        InstallTarget::Script { script, lock } => Ok(Metadata::from_lock_root(
-            script.path.parent().unwrap_or_else(|| Path::new("")),
-            lock,
-        )?),
+        InstallTarget::Script { script, lock } => Ok(Metadata::from_script(&script.path, lock)?),
     }
 }
 

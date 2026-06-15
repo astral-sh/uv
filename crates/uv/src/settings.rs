@@ -2979,7 +2979,7 @@ impl FormatSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct CheckSettings {
     pub(crate) ty_path: Option<PathBuf>,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     pub(crate) script: Option<PathBuf>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,

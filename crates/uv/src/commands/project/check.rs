@@ -549,7 +549,6 @@ pub(crate) async fn check(
             },
         };
         let metadata = crate::commands::workspace::metadata::metadata_from_target(
-            project.workspace(),
             (!no_sync).then_some(&venv),
             target,
             &extras,

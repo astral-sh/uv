@@ -16,6 +16,17 @@ fn write_wheel(
     dist_info_prefix: &str,
     files: &[(&str, &str)],
 ) -> Result<()> {
+    write_wheel_with_metadata(path, name, "0.1.0", dist_info_prefix, "", files)
+}
+
+fn write_wheel_with_metadata(
+    path: &Path,
+    name: &str,
+    version: &str,
+    dist_info_prefix: &str,
+    additional_metadata: &str,
+    files: &[(&str, &str)],
+) -> Result<()> {
     let mut writer = ZipFileWriter::new(Vec::new());
     let mut record = Vec::new();
 
@@ -27,10 +38,15 @@ fn write_wheel(
 
     let metadata_path = format!("{dist_info_prefix}.dist-info/METADATA");
     let entry = ZipEntryBuilder::new(metadata_path.clone().into(), Compression::Stored);
-    block_on(writer.write_entry_whole(
-        entry,
-        format!("Metadata-Version: 2.1\nName: {name}\nVersion: 0.1.0\n").as_bytes(),
-    ))?;
+    block_on(
+        writer.write_entry_whole(
+            entry,
+            format!(
+                "Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n{additional_metadata}"
+            )
+            .as_bytes(),
+        ),
+    )?;
     record.push(format!("{metadata_path},,"));
 
     let wheel_path = format!("{dist_info_prefix}.dist-info/WHEEL");
@@ -136,6 +152,10 @@ import iniconfig
       "environment": {
         "root": "[CACHE_DIR]/environments-v2/script-[HASH]"
       },
+      "script": {
+        "path": "[TEMP_DIR]/script.py",
+        "id": "script+[TEMP_DIR]/script.py"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -192,6 +212,15 @@ import iniconfig
               "filename": "iniconfig-2.0.0-py3-none-any.whl"
             }
           ]
+        },
+        "script+[TEMP_DIR]/script.py": {
+          "kind": "script",
+          "path": "[TEMP_DIR]/script.py",
+          "dependencies": [
+            {
+              "id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+            }
+          ]
         }
       }
     }
@@ -203,6 +232,185 @@ import iniconfig
     );
 
     assert!(!context.temp_dir.child("script.py.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_script_no_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let script = context.temp_dir.child("script.py");
+    script.write_str(
+        r#"# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
+
+print("Hello, world!")
+"#,
+    )?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .workspace_metadata()
+            .arg("--script")
+            .arg(script.path()),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "script": {
+        "path": "[TEMP_DIR]/script.py",
+        "id": "script+[TEMP_DIR]/script.py"
+      },
+      "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
+      "resolution": {
+        "script+[TEMP_DIR]/script.py": {
+          "kind": "script",
+          "path": "[TEMP_DIR]/script.py",
+          "dependencies": []
+        }
+      }
+    }
+
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    Resolved in [TIME]
+    "#
+    );
+
+    assert!(!context.temp_dir.child("script.py.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_script_dependency_edges() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context
+        .temp_dir
+        .child("metadata_edge_child-0.1.0-py3-none-any.whl");
+    write_wheel(
+        child.path(),
+        "metadata-edge-child",
+        "metadata_edge_child-0.1.0",
+        &[],
+    )?;
+    let child_url = Url::from_file_path(child.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    let first = context
+        .temp_dir
+        .child("metadata_edge-1.0.0-py3-none-any.whl");
+    write_wheel_with_metadata(
+        first.path(),
+        "metadata-edge",
+        "1.0.0",
+        "metadata_edge-1.0.0",
+        &format!(
+            "Provides-Extra: feature\nRequires-Dist: metadata-edge-child @ {child_url}; extra == 'feature'\n"
+        ),
+        &[],
+    )?;
+    let first_url = Url::from_file_path(first.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    let second = context
+        .temp_dir
+        .child("metadata_edge-2.0.0-py3-none-any.whl");
+    write_wheel_with_metadata(
+        second.path(),
+        "metadata-edge",
+        "2.0.0",
+        "metadata_edge-2.0.0",
+        &format!(
+            "Provides-Extra: feature\nRequires-Dist: metadata-edge-child @ {child_url}; extra == 'feature'\n"
+        ),
+        &[],
+    )?;
+    let second_url = Url::from_file_path(second.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(&format!(
+        r#"# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#   "metadata-edge[feature] @ {first_url}; sys_platform == 'win32'",
+#   "metadata-edge[feature] @ {second_url}; sys_platform != 'win32'",
+# ]
+# ///
+"#
+    ))?;
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--script")
+        .arg(script.path())
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+
+    let resolution = metadata["resolution"]
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("metadata resolution was not an object"))?;
+    let script_id = metadata["script"]["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("script ID was not a string"))?;
+    let script_node = resolution
+        .get(script_id)
+        .ok_or_else(|| anyhow::anyhow!("missing resolution node for {script_id}"))?;
+
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "script": metadata["script"],
+            "node": script_node,
+        }), @r#"
+        {
+          "node": {
+            "dependencies": [
+              {
+                "id": "metadata-edge[feature]==2.0.0@path+[TEMP_DIR]/metadata_edge-2.0.0-py3-none-any.whl",
+                "marker": "sys_platform != 'win32'"
+              },
+              {
+                "id": "metadata-edge[feature]==1.0.0@path+[TEMP_DIR]/metadata_edge-1.0.0-py3-none-any.whl",
+                "marker": "sys_platform == 'win32'"
+              }
+            ],
+            "kind": "script",
+            "path": "[TEMP_DIR]/script.py"
+          },
+          "script": {
+            "id": "script+[TEMP_DIR]/script.py",
+            "path": "[TEMP_DIR]/script.py"
+          }
+        }
+        "#);
+    });
+
+    for dependency in script_node["dependencies"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("script dependencies was not an array"))?
+    {
+        let id = dependency["id"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("script dependency ID was not a string"))?;
+        anyhow::ensure!(
+            resolution.contains_key(id),
+            "missing resolution node for {id}"
+        );
+    }
 
     Ok(())
 }
