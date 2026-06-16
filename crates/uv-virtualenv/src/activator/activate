@@ -66,6 +66,11 @@ deactivate () {
         export PS1
         unset _OLD_VIRTUAL_PS1
     fi
+    if [ -n "${ZSH_VERSION-}" ] && [ -n "${_VIRTUAL_ENV_PROMPT_PSVAR_INDEX-}" ] ; then
+        # Keep zsh array syntax opaque to POSIX parsers; the evaluated text is constant.
+        eval 'psvar[$_VIRTUAL_ENV_PROMPT_PSVAR_INDEX]=()'
+        unset _VIRTUAL_ENV_PROMPT_PSVAR_INDEX
+    fi
 
     unset VIRTUAL_ENV
     unset VIRTUAL_ENV_PROMPT
@@ -98,8 +103,8 @@ _OLD_VIRTUAL_PATH="$PATH"
 PATH="$VIRTUAL_ENV/{{ BIN_NAME }}:$PATH"
 export PATH
 
-if [ "x{{ VIRTUAL_PROMPT }}" != x ] ; then
-    VIRTUAL_ENV_PROMPT="{{ VIRTUAL_PROMPT }}"
+if [ "x"{{ VIRTUAL_PROMPT }} != x ] ; then
+    VIRTUAL_ENV_PROMPT={{ VIRTUAL_PROMPT }}
 else
     VIRTUAL_ENV_PROMPT=$(basename "$VIRTUAL_ENV")
 fi
@@ -113,7 +118,19 @@ fi
 
 if [ -z "${VIRTUAL_ENV_DISABLE_PROMPT-}" ] ; then
     _OLD_VIRTUAL_PS1="${PS1-}"
-    PS1="(${VIRTUAL_ENV_PROMPT}) ${PS1-}"
+    # With PROMPT_SUBST, zsh re-evaluates command substitutions stored directly in PS1.
+    # `%Nv` renders psvar[N] without another substitution pass. Append a temporary value
+    # so deactivation can remove it without changing the user's existing entries.
+    if [ -n "${ZSH_VERSION-}" ] ; then
+        _VIRTUAL_ENV_PROMPT_PSVAR_INDEX=$((${#psvar} + 1))
+        # Keep zsh array syntax opaque to POSIX parsers; the evaluated text is constant.
+        eval 'psvar+=("$VIRTUAL_ENV_PROMPT")'
+        PS1="(%${_VIRTUAL_ENV_PROMPT_PSVAR_INDEX}v) ${PS1-}"
+    elif [ -n "${BASH_VERSION-}" ] ; then
+        PS1='(${VIRTUAL_ENV_PROMPT}) '"${PS1-}"
+    else
+        PS1="(${VIRTUAL_ENV_PROMPT}) ${PS1-}"
+    fi
     export PS1
 fi
 
