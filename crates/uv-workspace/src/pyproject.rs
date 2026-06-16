@@ -1922,6 +1922,24 @@ impl Source {
             Self::Workspace { group, .. } => group.as_ref(),
         }
     }
+
+    /// Return `true` if the source matches the given extra.
+    ///
+    /// This does not evaluate the source marker or dependency group.
+    pub fn matches_extra(&self, extra: Option<&ExtraName>) -> bool {
+        self.extra().is_none_or(|target| extra == Some(target))
+    }
+
+    /// Return `true` if the source matches the given extra and dependency group.
+    ///
+    /// This does not evaluate the source marker.
+    pub fn matches_extra_and_group(
+        &self,
+        extra: Option<&ExtraName>,
+        group: Option<&GroupName>,
+    ) -> bool {
+        self.matches_extra(extra) && self.group().is_none_or(|target| group == Some(target))
+    }
 }
 
 /// The type of a dependency in a `pyproject.toml`.
@@ -1989,5 +2007,44 @@ impl OptionsMetadata for BuildBackendSettingsSchema {
         Self: Sized + 'static,
     {
         BuildBackendSettings::metadata()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use anyhow::Result;
+    use uv_normalize::{ExtraName, GroupName};
+    use uv_pep508::MarkerTree;
+
+    use super::Source;
+
+    #[test]
+    fn source_matches_extra_and_group() -> Result<()> {
+        let extra = ExtraName::from_str("gpu")?;
+        let group = GroupName::from_str("dev")?;
+        let source = Source::Workspace {
+            workspace: true,
+            editable: None,
+            marker: MarkerTree::FALSE,
+            extra: Some(extra.clone()),
+            group: Some(group.clone()),
+        };
+
+        assert!(source.matches_extra_and_group(Some(&extra), Some(&group)));
+        assert!(!source.matches_extra_and_group(None, Some(&group)));
+        assert!(!source.matches_extra_and_group(Some(&extra), None));
+
+        let unscoped = Source::Workspace {
+            workspace: true,
+            editable: None,
+            marker: MarkerTree::FALSE,
+            extra: None,
+            group: None,
+        };
+        assert!(unscoped.matches_extra_and_group(Some(&extra), Some(&group)));
+
+        Ok(())
     }
 }

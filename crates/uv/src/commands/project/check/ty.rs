@@ -57,24 +57,22 @@ pub(super) fn active_declaration(
         return Ok(None);
     }
 
+    let project_sources = project
+        .pyproject_toml()
+        .tool
+        .as_ref()
+        .and_then(|tool| tool.uv.as_ref())
+        .and_then(|uv| uv.sources.as_ref())
+        .map(ToolUvSources::inner);
     let source = if no_sources.for_package(&package_name) {
         None
     } else {
         project
-            .pyproject_toml()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.sources.as_ref())
-            .map(ToolUvSources::inner)
-            .and_then(|sources| sources.get(&package_name))
-            .or_else(|| project.workspace().sources().get(&package_name))
+            .workspace()
+            .sources_for_package(&package_name, project_sources)
             .and_then(|sources| {
                 sources.iter().find(|source| {
-                    source.extra().is_none()
-                        && source
-                            .group()
-                            .is_none_or(|group| group == &*DEV_DEPENDENCIES)
+                    source.matches_extra_and_group(None, Some(&DEV_DEPENDENCIES))
                         && source.marker().evaluate(interpreter.markers(), &[])
                 })
             })

@@ -19,7 +19,7 @@ use uv_python::{PythonDownloads, PythonPreference};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::MetadataResponse;
 use uv_settings::PythonInstallMirrors;
-use uv_workspace::pyproject::Source;
+use uv_workspace::pyproject::{Source, ToolUvSources};
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{
     DiscoveryOptions, ProjectWorkspace, VirtualProject, WorkspaceCache, WorkspaceErrorKind,
@@ -276,15 +276,17 @@ fn select_requirement(
         bail!("Dependency `{package}` refers to the current project and cannot be upgraded");
     }
 
-    let sources = project
+    let project_sources = project
         .current_project()
         .pyproject_toml()
         .tool
         .as_ref()
         .and_then(|tool| tool.uv.as_ref())
         .and_then(|uv| uv.sources.as_ref())
-        .and_then(|sources| sources.inner().get(package))
-        .or_else(|| project.workspace().sources().get(package));
+        .map(ToolUvSources::inner);
+    let sources = project
+        .workspace()
+        .sources_for_package(package, project_sources);
     if sources.is_some_and(|sources| {
         sources.iter().any(|source| {
             source_is_applicable(source, requirement.marker)
@@ -312,10 +314,7 @@ fn select_requirement(
 /// Return whether a source applies to the selected requirement declaration.
 fn source_is_applicable(source: &Source, requirement_marker: MarkerTree) -> bool {
     let extra = requirement_marker.top_level_extra_name();
-    source
-        .extra()
-        .is_none_or(|target| extra.as_deref() == Some(target))
-        && source.group().is_none()
+    source.matches_extra_and_group(extra.as_deref(), None)
         && !source.marker().is_disjoint(requirement_marker)
 }
 

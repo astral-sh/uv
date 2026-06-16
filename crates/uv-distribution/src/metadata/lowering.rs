@@ -54,33 +54,20 @@ impl LoweredRequirement {
         credentials_cache: &'data CredentialsCache,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + use<'data> + 'data {
         // Identify the source from the `tool.uv.sources` table.
-        let (sources, origin) = if let Some(source) = project_sources.get(&requirement.name) {
-            (Some(source), RequirementOrigin::Project)
-        } else if let Some(source) = workspace.sources().get(&requirement.name) {
-            (Some(source), RequirementOrigin::Workspace)
+        let origin = if project_sources.contains_key(&requirement.name) {
+            RequirementOrigin::Project
+        } else if workspace.sources().contains_key(&requirement.name) {
+            RequirementOrigin::Workspace
         } else {
-            (None, RequirementOrigin::Project)
+            RequirementOrigin::Project
         };
+        let sources = workspace.sources_for_package(&requirement.name, Some(project_sources));
 
         // If the source only applies to a given extra or dependency group, filter it out.
         let sources = sources.map(|sources| {
             sources
                 .iter()
-                .filter(|source| {
-                    if let Some(target) = source.extra() {
-                        if extra != Some(target) {
-                            return false;
-                        }
-                    }
-
-                    if let Some(target) = source.group() {
-                        if group != Some(target) {
-                            return false;
-                        }
-                    }
-
-                    true
-                })
+                .filter(|source| source.matches_extra_and_group(extra, group))
                 .cloned()
                 .collect::<Sources>()
         });
@@ -382,16 +369,10 @@ impl LoweredRequirement {
         };
 
         // If the source only applies to a given extra, filter it out.
+        let extra = requirement.marker.top_level_extra_name();
         let source = source
             .iter()
-            .filter(|source| {
-                source.extra().is_none_or(|target| {
-                    requirement
-                        .marker
-                        .top_level_extra_name()
-                        .is_some_and(|extra| &*extra == target)
-                })
-            })
+            .filter(|source| source.matches_extra(extra.as_deref()))
             .cloned()
             .collect::<Sources>();
 

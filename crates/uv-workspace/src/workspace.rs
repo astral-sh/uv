@@ -915,6 +915,20 @@ impl Workspace {
         &self.sources
     }
 
+    /// Return the sources for a package, preferring project sources over workspace sources.
+    ///
+    /// A project entry replaces the workspace entry as a whole. Callers should apply source
+    /// extra, group, and marker filters after selecting the source collection.
+    pub fn sources_for_package<'a>(
+        &'a self,
+        package_name: &PackageName,
+        project_sources: Option<&'a BTreeMap<PackageName, Sources>>,
+    ) -> Option<&'a Sources> {
+        project_sources
+            .and_then(|sources| sources.get(package_name))
+            .or_else(|| self.sources.get(package_name))
+    }
+
     /// The index table from the workspace `pyproject.toml`.
     pub fn indexes(&self) -> &[Index] {
         &self.indexes

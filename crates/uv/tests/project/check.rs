@@ -332,6 +332,73 @@ fn check_rejects_non_registry_ty_source() -> Result<()> {
 }
 
 #[test]
+fn check_prefers_member_ty_source_over_workspace_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        ty = { path = "does-not-exist/workspace", group = "dev" }
+    "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    let member_pyproject_toml = member.child("pyproject.toml");
+    member_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check().current_dir(member.path()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: The active `ty` development dependency uses the non-registry source `does-not-exist/workspace`, but `uv check` can only install standalone `ty` releases by version; use a registry source, `--ty-version`, or the `TY` environment variable
+    ");
+
+    member_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty"]
+
+        [tool.uv.sources]
+        ty = { path = "does-not-exist/member", group = "dev", marker = "python_version < '3.12'" }
+    "#})?;
+
+    // The member entry overrides the workspace entry even when none of its source variants apply.
+    uv_snapshot!(context.filters(), context.check().current_dir(member.path()).arg("--no-sync"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: The active `ty` development dependency requires an existing lockfile when `--no-sync` is used; update `uv.lock`, remove `--no-sync`, or use `--ty-version` or the `TY` environment variable
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn check_active_ty_requires_lock_with_no_sync() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
