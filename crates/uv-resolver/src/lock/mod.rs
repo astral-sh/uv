@@ -775,6 +775,64 @@ impl Lock {
         &self.manifest.dependency_groups
     }
 
+    /// Returns the package selected by a direct dependency in a dependency group.
+    ///
+    /// If `project_name` is provided, the dependency group attached to that package is used.
+    /// Otherwise, the dependency group attached directly to the lock manifest is used.
+    pub fn find_dependency_group_package(
+        &self,
+        project_name: Option<&PackageName>,
+        group: &GroupName,
+        dependency_name: &PackageName,
+        marker_environment: &MarkerEnvironment,
+    ) -> Result<Option<&Package>, String> {
+        let Some(project_name) = project_name else {
+            let Some(requirements) = self.manifest.dependency_groups.get(group) else {
+                return Ok(None);
+            };
+            if !requirements.iter().any(|requirement| {
+                &requirement.name == dependency_name
+                    && requirement.marker.evaluate(marker_environment, &[])
+            }) {
+                return Ok(None);
+            }
+            return self.find_by_markers(dependency_name, marker_environment);
+        };
+
+        let Some(project) = self.find_by_name(project_name)? else {
+            return Ok(None);
+        };
+        let Some(dependencies) = project.resolved_dependency_groups().get(group) else {
+            return Ok(None);
+        };
+
+        let mut selected = None;
+        for dependency in dependencies {
+            if &dependency.package_id.name != dependency_name
+                || !dependency.complexified_marker.evaluate(
+                    marker_environment,
+                    std::iter::empty::<&PackageName>(),
+                    dependency
+                        .extra
+                        .iter()
+                        .map(|extra| (&dependency.package_id.name, extra)),
+                    std::iter::once((project_name, group)),
+                )
+            {
+                continue;
+            }
+
+            let package = self.find_by_id(&dependency.package_id);
+            if selected.is_some_and(|selected: &Package| selected.id != package.id) {
+                return Err(format!(
+                    "found multiple packages matching `{dependency_name}` in dependency group `{group}` for `{project_name}`"
+                ));
+            }
+            selected = Some(package);
+        }
+        Ok(selected)
+    }
+
     /// Returns the build constraints that were used to generate this lock.
     pub fn build_constraints(&self, root: &Path) -> Constraints {
         Constraints::from_requirements(

@@ -5384,7 +5384,9 @@ pub struct CheckArgs {
     /// Accepts either a version (e.g., `0.0.1`) which will be treated as an exact pin,
     /// a version specifier (e.g., `>=0.0.1`), or `latest` to use the latest available version.
     ///
-    /// By default, a constrained version range of ty will be used (e.g., `>=0.0,<0.1`).
+    /// By default, the exact version resolved in `uv.lock` will be used when the project has an
+    /// active `ty` development dependency. Otherwise, a constrained version range of ty will be
+    /// used (e.g., `>=0.0,<0.1`).
     #[arg(long, value_hint = ValueHint::Other)]
     pub ty_version: Option<String>,
 

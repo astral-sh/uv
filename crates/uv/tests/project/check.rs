@@ -40,6 +40,536 @@ fn check_project() -> Result<()> {
 
 #[test]
 #[cfg(feature = "test-pypi")]
+fn check_uses_exact_ty_version_from_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        typing = ["ty>=0.0.1"]
+        dev = [{ include-group = "typing" }]
+
+        [tool.uv]
+        constraint-dependencies = ["ty==0.0.17"]
+
+        [tool.uv.sources]
+        ty = { path = "does-not-exist" }
+    "#})?;
+    context
+        .lock()
+        .arg("--no-sources")
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2026-02-15T00:00:00Z")
+        .assert()
+        .success();
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sources")
+            .arg("--no-sync")
+            .arg("--no-dev")
+            .arg("--no-build-package")
+            .arg("ty")
+            .arg("--no-binary-package")
+            .arg("ty")
+            .arg("--verbose")
+            .env(EnvVars::RUST_LOG, "uv::commands::project::check::ty=debug"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    DEBUG `--exclude-newer` is ignored for pinned version `0.0.17`
+    DEBUG Using `ty==0.0.17`
+    DEBUG Passing workspace metadata to `ty check` via stdin
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_uses_exact_ty_version_from_legacy_dev_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty<0.0.18"]
+
+        [tool.uv]
+        dev-dependencies = ["ty>=0.0.17"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-dev")
+            .arg("--exclude-newer")
+            .arg("2026-02-15T00:00:00Z")
+            .arg("--verbose")
+            .env(EnvVars::RUST_LOG, "uv::commands::project::check::ty=debug"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    DEBUG `--exclude-newer` is ignored for pinned version `0.0.17`
+    DEBUG Using `ty==0.0.17`
+    DEBUG Passing workspace metadata to `ty check` via stdin
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_uses_applicable_ty_version_from_forked_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+
+        [dependency-groups]
+        dev = [
+            "ty==0.0.16 ; python_version < '3.12'",
+            "ty==0.0.17 ; python_version >= '3.12'",
+        ]
+    "#})?;
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-dev")
+            .arg("--verbose")
+            .env(EnvVars::RUST_LOG, "uv::commands::project::check::ty=debug"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    DEBUG `--exclude-newer` is ignored for pinned version `0.0.17`
+    DEBUG Using `ty==0.0.17`
+    DEBUG Passing workspace metadata to `ty check` via stdin
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn check_ignores_inactive_ty_declaration() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty>=999 ; python_version < '3.12'"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--verbose")
+            .env(EnvVars::RUST_LOG, "uv::commands::project::check::ty=debug"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    DEBUG Resolved `ty@>=0.0, <0.1` to `ty==0.0.17`
+    DEBUG Passing workspace metadata to `ty check` via stdin
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn check_rejects_non_registry_ty_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty"]
+
+        [tool.uv.sources]
+        ty = { path = "does-not-exist" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: The active `ty` development dependency uses the non-registry source `does-not-exist`, but `uv check` can only install standalone `ty` releases by version; use a registry source, `--ty-version`, or the `TY` environment variable
+    ");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty @ https://example.com/ty.whl"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: The active `ty` development dependency uses the direct URL `https://example.com/ty.whl`, but `uv check` can only install standalone `ty` releases by version; use a registry requirement, `--ty-version`, or the `TY` environment variable
+    ");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty @ https://example.com/ty.whl"]
+
+        [tool.uv.sources]
+        ty = { index = "test" }
+
+        [[tool.uv.index]]
+        name = "test"
+        url = "https://example.com/simple"
+        explicit = true
+    "#})?;
+
+    // The registry override makes the inline URL registry-backed, so selection proceeds to the
+    // missing-lock error instead of rejecting the declaration as a direct URL.
+    uv_snapshot!(context.filters(), context.check().arg("--no-sync"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: The active `ty` development dependency requires an existing lockfile when `--no-sync` is used; update `uv.lock`, remove `--no-sync`, or use `--ty-version` or the `TY` environment variable
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_active_ty_requires_lock_with_no_sync() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty==0.0.17"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check().arg("--no-sync"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: The active `ty` development dependency requires an existing lockfile when `--no-sync` is used; update `uv.lock`, remove `--no-sync`, or use `--ty-version` or the `TY` environment variable
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_active_ty_rejects_stale_frozen_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    context.lock().assert().success();
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty==0.0.17"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check().arg("--frozen"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: The active `ty` development dependency is not present in the lockfile for the selected Python environment; update `uv.lock`, or use `--ty-version` or the `TY` environment variable
+    ");
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_virtual_root_does_not_use_member_ty() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty==0.0.17"]
+    "#})?;
+    context
+        .lock()
+        .arg("--exclude-newer")
+        .arg("2026-02-15T00:00:00Z")
+        .assert()
+        .success();
+
+    pyproject_toml.write_str(indoc! {r#"
+        [dependency-groups]
+        dev = ["ty==0.0.17"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check().arg("--frozen"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: The active `ty` development dependency is not present in the lockfile for the selected Python environment; update `uv.lock`, or use `--ty-version` or the `TY` environment variable
+    ");
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_virtual_root_uses_exact_ty_version_from_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [dependency-groups]
+        dev = ["ty==0.0.17"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+    context
+        .lock()
+        .arg("--exclude-newer")
+        .arg("2026-02-15T00:00:00Z")
+        .assert()
+        .success();
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--verbose")
+            .env(EnvVars::RUST_LOG, "uv::commands::project::check::ty=debug"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    DEBUG `--exclude-newer` is ignored for pinned version `0.0.17`
+    DEBUG Using `ty==0.0.17`
+    DEBUG Passing workspace metadata to `ty check` via stdin
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_member_ty_ignores_virtual_root_dev_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [dependency-groups]
+        dev = ["iniconfig==2.0.0"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty==0.0.17"]
+    "#})?;
+    member.child("main.py").write_str("x = 1")?;
+    context
+        .lock()
+        .arg("--exclude-newer")
+        .arg("2026-02-15T00:00:00Z")
+        .assert()
+        .success();
+
+    // These mutually exclusive build settings would make the workspace root's development
+    // dependency unusable if it leaked into the member-only version extraction.
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .current_dir(member.path())
+            .arg("--no-sync")
+            .arg("--no-build-package")
+            .arg("iniconfig")
+            .arg("--no-binary-package")
+            .arg("iniconfig")
+            .arg("--verbose")
+            .env(EnvVars::RUST_LOG, "uv::commands::project::check::ty=debug"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    DEBUG `--exclude-newer` is ignored for pinned version `0.0.17`
+    DEBUG Using `ty==0.0.17`
+    DEBUG Passing workspace metadata to `ty check` via stdin
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
 fn check_uses_ty_from_environment() -> Result<()> {
     let context =
         uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"));
@@ -56,13 +586,27 @@ fn check_uses_ty_from_environment() -> Result<()> {
         .success();
 
     let ty = bin_dir.child(format!("ty{}", std::env::consts::EXE_SUFFIX));
+    // `TY` takes precedence over both an explicit version and an unsupported project source.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty @ https://example.com/ty.whl"]
+    "#})?;
     context.temp_dir.child("main.py").write_str("x = 1")?;
 
     uv_snapshot!(
         context.filters(),
         context
             .check()
-            .arg("--no-project")
+            .arg("--no-sync")
             .arg("--ty-version")
             .arg(">=999.0.0")
             .arg("--verbose")
@@ -130,6 +674,7 @@ fn check_passes_workspace_metadata_to_ty() -> Result<()> {
 fn check_no_sync_ignores_invalid_lockfile() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
+    // An explicit version bypasses both project-source validation and lockfile parsing.
     context
         .temp_dir
         .child("pyproject.toml")
@@ -139,6 +684,9 @@ fn check_no_sync_ignores_invalid_lockfile() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [dependency-groups]
+        dev = ["ty @ https://example.com/ty.whl"]
     "#})?;
     context.temp_dir.child("uv.lock").write_str("invalid")?;
     context.temp_dir.child("main.py").write_str(indoc! {r"

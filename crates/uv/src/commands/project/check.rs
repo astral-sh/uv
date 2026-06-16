@@ -204,6 +204,7 @@ pub(crate) async fn check(
 
     // Select an environment and, if we found a project, sync it before running checks.
     let mut workspace_metadata = None;
+    let mut locked_ty_version = None;
     let venv_path = if let Some(project) = &project {
         let extras = extras.with_defaults(DefaultExtras::default());
 
@@ -229,18 +230,34 @@ pub(crate) async fn check(
             .into_environment()?
         };
 
+        let ty_declaration = if ty_path.is_none() && ty_version.is_none() {
+            ty::active_declaration(project, venv.interpreter(), &settings.resolver.sources)?
+        } else {
+            None
+        };
+
         let state = UniversalState::default();
         let _environment_lock;
         let lock = if no_sync {
             debug!("Skipping environment synchronization due to `--no-sync`");
 
-            match LockTarget::Workspace(project.workspace()).read().await {
+            let lock = match LockTarget::Workspace(project.workspace()).read().await {
                 Ok(lock) => lock,
+                Err(err) if ty_declaration.is_some() => return Err(err.into()),
                 Err(err) => {
                     debug!("Failed to read lockfile; skipping workspace metadata: {err}");
                     None
                 }
+            };
+            if let Some(declaration) = ty_declaration.as_ref() {
+                let Some(lock) = lock.as_ref() else {
+                    anyhow::bail!(
+                        "The active `ty` development dependency requires an existing lockfile when `--no-sync` is used; update `uv.lock`, remove `--no-sync`, or use `--ty-version` or the `TY` environment variable"
+                    );
+                };
+                locked_ty_version = Some(ty::version_from_lock(declaration, project, lock, &venv)?);
             }
+            lock
         } else {
             // Keep the environment locked through synchronization and metadata collection.
             _environment_lock = venv
@@ -290,6 +307,15 @@ pub(crate) async fn check(
                 }
                 Err(err) => return Err(err.into()),
             };
+
+            if let Some(declaration) = ty_declaration.as_ref() {
+                locked_ty_version = Some(ty::version_from_lock(
+                    declaration,
+                    project,
+                    result.lock(),
+                    &venv,
+                )?);
+            }
 
             let target = match project {
                 VirtualProject::Project(project) => InstallTarget::Project {
@@ -381,7 +407,7 @@ pub(crate) async fn check(
         .map(|value| value.timestamp());
 
     ty::run(
-        ty_version,
+        ty_version.or(locked_ty_version),
         ty_path,
         &target_dir,
         venv_path.as_deref(),
