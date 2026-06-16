@@ -660,7 +660,7 @@ impl EnvVars {
 
     /// Used to identify the source tree when invoking PEP 517 build hooks.
     #[attr_hidden]
-    #[attr_added_in("0.11.22")]
+    #[attr_added_in("next release")]
     pub const UV_INTERNAL__BUILD_DIR: &'static str = "UV_INTERNAL__BUILD_DIR";
 
     /// Used to force showing the derivation tree during resolver error reporting.
