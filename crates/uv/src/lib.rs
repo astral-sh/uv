@@ -538,21 +538,36 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     // the settings that go into the cache constructor, but the check happens before the first
     // workspace discovery that's used beyond settings discovery.
     let cache_dir = std::path::absolute(cache.root())?;
-    if project_dir.starts_with(&cache_dir) {
-        bail!(
-            "The project directory `{}` is inside the cache directory `{}`",
-            project_dir.user_display(),
-            cache_dir.user_display()
-        );
-    } else if let Ok(cache_dir) = fs_err::canonicalize(&cache_dir)
-        && let Ok(project_dir) = fs_err::canonicalize(&*project_dir)
-        && project_dir.starts_with(&cache_dir)
-    {
-        bail!(
-            "The project directory `{}` is inside the cache directory `{}`",
-            project_dir.user_display(),
-            cache_dir.user_display()
-        );
+    // PEP 517 hooks run from uv-managed source trees, including source distributions extracted
+    // into the cache, and can invoke uv recursively.
+    let project_is_in_build_dir =
+        std::env::var_os(EnvVars::UV_INTERNAL__BUILD_DIR).is_some_and(|build_dir| {
+            std::path::absolute(build_dir).is_ok_and(|build_dir| {
+                project_dir.starts_with(&build_dir)
+                    || fs_err::canonicalize(&*project_dir).is_ok_and(|project_dir| {
+                        fs_err::canonicalize(build_dir)
+                            .is_ok_and(|build_dir| project_dir.starts_with(build_dir))
+                    })
+            })
+        });
+    if !project_is_in_build_dir {
+        if project_dir.starts_with(&cache_dir) {
+            bail!(
+                "The project directory `{}` is inside the cache directory `{}`",
+                project_dir.user_display(),
+                cache_dir.user_display()
+            );
+        }
+        if let Ok(cache_dir) = fs_err::canonicalize(&cache_dir)
+            && let Ok(project_dir) = fs_err::canonicalize(&*project_dir)
+            && project_dir.starts_with(&cache_dir)
+        {
+            bail!(
+                "The project directory `{}` is inside the cache directory `{}`",
+                project_dir.user_display(),
+                cache_dir.user_display()
+            );
+        }
     }
 
     let workspace_cache = WorkspaceCache::default();

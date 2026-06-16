@@ -1229,6 +1229,7 @@ impl PythonRunner {
             .args(["-c", script])
             .current_dir(source_tree.simplified())
             .envs(environment_variables)
+            .env(EnvVars::UV_INTERNAL__BUILD_DIR, source_tree)
             .env(EnvVars::PATH, modified_path)
             .env(EnvVars::VIRTUAL_ENV, venv.root())
             // NOTE: it would be nice to get colored output from build backends,
