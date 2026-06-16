@@ -2,9 +2,12 @@ use std::borrow::Borrow;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{BuildHasher, Hash, RandomState};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use dashmap::{DashMap, Entry};
 use tokio::sync::Notify;
+
+static NEXT_ONCE_MAP_ID: AtomicU64 = AtomicU64::new(1);
 
 /// The caller tried to wait for a task that was never registered.
 #[derive(Debug)]
@@ -29,6 +32,33 @@ impl<K: Debug + Display> std::error::Error for UnregisteredTask<K> {}
 /// of this, it's common to wrap the `V` in an `Arc<V>` to make cloning cheap.
 pub struct OnceMap<K, V, S = RandomState> {
     items: DashMap<K, Value<V>, S>,
+    counters: OnceMapCounters,
+}
+
+struct OnceMapCounters {
+    id: u64,
+    register: AtomicU64,
+    register_or_wait: AtomicU64,
+    done: AtomicU64,
+    wait: AtomicU64,
+    wait_blocking: AtomicU64,
+    get: AtomicU64,
+    remove: AtomicU64,
+}
+
+impl OnceMapCounters {
+    fn new() -> Self {
+        Self {
+            id: NEXT_ONCE_MAP_ID.fetch_add(1, Ordering::Relaxed),
+            register: AtomicU64::new(0),
+            register_or_wait: AtomicU64::new(0),
+            done: AtomicU64::new(0),
+            wait: AtomicU64::new(0),
+            wait_blocking: AtomicU64::new(0),
+            get: AtomicU64::new(0),
+            remove: AtomicU64::new(0),
+        }
+    }
 }
 
 impl<K: Eq + Hash + Debug, V: Debug, S: BuildHasher + Clone> Debug for OnceMap<K, V, S> {
@@ -44,6 +74,7 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     /// or other tasks will hang. If it returns `false`, this job is already in progress and you
     /// can [`OnceMap::wait`] for the result.
     pub fn register(&self, key: K) -> bool {
+        self.counters.register.fetch_add(1, Ordering::Relaxed);
         let entry = self.items.entry(key);
         match entry {
             Entry::Occupied(_) => false,
@@ -73,6 +104,13 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     /// }
     /// ```
     pub async fn register_or_wait(&self, key: &K) -> Option<V> {
+        self.counters
+            .register_or_wait
+            .fetch_add(1, Ordering::Relaxed);
+        self.register_or_wait_inner(key).await
+    }
+
+    async fn register_or_wait_inner(&self, key: &K) -> Option<V> {
         let notify = {
             let entry = self.items.entry(key.clone());
             match entry {
@@ -110,6 +148,7 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
 
     /// Submit the result of a job you registered.
     pub fn done(&self, key: K, value: V) {
+        self.counters.done.fetch_add(1, Ordering::Relaxed);
         if let Some(Value::Waiting(notify)) = self.items.insert(key, Value::Filled(value)) {
             notify.notify_waiters();
         }
@@ -120,7 +159,8 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     /// Will hang if [`OnceMap::done`] isn't called for this key, or if `UnregisteredTask` is a
     /// non-fatal error and [`OnceMap::done`] isn't called for this key.
     pub async fn wait(&self, key: &K) -> Result<V, UnregisteredTask<K>> {
-        self.register_or_wait(key)
+        self.counters.wait.fetch_add(1, Ordering::Relaxed);
+        self.register_or_wait_inner(key)
             .await
             .ok_or_else(|| UnregisteredTask(key.clone()))
     }
@@ -130,7 +170,8 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     /// Will hang if [`OnceMap::done`] isn't called for this key, or if `UnregisteredTask` is a
     /// non-fatal error and [`OnceMap::done`] isn't called for this key.
     pub fn wait_blocking(&self, key: &K) -> Result<V, UnregisteredTask<K>> {
-        futures::executor::block_on(self.register_or_wait(key))
+        self.counters.wait_blocking.fetch_add(1, Ordering::Relaxed);
+        futures::executor::block_on(self.register_or_wait_inner(key))
             .ok_or_else(|| UnregisteredTask(key.clone()))
     }
 
@@ -139,6 +180,7 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     where
         K: Borrow<Q>,
     {
+        self.counters.get.fetch_add(1, Ordering::Relaxed);
         let entry = self.items.get(key)?;
         match entry.value() {
             Value::Filled(value) => Some(value.clone()),
@@ -151,6 +193,7 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     where
         K: Borrow<Q>,
     {
+        self.counters.remove.fetch_add(1, Ordering::Relaxed);
         let entry = self.items.remove(key)?;
         match entry {
             (_, Value::Filled(value)) => Some(value),
@@ -163,6 +206,7 @@ impl<K: Eq + Hash + Clone, V, H: Default + BuildHasher + Clone> Default for Once
     fn default() -> Self {
         Self {
             items: DashMap::with_hasher(H::default()),
+            counters: OnceMapCounters::new(),
         }
     }
 }
@@ -178,7 +222,31 @@ where
                 .into_iter()
                 .map(|(k, v)| (k, Value::Filled(v)))
                 .collect(),
+            counters: OnceMapCounters::new(),
         }
+    }
+}
+
+impl<K, V, H> Drop for OnceMap<K, V, H> {
+    fn drop(&mut self) {
+        if std::env::var_os("UV_ONCE_MAP_COUNTERS").is_none() {
+            return;
+        }
+
+        eprintln!(
+            "UV_ONCE_MAP_COUNTERS\tid={}\tkey={}\tvalue={}\thasher={}\tregister={}\tregister_or_wait={}\tdone={}\twait={}\twait_blocking={}\tget={}\tremove={}",
+            self.counters.id,
+            std::any::type_name::<K>(),
+            std::any::type_name::<V>(),
+            std::any::type_name::<H>(),
+            self.counters.register.load(Ordering::Relaxed),
+            self.counters.register_or_wait.load(Ordering::Relaxed),
+            self.counters.done.load(Ordering::Relaxed),
+            self.counters.wait.load(Ordering::Relaxed),
+            self.counters.wait_blocking.load(Ordering::Relaxed),
+            self.counters.get.load(Ordering::Relaxed),
+            self.counters.remove.load(Ordering::Relaxed),
+        );
     }
 }
 
