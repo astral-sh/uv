@@ -18,8 +18,8 @@ use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Pep508ErrorSource, Requirement, VerbatimUrl, VersionOrUrl};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{
-    DependencyGroupSpecifier, PyProjectToml, ResolutionMetadata, SupportedEnvironments,
-    VerbatimParsedUrl,
+    ConflictKindRef, Conflicts, DependencyGroupSpecifier, PyProjectToml, ResolutionMetadata,
+    SupportedEnvironments, VerbatimParsedUrl,
 };
 use uv_python::{ConfigDiscovery, Interpreter, PythonDownloads, PythonPreference};
 use uv_redacted::DisplaySafeUrl;
@@ -132,6 +132,7 @@ enum DeclarationOutcome {
 
 enum BlockedReason {
     UnrepresentableRequirement(ProposeRequirementError),
+    ConflictProject,
     ConflictExtra { extra: String },
     ConflictGroup { group: String },
 }
@@ -240,6 +241,7 @@ struct UpgradeLockVersionReport {
 #[serde(rename_all = "snake_case")]
 enum UpgradeReasonCode {
     UnrepresentableRequirement,
+    ConflictProject,
     ConflictExtra,
     ConflictGroup,
     EnvironmentOrPythonRequirement,
@@ -449,6 +451,7 @@ impl BlockedReason {
     fn code(&self) -> UpgradeReasonCode {
         match self {
             Self::UnrepresentableRequirement(_) => UpgradeReasonCode::UnrepresentableRequirement,
+            Self::ConflictProject => UpgradeReasonCode::ConflictProject,
             Self::ConflictExtra { .. } => UpgradeReasonCode::ConflictExtra,
             Self::ConflictGroup { .. } => UpgradeReasonCode::ConflictGroup,
         }
@@ -457,6 +460,7 @@ impl BlockedReason {
     fn message(&self) -> String {
         match self {
             Self::UnrepresentableRequirement(error) => error.to_string(),
+            Self::ConflictProject => "declared under conflicting project".to_string(),
             Self::ConflictExtra { extra } => {
                 format!("declared under conflicting extra `{extra}`")
             }
@@ -677,39 +681,10 @@ pub(crate) async fn upgrade(
     let mut requirements = requirements
         .into_iter()
         .filter_map(|selected| {
-            let blocked_reason =
-                selected
-                    .contexts
-                    .iter()
-                    .find_map(|context| match &context.dependency_type {
-                        DependencyType::Production => context
-                            .marker
-                            .top_level_extra_name()
-                            .map(std::borrow::Cow::into_owned)
-                            .filter(|extra| conflicts.contains(&selected.member, extra))
-                            .map(|extra| BlockedReason::ConflictExtra {
-                                extra: extra.to_string(),
-                            }),
-                        DependencyType::Optional(extra) => {
-                            if conflicts.contains(&selected.member, extra) {
-                                Some(BlockedReason::ConflictExtra {
-                                    extra: extra.to_string(),
-                                })
-                            } else {
-                                None
-                            }
-                        }
-                        DependencyType::Group(group) => {
-                            if conflicts.contains(&selected.member, group) {
-                                Some(BlockedReason::ConflictGroup {
-                                    group: group.to_string(),
-                                })
-                            } else {
-                                None
-                            }
-                        }
-                        DependencyType::Dev => None,
-                    });
+            let blocked_reason = selected
+                .contexts
+                .iter()
+                .find_map(|context| conflict_blocked_reason(&selected.member, context, &conflicts));
             if let Some(reason) = blocked_reason {
                 declaration_outcomes.push(DeclarationOutcome::Blocked {
                     declaration: selected.identity(),
@@ -1865,6 +1840,62 @@ fn apply_requirement_replacements<'a>(
         applied.push((dependency_type, existing, replacement));
     }
     Ok(())
+}
+
+/// Return the conflict that prevents attributing a resolved version to a declaration context.
+fn conflict_blocked_reason(
+    member: &PackageName,
+    context: &DeclarationContext,
+    conflicts: &Conflicts,
+) -> Option<BlockedReason> {
+    match &context.dependency_type {
+        DependencyType::Production => {
+            if conflicts.contains(member, ConflictKindRef::Project) {
+                return Some(BlockedReason::ConflictProject);
+            }
+
+            marker_conflict_extra_blocked_reason(member, context.marker, conflicts)
+        }
+        DependencyType::Optional(extra) => {
+            if conflicts.contains(member, extra) {
+                return Some(BlockedReason::ConflictExtra {
+                    extra: extra.to_string(),
+                });
+            }
+
+            marker_conflict_extra_blocked_reason(member, context.marker, conflicts)
+        }
+        DependencyType::Group(group) => {
+            if conflicts.contains(member, group) {
+                return Some(BlockedReason::ConflictGroup {
+                    group: group.to_string(),
+                });
+            }
+
+            marker_conflict_extra_blocked_reason(member, context.marker, conflicts)
+        }
+        DependencyType::Dev => None,
+    }
+}
+
+/// Return a conflict for an explicit `extra` marker on a declaration.
+fn marker_conflict_extra_blocked_reason(
+    member: &PackageName,
+    marker: MarkerTree,
+    conflicts: &Conflicts,
+) -> Option<BlockedReason> {
+    let mut extras = BTreeSet::new();
+    marker.visit_extras(|_, extra| {
+        if conflicts.contains(member, extra) {
+            extras.insert(extra.clone());
+        }
+    });
+    extras
+        .into_iter()
+        .next()
+        .map(|extra| BlockedReason::ConflictExtra {
+            extra: extra.to_string(),
+        })
 }
 
 /// Return whether a source applies to the selected requirement declaration.
