@@ -398,7 +398,7 @@ impl InstallLogger for UpgradeInstallLogger {
                         printer.stderr(),
                         "{} {} {}",
                         "Reinstalled".yellow().bold(),
-                        &self.target,
+                        self.target,
                         reinstalls
                     )?;
                 } else {
@@ -416,7 +416,7 @@ impl InstallLogger for UpgradeInstallLogger {
                         printer.stderr(),
                         "{} {} {} -> {}",
                         "Updated".green().bold(),
-                        &self.target,
+                        self.target,
                         removals,
                         additions
                     )?;
@@ -432,7 +432,7 @@ impl InstallLogger for UpgradeInstallLogger {
                     printer.stderr(),
                     "{} {} {}",
                     "Removed".red().bold(),
-                    &self.target,
+                    self.target,
                     removals
                 )?;
             }
@@ -446,7 +446,7 @@ impl InstallLogger for UpgradeInstallLogger {
                     printer.stderr(),
                     "{} {} {}",
                     "Added".green().bold(),
-                    &self.target,
+                    self.target,
                     additions
                 )?;
             }
@@ -455,7 +455,7 @@ impl InstallLogger for UpgradeInstallLogger {
                     printer.stderr(),
                     "{} {} {}",
                     "Modified".dimmed(),
-                    &self.target.dimmed().bold(),
+                    self.target.dimmed().bold(),
                     "environment".dimmed()
                 )?;
             }
