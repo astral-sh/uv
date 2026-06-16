@@ -975,10 +975,18 @@ impl Hash for Version {
         for i in self.release().iter().rev().skip_while(|x| **x == 0) {
             i.hash(state);
         }
-        self.pre().hash(state);
-        self.dev().hash(state);
-        self.post().hash(state);
-        self.local().hash(state);
+        // The `min`/`max` sentinels make `pre`/`dev`/`post` irrelevant to equality (see
+        // `sortable_tuple`), so hashing those fields directly would let two equal versions hash
+        // differently. Hash the comparison key for sentinels; regular versions keep hashing their
+        // fields directly so existing hashes are unaffected.
+        if self.min().is_some() || self.max().is_some() {
+            sortable_tuple(self).hash(state);
+        } else {
+            self.pre().hash(state);
+            self.dev().hash(state);
+            self.post().hash(state);
+            self.local().hash(state);
+        }
     }
 }
 
@@ -2890,6 +2898,33 @@ mod tests {
     use crate::VersionSpecifier;
 
     use super::*;
+
+    #[test]
+    fn hash_matches_eq() {
+        use std::hash::{Hash, Hasher};
+        fn hash_of<T: Hash>(t: &T) -> u64 {
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            t.hash(&mut h);
+            h.finish()
+        }
+        // Normal zero-padding equality still hashes consistently.
+        let v1 = Version::new([1u64, 0, 0]);
+        let v2 = Version::new([1u64]);
+        assert_eq!(v1, v2);
+        assert_eq!(hash_of(&v1), hash_of(&v2));
+
+        // The `min` sentinel makes pre/dev irrelevant to equality, so these compare equal,
+        // and the hash must agree.
+        let a = Version::new([1u64, 2])
+            .with_min(Some(0))
+            .with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 1,
+            }));
+        let b = Version::new([1u64, 2]).with_min(Some(0));
+        assert_eq!(a, b);
+        assert_eq!(hash_of(&a), hash_of(&b));
+    }
 
     /// <https://github.com/pypa/packaging/blob/237ff3aa348486cf835a980592af3a59fccd6101/tests/test_version.py#L24-L81>
     #[test]
