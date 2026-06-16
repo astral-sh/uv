@@ -10,7 +10,7 @@ use std::env::current_dir;
 use std::path::Path;
 use url::Url;
 use uv_static::EnvVars;
-use uv_test::{DEFAULT_PYTHON_VERSION, apply_filters, uv_snapshot};
+use uv_test::{DEFAULT_PYTHON_VERSION, apply_filters, get_bin, uv_snapshot};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path as url_path},
@@ -144,6 +144,66 @@ fn build_basic() -> Result<()> {
         .child("out")
         .child("project-0.1.0-py3-none-any.whl")
         .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+/// Build hooks can invoke uv while building a wheel from an extracted source distribution.
+/// Regression test for <https://github.com/astral-sh/uv/issues/19878>.
+#[test]
+fn build_hook_invokes_uv() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.hatch.build.hooks.custom]
+        path = "hatch_build.py"
+    "#})?;
+    project.child("src/project/__init__.py").touch()?;
+    project.child("hatch_build.py").write_str(&formatdoc! {r#"
+        import subprocess
+
+        from hatchling.builders.hooks.plugin.interface import BuildHookInterface
+
+
+        class CustomBuildHook(BuildHookInterface):
+            def initialize(self, version, build_data):
+                subprocess.run(
+                    [
+                        {uv:?},
+                        "export",
+                        "--quiet",
+                        "--no-dev",
+                        "--no-editable",
+                        "--no-emit-project",
+                        "--output-file",
+                        "requirements.txt",
+                    ],
+                    check=True,
+                    cwd=self.root,
+                )
+    "#, uv = get_bin!().display() })?;
+
+    uv_snapshot!(context.filters(), context.build().current_dir(&project), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
 
     Ok(())
 }
