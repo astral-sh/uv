@@ -88,19 +88,19 @@ pub(super) fn active_declaration(
                 source_reference(source)
             );
         }
-        None if let Some(url) = active_requirements.iter().find_map(|requirement| {
-            let Some(uv_pep508::VersionOrUrl::Url(url)) = requirement.version_or_url.as_ref()
-            else {
-                return None;
-            };
-            Some(url)
-        }) =>
-        {
-            bail!(
-                "The active `ty` development dependency uses the direct URL `{url}`, but `uv check` can only install standalone `ty` releases by version; use a registry requirement, `--ty-version`, or the `TY` environment variable"
-            );
+        None => {
+            if let Some(url) = active_requirements.iter().find_map(|requirement| {
+                let Some(uv_pep508::VersionOrUrl::Url(url)) = requirement.version_or_url.as_ref()
+                else {
+                    return None;
+                };
+                Some(url)
+            }) {
+                bail!(
+                    "The active `ty` development dependency uses the direct URL `{url}`, but `uv check` can only install standalone `ty` releases by version; use a registry requirement, `--ty-version`, or the `TY` environment variable"
+                );
+            }
         }
-        None => {}
     }
 
     Ok(Some(ActiveDeclaration { package_name }))
