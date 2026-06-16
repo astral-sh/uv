@@ -35,7 +35,9 @@ use uv_workspace::{
 };
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
-use crate::commands::project::lock::{LockEvent, LockMode, LockOperation, LockResult};
+use crate::commands::project::lock::{
+    LockEvent, LockEventAction, LockEventVersion, LockMode, LockOperation, LockResult,
+};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{ProjectError, ProjectInterpreter, UniversalState, WorkspacePython};
 use crate::commands::{ExitStatus, diagnostics};
@@ -96,7 +98,7 @@ struct DeclarationIdentity {
     member: PackageName,
     package: PackageName,
     dependency_type: DependencyType,
-    text: String,
+    display_text: String,
     resolved_versions: BTreeSet<Version>,
 }
 
@@ -151,6 +153,7 @@ struct UpgradeReport {
     dry_run: bool,
     packages: Vec<PackageName>,
     declarations: Vec<UpgradeDeclarationReport>,
+    lock_changes: Vec<UpgradeLockChangeReport>,
 }
 
 #[derive(Serialize, Debug, Default)]
@@ -209,6 +212,30 @@ struct UpgradeReasonReport {
     message: String,
 }
 
+#[derive(Serialize, Debug)]
+struct UpgradeLockChangeReport {
+    action: UpgradeLockChangeAction,
+    package: PackageName,
+    previous_versions: Vec<UpgradeLockVersionReport>,
+    current_versions: Vec<UpgradeLockVersionReport>,
+}
+
+#[derive(Serialize, Debug, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+enum UpgradeLockChangeAction {
+    Update,
+    Add,
+    Remove,
+}
+
+#[derive(Serialize, Debug)]
+struct UpgradeLockVersionReport {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<Version>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sha: Option<String>,
+}
+
 #[derive(Serialize, Debug, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
 enum UpgradeReasonCode {
@@ -246,7 +273,11 @@ impl DeclarationOutcome {
 }
 
 impl UpgradeReport {
-    fn from_outcomes(outcomes: &[DeclarationOutcome], dry_run: DryRun) -> Self {
+    fn from_outcomes(
+        outcomes: &[DeclarationOutcome],
+        events: &[LockEvent<'_>],
+        dry_run: DryRun,
+    ) -> Self {
         let mut packages = Vec::new();
         for outcome in outcomes {
             if !packages.contains(outcome.package()) {
@@ -261,6 +292,10 @@ impl UpgradeReport {
             declarations: outcomes
                 .iter()
                 .map(UpgradeDeclarationReport::from_outcome)
+                .collect(),
+            lock_changes: events
+                .iter()
+                .map(UpgradeLockChangeReport::from_event)
                 .collect(),
         }
     }
@@ -322,7 +357,7 @@ impl UpgradeDeclarationReport {
             location: dependency_location(&declaration.dependency_type),
             extra: dependency_extra(&declaration.dependency_type),
             group: dependency_group(&declaration.dependency_type),
-            original_requirement: declaration.text.clone(),
+            original_requirement: declaration.display_text.clone(),
             new_requirement,
             resolved_versions: declaration.resolved_versions.iter().cloned().collect(),
             status,
@@ -346,6 +381,46 @@ impl UpgradeDeclarationReport {
                 code: declaration.reason.code(),
                 message: declaration.reason.message().to_string(),
             }),
+        }
+    }
+}
+
+impl UpgradeLockChangeReport {
+    fn from_event(event: &LockEvent<'_>) -> Self {
+        Self {
+            action: UpgradeLockChangeAction::from(event.action()),
+            package: event.package().clone(),
+            previous_versions: event
+                .previous_versions()
+                .into_iter()
+                .flatten()
+                .map(UpgradeLockVersionReport::from_version)
+                .collect(),
+            current_versions: event
+                .current_versions()
+                .into_iter()
+                .flatten()
+                .map(UpgradeLockVersionReport::from_version)
+                .collect(),
+        }
+    }
+}
+
+impl From<LockEventAction> for UpgradeLockChangeAction {
+    fn from(value: LockEventAction) -> Self {
+        match value {
+            LockEventAction::Update => Self::Update,
+            LockEventAction::Add => Self::Add,
+            LockEventAction::Remove => Self::Remove,
+        }
+    }
+}
+
+impl UpgradeLockVersionReport {
+    fn from_version(version: &LockEventVersion<'_>) -> Self {
+        Self {
+            version: version.version().cloned(),
+            sha: version.sha().map(ToString::to_string),
         }
     }
 }
@@ -441,7 +516,7 @@ impl UpgradableRequirement {
             member: self.member.clone(),
             package: self.package.clone(),
             dependency_type: self.dependency_type.clone(),
-            text: self.original_text.clone(),
+            display_text: self.original_text.clone(),
             resolved_versions: self.resolved_versions.clone(),
         }
     }
@@ -888,15 +963,11 @@ pub(crate) async fn upgrade(
     }
 
     let events = match &result {
-        LockResult::Changed(previous, lock) => {
-            LockEvent::detect_changes(previous.as_ref(), lock, DryRun::Enabled)
-                .filter(|event| {
-                    selected_packages
-                        .iter()
-                        .any(|package| event.package() == package)
-                })
-                .collect::<Vec<_>>()
-        }
+        LockResult::Changed(previous, lock) => reportable_lock_events(
+            &declaration_outcomes,
+            &selected_packages,
+            LockEvent::detect_changes(previous.as_ref(), lock, DryRun::Enabled),
+        ),
         LockResult::Unchanged(_) => Vec::new(),
     };
     render_upgrade_report(
@@ -1600,7 +1671,7 @@ fn render_upgrade_report(
         SyncFormat::Json => {
             render_declaration_outcomes(outcomes, display_members, printer)?;
             if let Some(output) =
-                UpgradeReport::from_outcomes(outcomes, dry_run).format(output_format)
+                UpgradeReport::from_outcomes(outcomes, events, dry_run).format(output_format)
             {
                 writeln!(printer.stdout_important(), "{output}")?;
             }
@@ -1618,10 +1689,7 @@ fn render_upgrade_report_text(
     printer: Printer,
 ) -> Result<()> {
     for package in selected_packages {
-        if !outcomes
-            .iter()
-            .any(|outcome| outcome.package() == package && outcome.supports_lock_event())
-        {
+        if !package_supports_lock_event(outcomes, package) {
             continue;
         }
         if let Some(event) = events.iter().find(|event| event.package() == package) {
@@ -1676,6 +1744,28 @@ fn render_upgrade_report_text(
     Ok(())
 }
 
+fn reportable_lock_events<'lock>(
+    outcomes: &[DeclarationOutcome],
+    selected_packages: &[PackageName],
+    events: impl IntoIterator<Item = LockEvent<'lock>>,
+) -> Vec<LockEvent<'lock>> {
+    events
+        .into_iter()
+        .filter(|event| {
+            selected_packages
+                .iter()
+                .any(|package| event.package() == package)
+                && package_supports_lock_event(outcomes, event.package())
+        })
+        .collect()
+}
+
+fn package_supports_lock_event(outcomes: &[DeclarationOutcome], package: &PackageName) -> bool {
+    outcomes
+        .iter()
+        .any(|outcome| outcome.package() == package && outcome.supports_lock_event())
+}
+
 fn render_declaration_outcomes(
     outcomes: &[DeclarationOutcome],
     display_members: bool,
@@ -1694,7 +1784,7 @@ fn render_declaration_outcomes(
                         declaration.package,
                         declaration.member,
                         declaration.dependency_type.toml_table_name(),
-                        declaration.text,
+                        declaration.display_text,
                         reason.message()
                     )?;
                 } else {
@@ -1703,7 +1793,7 @@ fn render_declaration_outcomes(
                         "warning: Could not update dependency `{}` in {}: `{}` ({})",
                         declaration.package,
                         declaration.dependency_type.toml_table_name(),
-                        declaration.text,
+                        declaration.display_text,
                         reason.message()
                     )?;
                 }
