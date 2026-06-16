@@ -957,6 +957,10 @@ fn select_requirements(
             {
                 continue;
             }
+            // Optional self-references are valid metadata, but not implicit upgrade targets.
+            if !is_explicit_selection && requirement.name == member {
+                continue;
+            }
 
             found_packages.insert(requirement.name.clone());
             let declaration_contexts = contexts
