@@ -567,6 +567,333 @@ fn upgrade_rejects_conflicting_extra_declarations() -> Result<()> {
 }
 
 #[test]
+fn upgrade_rejects_conflicting_project_declarations() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar<2", "foo==1"]
+
+        [project.optional-dependencies]
+        cpu = []
+
+        [tool.uv]
+        conflicts = [
+            [
+                {{ package = "project" }},
+                {{ extra = "cpu" }},
+            ],
+        ]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Could not update dependency `bar` in `project.dependencies`: `bar<2` (declared under conflicting project)
+    "
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)
+}
+
+#[test]
+fn upgrade_rejects_conflicting_extra_declaration_with_compound_negated_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "bar<2 ; extra == 'cpu' and extra != 'gpu'",
+            "foo==1",
+        ]
+
+        [project.optional-dependencies]
+        cpu = []
+        gpu = []
+        tpu = []
+
+        [tool.uv]
+        conflicts = [
+            [
+                {{ extra = "gpu" }},
+                {{ extra = "tpu" }},
+            ],
+        ]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Could not update dependency `bar` in `project.dependencies`: `bar<2 ; extra == 'cpu' and extra != 'gpu'` (declared under conflicting extra `gpu`)
+    "
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)
+}
+
+#[test]
+fn upgrade_rejects_optional_declaration_with_conflicting_extra_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo==1"]
+
+        [project.optional-dependencies]
+        cpu = ["bar<2 ; extra != 'gpu'"]
+        gpu = []
+        tpu = []
+
+        [tool.uv]
+        conflicts = [
+            [
+                {{ extra = "gpu" }},
+                {{ extra = "tpu" }},
+            ],
+        ]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Could not update dependency `bar` in `project.optional-dependencies.cpu`: `bar<2 ; extra != 'gpu'` (declared under conflicting extra `gpu`)
+    "
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)
+}
+
+#[test]
+fn upgrade_rejects_group_declaration_with_conflicting_extra_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo==1"]
+
+        [project.optional-dependencies]
+        gpu = []
+        tpu = []
+
+        [dependency-groups]
+        dev = ["bar<2 ; extra != 'gpu'"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                {{ extra = "gpu" }},
+                {{ extra = "tpu" }},
+            ],
+        ]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Could not update dependency `bar` in `dependency-groups.dev`: `bar<2 ; extra != 'gpu'` (declared under conflicting extra `gpu`)
+    "
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)
+}
+
+#[test]
+fn upgrade_project_conflict_does_not_block_optional_or_group_declarations() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/upgrade-outcomes.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        cpu = []
+        test = ["bar<2"]
+
+        [dependency-groups]
+        dev = ["baz<2"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                {{ package = "project" }},
+                {{ extra = "cpu" }},
+            ],
+        ]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .arg("baz")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 3 packages in [TIME]
+    Add bar v2.0.0
+    Add baz v2.0.0
+    Updated requirement: `bar<2` -> `bar<3`
+    Updated requirement: `baz<2` -> `baz<3`
+    "
+    );
+
+    let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+    insta::with_settings!({ filters => packse_filters(&context) }, {
+        insta::assert_snapshot!(
+            updated_pyproject_toml,
+            @r#"
+
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+cpu = []
+test = ["bar<3"]
+
+[dependency-groups]
+dev = ["baz<3"]
+
+[tool.uv]
+conflicts = [
+    [
+        { package = "project" },
+        { extra = "cpu" },
+    ],
+]
+
+[[tool.uv.index]]
+url = "http://[LOCALHOST]/simple/"
+default = true
+"#
+        );
+    });
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
 fn upgrade_rejects_conflicting_included_group_declarations() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let pyproject_toml = r#"
