@@ -2794,18 +2794,21 @@ pub(crate) fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
 /// implementation
 ///
 /// [pep440-suffix-ordering]: https://peps.python.org/pep-0440/#summary-of-permitted-suffixes-and-relative-ordering
-fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, LocalVersionSlice<'_>) {
-    // If the version is a "max" version, use a post version larger than any possible post version.
-    let post = if version.max().is_some() {
+fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, LocalVersionSlice<'_>, bool) {
+    // A "max" version reuses the post-release bucket of its base version (`post = u64::MAX`) so it
+    // sorts above every real version in that bucket. The trailing `is_max` flag keeps it distinct
+    // from — and just above — a real `post == u64::MAX`, which would otherwise compare equal.
+    let is_max = version.max().is_some();
+    let post = if is_max {
         Some(u64::MAX)
     } else {
         version.post()
     };
     match (version.pre(), post, version.dev(), version.min()) {
         // min release
-        (_pre, post, _dev, Some(n)) => (0, 0, post, n, version.local()),
+        (_pre, post, _dev, Some(n)) => (0, 0, post, n, version.local(), is_max),
         // dev release
-        (None, None, Some(n), None) => (1, 0, None, n, version.local()),
+        (None, None, Some(n), None) => (1, 0, None, n, version.local(), is_max),
         // alpha release
         (
             Some(Prerelease {
@@ -2815,7 +2818,7 @@ fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, LocalVersio
             post,
             dev,
             None,
-        ) => (2, n, post, dev.unwrap_or(u64::MAX), version.local()),
+        ) => (2, n, post, dev.unwrap_or(u64::MAX), version.local(), is_max),
         // beta release
         (
             Some(Prerelease {
@@ -2825,8 +2828,8 @@ fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, LocalVersio
             post,
             dev,
             None,
-        ) => (3, n, post, dev.unwrap_or(u64::MAX), version.local()),
-        // alpha release
+        ) => (3, n, post, dev.unwrap_or(u64::MAX), version.local(), is_max),
+        // rc release
         (
             Some(Prerelease {
                 kind: PrereleaseKind::Rc,
@@ -2835,13 +2838,18 @@ fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, LocalVersio
             post,
             dev,
             None,
-        ) => (4, n, post, dev.unwrap_or(u64::MAX), version.local()),
+        ) => (4, n, post, dev.unwrap_or(u64::MAX), version.local(), is_max),
         // final release
-        (None, None, None, None) => (5, 0, None, 0, version.local()),
+        (None, None, None, None) => (5, 0, None, 0, version.local(), is_max),
         // post release
-        (None, Some(post), dev, None) => {
-            (6, 0, Some(post), dev.unwrap_or(u64::MAX), version.local())
-        }
+        (None, Some(post), dev, None) => (
+            6,
+            0,
+            Some(post),
+            dev.unwrap_or(u64::MAX),
+            version.local(),
+            is_max,
+        ),
     }
 }
 
@@ -2924,6 +2932,13 @@ mod tests {
         let b = Version::new([1u64, 2]).with_min(Some(0));
         assert_eq!(a, b);
         assert_eq!(hash_of(&a), hash_of(&b));
+
+        // The `max` sentinel sorts above every real version, so it must stay distinct from a
+        // real `post == u64::MAX` rather than comparing equal to it.
+        let max = Version::new([1u64]).with_max(Some(0));
+        let post_max = Version::new([1u64]).with_post(Some(u64::MAX));
+        assert_ne!(max, post_max);
+        assert!(max > post_max);
     }
 
     /// <https://github.com/pypa/packaging/blob/237ff3aa348486cf835a980592af3a59fccd6101/tests/test_version.py#L24-L81>
