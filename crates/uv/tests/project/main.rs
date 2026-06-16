@@ -19,6 +19,9 @@ mod format;
 mod init;
 
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
+mod no_workspace;
+
+#[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod run;
 
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]

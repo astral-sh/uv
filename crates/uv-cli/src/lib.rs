@@ -671,6 +671,10 @@ pub struct VersionArgs {
     #[arg(long, conflicts_with = "isolated", value_hint = ValueHint::Other)]
     pub package: Option<PackageName>,
 
+    /// Ignore the containing workspace and operate on the current project as a standalone project.
+    #[arg(long, conflicts_with = "package")]
+    pub no_workspace: bool,
+
     /// The Python interpreter to use for resolving and syncing.
     ///
     /// See `uv help python` for details on Python discovery and supported request formats.
@@ -3794,6 +3798,10 @@ pub struct RunArgs {
     #[arg(long, conflicts_with = "all_packages", value_hint = ValueHint::Other)]
     pub package: Option<PackageName>,
 
+    /// Ignore the containing workspace and run in the current project as a standalone project.
+    #[arg(long, conflicts_with_all = ["all_packages", "package", "no_project"])]
+    pub no_workspace: bool,
+
     /// Avoid discovering the project or workspace.
     ///
     /// Instead of searching for projects in the current directory and parent directories, run in an
@@ -4124,6 +4132,10 @@ pub struct SyncArgs {
     #[arg(long, conflicts_with = "all_packages", value_hint = ValueHint::Other)]
     pub package: Vec<PackageName>,
 
+    /// Ignore the containing workspace and sync the current project as a standalone project.
+    #[arg(long, conflicts_with_all = ["all_packages", "package", "script"])]
+    pub no_workspace: bool,
+
     /// Sync the environment for a Python script, rather than the current project.
     ///
     /// If provided, uv will sync the dependencies based on the script's inline metadata table, in
@@ -4207,6 +4219,12 @@ pub struct SyncArgs {
 
 #[derive(Args)]
 pub struct LockArgs {
+    /// Ignore the workspace and lock only the current project.
+    ///
+    /// By default, uv searches for workspaces in the current directory or any parent directory.
+    #[arg(long, conflicts_with = "script")]
+    pub no_workspace: bool,
+
     /// Check if the lockfile is up-to-date.
     ///
     /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is
@@ -4285,6 +4303,10 @@ pub struct UpgradeArgs {
     /// The package to upgrade.
     #[arg(value_hint = ValueHint::Other)]
     pub package: PackageName,
+
+    /// Ignore the containing workspace and upgrade the current project as a standalone project.
+    #[arg(long)]
+    pub no_workspace: bool,
 }
 
 #[derive(Args)]
@@ -4513,6 +4535,9 @@ pub struct AddArgs {
 
     /// Don't add the dependency as a workspace member.
     ///
+    /// If the current project has its own `uv.lock`, uv will instead ignore the containing
+    /// workspace and update the current project as a standalone project.
+    ///
     /// By default, when adding a dependency that's a local path and is within the workspace
     /// directory, uv will add it as a workspace member; pass `--no-workspace` to add the package
     /// as direct path dependency instead.
@@ -4705,6 +4730,10 @@ pub struct RemoveArgs {
     #[arg(long, conflicts_with = "isolated", value_hint = ValueHint::Other)]
     pub package: Option<PackageName>,
 
+    /// Ignore the containing workspace and modify the current project as a standalone project.
+    #[arg(long, conflicts_with_all = ["package", "script"])]
+    pub no_workspace: bool,
+
     /// Remove the dependency from the specified Python script, rather than from a project.
     ///
     /// If provided, uv will remove the dependency from the script's inline metadata table, in
@@ -4820,6 +4849,10 @@ pub struct TreeArgs {
     #[command(flatten)]
     pub resolver: ResolverArgs,
 
+    /// Ignore the containing workspace and show the current project as a standalone project.
+    #[arg(long, conflicts_with = "script")]
+    pub no_workspace: bool,
+
     /// Show the dependency tree the specified PEP 723 Python script, rather than the current
     /// project.
     ///
@@ -4893,6 +4926,10 @@ pub struct ExportArgs {
     /// If any workspace member does not exist, uv will exit with an error.
     #[arg(long, conflicts_with = "all_packages", value_hint = ValueHint::Other)]
     pub package: Vec<PackageName>,
+
+    /// Ignore the containing workspace and export the current project as a standalone project.
+    #[arg(long, conflicts_with_all = ["all_packages", "package", "script"])]
+    pub no_workspace: bool,
 
     /// Prune the given package from the dependency tree.
     ///
@@ -5231,6 +5268,10 @@ pub struct FormatArgs {
     )]
     pub no_project: bool,
 
+    /// Ignore the containing workspace and format the current project as a standalone project.
+    #[arg(long, conflicts_with = "no_project")]
+    pub no_workspace: bool,
+
     /// Display the version of Ruff that will be used for formatting.
     ///
     /// This is useful for verifying which version was resolved when using version constraints
@@ -5429,6 +5470,10 @@ pub struct CheckArgs {
     )]
     pub no_project: bool,
 
+    /// Ignore the containing workspace and check the current project as a standalone project.
+    #[arg(long, conflicts_with = "no_project")]
+    pub no_workspace: bool,
+
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
 
@@ -5504,6 +5549,10 @@ pub struct AuditArgs {
 
     #[command(flatten)]
     pub resolver: ResolverArgs,
+
+    /// Ignore the containing workspace and audit the current project as a standalone project.
+    #[arg(long, conflicts_with = "script")]
+    pub no_workspace: bool,
 
     /// Audit the specified PEP 723 Python script, rather than the current
     /// project.

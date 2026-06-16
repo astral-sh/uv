@@ -35,6 +35,7 @@ use crate::settings::ResolverSettings;
 
 pub(crate) async fn upgrade(
     project_dir: &Path,
+    no_workspace: bool,
     package: PackageName,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
@@ -50,7 +51,10 @@ pub(crate) async fn upgrade(
 ) -> Result<ExitStatus> {
     let project = match VirtualProject::discover(
         project_dir,
-        &DiscoveryOptions::default(),
+        &DiscoveryOptions {
+            no_workspace,
+            ..DiscoveryOptions::default()
+        },
         cache,
         workspace_cache,
     )

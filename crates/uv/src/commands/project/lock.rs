@@ -83,6 +83,7 @@ impl LockResult {
 /// Resolve the project requirements into a lockfile.
 pub(crate) async fn lock(
     project_dir: &Path,
+    no_workspace: bool,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     dry_run: DryRun,
@@ -131,7 +132,10 @@ pub(crate) async fn lock(
     } else {
         workspace = VirtualProject::discover(
             project_dir,
-            &DiscoveryOptions::default(),
+            &DiscoveryOptions {
+                no_workspace,
+                ..DiscoveryOptions::default()
+            },
             cache,
             workspace_cache,
         )

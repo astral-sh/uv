@@ -745,6 +745,7 @@ impl RunSettings {
             refresh,
             all_packages,
             package,
+            no_workspace: _,
             no_project,
             python,
             python_platform,
@@ -1833,6 +1834,7 @@ impl SyncSettings {
             refresh,
             all_packages,
             package,
+            no_workspace: _,
             script,
             python,
             python_platform,
@@ -2008,6 +2010,7 @@ impl LockSettings {
         environment: EnvironmentOptions,
     ) -> Self {
         let LockArgs {
+            no_workspace: _,
             check,
             locked,
             check_exists,
@@ -2489,6 +2492,7 @@ impl RemoveSettings {
             build,
             refresh,
             package,
+            no_workspace: _,
             script,
             python,
         } = args;
@@ -2595,6 +2599,7 @@ impl VersionSettings {
             build,
             refresh,
             package,
+            no_workspace: _,
             python,
         } = args;
 
@@ -2687,6 +2692,7 @@ impl TreeSettings {
             frozen,
             build,
             resolver,
+            no_workspace: _,
             script,
             python_version,
             python_platform,
@@ -2793,6 +2799,7 @@ impl ExportSettings {
             format,
             all_packages,
             package,
+            no_workspace: _,
             prune,
             extra,
             all_extras,
@@ -2959,6 +2966,7 @@ impl FormatSettings {
             version,
             exclude_newer,
             no_project,
+            no_workspace: _,
             show_version,
         } = args;
 
@@ -3028,6 +3036,7 @@ impl CheckSettings {
             ty_version,
             show_version,
             no_project,
+            no_workspace: _,
             installer,
             build,
             refresh,
@@ -3141,6 +3150,7 @@ impl AuditSettings {
             output_format,
             build,
             resolver,
+            no_workspace: _,
             ignore,
             ignore_until_fixed,
             service_format,
@@ -5156,6 +5166,7 @@ mod tests {
         let settings = UpgradeSettings::resolve(
             UpgradeArgs {
                 package: package.clone(),
+                no_workspace: false,
             },
             None,
             EnvironmentOptions::new()?,

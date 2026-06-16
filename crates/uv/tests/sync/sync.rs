@@ -7748,6 +7748,67 @@ fn sync_active_script_environment_json() -> Result<()> {
 }
 
 #[test]
+fn sync_without_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["child"]
+    "#})?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&child).arg("--no-workspace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    ");
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str("root lockfile\n")?;
+    fs_err::remove_dir_all(context.temp_dir.child(".venv"))?;
+
+    uv_snapshot!(context.filters(), context.sync().current_dir(&child).arg("--no-workspace").arg("--frozen"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Checked in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), "root lockfile\n");
+    context
+        .temp_dir
+        .child(".venv")
+        .assert(predicate::path::missing());
+    child.child(".venv").assert(predicate::path::is_dir());
+
+    Ok(())
+}
+
+#[test]
 #[cfg(feature = "test-git")]
 fn sync_workspace_custom_environment_path() -> Result<()> {
     let context = uv_test::test_context!("3.12");

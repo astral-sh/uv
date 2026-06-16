@@ -58,8 +58,10 @@ use crate::settings::{
 };
 
 /// Sync the project environment.
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn sync(
     project_dir: &Path,
+    no_workspace: bool,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     dry_run: DryRun,
@@ -105,6 +107,7 @@ pub(crate) async fn sync(
             VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions {
+                    no_workspace,
                     members: MemberDiscovery::Existing,
                     ..DiscoveryOptions::default()
                 },
@@ -115,7 +118,10 @@ pub(crate) async fn sync(
         } else if let [name] = package.as_slice() {
             VirtualProject::discover_with_package(
                 project_dir,
-                &DiscoveryOptions::default(),
+                &DiscoveryOptions {
+                    no_workspace,
+                    ..DiscoveryOptions::default()
+                },
                 cache,
                 workspace_cache,
                 name.clone(),
@@ -124,7 +130,10 @@ pub(crate) async fn sync(
         } else {
             let project = VirtualProject::discover(
                 project_dir,
-                &DiscoveryOptions::default(),
+                &DiscoveryOptions {
+                    no_workspace,
+                    ..DiscoveryOptions::default()
+                },
                 cache,
                 workspace_cache,
             )

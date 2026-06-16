@@ -66,6 +66,7 @@ use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
     project_dir: &Path,
+    no_workspace: bool,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     active: Option<bool>,
@@ -235,7 +236,10 @@ pub(crate) async fn add(
         let project = if let Some(package) = package {
             VirtualProject::discover_with_package(
                 project_dir,
-                &DiscoveryOptions::default(),
+                &DiscoveryOptions {
+                    no_workspace,
+                    ..DiscoveryOptions::default()
+                },
                 cache,
                 &WorkspaceCache::default(),
                 package,
@@ -244,7 +248,10 @@ pub(crate) async fn add(
         } else {
             VirtualProject::discover(
                 project_dir,
-                &DiscoveryOptions::default(),
+                &DiscoveryOptions {
+                    no_workspace,
+                    ..DiscoveryOptions::default()
+                },
                 cache,
                 &WorkspaceCache::default(),
             )
@@ -611,7 +618,10 @@ pub(crate) async fn add(
             AddTarget::Project(
                 VirtualProject::discover(
                     project.root(),
-                    &DiscoveryOptions::default(),
+                    &DiscoveryOptions {
+                        no_workspace,
+                        ..DiscoveryOptions::default()
+                    },
                     cache,
                     &WorkspaceCache::default(),
                 )
