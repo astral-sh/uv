@@ -2351,8 +2351,9 @@ async fn audit_json_vulnerability_and_project_status() {
 /// SARIF output includes vulnerabilities and adverse project statuses in the
 /// same audit report.
 #[tokio::test]
-async fn audit_sarif_vulnerability_and_project_status() {
+async fn audit_sarif_vulnerability_and_project_status() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filter((uv_version::version(), "[VERSION]"));
+    context.temp_dir.child(".git").create_dir_all()?;
     let proxy = crate::pypi_proxy::start().await;
     write_audit_output_project(&context.temp_dir, &proxy.url("/status/archived/simple"));
 
@@ -2538,13 +2539,16 @@ async fn audit_sarif_vulnerability_and_project_status() {
 
     ----- stderr -----
     "#);
+
+    Ok(())
 }
 
-/// SARIF artifact locations are relative to the invocation directory, even
-/// when the project is selected with `--project`.
+/// SARIF artifact locations are relative to the repository root, whether the
+/// project is selected with `--project` or uv is invoked from the project directory.
 #[tokio::test]
 async fn audit_sarif_project_artifact_uri() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    context.temp_dir.child(".git").create_dir_all()?;
     let proxy = crate::pypi_proxy::start().await;
     let project_dir = context.temp_dir.child("packages/project");
     project_dir.create_dir_all()?;
@@ -2588,11 +2592,36 @@ async fn audit_sarif_project_artifact_uri() -> Result<()> {
         .assert()
         .failure()
         .code(1);
-    let report: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
-    let artifact_uri =
-        report.pointer("/runs/0/results/0/locations/0/physicalLocation/artifactLocation/uri");
+    let project_report: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
 
-    insta::assert_json_snapshot!(artifact_uri, @r#""packages/project/uv.lock""#);
+    let assert = context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--output-format")
+        .arg("sarif")
+        .arg("--frozen")
+        .arg("--service-url")
+        .arg(server.uri())
+        .current_dir(&project_dir)
+        .assert()
+        .failure()
+        .code(1);
+    let nested_report: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+
+    let artifact_uris = [
+        project_report
+            .pointer("/runs/0/results/0/locations/0/physicalLocation/artifactLocation/uri"),
+        nested_report
+            .pointer("/runs/0/results/0/locations/0/physicalLocation/artifactLocation/uri"),
+    ];
+
+    insta::assert_json_snapshot!(artifact_uris, @r#"
+    [
+      "packages/project/uv.lock",
+      "packages/project/uv.lock"
+    ]
+    "#);
 
     Ok(())
 }

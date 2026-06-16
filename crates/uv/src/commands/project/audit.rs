@@ -29,7 +29,7 @@ use uv_cli::AuditOutputFormat;
 use uv_client::{BaseClientBuilder, CachedClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple};
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
-use uv_fs::CWD;
+use uv_fs::{CWD, find_git_repository_root, relative_to};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -326,10 +326,18 @@ pub(crate) async fn audit(
             } else {
                 lock_path.as_path()
             };
-            let artifact_path = if let Ok(relative) = artifact_path.strip_prefix(&*CWD) {
+            // SARIF consumers resolve artifact locations from the repository root, regardless of
+            // the directory from which uv was invoked. Fall back to the invocation directory for
+            // projects that aren't in a Git repository.
+            let artifact_path = if let Some(repository_root) =
+                find_git_repository_root(artifact_path)
+                && let Ok(relative) = relative_to(artifact_path, repository_root)
+            {
                 relative
+            } else if let Ok(relative) = artifact_path.strip_prefix(&*CWD) {
+                relative.to_path_buf()
             } else {
-                artifact_path
+                artifact_path.to_path_buf()
             };
             artifact_path.to_string_lossy().replace('\\', "/")
         },
