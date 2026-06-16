@@ -2878,6 +2878,9 @@ fn init_git() -> Result<()> {
 
         # Virtual environments
         .venv
+
+        # OS files
+        .DS_Store
         "
         );
     });

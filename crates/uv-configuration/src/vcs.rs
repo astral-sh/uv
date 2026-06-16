@@ -94,6 +94,9 @@ wheels/
 
 # Virtual environments
 .venv
+
+# OS files
+.DS_Store
 ";
 
 /// Setting for Git LFS (Large File Storage) support.
