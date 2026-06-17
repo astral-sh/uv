@@ -260,8 +260,24 @@ pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::
     fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref())
 }
 
+/// Remove a symbolic link at `path` without following its target.
+pub fn remove_symlink(path: impl AsRef<Path>) -> io::Result<()> {
+    let path = path.as_ref();
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::FileTypeExt;
+
+        if fs_err::symlink_metadata(path)?.file_type().is_symlink_dir() {
+            return fs_err::remove_dir(path);
+        }
+    }
+
+    fs_err::remove_file(path)
+}
+
 #[cfg(all(test, windows))]
-mod tests {
+mod windows_tests {
     use std::os::windows::ffi::OsStrExt;
 
     use super::*;
@@ -888,4 +904,28 @@ pub fn remove_virtualenv(location: &Path) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn remove_symlink_removes_directory_link_without_removing_target() -> std::io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let target = tempdir.path().join("target");
+        fs_err::create_dir(&target)?;
+        fs_err::write(target.join("file"), "content")?;
+        let link = tempdir.path().join("link");
+
+        create_symlink(&target, &link)?;
+        remove_symlink(&link)?;
+
+        assert!(matches!(
+            fs_err::symlink_metadata(&link),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound
+        ));
+        assert_eq!(fs_err::read_to_string(target.join("file"))?, "content");
+        Ok(())
+    }
 }
