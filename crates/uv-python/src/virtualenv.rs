@@ -317,12 +317,12 @@ impl PyVenvConfiguration {
         let mut lines = content.lines().map(Cow::Borrowed).collect::<Vec<_>>();
         let mut found = false;
         for line in &mut lines {
-            if let Some((lhs, _)) = line.split_once('=') {
-                if lhs.trim() == key {
-                    *line = Cow::Owned(format!("{key} = {value}"));
-                    found = true;
-                    break;
-                }
+            if let Some((lhs, _)) = line.split_once('=')
+                && lhs.trim() == key
+            {
+                *line = Cow::Owned(format!("{key} = {value}"));
+                found = true;
+                break;
             }
         }
         if !found {

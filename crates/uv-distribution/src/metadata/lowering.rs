@@ -67,16 +67,16 @@ impl LoweredRequirement {
             sources
                 .iter()
                 .filter(|source| {
-                    if let Some(target) = source.extra() {
-                        if extra != Some(target) {
-                            return false;
-                        }
+                    if let Some(target) = source.extra()
+                        && extra != Some(target)
+                    {
+                        return false;
                     }
 
-                    if let Some(target) = source.group() {
-                        if group != Some(target) {
-                            return false;
-                        }
+                    if let Some(target) = source.group()
+                        && group != Some(target)
+                    {
+                        return false;
                     }
 
                     true

@@ -190,10 +190,10 @@ impl Upgrade {
         let mut constraints: FxHashMap<PackageName, Vec<Requirement>> = FxHashMap::default();
         for requirement in upgrade_package {
             // Skip any "empty" constraints.
-            if let RequirementSource::Registry { specifier, .. } = &requirement.source {
-                if specifier.is_empty() {
-                    continue;
-                }
+            if let RequirementSource::Registry { specifier, .. } = &requirement.source
+                && specifier.is_empty()
+            {
+                continue;
             }
             constraints
                 .entry(requirement.name.clone())

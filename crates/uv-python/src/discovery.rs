@@ -1216,10 +1216,10 @@ fn find_python_installations_with_strategy<'a>(
             })
         }
         PythonRequest::Key(request) => {
-            if let Some(version) = request.version() {
-                if let Err(err) = version.check_supported() {
-                    return Box::new(iter::once(Err(Error::InvalidVersionRequest(err))));
-                }
+            if let Some(version) = request.version()
+                && let Err(err) = version.check_supported()
+            {
+                return Box::new(iter::once(Err(Error::InvalidVersionRequest(err))));
             }
 
             Box::new({
@@ -1292,10 +1292,10 @@ pub(crate) fn find_python_installation(
         // Iterate until the first critical error or happy result
         if !result.as_ref().err().is_none_or(Error::is_critical) {
             // Track the first non-critical error
-            if first_error.is_none() {
-                if let Err(err) = result {
-                    first_error = Some(err);
-                }
+            if first_error.is_none()
+                && let Err(err) = result
+            {
+                first_error = Some(err);
             }
             continue;
         }
@@ -2710,12 +2710,11 @@ impl VersionRequest {
     /// If the specifiers consist of a single `==` constraint, the version is parsed as a
     /// concrete version request (e.g., `MajorMinorPatch`) rather than a range.
     pub fn from_specifiers(specifiers: VersionSpecifiers, variant: PythonVariant) -> Self {
-        if let [specifier] = specifiers.iter().as_slice() {
-            if specifier.operator() == &uv_pep440::Operator::Equal {
-                if let Ok(request) = Self::from_str(&specifier.version().to_string()) {
-                    return request;
-                }
-            }
+        if let [specifier] = specifiers.iter().as_slice()
+            && specifier.operator() == &uv_pep440::Operator::Equal
+            && let Ok(request) = Self::from_str(&specifier.version().to_string())
+        {
+            return request;
         }
         Self::Range(specifiers, variant)
     }
@@ -2819,12 +2818,12 @@ impl VersionRequest {
         }
 
         // Include free-threaded variants
-        if let Some(variant) = self.variant() {
-            if variant != PythonVariant::Default {
-                for i in 0..names.len() {
-                    let name = names[i].with_variant(variant);
-                    names.push(name);
-                }
+        if let Some(variant) = self.variant()
+            && variant != PythonVariant::Default
+        {
+            for i in 0..names.len() {
+                let name = names[i].with_variant(variant);
+                names.push(name);
             }
         }
 
@@ -2927,14 +2926,13 @@ impl VersionRequest {
             Self::Range(_, _) => (),
         }
 
-        if self.is_freethreaded() {
-            if let Self::MajorMinor(major, minor, _) = self.clone().without_patch() {
-                if (major, minor) < (3, 13) {
-                    return Err(format!(
-                        "Python <3.13 does not support free-threading but {self} was requested."
-                    ));
-                }
-            }
+        if self.is_freethreaded()
+            && let Self::MajorMinor(major, minor, _) = self.clone().without_patch()
+            && (major, minor) < (3, 13)
+        {
+            return Err(format!(
+                "Python <3.13 does not support free-threading but {self} was requested."
+            ));
         }
 
         Ok(())

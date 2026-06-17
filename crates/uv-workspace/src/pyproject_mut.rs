@@ -450,14 +450,13 @@ impl PyProjectTomlMut {
             .iter()
             .find(|table| {
                 // If the index has the same name, reuse it.
-                if let Some(index) = index.name.as_deref() {
-                    if table
+                if let Some(index) = index.name.as_deref()
+                    && table
                         .get("name")
                         .and_then(|name| name.as_str())
                         .is_some_and(|name| name == index)
-                    {
-                        return true;
-                    }
+                {
+                    return true;
                 }
 
                 // If the index is the default, and there's another default index, reuse it.
@@ -487,23 +486,22 @@ impl PyProjectTomlMut {
             .unwrap_or_default();
 
         // If necessary, update the name.
-        if let Some(index) = index.name.as_deref() {
-            if table
+        if let Some(index) = index.name.as_deref()
+            && table
                 .get("name")
                 .and_then(|name| name.as_str())
                 .is_none_or(|name| name != index)
-            {
-                let mut formatted = Formatted::new(index.to_string());
-                if let Some(value) = table.get("name").and_then(Item::as_value) {
-                    if let Some(prefix) = value.decor().prefix() {
-                        formatted.decor_mut().set_prefix(prefix.clone());
-                    }
-                    if let Some(suffix) = value.decor().suffix() {
-                        formatted.decor_mut().set_suffix(suffix.clone());
-                    }
+        {
+            let mut formatted = Formatted::new(index.to_string());
+            if let Some(value) = table.get("name").and_then(Item::as_value) {
+                if let Some(prefix) = value.decor().prefix() {
+                    formatted.decor_mut().set_prefix(prefix.clone());
                 }
-                table.insert("name", Value::String(formatted).into());
+                if let Some(suffix) = value.decor().suffix() {
+                    formatted.decor_mut().set_suffix(suffix.clone());
+                }
             }
+            table.insert("name", Value::String(formatted).into());
         }
 
         // If necessary, update the URL.
@@ -547,14 +545,13 @@ impl PyProjectTomlMut {
         // Remove any replaced tables.
         existing.retain(|table| {
             // If the index has the same name, skip it.
-            if let Some(index) = index.name.as_deref() {
-                if table
+            if let Some(index) = index.name.as_deref()
+                && table
                     .get("name")
                     .and_then(|name| name.as_str())
                     .is_some_and(|name| name == index)
-                {
-                    return false;
-                }
+            {
+                return false;
             }
 
             // If there's another default index, skip it.
@@ -1168,10 +1165,10 @@ impl PyProjectTomlMut {
 
         if let Some(project) = self.doc.get("project").and_then(Item::as_table) {
             // Check `project.dependencies`.
-            if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array) {
-                if !find_dependencies(name, marker, dependencies).is_empty() {
-                    types.push(DependencyType::Production);
-                }
+            if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array)
+                && !find_dependencies(name, marker, dependencies).is_empty()
+            {
+                types.push(DependencyType::Production);
             }
 
             // Check `project.optional-dependencies`.
@@ -1219,10 +1216,9 @@ impl PyProjectTomlMut {
             .and_then(Item::as_table)
             .and_then(|uv| uv.get("dev-dependencies"))
             .and_then(Item::as_array)
+            && !find_dependencies(name, marker, dev_dependencies).is_empty()
         {
-            if !find_dependencies(name, marker, dev_dependencies).is_empty() {
-                types.push(DependencyType::Dev);
-            }
+            types.push(DependencyType::Dev);
         }
 
         types
@@ -1648,10 +1644,11 @@ fn find_dependencies(
 ) -> Vec<(usize, Requirement)> {
     let mut to_replace = Vec::new();
     for (i, dep) in deps.iter().enumerate() {
-        if let Some(req) = dep.as_str().and_then(try_parse_requirement) {
-            if marker.is_none_or(|m| *m == req.marker) && *name == req.name {
-                to_replace.push((i, req));
-            }
+        if let Some(req) = dep.as_str().and_then(try_parse_requirement)
+            && marker.is_none_or(|m| *m == req.marker)
+            && *name == req.name
+        {
+            to_replace.push((i, req));
         }
     }
     to_replace

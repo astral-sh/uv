@@ -822,14 +822,14 @@ impl FromStr for PlatformTag {
                 });
             }
 
-            if let Some(release_arch) = rest.strip_suffix("_64bit") {
-                if !release_arch.is_empty() {
-                    return Ok(Self::Solaris {
-                        release_arch: release_arch.parse::<ReleaseArch>().map_err(|_| {
-                            ParsePlatformTagError::InvalidCharacters { tag: s.to_string() }
-                        })?,
-                    });
-                }
+            if let Some(release_arch) = rest.strip_suffix("_64bit")
+                && !release_arch.is_empty()
+            {
+                return Ok(Self::Solaris {
+                    release_arch: release_arch.parse::<ReleaseArch>().map_err(|_| {
+                        ParsePlatformTagError::InvalidCharacters { tag: s.to_string() }
+                    })?,
+                });
             }
 
             return Err(ParsePlatformTagError::InvalidArch {
