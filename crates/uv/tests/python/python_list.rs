@@ -669,6 +669,24 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
     ----- stderr -----
     ");
 
+    // Test showing custom download metadata with a CPython mirror configured
+    uv_snapshot!(context.filters(), context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .env(EnvVars::UV_PYTHON_INSTALL_MIRROR, "https://mirror.example.com")
+        .arg("--all-versions")
+        .arg("--all-platforms")
+        .arg("--all-arches")
+        .arg("--show-urls")
+        .arg("--python-downloads-json-url").arg(server.uri()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: A mirror was provided via `UV_PYTHON_INSTALL_MIRROR`, but the URL does not match the expected format: https://custom.com/cpython-3.14.0-darwin-aarch64-none.tar.gz
+    ");
+
     // test invalid URL path
     uv_snapshot!(context.filters(), context
         .python_list()
