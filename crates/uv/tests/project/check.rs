@@ -65,8 +65,7 @@ fn check_uses_ty_from_environment() -> Result<()> {
             .arg("--no-project")
             .arg("--ty-version")
             .arg(">=999.0.0")
-            .arg("--verbose")
-            .env(EnvVars::RUST_LOG, "uv::commands::project::check::ty=debug")
+            .arg("--show-version")
             .env(EnvVars::TY, ty.as_os_str()),
         @"
     success: true
@@ -76,7 +75,7 @@ fn check_uses_ty_from_environment() -> Result<()> {
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    DEBUG Using `ty 0.0.17`
+    Using ty 0.0.17
     "
     );
 
@@ -210,15 +209,17 @@ fn check_ty_version_no_match() {
 }
 
 #[test]
-fn check_ty_version_pinned_verbose() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]);
+fn check_ty_version_show_version() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_filter((
+        r"(?m)^WARN Failed to fetch `ty` from .+; falling back to .+\n",
+        "",
+    ));
 
     let main_py = context.temp_dir.child("main.py");
     main_py.write_str(indoc! {r"
         x: int = 1
     "})?;
 
-    // Narrow verbose logging to the version selection this test exercises.
     uv_snapshot!(
         context.filters(),
         context
@@ -226,8 +227,7 @@ fn check_ty_version_pinned_verbose() -> Result<()> {
             .arg("--no-project")
             .arg("--ty-version")
             .arg("0.0.17")
-            .arg("--verbose")
-            .env(EnvVars::RUST_LOG, "uv::commands::project::check::ty=debug"),
+            .arg("--show-version"),
         @"
     success: true
     exit_code: 0
@@ -236,8 +236,7 @@ fn check_ty_version_pinned_verbose() -> Result<()> {
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    DEBUG `--exclude-newer` is ignored for pinned version `0.0.17`
-    DEBUG Using `ty==0.0.17`
+    Using ty 0.0.17
     "
     );
 

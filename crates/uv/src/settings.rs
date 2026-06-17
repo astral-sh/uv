@@ -2986,6 +2986,7 @@ pub(crate) struct CheckSettings {
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) ty_version: Option<String>,
+    pub(crate) show_version: bool,
     pub(crate) no_project: bool,
     pub(crate) malware_settings: MalwareCheckSettings,
 }
@@ -3016,6 +3017,7 @@ impl CheckSettings {
             isolated,
             python,
             ty_version,
+            show_version,
             no_project,
             installer,
             build,
@@ -3082,6 +3084,7 @@ impl CheckSettings {
             refresh: Refresh::from(refresh),
             settings,
             ty_version,
+            show_version,
             no_project,
             malware_settings,
         }

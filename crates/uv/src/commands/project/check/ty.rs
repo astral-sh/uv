@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::str::FromStr;
@@ -42,12 +43,13 @@ pub(super) async fn run(
     venv_path: Option<&Path>,
     workspace_metadata: Option<String>,
     exclude_newer: Option<jiff::Timestamp>,
+    show_version: bool,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let ty_path = if let Some(ty_path) = ty_path {
-        if tracing::enabled!(tracing::Level::DEBUG) {
+        if show_version {
             let output = Command::new(&ty_path)
                 .arg("--version")
                 .output()
@@ -56,7 +58,8 @@ pub(super) async fn run(
             if !output.status.success() {
                 anyhow::bail!("Failed to query ty version");
             }
-            debug!("Using `{}`", String::from_utf8_lossy(&output.stdout).trim());
+            let version = String::from_utf8_lossy(&output.stdout);
+            writeln!(printer.stderr(), "Using {}", version.trim())?;
         }
         ty_path
     } else {
@@ -122,6 +125,10 @@ pub(super) async fn run(
                 resolved
             }
         };
+
+        if show_version {
+            writeln!(printer.stderr(), "Using ty {}", resolved.version)?;
+        }
 
         bin_install(
             Binary::Ty,

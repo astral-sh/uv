@@ -2800,6 +2800,7 @@ async fn run_project(
                 args.install_mirrors,
                 args.settings,
                 args.ty_version,
+                args.show_version,
                 client_builder.subcommand(vec!["check".to_owned()]),
                 globals.python_preference,
                 globals.python_downloads,
