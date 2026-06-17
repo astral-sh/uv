@@ -18,8 +18,11 @@ pub struct CacheArgs {
         alias = "no-cache-dir",
         env = EnvVars::UV_NO_CACHE,
         value_parser = clap::builder::BoolishValueParser::new(),
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
     )]
-    pub no_cache: bool,
+    pub no_cache: Option<bool>,
 
     /// Path to the cache directory.
     ///
@@ -82,7 +85,7 @@ impl TryFrom<CacheArgs> for Cache {
     type Error = io::Error;
 
     fn try_from(value: CacheArgs) -> Result<Self, Self::Error> {
-        Self::from_settings(value.no_cache, value.cache_dir)
+        Self::from_settings(value.no_cache.unwrap_or(false), value.cache_dir)
     }
 }
 

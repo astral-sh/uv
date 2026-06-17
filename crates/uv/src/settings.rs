@@ -421,10 +421,10 @@ impl CacheSettings {
     /// Resolve the [`CacheSettings`] from the CLI and filesystem configuration.
     pub(crate) fn resolve(args: CacheArgs, workspace: Option<&FilesystemOptions>) -> Self {
         Self {
-            no_cache: args.no_cache
-                || workspace
-                    .and_then(|workspace| workspace.globals.no_cache)
-                    .unwrap_or(false),
+            no_cache: args
+                .no_cache
+                .combine(workspace.and_then(|workspace| workspace.globals.no_cache))
+                .unwrap_or(false),
             cache_dir: args
                 .cache_dir
                 .or_else(|| workspace.and_then(|workspace| workspace.globals.cache_dir.clone())),
@@ -5131,7 +5131,6 @@ fn parse_failure(name: &str, expected: &str) -> ! {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
     fn upgrade_settings_target_only_requested_package() -> anyhow::Result<()> {
         let package = PackageName::from_str("anyio")?;
@@ -5147,5 +5146,58 @@ mod tests {
         assert!(!settings.settings.upgrade.is_all());
         assert_eq!(settings.settings.upgrade.packages(), Some(&expected));
         Ok(())
+    }
+
+    fn workspace_with_no_cache(no_cache: bool) -> FilesystemOptions {
+        let toml = format!("no-cache = {no_cache}");
+        let options: Options = toml::from_str(&toml).unwrap();
+        FilesystemOptions::from(options)
+    }
+
+    #[test]
+    fn cache_settings_env_var_overrides_config() {
+        // UV_NO_CACHE=false (explicit false) should override no-cache=true in config.
+        let args = CacheArgs {
+            no_cache: Some(false),
+            cache_dir: None,
+        };
+        let workspace = workspace_with_no_cache(true);
+        let resolved = CacheSettings::resolve(args, Some(&workspace));
+        assert!(!resolved.no_cache);
+    }
+
+    #[test]
+    fn cache_settings_config_applies_when_env_var_unset() {
+        // When the env var is not set, the config file value applies.
+        let args = CacheArgs {
+            no_cache: None,
+            cache_dir: None,
+        };
+        let workspace = workspace_with_no_cache(true);
+        let resolved = CacheSettings::resolve(args, Some(&workspace));
+        assert!(resolved.no_cache);
+    }
+
+    #[test]
+    fn cache_settings_env_var_true_with_config_false() {
+        // UV_NO_CACHE=true should take effect even when config says false.
+        let args = CacheArgs {
+            no_cache: Some(true),
+            cache_dir: None,
+        };
+        let workspace = workspace_with_no_cache(false);
+        let resolved = CacheSettings::resolve(args, Some(&workspace));
+        assert!(resolved.no_cache);
+    }
+
+    #[test]
+    fn cache_settings_defaults_to_false() {
+        // With neither env var nor config, no_cache defaults to false.
+        let args = CacheArgs {
+            no_cache: None,
+            cache_dir: None,
+        };
+        let resolved = CacheSettings::resolve(args, None);
+        assert!(!resolved.no_cache);
     }
 }

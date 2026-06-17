@@ -71,8 +71,9 @@ fn upgrade_help() {
       <PACKAGE>  The package to upgrade
 
     Cache options:
-      -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
+      -n, --no-cache[=<NO_CACHE>]  Avoid reading from or writing to the cache, instead using a temporary
                                    directory for the duration of the operation [env: UV_NO_CACHE=]
+                                   [possible values: true, false]
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
