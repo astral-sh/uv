@@ -46,6 +46,7 @@ pub(crate) async fn tree(
     package: Vec<PackageName>,
     no_dedupe: bool,
     invert: bool,
+    only_emit_workspace: bool,
     outdated: bool,
     show_sizes: bool,
     python_version: Option<PythonVersion>,
@@ -303,6 +304,11 @@ pub(crate) async fn tree(
         invert,
         show_sizes,
     );
+    let tree = if only_emit_workspace {
+        tree.only_emit_workspace()
+    } else {
+        tree
+    };
 
     print!("{tree}");
 

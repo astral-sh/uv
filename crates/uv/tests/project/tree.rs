@@ -2356,3 +2356,163 @@ fn workspace_circular_dependencies() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn only_emit_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+
+    let package_a = context.temp_dir.child("packages/package-a");
+    package_a.create_dir_all()?;
+    package_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-b"]
+
+        [tool.uv.sources]
+        package-b = { workspace = true }
+        "#,
+    )?;
+
+    let package_b = context.temp_dir.child("packages/package-b");
+    package_b.create_dir_all()?;
+    package_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+        "#,
+    )?;
+
+    let package_c = context.temp_dir.child("packages/package-c");
+    package_c.create_dir_all()?;
+    package_c.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-c"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Non-workspace dependencies are omitted while the workspace hierarchy is retained. The
+    // unrelated workspace member is excluded by the existing `--package` traversal filter.
+    uv_snapshot!(context.filters(), context
+        .tree()
+        .arg("--package")
+        .arg("package-a")
+        .arg("--only-emit-workspace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-a v0.1.0
+    └── package-b v0.1.0
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    // Hidden dependencies alone do not cause a repeated workspace leaf to be marked as having a
+    // suppressed subtree.
+    uv_snapshot!(context.filters(), context
+        .tree()
+        .arg("--only-emit-workspace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-c v0.1.0
+    package-b v0.1.0
+    package-a v0.1.0
+    └── package-b v0.1.0
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    // A non-workspace target is hidden, while its direct and transitive workspace dependents are
+    // promoted into the rendered tree.
+    uv_snapshot!(context.filters(), context
+        .tree()
+        .arg("--invert")
+        .arg("--package")
+        .arg("anyio")
+        .arg("--only-emit-workspace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-b v0.1.0
+    └── package-a v0.1.0
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    // Hidden packages do not consume display depth.
+    uv_snapshot!(context.filters(), context
+        .tree()
+        .arg("--invert")
+        .arg("--package")
+        .arg("idna")
+        .arg("--depth")
+        .arg("1")
+        .arg("--only-emit-workspace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-b v0.1.0
+    └── package-a v0.1.0
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    // Repeated hidden paths still reach the same visible subtree, allowing the existing tree
+    // de-duplication behavior to be applied to the emitted workspace member.
+    uv_snapshot!(context.filters(), context
+        .tree()
+        .arg("--invert")
+        .arg("--package")
+        .arg("idna")
+        .arg("--package")
+        .arg("sniffio")
+        .arg("--only-emit-workspace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-b v0.1.0
+    └── package-a v0.1.0
+    package-b v0.1.0 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    // If traversal from the selected package reaches no workspace members, the result is empty.
+    uv_snapshot!(context.filters(), context
+        .tree()
+        .arg("--package")
+        .arg("idna")
+        .arg("--only-emit-workspace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    Ok(())
+}
