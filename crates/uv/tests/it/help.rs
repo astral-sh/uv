@@ -42,9 +42,8 @@ fn help() {
       help                       Display documentation for a command
 
     Cache options:
-      -n, --no-cache[=<NO_CACHE>]  Avoid reading from or writing to the cache, instead using a temporary
-                                   directory for the duration of the operation [env: UV_NO_CACHE=]
-                                   [possible values: true, false]
+      -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
+                                   directory for the duration of the operation
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
@@ -126,9 +125,8 @@ fn help_flag() {
       help       Display documentation for a command
 
     Cache options:
-      -n, --no-cache[=<NO_CACHE>]  Avoid reading from or writing to the cache, instead using a temporary
-                                   directory for the duration of the operation [env: UV_NO_CACHE=]
-                                   [possible values: true, false]
+      -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
+                                   directory for the duration of the operation
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
@@ -210,9 +208,8 @@ fn help_short_flag() {
       help       Display documentation for a command
 
     Cache options:
-      -n, --no-cache[=<NO_CACHE>]  Avoid reading from or writing to the cache, instead using a temporary
-                                   directory for the duration of the operation [env: UV_NO_CACHE=]
-                                   [possible values: true, false]
+      -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
+                                   directory for the duration of the operation
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
@@ -274,9 +271,8 @@ fn help_flag_workspace() {
       list      List the members of a workspace
 
     Cache options:
-      -n, --no-cache[=<NO_CACHE>]  Avoid reading from or writing to the cache, instead using a temporary
-                                   directory for the duration of the operation [env: UV_NO_CACHE=]
-                                   [possible values: true, false]
+      -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
+                                   directory for the duration of the operation
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
@@ -381,12 +377,9 @@ fn help_subcommand() {
       update-shell  Ensure that the Python executable directory is on the `PATH`
 
     Cache options:
-      -n, --no-cache[=<NO_CACHE>]
+      -n, --no-cache
               Avoid reading from or writing to the cache, instead using a temporary directory for the
               duration of the operation
-
-              [env: UV_NO_CACHE=]
-              [possible values: true, false]
 
           --cache-dir [CACHE_DIR]
               Path to the cache directory.
@@ -666,12 +659,9 @@ fn help_subsubcommand() {
               [env: UV_COMPILE_BYTECODE=]
 
     Cache options:
-      -n, --no-cache[=<NO_CACHE>]
+      -n, --no-cache
               Avoid reading from or writing to the cache, instead using a temporary directory for the
               duration of the operation
-
-              [env: UV_NO_CACHE=]
-              [possible values: true, false]
 
           --cache-dir [CACHE_DIR]
               Path to the cache directory.
@@ -837,9 +827,8 @@ fn help_flag_subcommand() {
       update-shell  Ensure that the Python executable directory is on the `PATH`
 
     Cache options:
-      -n, --no-cache[=<NO_CACHE>]  Avoid reading from or writing to the cache, instead using a temporary
-                                   directory for the duration of the operation [env: UV_NO_CACHE=]
-                                   [possible values: true, false]
+      -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
+                                   directory for the duration of the operation
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
@@ -922,9 +911,8 @@ fn help_flag_subsubcommand() {
               UV_COMPILE_BYTECODE=]
 
     Cache options:
-      -n, --no-cache[=<NO_CACHE>]  Avoid reading from or writing to the cache, instead using a temporary
-                                   directory for the duration of the operation [env: UV_NO_CACHE=]
-                                   [possible values: true, false]
+      -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
+                                   directory for the duration of the operation
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
@@ -1094,9 +1082,8 @@ fn help_with_global_option() {
       help                       Display documentation for a command
 
     Cache options:
-      -n, --no-cache[=<NO_CACHE>]  Avoid reading from or writing to the cache, instead using a temporary
-                                   directory for the duration of the operation [env: UV_NO_CACHE=]
-                                   [possible values: true, false]
+      -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
+                                   directory for the duration of the operation
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
@@ -1220,9 +1207,8 @@ fn help_with_no_pager() {
       help                       Display documentation for a command
 
     Cache options:
-      -n, --no-cache[=<NO_CACHE>]  Avoid reading from or writing to the cache, instead using a temporary
-                                   directory for the duration of the operation [env: UV_NO_CACHE=]
-                                   [possible values: true, false]
+      -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
+                                   directory for the duration of the operation
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
