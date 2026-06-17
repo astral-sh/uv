@@ -414,9 +414,7 @@ impl NetworkSettings {
 fn env_no_cache() -> Option<bool> {
     match uv_static::parse_boolish_environment_variable(EnvVars::UV_NO_CACHE) {
         Ok(value) => value,
-        Err(err) => {
-            parse_failure(&err.name, "a boolish value (true/false, 1/0, yes/no, etc.)")
-        }
+        Err(err) => parse_failure(&err.name, "a boolish value (true/false, 1/0, yes/no, etc.)"),
     }
 }
 

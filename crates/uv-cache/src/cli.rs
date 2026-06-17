@@ -16,7 +16,7 @@ pub struct CacheArgs {
         long,
         short,
         alias = "no-cache-dir",
-        overrides_with("cache"),
+        overrides_with("cache")
     )]
     pub no_cache: bool,
 
@@ -50,7 +50,10 @@ impl CacheArgs {
             Err(err) => {
                 #[allow(clippy::print_stderr)]
                 {
-                    eprintln!("error: invalid value for {}, expected a boolish value (true/false, 1/0, yes/no, etc.)", err.name);
+                    eprintln!(
+                        "error: invalid value for {}, expected a boolish value (true/false, 1/0, yes/no, etc.)",
+                        err.name
+                    );
                 }
                 #[allow(clippy::exit)]
                 {
