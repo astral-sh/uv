@@ -863,8 +863,7 @@ fn path_source(
                     .ok()
                     .and_then(|contents| PyProjectToml::from_string(contents, pyproject_path).ok())
                     // We don't require a build system for path dependencies
-                    .map(|pyproject_toml| pyproject_toml.is_package(false))
-                    .unwrap_or(true)
+                    .is_none_or(|pyproject_toml| pyproject_toml.is_package(false))
             });
 
             // If the project is not a package, treat it as a virtual dependency.

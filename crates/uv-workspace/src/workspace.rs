@@ -1182,8 +1182,7 @@ impl Workspace {
                             // If the directory is hidden, skip it.
                             if member_root
                                 .file_name()
-                                .map(|name| name.as_encoded_bytes().starts_with(b"."))
-                                .unwrap_or(false)
+                                .is_some_and(|name| name.as_encoded_bytes().starts_with(b"."))
                             {
                                 debug!(
                                     "Ignoring hidden workspace member: `{}`",
@@ -1467,8 +1466,7 @@ impl ProjectWorkspace {
                     .stop_discovery_at
                     .as_deref()
                     .and_then(Path::parent)
-                    .map(|stop_discovery_at| stop_discovery_at != *path)
-                    .unwrap_or(true)
+                    .is_none_or(|stop_discovery_at| stop_discovery_at != *path)
             })
             .find(|path| path.join("pyproject.toml").is_file())
             .ok_or_else(|| WorkspaceErrorKind::MissingPyprojectToml)?;
@@ -1762,8 +1760,7 @@ async fn find_workspace(
                 .stop_discovery_at
                 .as_deref()
                 .and_then(Path::parent)
-                .map(|stop_discovery_at| stop_discovery_at != *path)
-                .unwrap_or(true)
+                .is_none_or(|stop_discovery_at| stop_discovery_at != *path)
         })
         .skip(1)
     {
@@ -1962,8 +1959,7 @@ impl VirtualProject {
                     .stop_discovery_at
                     .as_deref()
                     .and_then(Path::parent)
-                    .map(|stop_discovery_at| stop_discovery_at != *path)
-                    .unwrap_or(true)
+                    .is_none_or(|stop_discovery_at| stop_discovery_at != *path)
             })
             .find(|path| path.join("pyproject.toml").is_file())
             .ok_or(WorkspaceErrorKind::MissingPyprojectToml)?;

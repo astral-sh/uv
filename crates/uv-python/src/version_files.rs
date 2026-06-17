@@ -137,8 +137,7 @@ impl PythonVersionFile {
                 options
                     .stop_discovery_at
                     .and_then(Path::parent)
-                    .map(|stop_discovery_at| stop_discovery_at != *path)
-                    .unwrap_or(true)
+                    .is_none_or(|stop_discovery_at| stop_discovery_at != *path)
             })
             .find_map(|path| Self::find_in_directory(path, options))
     }

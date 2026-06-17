@@ -905,8 +905,7 @@ impl PyProjectToml {
         if !group
             .chars()
             .next()
-            .map(|c| c.is_alphanumeric() || c == '_')
-            .unwrap_or(false)
+            .is_some_and(|c| c.is_alphanumeric() || c == '_')
             || !group
                 .chars()
                 .all(|c| c.is_alphanumeric() || c == '.' || c == '_')
@@ -1228,8 +1227,7 @@ impl BuildSystem {
                 }
                 Ranges::from(specifier.clone())
                     .bounding_range()
-                    .map(|bounding_range| bounding_range.1 != Bound::Unbounded)
-                    .unwrap_or(false)
+                    .is_some_and(|bounding_range| bounding_range.1 != Bound::Unbounded)
             }
         };
 

@@ -123,10 +123,7 @@ impl DisplaySafeUrl {
 
         // Check for the suspicious pattern.
         if !has_credential_like_pattern(url.path())
-            && !url
-                .fragment()
-                .map(has_credential_like_pattern)
-                .unwrap_or(false)
+            && !url.fragment().is_some_and(has_credential_like_pattern)
         {
             return Ok(());
         }

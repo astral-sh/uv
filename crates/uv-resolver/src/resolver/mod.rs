@@ -970,12 +970,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
         // Ignore unresolved URL packages, i.e., packages that use a direct URL in some forks.
-        if url.is_none()
-            && package
-                .name()
-                .map(|name| self.urls.any_url(name))
-                .unwrap_or(true)
-        {
+        if url.is_none() && package.name().is_none_or(|name| self.urls.any_url(name)) {
             return Ok(());
         }
 
@@ -3030,8 +3025,7 @@ impl ForkState {
                 // Warn the user if a direct dependency lacks a lower bound in `--lowest` resolution.
                 let missing_lower_bound = version
                     .bounding_range()
-                    .map(|(lowest, _highest)| lowest == Bound::Unbounded)
-                    .unwrap_or(true);
+                    .is_none_or(|(lowest, _highest)| lowest == Bound::Unbounded);
                 let strategy_lowest = matches!(
                     resolution_strategy,
                     ResolutionStrategy::Lowest | ResolutionStrategy::LowestDirect(..)
@@ -3050,8 +3044,7 @@ impl ForkState {
                             && !other
                                 .version
                                 .bounding_range()
-                                .map(|(lowest, _highest)| lowest == Bound::Unbounded)
-                                .unwrap_or(true)
+                                .is_none_or(|(lowest, _highest)| lowest == Bound::Unbounded)
                     });
 
                     if !bound_on_other_package {

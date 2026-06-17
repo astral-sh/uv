@@ -630,8 +630,7 @@ impl SourceBuild {
                 .tool
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
-                .map(|uv| uv.build_backend.is_some())
-                .unwrap_or(false)
+                .is_some_and(|uv| uv.build_backend.is_some())
             && build_backend != Some("uv_build")
             && let Some(package_name) =
                 package_name.or(pyproject_toml.project.as_ref().map(|project| &project.name))

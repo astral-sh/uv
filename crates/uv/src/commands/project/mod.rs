@@ -616,9 +616,7 @@ pub(crate) fn validate_project_requires_python(
         .flatten()
         .filter(|(.., requires)| !requires.contains(interpreter.python_version()))
         .collect::<RequiresPythonSources>();
-    let workspace_non_trivial = workspace
-        .map(|workspace| workspace.packages().len() > 1)
-        .unwrap_or(false);
+    let workspace_non_trivial = workspace.is_some_and(|workspace| workspace.packages().len() > 1);
 
     match source {
         PythonRequestSource::UserRequest => {

@@ -3878,7 +3878,7 @@ impl PackageId {
     fn to_toml(&self, dist_count_by_name: Option<&FxHashMap<PackageName, u64>>, table: &mut Table) {
         let count = dist_count_by_name.and_then(|map| map.get(&self.name).copied());
         table.insert("name", value(self.name.to_string()));
-        if count.map(|count| count > 1).unwrap_or(true) {
+        if count.is_none_or(|count| count > 1) {
             if let Some(version) = &self.version {
                 table.insert("version", value(version.to_string()));
             }

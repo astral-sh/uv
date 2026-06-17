@@ -228,8 +228,7 @@ impl ManagedPythonInstallations {
             .filter(|path| {
                 path.file_name()
                     .and_then(OsStr::to_str)
-                    .map(|name| !name.starts_with('.'))
-                    .unwrap_or(true)
+                    .is_none_or(|name| !name.starts_with('.'))
             })
             .filter_map(|path| {
                 ManagedPythonInstallation::from_path(path)
