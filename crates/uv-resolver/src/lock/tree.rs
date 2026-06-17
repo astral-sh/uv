@@ -8,15 +8,17 @@ use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
 use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use serde::Serialize;
 
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_console::human_readable_bytes;
+use uv_fs::PortablePath;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ResolverMarkerEnvironment;
 
-use crate::lock::{Package, PackageId};
+use crate::lock::{DirectSource, Package, PackageId, RegistrySource, Source};
 use crate::{Lock, PackageMap};
 
 #[derive(Debug)]
@@ -647,6 +649,353 @@ impl<'env> TreeDisplay<'env> {
             .filter(|extra| package.optional_dependencies.contains_key(*extra))
             .collect()
     }
+
+    /// Serialize the dependency graph in `NetworkX` node-link format.
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(&JsonGraph::from(self))
+    }
+
+    /// Return the shortest distance from any displayed root to every package within the requested
+    /// depth.
+    fn json_distances(&self) -> FxHashMap<NodeIndex, usize> {
+        let mut distances = FxHashMap::default();
+        let mut queue = VecDeque::new();
+
+        for root in &self.roots {
+            match self.graph[*root] {
+                Node::Root => {
+                    for edge in self.graph.edges_directed(*root, Direction::Outgoing) {
+                        if matches!(self.graph[edge.target()], Node::Package(_))
+                            && distances.insert(edge.target(), 0).is_none()
+                        {
+                            queue.push_back(edge.target());
+                        }
+                    }
+                }
+                Node::Package(_) => {
+                    if distances.insert(*root, 0).is_none() {
+                        queue.push_back(*root);
+                    }
+                }
+            }
+        }
+
+        while let Some(source) = queue.pop_front() {
+            let distance = distances[&source];
+            if distance >= self.depth {
+                continue;
+            }
+
+            for edge in self.graph.edges_directed(source, Direction::Outgoing) {
+                let target = edge.target();
+                if !matches!(self.graph[target], Node::Package(_))
+                    || distances.contains_key(&target)
+                {
+                    continue;
+                }
+                distances.insert(target, distance + 1);
+                queue.push_back(target);
+            }
+        }
+
+        distances
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct JsonGraph<'env> {
+    directed: bool,
+    multigraph: bool,
+    graph: JsonGraphAttributes<'env>,
+    nodes: Vec<JsonNode<'env>>,
+    edges: Vec<JsonEdge<'env>>,
+}
+
+impl<'env> From<&TreeDisplay<'env>> for JsonGraph<'env> {
+    fn from(tree: &TreeDisplay<'env>) -> Self {
+        let distances = tree.json_distances();
+
+        let mut package_nodes = distances.keys().copied().collect::<Vec<_>>();
+        package_nodes.sort_by_key(|index| &tree.graph[*index]);
+
+        let node_ids = package_nodes
+            .iter()
+            .enumerate()
+            .map(|(id, index)| (*index, id))
+            .collect::<FxHashMap<_, _>>();
+
+        let nodes = package_nodes
+            .iter()
+            .map(|index| {
+                let Node::Package(package_id) = tree.graph[*index] else {
+                    unreachable!("JSON nodes only include packages");
+                };
+                let package = tree.lock.find_by_id(package_id);
+                JsonNode {
+                    id: node_ids[index],
+                    name: &package_id.name,
+                    version: package_id.version.as_ref(),
+                    source: JsonSource::from(&package_id.source),
+                    latest_version: tree.latest.get(package_id),
+                    size_bytes: tree
+                        .show_sizes
+                        .then(|| package.wheels.iter().find_map(|wheel| wheel.size))
+                        .flatten(),
+                }
+            })
+            .collect();
+
+        let mut roots = tree
+            .roots
+            .iter()
+            .flat_map(|root| match tree.graph[*root] {
+                Node::Root => tree
+                    .graph
+                    .edges_directed(*root, Direction::Outgoing)
+                    .filter_map(|edge| {
+                        node_ids
+                            .get(&edge.target())
+                            .map(|id| JsonRoot::new(*id, Some(edge.weight())))
+                    })
+                    .collect::<Vec<_>>(),
+                Node::Package(_) => node_ids
+                    .get(root)
+                    .map(|id| vec![JsonRoot::new(*id, None)])
+                    .unwrap_or_default(),
+            })
+            .collect::<Vec<_>>();
+        roots.sort();
+        roots.dedup();
+
+        let mut graph_edges = tree
+            .graph
+            .edge_references()
+            .filter(|edge| {
+                distances
+                    .get(&edge.source())
+                    .is_some_and(|distance| *distance < tree.depth)
+                    && node_ids.contains_key(&edge.source())
+                    && node_ids.contains_key(&edge.target())
+            })
+            .collect::<Vec<_>>();
+        graph_edges.sort_by(|left, right| {
+            (
+                node_ids[&left.source()],
+                node_ids[&left.target()],
+                left.weight(),
+            )
+                .cmp(&(
+                    node_ids[&right.source()],
+                    node_ids[&right.target()],
+                    right.weight(),
+                ))
+        });
+
+        let mut previous_endpoints = None;
+        let mut key = 0;
+        let edges = graph_edges
+            .into_iter()
+            .map(|edge| {
+                let endpoints = (node_ids[&edge.source()], node_ids[&edge.target()]);
+                if previous_endpoints == Some(endpoints) {
+                    key += 1;
+                } else {
+                    previous_endpoints = Some(endpoints);
+                    key = 0;
+                }
+                JsonEdge::new(endpoints.0, endpoints.1, key, edge.weight())
+            })
+            .collect();
+
+        Self {
+            directed: true,
+            multigraph: true,
+            graph: JsonGraphAttributes {
+                schema: JsonSchema {
+                    version: JsonSchemaVersion::Preview,
+                },
+                roots,
+                inverted: tree.invert,
+            },
+            nodes,
+            edges,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct JsonGraphAttributes<'env> {
+    schema: JsonSchema,
+    roots: Vec<JsonRoot<'env>>,
+    inverted: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonSchema {
+    version: JsonSchemaVersion,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum JsonSchemaVersion {
+    Preview,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonNode<'env> {
+    id: usize,
+    name: &'env PackageName,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<&'env Version>,
+    source: JsonSource,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latest_version: Option<&'env Version>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    size_bytes: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum JsonSource {
+    Registry {
+        registry: String,
+    },
+    Git {
+        git: String,
+    },
+    Direct {
+        url: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        subdirectory: Option<String>,
+    },
+    Path {
+        path: String,
+    },
+    Directory {
+        directory: String,
+    },
+    Editable {
+        editable: String,
+    },
+    Virtual {
+        r#virtual: String,
+    },
+}
+
+impl From<&Source> for JsonSource {
+    fn from(source: &Source) -> Self {
+        match source {
+            Source::Registry(source) => Self::Registry {
+                registry: match source {
+                    RegistrySource::Url(url) => url.as_ref().to_string(),
+                    RegistrySource::Path(path) => PortablePath::from(path).to_string(),
+                },
+            },
+            Source::Git(url, _) => Self::Git {
+                git: url.as_ref().to_string(),
+            },
+            Source::Direct(url, DirectSource { subdirectory }) => Self::Direct {
+                url: url.as_ref().to_string(),
+                subdirectory: subdirectory
+                    .as_deref()
+                    .map(|path| PortablePath::from(path).to_string()),
+            },
+            Source::Path(path) => Self::Path {
+                path: PortablePath::from(path).to_string(),
+            },
+            Source::Directory(path) => Self::Directory {
+                directory: PortablePath::from(path).to_string(),
+            },
+            Source::Editable(path) => Self::Editable {
+                editable: PortablePath::from(path).to_string(),
+            },
+            Source::Virtual(path) => Self::Virtual {
+                r#virtual: PortablePath::from(path).to_string(),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+struct JsonRoot<'env> {
+    id: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    kind: Option<JsonEdgeKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    extra: Option<&'env ExtraName>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    group: Option<&'env GroupName>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    requested_extras: Option<Vec<&'env ExtraName>>,
+}
+
+impl<'env> JsonRoot<'env> {
+    fn new(id: usize, edge: Option<&Edge<'env>>) -> Self {
+        let kind = match edge {
+            None | Some(Edge::Prod(_)) => None,
+            Some(Edge::Optional(_, _)) => Some(JsonEdgeKind::Optional),
+            Some(Edge::Dev(_, _)) => Some(JsonEdgeKind::Development),
+        };
+        let extra = match edge {
+            Some(Edge::Optional(extra, _)) => Some(*extra),
+            None | Some(Edge::Prod(_) | Edge::Dev(_, _)) => None,
+        };
+        let group = match edge {
+            Some(Edge::Dev(group, _)) => Some(*group),
+            None | Some(Edge::Prod(_) | Edge::Optional(_, _)) => None,
+        };
+        let requested_extras = edge
+            .and_then(Edge::extras)
+            .filter(|extras| !extras.is_empty())
+            .map(|extras| extras.iter().collect());
+        Self {
+            id,
+            kind,
+            extra,
+            group,
+            requested_extras,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct JsonEdge<'env> {
+    source: usize,
+    target: usize,
+    key: usize,
+    kind: JsonEdgeKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    extra: Option<&'env ExtraName>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    group: Option<&'env GroupName>,
+    requested_extras: Vec<&'env ExtraName>,
+}
+
+impl<'env> JsonEdge<'env> {
+    fn new(source: usize, target: usize, key: usize, edge: &Edge<'env>) -> Self {
+        let (kind, extra, group) = match edge {
+            Edge::Prod(_) => (JsonEdgeKind::Production, None, None),
+            Edge::Optional(extra, _) => (JsonEdgeKind::Optional, Some(*extra), None),
+            Edge::Dev(group, _) => (JsonEdgeKind::Development, None, Some(*group)),
+        };
+        Self {
+            source,
+            target,
+            key,
+            kind,
+            extra,
+            group,
+            requested_extras: edge.extras().into_iter().flatten().collect::<Vec<_>>(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+enum JsonEdgeKind {
+    Production,
+    Optional,
+    Development,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

@@ -50,6 +50,391 @@ fn nested_dependencies() -> Result<()> {
 }
 
 #[test]
+fn json_output() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-a[feature]"]
+
+        [dependency-groups]
+        dev = ["package-c"]
+
+        [tool.uv.sources]
+        package-a = { path = "packages/package-a" }
+        package-c = { path = "packages/package-c" }
+        "#,
+    )?;
+
+    let package_a = context.temp_dir.child("packages/package-a");
+    package_a.create_dir_all()?;
+    package_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["package-b"]
+
+        [tool.uv.sources]
+        package-b = { path = "../package-b" }
+        "#,
+    )?;
+
+    for package in ["package-b", "package-c"] {
+        let directory = context.temp_dir.child(format!("packages/{package}"));
+        directory.create_dir_all()?;
+        directory
+            .child("pyproject.toml")
+            .write_str(&formatdoc! {r#"
+            [project]
+            name = "{package}"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+        "#})?;
+    }
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .arg("--universal"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "directed": true,
+      "multigraph": true,
+      "graph": {
+        "schema": {
+          "version": "preview"
+        },
+        "roots": [
+          {
+            "id": 3
+          }
+        ],
+        "inverted": false
+      },
+      "nodes": [
+        {
+          "id": 0,
+          "name": "package-a",
+          "version": "1.0.0",
+          "source": {
+            "directory": "packages/package-a"
+          }
+        },
+        {
+          "id": 1,
+          "name": "package-b",
+          "version": "1.0.0",
+          "source": {
+            "directory": "packages/package-b"
+          }
+        },
+        {
+          "id": 2,
+          "name": "package-c",
+          "version": "1.0.0",
+          "source": {
+            "directory": "packages/package-c"
+          }
+        },
+        {
+          "id": 3,
+          "name": "project",
+          "version": "0.1.0",
+          "source": {
+            "virtual": "."
+          }
+        }
+      ],
+      "edges": [
+        {
+          "source": 0,
+          "target": 1,
+          "key": 0,
+          "kind": "optional",
+          "extra": "feature",
+          "requested_extras": []
+        },
+        {
+          "source": 3,
+          "target": 0,
+          "key": 0,
+          "kind": "production",
+          "requested_extras": [
+            "feature"
+          ]
+        },
+        {
+          "source": 3,
+          "target": 2,
+          "key": 0,
+          "kind": "development",
+          "group": "dev",
+          "requested_extras": []
+        }
+      ]
+    }
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .arg("--universal")
+        .arg("--depth")
+        .arg("1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "directed": true,
+      "multigraph": true,
+      "graph": {
+        "schema": {
+          "version": "preview"
+        },
+        "roots": [
+          {
+            "id": 2
+          }
+        ],
+        "inverted": false
+      },
+      "nodes": [
+        {
+          "id": 0,
+          "name": "package-a",
+          "version": "1.0.0",
+          "source": {
+            "directory": "packages/package-a"
+          }
+        },
+        {
+          "id": 1,
+          "name": "package-c",
+          "version": "1.0.0",
+          "source": {
+            "directory": "packages/package-c"
+          }
+        },
+        {
+          "id": 2,
+          "name": "project",
+          "version": "0.1.0",
+          "source": {
+            "virtual": "."
+          }
+        }
+      ],
+      "edges": [
+        {
+          "source": 2,
+          "target": 0,
+          "key": 0,
+          "kind": "production",
+          "requested_extras": [
+            "feature"
+          ]
+        },
+        {
+          "source": 2,
+          "target": 1,
+          "key": 0,
+          "kind": "development",
+          "group": "dev",
+          "requested_extras": []
+        }
+      ]
+    }
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .arg("--universal")
+        .arg("--invert")
+        .arg("--depth")
+        .arg("1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "directed": true,
+      "multigraph": true,
+      "graph": {
+        "schema": {
+          "version": "preview"
+        },
+        "roots": [
+          {
+            "id": 1
+          },
+          {
+            "id": 2
+          }
+        ],
+        "inverted": true
+      },
+      "nodes": [
+        {
+          "id": 0,
+          "name": "package-a",
+          "version": "1.0.0",
+          "source": {
+            "directory": "packages/package-a"
+          }
+        },
+        {
+          "id": 1,
+          "name": "package-b",
+          "version": "1.0.0",
+          "source": {
+            "directory": "packages/package-b"
+          }
+        },
+        {
+          "id": 2,
+          "name": "package-c",
+          "version": "1.0.0",
+          "source": {
+            "directory": "packages/package-c"
+          }
+        },
+        {
+          "id": 3,
+          "name": "project",
+          "version": "0.1.0",
+          "source": {
+            "virtual": "."
+          }
+        }
+      ],
+      "edges": [
+        {
+          "source": 1,
+          "target": 0,
+          "key": 0,
+          "kind": "optional",
+          "extra": "feature",
+          "requested_extras": []
+        },
+        {
+          "source": 2,
+          "target": 3,
+          "key": 0,
+          "kind": "development",
+          "group": "dev",
+          "requested_extras": []
+        }
+      ]
+    }
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn json_output_virtual_root() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [dependency-groups]
+        dev = ["package-a"]
+
+        [tool.uv.sources]
+        package-a = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["package-a"]
+        "#,
+    )?;
+
+    let package_a = context.temp_dir.child("package-a");
+    package_a.create_dir_all()?;
+    package_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .arg("--universal")
+        .arg("--only-group")
+        .arg("dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "directed": true,
+      "multigraph": true,
+      "graph": {
+        "schema": {
+          "version": "preview"
+        },
+        "roots": [
+          {
+            "id": 0
+          },
+          {
+            "id": 0,
+            "kind": "development",
+            "group": "dev"
+          }
+        ],
+        "inverted": false
+      },
+      "nodes": [
+        {
+          "id": 0,
+          "name": "package-a",
+          "version": "1.0.0",
+          "source": {
+            "editable": "package-a"
+          }
+        }
+      ],
+      "edges": []
+    }
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn nested_platform_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -268,6 +653,23 @@ fn outdated() -> Result<()> {
     Resolved 4 packages in [TIME]
     "
     );
+
+    let output = context
+        .tree()
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .arg("--outdated")
+        .arg("--universal")
+        .output()?;
+    output.clone().assert().success();
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    let anyio = report["nodes"]
+        .as_array()
+        .and_then(|nodes| nodes.iter().find(|node| node["name"] == "anyio"))
+        .expect("anyio should be included in the dependency graph");
+    assert_eq!(anyio["latest_version"], "4.3.0");
 
     Ok(())
 }
@@ -2257,6 +2659,64 @@ fn show_sizes() -> Result<()> {
     Resolved 2 packages in [TIME]
     "
     );
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .arg("--show-sizes")
+        .arg("--universal"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "directed": true,
+      "multigraph": true,
+      "graph": {
+        "schema": {
+          "version": "preview"
+        },
+        "roots": [
+          {
+            "id": 1
+          }
+        ],
+        "inverted": false
+      },
+      "nodes": [
+        {
+          "id": 0,
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "source": {
+            "registry": "https://pypi.org/simple"
+          },
+          "size_bytes": 5892
+        },
+        {
+          "id": 1,
+          "name": "project",
+          "version": "0.1.0",
+          "source": {
+            "virtual": "."
+          }
+        }
+      ],
+      "edges": [
+        {
+          "source": 1,
+          "target": 0,
+          "key": 0,
+          "kind": "production",
+          "requested_extras": []
+        }
+      ]
+    }
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
 
     Ok(())
 }
