@@ -85,7 +85,7 @@ jobs:
           sudo chown "$(id -u):$(id -g)" /minix
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@56545b37b57562edd73171cb6c62cc509db4c34e # v2.81.7
+        uses: taiki-e/install-action@0631aa6515c7d545823c67cfae7ef4fc7f490154 # v2.81.8
         with:
           tool: cargo-nextest
 
@@ -159,7 +159,7 @@ jobs:
         run: uv python install
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@56545b37b57562edd73171cb6c62cc509db4c34e # v2.81.7
+        uses: taiki-e/install-action@0631aa6515c7d545823c67cfae7ef4fc7f490154 # v2.81.8
         with:
           tool: cargo-nextest
 
@@ -251,7 +251,7 @@ jobs:
           New-SmbShare -Name "uv-alt-fs" -Path "C:\uv-smb" -FullAccess "Everyone"
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@56545b37b57562edd73171cb6c62cc509db4c34e # v2.81.7
+        uses: taiki-e/install-action@0631aa6515c7d545823c67cfae7ef4fc7f490154 # v2.81.8
         with:
           tool: cargo-nextest
 
