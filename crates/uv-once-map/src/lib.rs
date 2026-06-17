@@ -173,6 +173,7 @@ where
 #[derive(Debug)]
 enum Value<V> {
     Waiting(Arc<Notify>),
+    /// The mutex is a workaround to papaya always returning borrowed instead of owned values.
     Filled(Mutex<Option<V>>),
 }
 
@@ -182,10 +183,7 @@ impl<V> Value<V> {
     }
 
     fn lock(value: &Mutex<Option<V>>) -> MutexGuard<'_, Option<V>> {
-        match value.lock() {
-            Ok(value) => value,
-            Err(err) => err.into_inner(),
-        }
+        value.lock().unwrap_or_else(|err| err.into_inner())
     }
 
     fn take(&self) -> Option<V> {
