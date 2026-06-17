@@ -73,6 +73,7 @@ use crate::{
     InMemoryIndex, MetadataResponse, PrereleaseMode, ResolutionMode, ResolverOutput,
 };
 
+mod dependents;
 pub(crate) mod export;
 mod installable;
 mod map;
