@@ -5388,6 +5388,10 @@ pub struct CheckArgs {
     #[arg(long, value_hint = ValueHint::Other)]
     pub ty_version: Option<String>,
 
+    /// Display the version of ty that will be used for type checking.
+    #[arg(long, hide = true)]
+    pub show_version: bool,
+
     /// Avoid discovering a project or workspace.
     ///
     /// Instead of running checks in the context of the current project, run them in the context of
