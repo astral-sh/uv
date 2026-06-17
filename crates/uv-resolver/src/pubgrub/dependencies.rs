@@ -117,8 +117,7 @@ impl PubGrubDependency {
     ) -> impl Iterator<Item = Self> + 'a {
         let parent_name = parent_package.and_then(|package| package.name_no_root());
         let is_normal_parent = parent_package
-            .map(|pp| pp.extra().is_none() && pp.group().is_none())
-            .unwrap_or(false);
+            .is_some_and(|parent| parent.extra().is_none() && parent.group().is_none());
         let iter = if !requirement.extras.is_empty() {
             // This is crazy subtle, but if any of the extras in the
             // requirement are part of a declared conflict, then we

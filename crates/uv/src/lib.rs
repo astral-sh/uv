@@ -500,11 +500,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .break_words(false)
                 .word_separator(textwrap::WordSeparator::AsciiSpace)
                 .word_splitter(textwrap::WordSplitter::NoHyphenation)
-                .wrap_lines(
-                    std::env::var(EnvVars::UV_NO_WRAP)
-                        .map(|_| false)
-                        .unwrap_or(true),
-                )
+                .wrap_lines(std::env::var(EnvVars::UV_NO_WRAP).is_err())
                 .build(),
         )
     }))?;

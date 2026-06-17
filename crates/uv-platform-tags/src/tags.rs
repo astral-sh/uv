@@ -425,8 +425,7 @@ impl Tags {
     pub fn is_compatible_abi(&self, python_tag: LanguageTag, abi_tag: AbiTag) -> bool {
         self.map
             .get(&python_tag)
-            .map(|abis| abis.contains_key(&abi_tag))
-            .unwrap_or(false)
+            .is_some_and(|abis| abis.contains_key(&abi_tag))
     }
 
     pub fn python_platform(&self) -> &Platform {
