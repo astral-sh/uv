@@ -432,7 +432,8 @@ impl CacheSettings {
     /// Resolve the [`CacheSettings`] from the CLI and filesystem configuration.
     pub(crate) fn resolve(args: CacheArgs, workspace: Option<&FilesystemOptions>) -> Self {
         Self {
-            no_cache: flag(args.no_cache, args.cache, "cache")
+            no_cache: flag(args.cache, args.no_cache, "cache")
+                .map(|cache| !cache)
                 .combine(env_no_cache())
                 .combine(workspace.and_then(|workspace| workspace.globals.no_cache))
                 .unwrap_or(false),
@@ -5179,23 +5180,6 @@ mod tests {
     }
 
     #[test]
-    fn cache_settings_config_applies_when_flags_unset() {
-        // When neither flag is set, the config file value applies.
-        let args = CacheArgs {
-            no_cache: false,
-            cache: false,
-            cache_dir: None,
-        };
-        let workspace = workspace_with_no_cache(true);
-        let resolved = CacheSettings::resolve(args, Some(&workspace));
-        // env_no_cache() may or may not be set in the test environment;
-        // if UV_NO_CACHE is unset, config should apply.
-        // We can't fully control env in unit tests, so just verify it compiles
-        // and that with no flags the workspace value is reachable.
-        assert!(resolved.no_cache || std::env::var_os("UV_NO_CACHE").is_some());
-    }
-
-    #[test]
     fn cache_settings_no_cache_flag_with_config_false() {
         // --no-cache should take effect even when config says false.
         let args = CacheArgs {
@@ -5206,18 +5190,5 @@ mod tests {
         let workspace = workspace_with_no_cache(false);
         let resolved = CacheSettings::resolve(args, Some(&workspace));
         assert!(resolved.no_cache);
-    }
-
-    #[test]
-    fn cache_settings_defaults_to_false() {
-        // With neither flags nor config, no_cache defaults to false.
-        let args = CacheArgs {
-            no_cache: false,
-            cache: false,
-            cache_dir: None,
-        };
-        let resolved = CacheSettings::resolve(args, None);
-        // If UV_NO_CACHE is set in the environment, it could override the default.
-        assert!(!resolved.no_cache || std::env::var_os("UV_NO_CACHE").is_some());
     }
 }

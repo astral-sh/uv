@@ -10,7 +10,7 @@ use tracing::{debug, warn};
 #[command(next_help_heading = "Cache options")]
 pub struct CacheArgs {
     /// Avoid reading from or writing to the cache, instead using a temporary directory for the
-    /// duration of the operation.
+    /// duration of the operation [env: UV_NO_CACHE=]
     #[arg(
         global = true,
         long,
@@ -84,7 +84,12 @@ impl TryFrom<CacheArgs> for Cache {
     type Error = io::Error;
 
     fn try_from(value: CacheArgs) -> Result<Self, Self::Error> {
-        Self::from_settings(value.no_cache, value.cache_dir)
+        let no_cache = value.no_cache
+            || uv_static::parse_boolish_environment_variable(EnvVars::UV_NO_CACHE)
+                .ok()
+                .flatten()
+                .unwrap_or(false);
+        Self::from_settings(no_cache, value.cache_dir)
     }
 }
 
