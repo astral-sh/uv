@@ -415,7 +415,6 @@ fn env_no_cache() -> Option<bool> {
     match uv_static::parse_boolish_environment_variable(EnvVars::UV_NO_CACHE) {
         Ok(value) => value,
         Err(err) => {
-            // Match the error-handling style used by `env()` in this file.
             parse_failure(&err.name, "a boolish value (true/false, 1/0, yes/no, etc.)")
         }
     }
@@ -429,7 +428,9 @@ pub(crate) struct CacheSettings {
 }
 
 impl CacheSettings {
-    /// Resolve the [`CacheSettings`] from the CLI and filesystem configuration.
+    /// Resolve the [`CacheSettings`] from the CLI, environment, and filesystem configuration.
+    ///
+    /// Precedence: CLI flags > `UV_NO_CACHE` env var > config file > default (`false`).
     pub(crate) fn resolve(args: CacheArgs, workspace: Option<&FilesystemOptions>) -> Self {
         Self {
             no_cache: flag(args.cache, args.no_cache, "cache")

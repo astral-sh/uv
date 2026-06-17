@@ -33,6 +33,34 @@ pub struct CacheArgs {
     pub cache_dir: Option<PathBuf>,
 }
 
+impl CacheArgs {
+    /// Resolve `no_cache` from the CLI flag pair and `UV_NO_CACHE` env var.
+    ///
+    /// CLI flags take precedence over the env var. This does NOT account for
+    /// config file settings — use [`CacheSettings::resolve`] for full resolution.
+    pub fn resolved_no_cache(&self) -> bool {
+        if self.no_cache {
+            return true;
+        }
+        if self.cache {
+            return false;
+        }
+        match uv_static::parse_boolish_environment_variable(EnvVars::UV_NO_CACHE) {
+            Ok(value) => value.unwrap_or(false),
+            Err(err) => {
+                #[allow(clippy::print_stderr)]
+                {
+                    eprintln!("error: invalid value for {}, expected a boolish value (true/false, 1/0, yes/no, etc.)", err.name);
+                }
+                #[allow(clippy::exit)]
+                {
+                    std::process::exit(2);
+                }
+            }
+        }
+    }
+}
+
 impl Cache {
     /// Prefer, in order:
     ///
@@ -84,12 +112,7 @@ impl TryFrom<CacheArgs> for Cache {
     type Error = io::Error;
 
     fn try_from(value: CacheArgs) -> Result<Self, Self::Error> {
-        let no_cache = value.no_cache
-            || uv_static::parse_boolish_environment_variable(EnvVars::UV_NO_CACHE)
-                .ok()
-                .flatten()
-                .unwrap_or(false);
-        Self::from_settings(no_cache, value.cache_dir)
+        Self::from_settings(value.resolved_no_cache(), value.cache_dir)
     }
 }
 

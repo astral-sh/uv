@@ -268,13 +268,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     //    starting from the current directory.
 
     // Pass the (possibly non-existent) cache dir path to the initial workspace discovery.
-    let discovery_no_cache = cli.top_level.cache_args.no_cache
-        || uv_static::parse_boolish_environment_variable(EnvVars::UV_NO_CACHE)
-            .ok()
-            .flatten()
-            .unwrap_or(false);
     let discovery_cache = Cache::from_settings(
-        discovery_no_cache,
+        cli.top_level.cache_args.resolved_no_cache(),
         cli.top_level.cache_args.cache_dir.clone(),
     )?;
     let workspace_cache = WorkspaceCache::default();
