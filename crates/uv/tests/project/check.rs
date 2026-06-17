@@ -39,6 +39,389 @@ fn check_project() -> Result<()> {
 }
 
 #[test]
+fn check_no_sync_creates_lock_without_sync() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str(indoc! {r"
+        x: int = 1
+    "})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--exclude-newer")
+            .arg("2026-02-15T00:00:00Z")
+            .arg("--ty-version")
+            .arg("0.0.17"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "
+    );
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+    assert!(!context.site_packages().join("iniconfig").exists());
+
+    Ok(())
+}
+
+#[test]
+fn check_no_sync_uses_compatible_lock_interpreter() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"]);
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+    "#})?;
+    context.temp_dir.child("main.py").write_str(indoc! {r"
+        x: int = 1
+    "})?;
+    context
+        .venv()
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--python")
+            .arg("3.11")
+            .arg("--exclude-newer")
+            .arg("2026-02-15T00:00:00Z")
+            .arg("--ty-version")
+            .arg("0.0.17"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    warning: Using incompatible environment (`.venv`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.11`)
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    "
+    );
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+    context
+        .assert_command("import sys; assert sys.version_info[:2] == (3, 12)")
+        .success();
+
+    Ok(())
+}
+
+#[test]
+fn check_no_sync_updates_stale_lock_without_sync() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+    "#})?;
+    context
+        .lock()
+        .arg("--exclude-newer")
+        .arg("2026-02-15T00:00:00Z")
+        .assert()
+        .success();
+    let stale_lock = context.read("uv.lock");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str(indoc! {r"
+        x: int = 1
+    "})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--exclude-newer")
+            .arg("2026-02-15T00:00:00Z")
+            .arg("--ty-version")
+            .arg("0.0.17"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "
+    );
+
+    let updated_lock = context.read("uv.lock");
+    assert_ne!(stale_lock, updated_lock);
+    assert!(updated_lock.contains("iniconfig"));
+    assert!(!context.site_packages().join("iniconfig").exists());
+
+    Ok(())
+}
+
+#[test]
+fn check_no_sync_locked_rejects_stale_lock_without_update() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+    "#})?;
+    context
+        .lock()
+        .arg("--exclude-newer")
+        .arg("2026-02-15T00:00:00Z")
+        .assert()
+        .success();
+    let stale_lock = context.read("uv.lock");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--locked")
+            .arg("--exclude-newer")
+            .arg("2026-02-15T00:00:00Z"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    "
+    );
+
+    assert_eq!(stale_lock, context.read("uv.lock"));
+    assert!(!context.site_packages().join("iniconfig").exists());
+
+    Ok(())
+}
+
+#[test]
+fn check_no_sync_locked_requires_existing_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.check().arg("--no-sync").arg("--locked"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    "
+    );
+
+    assert!(!context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn check_no_sync_frozen_uses_existing_lock_without_update() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+    "#})?;
+    context
+        .lock()
+        .arg("--exclude-newer")
+        .arg("2026-02-15T00:00:00Z")
+        .assert()
+        .success();
+    let stale_lock = context.read("uv.lock");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str(indoc! {r"
+        x: int = 1
+    "})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--frozen")
+            .arg("--exclude-newer")
+            .arg("2026-02-15T00:00:00Z")
+            .arg("--ty-version")
+            .arg("0.0.17"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "
+    );
+
+    assert_eq!(stale_lock, context.read("uv.lock"));
+    assert!(!context.site_packages().join("iniconfig").exists());
+
+    Ok(())
+}
+
+#[test]
+fn check_no_sync_frozen_requires_existing_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.check().arg("--no-sync").arg("--frozen"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    "
+    );
+
+    assert!(!context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn check_no_sync_isolated_does_not_write_lock_or_sync() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str(indoc! {r"
+        x: int = 1
+    "})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--isolated")
+            .arg("--exclude-newer")
+            .arg("2026-02-15T00:00:00Z")
+            .arg("--ty-version")
+            .arg("0.0.17"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "
+    );
+
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.site_packages().join("iniconfig").exists());
+
+    Ok(())
+}
+
+#[test]
 #[cfg(feature = "test-pypi")]
 fn check_uses_ty_from_environment() -> Result<()> {
     let context =
@@ -126,7 +509,7 @@ fn check_passes_workspace_metadata_to_ty() -> Result<()> {
 }
 
 #[test]
-fn check_no_sync_ignores_invalid_lockfile() -> Result<()> {
+fn check_no_sync_errors_on_invalid_lockfile() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     context
@@ -153,13 +536,18 @@ fn check_no_sync_ignores_invalid_lockfile() -> Result<()> {
             .arg("0.0.17")
             .env(EnvVars::RUST_LOG, "error"),
         @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    All checks passed!
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: Failed to parse `uv.lock`
+      Caused by: TOML parse error at line 1, column 8
+      |
+    1 | invalid
+      |        ^
+    key with no value, expected `=`
     "
     );
 

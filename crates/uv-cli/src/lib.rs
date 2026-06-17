@@ -5353,8 +5353,7 @@ pub struct CheckArgs {
 
     /// Avoid syncing the virtual environment [env: UV_NO_SYNC=]
     ///
-    /// Implies `--frozen`, as the project dependencies will be ignored (i.e., the lockfile will not
-    /// be updated, since the environment will not be synced regardless).
+    /// The project lockfile will still be created or updated as needed.
     #[arg(long)]
     pub no_sync: bool,
 
