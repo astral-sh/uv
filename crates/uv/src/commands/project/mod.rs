@@ -2305,7 +2305,7 @@ impl From<RequirementsSpecification> for EnvironmentSpecification<'_> {
 impl<'lock> EnvironmentSpecification<'lock> {
     /// Set the [`PreferenceLocation`] for the specification.
     #[must_use]
-    fn with_preferences(self, preferences: PreferenceLocation<'lock>) -> Self {
+    pub(crate) fn with_preferences(self, preferences: PreferenceLocation<'lock>) -> Self {
         Self {
             preferences: Some(preferences),
             ..self

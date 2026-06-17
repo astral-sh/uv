@@ -354,20 +354,23 @@ async fn upgrade_tool(
     );
     // Initialize any shared state.
     let state = PlatformState::default();
-    let site_packages = SitePackages::from_environment(environment.environment())?;
-
     // Check if we need to create a new environment — if so, resolve it first, then
     // install the requested tool
     let (environment, outcome, tool_lock) = if let Some(interpreter) =
         interpreter.filter(|interpreter| !environment.environment().uses(interpreter))
     {
         // If we're using a new interpreter, re-create the environment for each tool.
+        let site_packages = if existing_tool_receipt.lock().is_none() {
+            Some(SitePackages::from_environment(environment.environment())?)
+        } else {
+            None
+        };
         let resolution = resolve_environment(
             tool_environment_spec(
                 spec,
                 Some(&existing_tool_receipt),
                 &installed_tools.tool_dir(name),
-                Some(&site_packages),
+                site_packages.as_ref(),
             ),
             interpreter,
             python_platform,
@@ -408,6 +411,7 @@ async fn upgrade_tool(
 
         (environment, UpgradeOutcome::UpgradeEnvironment, tool_lock)
     } else {
+        let site_packages = SitePackages::from_environment(environment.environment())?;
         let resolution = resolve_environment(
             tool_environment_spec(
                 spec,
@@ -470,9 +474,9 @@ async fn upgrade_tool(
             &tags,
         )?;
 
-        let outcome = if plan.is_empty() {
+        let outcome = if plan.is_empty() && !settings.compile_bytecode {
             UpgradeOutcome::NoOp
-        } else if plan.installs(name) {
+        } else if plan.changes(name) {
             UpgradeOutcome::UpgradeTool
         } else {
             UpgradeOutcome::UpgradeDependencies

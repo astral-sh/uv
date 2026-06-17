@@ -776,27 +776,41 @@ impl RequirementSource {
                 install_path,
                 ext,
                 url,
-            } => Self::Path {
-                install_path: normalize_path(root.join(install_path))
+            } => {
+                let install_path = normalize_path(root.join(install_path))
                     .into_owned()
-                    .into_boxed_path(),
-                ext,
-                url,
-            },
+                    .into_boxed_path();
+                let url = match VerbatimUrl::from_normalized_path(&install_path) {
+                    Ok(url) => url,
+                    Err(_) => url,
+                };
+                Self::Path {
+                    install_path,
+                    ext,
+                    url,
+                }
+            }
             Self::Directory {
                 install_path,
                 editable,
                 r#virtual,
                 url,
                 ..
-            } => Self::Directory {
-                install_path: normalize_path(root.join(install_path))
+            } => {
+                let install_path = normalize_path(root.join(install_path))
                     .into_owned()
-                    .into_boxed_path(),
-                editable,
-                r#virtual,
-                url,
-            },
+                    .into_boxed_path();
+                let url = match VerbatimUrl::from_normalized_path(&install_path) {
+                    Ok(url) => url,
+                    Err(_) => url,
+                };
+                Self::Directory {
+                    install_path,
+                    editable,
+                    r#virtual,
+                    url,
+                }
+            }
         }
     }
 }

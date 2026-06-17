@@ -5,10 +5,11 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
+use predicates::prelude::predicate;
 
 use uv_static::EnvVars;
 
-use uv_test::uv_snapshot;
+use uv_test::{site_packages_path, uv_snapshot};
 
 #[test]
 fn tool_upgrade_empty() {
@@ -1510,6 +1511,149 @@ fn tool_upgrade_python() {
         let lines: Vec<&str> = content.split('\n').collect();
         assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
     });
+}
+
+#[test]
+fn tool_upgrade_python_replaces_malformed_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.13"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .arg("--python")
+        .arg("3.12")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    fs_err::create_dir(
+        site_packages_path(&tool_dir.join("simple-launcher"), "python3.12")
+            .join("malformed.dist-info"),
+    )?;
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("simple-launcher")
+        .arg("--python")
+        .arg("3.13")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + simple-launcher==0.1.0
+    Installed 1 executable: simple_launcher
+    Upgraded tool environment for `simple-launcher` to Python 3.13
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_upgrade_compile_bytecode_on_noop() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_filtered_compiled_file_count();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let bytecode = site_packages_path(&tool_dir.join("simple-launcher"), "python3.12")
+        .join("simple_launcher")
+        .join("__pycache__");
+    if bytecode.exists() {
+        fs_err::remove_dir_all(&bytecode)?;
+    }
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("simple-launcher")
+        .arg("--compile-bytecode")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Bytecode compiled [COUNT] files in [TIME]
+    Modified simple-launcher environment
+    ");
+
+    assert!(bytecode.is_dir());
+
+    Ok(())
+}
+
+#[test]
+fn tool_upgrade_removes_entrypoint_when_target_becomes_inactive() {
+    let context = uv_test::test_context!("3.13")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("simple-launcher; sys_platform == 'linux'")
+        .arg("--with-executables-from")
+        .arg("basic-app")
+        .arg("--python-platform")
+        .arg("linux")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    context
+        .tool_upgrade()
+        .arg("simple-launcher")
+        .arg("--python-platform")
+        .arg("windows")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .failure();
+
+    bin_dir
+        .child(format!("simple_launcher{}", std::env::consts::EXE_SUFFIX))
+        .assert(predicate::path::missing());
+    bin_dir
+        .child(format!("basic-app{}", std::env::consts::EXE_SUFFIX))
+        .assert(predicate::path::missing());
+    tool_dir
+        .child("simple-launcher")
+        .assert(predicate::path::missing());
 }
 
 #[test]

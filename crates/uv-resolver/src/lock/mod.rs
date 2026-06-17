@@ -702,6 +702,12 @@ impl Lock {
         self.manifest == *manifest
     }
 
+    /// Return whether this lock was generated with the given [`ResolverManifest`], resolving local
+    /// paths relative to the given root before comparison.
+    pub fn matches_manifest_at(&self, manifest: &ResolverManifest, root: &Path) -> bool {
+        self.manifest.clone().into_absolute(root) == manifest.clone().into_absolute(root)
+    }
+
     /// Record the conflicting groups that were used to generate this lock.
     #[must_use]
     pub fn with_conflicts(mut self, conflicts: Conflicts) -> Self {
@@ -2888,6 +2894,48 @@ impl ResolverManifest {
                 .collect::<Result<BTreeMap<_, _>, _>>()?,
             dependency_metadata: self.dependency_metadata,
         })
+    }
+
+    /// Convert the manifest to an absolute form using the given root.
+    fn into_absolute(self, root: &Path) -> Self {
+        Self {
+            members: self.members,
+            requirements: self
+                .requirements
+                .into_iter()
+                .map(|requirement| requirement.to_absolute(root))
+                .collect(),
+            constraints: self
+                .constraints
+                .into_iter()
+                .map(|requirement| requirement.to_absolute(root))
+                .collect(),
+            overrides: self
+                .overrides
+                .into_iter()
+                .map(|requirement| requirement.to_absolute(root))
+                .collect(),
+            excludes: self.excludes,
+            build_constraints: self
+                .build_constraints
+                .into_iter()
+                .map(|requirement| requirement.to_absolute(root))
+                .collect(),
+            dependency_groups: self
+                .dependency_groups
+                .into_iter()
+                .map(|(group, requirements)| {
+                    (
+                        group,
+                        requirements
+                            .into_iter()
+                            .map(|requirement| requirement.to_absolute(root))
+                            .collect(),
+                    )
+                })
+                .collect(),
+            dependency_metadata: self.dependency_metadata,
+        }
     }
 }
 

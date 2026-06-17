@@ -14,11 +14,11 @@ use assert_fs::{
 };
 use indoc::indoc;
 use insta::assert_snapshot;
-use predicates::prelude::predicate;
+use predicates::prelude::{PredicateBooleanExt, predicate};
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
-use uv_test::uv_snapshot;
+use uv_test::{site_packages_path, uv_snapshot};
 
 #[cfg(feature = "test-git")]
 fn tool_install_git_path(bin_dir: &ChildPath) -> OsString {
@@ -1726,9 +1726,11 @@ fn tool_install_repairs_workspace_member_editability_drift_on_reinstall_check() 
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ root==0.1.0 (from file://[TEMP_DIR]/)
     Installed 1 executable: root_cli
     ");
 
@@ -4042,6 +4044,285 @@ fn tool_install_migrates_missing_lock_with_installed_preferences() -> Result<()>
     ----- stderr -----
     `black==24.2.0` is already installed
     ");
+
+    Ok(())
+}
+
+/// Test reusing a tool lock generated from a relative path requirement.
+#[test]
+fn tool_install_reuses_relative_path_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let foo = context.temp_dir.child("foo");
+    foo.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#})?;
+    foo.child("src")
+        .child("foo")
+        .child("__init__.py")
+        .write_str("def main(): pass\n")?;
+
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        links.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    context
+        .tool_install()
+        .arg("./foo")
+        .arg("--with")
+        .arg("ok")
+        .arg("--find-links")
+        .arg("links")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+    tool_dir
+        .child("foo")
+        .child("uv.lock")
+        .assert(predicate::path::is_file());
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        links.child("ok-2.0.0-py3-none-any.whl"),
+    )?;
+
+    context
+        .tool_upgrade()
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let site_packages = site_packages_path(&tool_dir.join("foo"), "python3.12");
+    assert!(!site_packages.join("ok-1.0.0.dist-info").exists());
+    assert!(site_packages.join("ok-2.0.0.dist-info").is_dir());
+
+    Ok(())
+}
+
+/// Test that migrating a tool without a usable lock does not change an installed version that is
+/// no longer available from its package source.
+#[test]
+fn tool_install_missing_lock_preserves_unavailable_installed_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/simple_launcher-0.1.0-py3-none-any.whl"),
+        links.child("simple_launcher-0.1.0-py3-none-any.whl"),
+    )?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        links.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--with")
+        .arg("ok")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let lock_path = tool_dir.child("simple-launcher").child("uv.lock");
+    fs_err::remove_file(&lock_path)?;
+    fs_err::remove_file(links.child("ok-1.0.0-py3-none-any.whl"))?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        links.child("ok-2.0.0-py3-none-any.whl"),
+    )?;
+
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--with")
+        .arg("ok")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let site_packages = site_packages_path(&tool_dir.join("simple-launcher"), "python3.12");
+    assert!(site_packages.join("ok-1.0.0.dist-info").is_dir());
+    assert!(!site_packages.join("ok-2.0.0.dist-info").exists());
+    lock_path.assert(predicate::path::missing());
+
+    Ok(())
+}
+
+#[test]
+fn tool_install_repairs_lock_version_drift() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--with")
+        .arg("ok==1.0.0")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let tool_python = if cfg!(windows) {
+        tool_dir
+            .join("simple-launcher")
+            .join("Scripts")
+            .join(format!("python{}", std::env::consts::EXE_SUFFIX))
+    } else {
+        tool_dir.join("simple-launcher").join("bin").join("python")
+    };
+    context
+        .pip_install()
+        .arg("--python")
+        .arg(tool_python)
+        .arg("ok==2.0.0")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("simple-launcher")
+        .arg("--with")
+        .arg("ok==1.0.0")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - ok==2.0.0
+     + ok==1.0.0
+    Installed 1 executable: simple_launcher
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("simple-launcher")
+        .arg("--with")
+        .arg("ok==1.0.0")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    `simple-launcher` is already installed
+    ");
+}
+
+#[test]
+fn tool_install_does_not_invalidate_receipt_for_unreadable_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let lock_path = tool_dir.child("simple-launcher").child("uv.lock");
+    fs_err::remove_file(&lock_path)?;
+    fs_err::create_dir(&lock_path)?;
+
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("Removed existing `simple-launcher` with invalid receipt")
+                .not(),
+        );
+
+    tool_dir
+        .child("simple-launcher")
+        .assert(predicate::path::is_dir());
+    bin_dir
+        .child(format!("simple_launcher{}", std::env::consts::EXE_SUFFIX))
+        .assert(predicate::path::exists());
 
     Ok(())
 }
@@ -9527,6 +9808,55 @@ fn tool_install_python_platform() {
     Installed [N] packages in [TIME]
      ~ black==24.3.0
     Installed 2 executables: black, blackd
+    ");
+}
+
+#[test]
+fn tool_install_reresolves_when_marker_environment_changes() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--with")
+        .arg("ok; sys_platform == 'win32'")
+        .arg("--python-platform")
+        .arg("linux")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("simple-launcher")
+        .arg("--with")
+        .arg("ok; sys_platform == 'win32'")
+        .arg("--python-platform")
+        .arg("windows")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + ok==2.0.0
+    Installed 1 executable: simple_launcher
     ");
 }
 

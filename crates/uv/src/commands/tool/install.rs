@@ -597,54 +597,57 @@ pub(crate) async fn install(
                 )
                 .into_inner();
 
-                // Determine the markers and tags to use for the resolution. We use the existing
-                // environment for markers here — above we filter the environment to `None` if
-                // `existing_environment_usable` is `false`, so we've determined it's valid.
+                // Only use the environment-specific lock when the requested marker environment
+                // matches the installed interpreter. A lock generated for one platform cannot
+                // recover dependencies that were inactive on that platform.
                 let markers = resolution_markers(
                     None,
                     python_platform.as_ref(),
                     environment.environment().interpreter(),
                 );
+                let marker_environment_unchanged = markers
+                    == resolution_markers(None, None, environment.environment().interpreter());
                 let tags = resolution_tags(
                     None,
                     python_platform.as_ref(),
                     environment.environment().interpreter(),
                 )?;
 
-                let already_installed = if let Some(lock) = tool_receipt.lock() {
-                    let resolution = ToolLockInstallTarget::new(
-                        environment.environment().root(),
-                        lock,
-                        tool_receipt
-                            .target_requirement()
-                            .map(|requirement| &requirement.name),
-                    )
-                    .to_resolution_simple(
-                        &markers,
-                        &tags,
-                        &settings.resolver.build_options,
-                    )?;
-                    Planner::new(&resolution)
-                        .build(
-                            SitePackages::from_environment(environment.environment())?,
-                            InstallationStrategy::Permissive,
-                            &Reinstall::default(),
-                            &settings.resolver.build_options,
-                            &HashStrategy::default(),
-                            &settings.resolver.index_locations,
-                            config_setting,
-                            config_settings_package,
-                            &extra_build_requires,
-                            extra_build_variables,
-                            &cache,
-                            environment.environment(),
+                let already_installed =
+                    if marker_environment_unchanged && let Some(lock) = tool_receipt.lock() {
+                        let resolution = ToolLockInstallTarget::new(
+                            environment.environment().root(),
+                            lock,
+                            tool_receipt
+                                .target_requirement()
+                                .map(|requirement| &requirement.name),
+                        )
+                        .to_resolution_simple(
+                            &markers,
                             &tags,
-                        )?
-                        .is_empty()
-                } else {
-                    // Force tools without locks through the update path so a lock gets generated.
-                    false
-                };
+                            &settings.resolver.build_options,
+                        )?;
+                        Planner::new(&resolution)
+                            .build(
+                                SitePackages::from_environment(environment.environment())?,
+                                InstallationStrategy::Permissive,
+                                &Reinstall::default(),
+                                &settings.resolver.build_options,
+                                &HashStrategy::default(),
+                                &settings.resolver.index_locations,
+                                config_setting,
+                                config_settings_package,
+                                &extra_build_requires,
+                                extra_build_variables,
+                                &cache,
+                                environment.environment(),
+                                &tags,
+                            )?
+                            .is_empty()
+                    } else {
+                        // Force tools without locks through the update path so a lock gets generated.
+                        false
+                    };
                 if already_installed {
                     // Then we're done! Though we might need to update the receipt.
                     if *tool_receipt.options() != options {
@@ -726,27 +729,13 @@ pub(crate) async fn install(
             Err(err) => return Err(err.into()),
         };
 
-        // At this point, we updated the existing environment, so we should remove any of its
-        // existing executables.
-        if let Some(existing_receipt) = existing_tool_receipt.as_ref() {
-            remove_entrypoints(existing_receipt);
-        }
-
-        let tool_lock = if let Some(tool_receipt) = existing_tool_receipt.as_ref() {
-            let site_packages = if tool_receipt.lock().is_none() {
-                match SitePackages::from_environment(&update.environment) {
-                    Ok(site_packages) => Some(site_packages),
-                    Err(err) => {
-                        debug!(
-                            "Failed to read tool environment site-packages while rebuilding lock after update: {err}"
-                        );
-                        None
-                    }
-                }
-            } else {
+        let (environment, tool_lock) = if let Some(tool_receipt) = existing_tool_receipt.as_ref() {
+            let had_lock = tool_receipt.lock().is_some();
+            let site_packages = if had_lock {
                 None
+            } else {
+                Some(SitePackages::from_environment(&update.environment)?)
             };
-
             match resolve_environment(
                 tool_environment_spec(
                     spec,
@@ -770,21 +759,92 @@ pub(crate) async fn install(
             )
             .await
             {
-                Ok(resolution) => tool_lock(
-                    &installed_tools.tool_dir(package_name),
-                    &resolution,
-                    &lock_manifest,
-                ),
+                Ok(resolution) => {
+                    let tool_lock = tool_lock(
+                        &installed_tools.tool_dir(package_name),
+                        &resolution,
+                        &lock_manifest,
+                    );
+                    let resolution = Resolution::from(resolution);
+
+                    let ResolverInstallerSettings {
+                        resolver:
+                            ResolverSettings {
+                                config_setting,
+                                config_settings_package,
+                                extra_build_dependencies,
+                                extra_build_variables,
+                                ..
+                            },
+                        ..
+                    } = &settings;
+                    let extra_build_requires = LoweredExtraBuildDependencies::from_non_lowered(
+                        extra_build_dependencies.clone(),
+                    )
+                    .into_inner();
+                    let tags = resolution_tags(
+                        None,
+                        python_platform.as_ref(),
+                        update.environment.interpreter(),
+                    )?;
+                    let plan = Planner::new(&resolution).build(
+                        SitePackages::from_environment(&update.environment)?,
+                        InstallationStrategy::Permissive,
+                        &Reinstall::default(),
+                        &settings.resolver.build_options,
+                        &HashStrategy::default(),
+                        &settings.resolver.index_locations,
+                        config_setting,
+                        config_settings_package,
+                        &extra_build_requires,
+                        extra_build_variables,
+                        &cache,
+                        &update.environment,
+                        &tags,
+                    )?;
+                    if plan.is_empty() {
+                        (update.environment, tool_lock)
+                    } else if had_lock {
+                        let environment = sync_environment(
+                            update.environment,
+                            &resolution,
+                            Modifications::Exact,
+                            Constraints::from_requirements(build_constraints.iter().cloned()),
+                            (&settings).into(),
+                            &client_builder,
+                            &state,
+                            Box::new(DefaultInstallLogger),
+                            installer_metadata,
+                            &concurrency,
+                            &cache,
+                            printer,
+                            preview,
+                        )
+                        .await?;
+                        (environment, tool_lock)
+                    } else {
+                        debug!(
+                            "Failed to rebuild tool lock without changing the installed packages"
+                        );
+                        (update.environment, None)
+                    }
+                }
                 Err(err) => {
                     debug!("Failed to rebuild tool lock after update: {err}");
-                    None
+                    (update.environment, None)
                 }
             }
         } else {
-            None
+            (update.environment, None)
         };
 
-        (update.environment, tool_lock)
+        // At this point, we updated the existing environment, so we should remove any of its
+        // existing executables.
+        if let Some(existing_receipt) = existing_tool_receipt.as_ref() {
+            remove_entrypoints(existing_receipt);
+        }
+
+        (environment, tool_lock)
     } else {
         let spec = EnvironmentSpecification::from(spec);
 

@@ -151,28 +151,34 @@ impl InstalledTools {
     }
 
     /// Read the lock for a tool, if it has been generated and still matches its receipt.
-    fn read_lock(directory: &Path, tool: &Tool) -> Result<Option<Lock>, Error> {
+    fn read_lock(directory: &Path, tool: &Tool) -> Option<Lock> {
         let path = directory.join("uv.lock");
         match fs_err::read_to_string(&path) {
             Ok(contents) => match toml::from_str::<Lock>(&contents) {
-                Ok(lock) if tool.matches_lock(&lock, directory) => Ok(Some(lock)),
+                Ok(lock) if tool.matches_lock(&lock, directory) => Some(lock),
                 Ok(_) => {
                     debug!(
                         "Ignoring tool lock at `{}` because it does not match its receipt",
                         path.user_display()
                     );
-                    Ok(None)
+                    None
                 }
                 Err(err) => {
                     debug!(
                         "Ignoring invalid tool lock at `{}`: {err}",
                         path.user_display()
                     );
-                    Ok(None)
+                    None
                 }
             },
-            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
-            Err(err) => Err(err.into()),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+            Err(err) => {
+                debug!(
+                    "Ignoring unreadable tool lock at `{}`: {err}",
+                    path.user_display()
+                );
+                None
+            }
         }
     }
 
@@ -206,10 +212,8 @@ impl InstalledTools {
             match ToolReceipt::from_string(contents) {
                 Ok(tool_receipt) => {
                     let tool = tool_receipt.tool;
-                    tools.push((
-                        name,
-                        Self::read_lock(&directory, &tool).map(|lock| tool.with_lock(lock)),
-                    ));
+                    let lock = Self::read_lock(&directory, &tool);
+                    tools.push((name, Ok(tool.with_lock(lock))));
                 }
                 Err(err) => {
                     let err = Error::ReceiptRead(path, Box::new(err));
@@ -232,7 +236,7 @@ impl InstalledTools {
         match ToolReceipt::from_path(&path) {
             Ok(tool_receipt) => {
                 let tool = tool_receipt.tool;
-                let lock = Self::read_lock(&directory, &tool)?;
+                let lock = Self::read_lock(&directory, &tool);
                 Ok(Some(tool.with_lock(lock)))
             }
             Err(Error::Io(err)) if err.kind() == io::ErrorKind::NotFound => Ok(None),

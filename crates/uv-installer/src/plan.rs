@@ -827,11 +827,12 @@ impl Plan {
             && self.extraneous.is_empty()
     }
 
-    /// Returns `true` if the plan installs or reinstalls the named package.
-    pub fn installs(&self, name: &PackageName) -> bool {
+    /// Returns `true` if the plan installs, reinstalls, or removes the named package.
+    pub fn changes(&self, name: &PackageName) -> bool {
         self.cached.iter().any(|dist| dist.name() == name)
             || self.remote.iter().any(|dist| dist.name() == name)
             || self.reinstalls.iter().any(|dist| dist.name() == name)
+            || self.extraneous.iter().any(|dist| dist.name() == name)
     }
 
     /// Partition the remote distributions based on a predicate function.
