@@ -75,6 +75,8 @@ pub enum AuditOutputFormat {
     Text,
     /// Display the result in JSON format.
     Json,
+    /// Display the result in SARIF format.
+    Sarif,
 }
 
 #[derive(Debug, Default, Clone, clap::ValueEnum)]

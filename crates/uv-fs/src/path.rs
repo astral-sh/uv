@@ -364,6 +364,16 @@ pub fn relative_to(
     Ok(up.join(stripped))
 }
 
+/// Find the root of the nearest Git repository containing `path`.
+///
+/// A `.git` directory or file is treated as a repository marker to support both regular
+/// repositories and linked worktrees.
+pub fn find_git_repository_root(path: &Path) -> Option<&Path> {
+    // TODO: Consider supporting GIT_CEILING_DIRECTORIES here.
+    path.ancestors()
+        .find(|ancestor| ancestor.join(".git").exists())
+}
+
 /// Try to compute a path relative to `base` if `should_relativize` is true, otherwise return
 /// the absolute path. Falls back to absolute if relativization fails.
 pub fn try_relative_to_if(
@@ -609,6 +619,28 @@ impl AsRef<Path> for PortablePathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_find_git_repository_root() -> std::io::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+
+        let repository = temp_dir.path().join("repository");
+        let nested = repository.join("packages/project");
+        fs_err::create_dir_all(repository.join(".git"))?;
+        fs_err::create_dir_all(&nested)?;
+        assert_eq!(
+            find_git_repository_root(&nested),
+            Some(repository.as_path())
+        );
+
+        let worktree = temp_dir.path().join("worktree");
+        let nested = worktree.join("packages/project");
+        fs_err::create_dir_all(&nested)?;
+        fs_err::write(worktree.join(".git"), "gitdir: ../repository/.git")?;
+        assert_eq!(find_git_repository_root(&nested), Some(worktree.as_path()));
+
+        Ok(())
+    }
 
     #[test]
     fn test_normalize_url() {
