@@ -411,7 +411,7 @@ mod tests {
                     &format!("{}.{}", version.major(), version.minor()),
                 )
                 .replace("{FREE_THREADED}", &free_threaded.to_string())
-                .replace("{IMPLEMENTATION}", (&implementation).into());
+                .replace("{IMPLEMENTATION}", implementation.long_name());
 
             fs_err::create_dir_all(path.parent().unwrap())?;
             fs_err::write(

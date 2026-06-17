@@ -1840,8 +1840,9 @@ impl PythonRequest {
 
         // the prefix of e.g. `python312` and the empty prefix of bare versions, e.g. `312`
         let abstract_version_prefixes = ["python", ""];
-        let all_implementation_names =
-            ImplementationName::long_names().chain(ImplementationName::short_names());
+        let all_implementation_names = ImplementationName::iter_all().flat_map(|implementation| {
+            std::iter::once(implementation.long_name()).chain(implementation.short_name())
+        });
         // Abstract versions like `python@312`, `python312`, or `312`, plus implementations and
         // implementation versions like `pypy`, `pypy@312` or `pypy312`.
         if let Ok(Some(request)) = Self::parse_versions_and_implementations(
@@ -1932,7 +1933,7 @@ impl PythonRequest {
         }
         Self::parse_versions_and_implementations(
             abstract_version_prefixes.iter().copied(),
-            ImplementationName::long_names(),
+            ImplementationName::iter_all().map(ImplementationName::long_name),
             lowercase_value,
         )
     }
@@ -1948,7 +1949,7 @@ impl PythonRequest {
     fn parse_versions_and_implementations<'a>(
         // typically "python", possibly also "pythonw" or "" (for bare versions)
         abstract_version_prefixes: impl IntoIterator<Item = &'a str>,
-        // expected to be either long_names() or all names
+        // expected to be either long names or all names
         implementation_names: impl IntoIterator<Item = &'a str>,
         // the string to parse
         lowercase_value: &str,
@@ -2141,12 +2142,12 @@ impl PythonRequest {
             }
             Self::Implementation(implementation) => interpreter
                 .implementation_name()
-                .eq_ignore_ascii_case(implementation.into()),
+                .eq_ignore_ascii_case(implementation.long_name()),
             Self::ImplementationVersion(implementation, version) => {
                 version.matches_interpreter(interpreter)
                     && interpreter
                         .implementation_name()
-                        .eq_ignore_ascii_case(implementation.into())
+                        .eq_ignore_ascii_case(implementation.long_name())
             }
             Self::Key(request) => request.satisfied_by_interpreter(interpreter),
         }
