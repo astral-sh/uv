@@ -12,7 +12,7 @@ use uv_normalize::DefaultGroups;
 use uv_normalize::PackageName;
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
-use uv_resolver::{PackageMap, TreeDisplay};
+use uv_resolver::{PackageMap, TreeDisplay, TreeDisplayMode};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
@@ -41,6 +41,7 @@ pub(crate) async fn tree(
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     universal: bool,
+    flatten: bool,
     depth: u8,
     prune: Vec<PackageName>,
     package: Vec<PackageName>,
@@ -302,6 +303,11 @@ pub(crate) async fn tree(
         no_dedupe,
         invert,
         show_sizes,
+        if flatten {
+            TreeDisplayMode::Flattened
+        } else {
+            TreeDisplayMode::Tree
+        },
     );
 
     print!("{tree}");

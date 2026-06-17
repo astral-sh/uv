@@ -2645,6 +2645,7 @@ pub(crate) struct TreeSettings {
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
     pub(crate) universal: bool,
+    pub(crate) flatten: bool,
     pub(crate) depth: u8,
     pub(crate) prune: Vec<PackageName>,
     pub(crate) package: Vec<PackageName>,
@@ -2671,6 +2672,7 @@ impl TreeSettings {
         let TreeArgs {
             tree,
             universal,
+            flatten,
             dev,
             only_dev,
             no_dev,
@@ -2728,6 +2730,7 @@ impl TreeSettings {
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
             universal,
+            flatten,
             depth: tree.depth,
             prune: tree.prune,
             package: tree.package,
