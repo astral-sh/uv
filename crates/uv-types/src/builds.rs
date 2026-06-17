@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use papaya::HashMap;
+use papaya::{HashMap, ResizeMode};
 
 use uv_configuration::{BuildKind, NoSources};
 use uv_normalize::PackageName;
@@ -61,7 +61,9 @@ pub struct BuildArena<T>(Arc<HashMap<BuildKey, Arc<T>>>);
 
 impl<T> Default for BuildArena<T> {
     fn default() -> Self {
-        Self(Arc::new(HashMap::new()))
+        Self(Arc::new(
+            HashMap::builder().resize_mode(ResizeMode::Blocking).build(),
+        ))
     }
 }
 

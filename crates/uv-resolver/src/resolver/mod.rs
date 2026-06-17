@@ -12,7 +12,7 @@ use std::{iter, slice, thread};
 use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
-use papaya::HashMap;
+use papaya::{HashMap, ResizeMode};
 use pubgrub::{Id, IncompId, Incompatibility, Kind, Range, Ranges, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
@@ -1868,8 +1868,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             warn!("{name} {message}");
                         }
                         let incomplete_packages = self.incomplete_packages.pin();
-                        let versions =
-                            incomplete_packages.get_or_insert(name.clone(), HashMap::new());
+                        let versions = incomplete_packages.get_or_insert(
+                            name.clone(),
+                            HashMap::builder().resize_mode(ResizeMode::Blocking).build(),
+                        );
                         versions.pin().insert(version.clone(), reason.clone());
                         return Ok(Dependencies::Unavailable(unavailable_version));
                     }

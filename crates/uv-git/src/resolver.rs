@@ -4,7 +4,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use fs_err::tokio as fs;
-use papaya::HashMap;
+use papaya::{HashMap, ResizeMode};
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 
@@ -59,8 +59,16 @@ impl GitHttpSettings {
 }
 
 /// A resolver for Git repositories.
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct GitResolver(Arc<HashMap<RepositoryReference, GitOid>>);
+
+impl Default for GitResolver {
+    fn default() -> Self {
+        Self(Arc::new(
+            HashMap::builder().resize_mode(ResizeMode::Blocking).build(),
+        ))
+    }
+}
 
 impl GitResolver {
     /// Inserts a new [`GitOid`] for the given [`RepositoryReference`].
