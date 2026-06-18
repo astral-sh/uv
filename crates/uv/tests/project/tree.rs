@@ -766,7 +766,8 @@ fn optional_dependencies_inverted() -> Result<()> {
         └── project[dotenv] v0.1.0
     colorama v0.4.6
     └── click v8.1.7
-        └── flask v3.0.2 (*)
+        └── flask v3.0.2
+            └── project[dotenv] v0.1.0
     idna v3.6
     └── anyio v4.3.0
         └── project v0.1.0 (extra: async)
@@ -780,7 +781,8 @@ fn optional_dependencies_inverted() -> Result<()> {
     └── werkzeug v3.0.1
         └── flask v3.0.2 (*)
     python-dotenv v1.0.1
-    └── flask v3.0.2 (extra: dotenv) (*)
+    └── flask v3.0.2 (extra: dotenv)
+        └── project[dotenv] v0.1.0
     sniffio v1.3.1
     └── anyio v4.3.0 (*)
     (*) Package tree already displayed
@@ -1636,6 +1638,438 @@ fn workspace_dev() -> Result<()> {
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
+
+    Ok(())
+}
+
+/// An inverted tree should only follow consumers that activate the extra required by the path.
+#[test]
+fn invert_preserves_extra_attribution() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+
+    let package_a = context.temp_dir.child("packages").child("package-a");
+    package_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-p[feature]"]
+
+        [tool.uv.sources]
+        package-p = { workspace = true }
+        "#,
+    )?;
+
+    let package_b = context.temp_dir.child("packages").child("package-b");
+    package_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-p"]
+
+        [tool.uv.sources]
+        package-p = { workspace = true }
+        "#,
+    )?;
+
+    let package_p = context.temp_dir.child("packages").child("package-p");
+    package_p.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-p"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["package-x"]
+
+        [tool.uv.sources]
+        package-x = { workspace = true }
+        "#,
+    )?;
+
+    let package_x = context.temp_dir.child("packages").child("package-x");
+    package_x.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-x"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--package").arg("package-x"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-x v0.1.0
+    └── package-p v0.1.0 (extra: feature)
+        └── package-a[feature] v0.1.0
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Member dependency groups describe the root member, not consumers of that member.
+#[test]
+fn invert_preserves_dependency_group_attribution() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+
+    let package_a = context.temp_dir.child("packages").child("package-a");
+    package_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["package-x"]
+
+        [tool.uv.sources]
+        package-x = { workspace = true }
+        "#,
+    )?;
+
+    let package_b = context.temp_dir.child("packages").child("package-b");
+    package_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-a"]
+
+        [tool.uv.sources]
+        package-a = { workspace = true }
+        "#,
+    )?;
+
+    let package_x = context.temp_dir.child("packages").child("package-x");
+    package_x.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-x"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--package").arg("package-x"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-x v0.1.0
+    └── package-a v0.1.0 (group: dev)
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Universal inverted trees should not join edges from mutually exclusive environments.
+#[test]
+fn invert_preserves_marker_attribution() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+
+    let package_a = context.temp_dir.child("packages").child("package-a");
+    package_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-p; sys_platform == 'win32'"]
+
+        [tool.uv.sources]
+        package-p = { workspace = true }
+        "#,
+    )?;
+
+    let package_p = context.temp_dir.child("packages").child("package-p");
+    package_p.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-p"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-x; sys_platform == 'linux'"]
+
+        [tool.uv.sources]
+        package-x = { workspace = true }
+        "#,
+    )?;
+
+    let package_b = context.temp_dir.child("packages").child("package-b");
+    package_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-p; sys_platform == 'linux'"]
+
+        [tool.uv.sources]
+        package-p = { workspace = true }
+        "#,
+    )?;
+
+    let package_x = context.temp_dir.child("packages").child("package-x");
+    package_x.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-x"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--package").arg("package-x"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-x v0.1.0
+    └── package-p v0.1.0
+        └── package-b v0.1.0
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Universal inverted trees should include every version that directly depends on a package in a
+/// satisfiable marker environment.
+#[test]
+fn invert_preserves_marker_split_versions() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "bar==1.0.0; sys_platform == 'win32'",
+            "bar==2.0.0; sys_platform != 'win32'",
+        ]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'win32'",
+            "sys_platform != 'win32'",
+        ]
+
+        [[package]]
+        name = "bar"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "sys_platform == 'win32'",
+        ]
+        dependencies = [
+            { name = "baz", marker = "sys_platform == 'win32'" },
+        ]
+
+        [[package]]
+        name = "bar"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "sys_platform != 'win32'",
+        ]
+        dependencies = [
+            { name = "baz", marker = "sys_platform != 'win32'" },
+        ]
+
+        [[package]]
+        name = "baz"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple" }
+
+        [[package]]
+        name = "foo"
+        version = "1.0.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "bar", version = "1.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32'" },
+            { name = "bar", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen").arg("--universal").arg("--invert").arg("--package").arg("baz"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    baz v1.0.0
+    ├── bar v1.0.0
+    │   └── foo v1.0.0
+    └── bar v2.0.0
+        └── foo v1.0.0
+
+    ----- stderr -----
+
+    ");
+
+    Ok(())
+}
+
+/// Declared conflicts are world knowledge for the encoded extra and group markers.
+#[test]
+fn invert_preserves_conflict_marker_attribution() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { package = "a", extra = "bar" },
+            { package = "p", extra = "foo" },
+          ],
+        ]
+        "#,
+    )?;
+
+    let package_a = context.temp_dir.child("packages").child("a");
+    package_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        bar = ["p[foo]"]
+
+        [tool.uv.sources]
+        p = { workspace = true }
+        "#,
+    )?;
+
+    let package_p = context.temp_dir.child("packages").child("p");
+    package_p.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "p"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        foo = ["x"]
+
+        [tool.uv.sources]
+        x = { workspace = true }
+        "#,
+    )?;
+
+    let package_x = context.temp_dir.child("packages").child("x");
+    package_x.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "x"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    // Preserve both encoded conflict conditions in the lock. Resolving this project would simplify
+    // the impossible `a[bar] -> p[foo]` edge before `uv tree` can exercise path attribution.
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "a", extra = "bar" },
+            { package = "p", extra = "foo" },
+        ]]
+
+        [manifest]
+        members = [
+            "a",
+            "p",
+            "x",
+        ]
+
+        [[package]]
+        name = "a"
+        version = "0.1.0"
+        source = { virtual = "packages/a" }
+
+        [package.optional-dependencies]
+        bar = [
+            { name = "p", extra = ["foo"], marker = "extra == 'extra-1-a-bar'" },
+        ]
+
+        [[package]]
+        name = "p"
+        version = "0.1.0"
+        source = { editable = "packages/p" }
+
+        [package.optional-dependencies]
+        foo = [
+            { name = "x", marker = "extra == 'extra-1-p-foo'" },
+        ]
+
+        [[package]]
+        name = "x"
+        version = "0.1.0"
+        source = { editable = "packages/x" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen").arg("--universal").arg("--invert").arg("--package").arg("x"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    x v0.1.0
+    └── p v0.1.0 (extra: foo)
+
+    ----- stderr -----
+
+    ");
 
     Ok(())
 }
