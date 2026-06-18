@@ -22,10 +22,9 @@ use crate::commands::pip::loggers::{SummaryInstallLogger, SummaryResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
-use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectEnvironment, ProjectError, UniversalState, WorkspacePython, default_dependency_groups,
-    validate_project_requires_python,
+    ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState, WorkspacePython,
+    default_dependency_groups, validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
@@ -230,20 +229,45 @@ pub(crate) async fn check(
             .into_environment()?
         };
 
-        let state = UniversalState::default();
-        let _environment_lock;
-        let lock = if no_sync {
-            debug!("Skipping environment synchronization due to `--no-sync`");
-
-            match LockTarget::Workspace(project.workspace()).read().await {
-                Ok(lock) => lock,
-                Err(err) => {
-                    debug!("Failed to read lockfile; skipping workspace metadata: {err}");
-                    None
-                }
-            }
+        // `--no-sync` intentionally permits an incompatible project environment, but locking must
+        // still use an interpreter that satisfies the project and any explicit Python request.
+        let lock_interpreter = if no_sync && !isolated && frozen.is_none() {
+            let workspace_python = WorkspacePython::from_request(
+                python.as_deref().map(PythonRequest::parse),
+                Some(project.workspace()),
+                &groups,
+                project_dir,
+                no_config,
+            )
+            .await?;
+            Some(
+                ProjectInterpreter::discover(
+                    project.workspace(),
+                    &groups,
+                    workspace_python,
+                    &client_builder,
+                    python_preference,
+                    python_downloads,
+                    &install_mirrors,
+                    false,
+                    None,
+                    cache,
+                    printer,
+                )
+                .await?
+                .into_interpreter(),
+            )
         } else {
-            // Keep the environment locked through synchronization and metadata collection.
+            None
+        };
+        let lock_interpreter = lock_interpreter
+            .as_ref()
+            .unwrap_or_else(|| venv.interpreter());
+
+        let state = UniversalState::default();
+        // Keep the environment locked through synchronization and metadata collection.
+        let _environment_lock;
+        if !no_sync {
             _environment_lock = venv
                 .lock()
                 .await
@@ -251,62 +275,65 @@ pub(crate) async fn check(
                     tracing::warn!("Failed to acquire environment lock: {err}");
                 })
                 .ok();
+        }
 
-            let sync_state = state.fork();
+        let mode = if let Some(frozen_source) = frozen {
+            LockMode::Frozen(frozen_source.into())
+        } else if let LockCheck::Enabled(lock_check) = lock_check {
+            LockMode::Locked(lock_interpreter, lock_check)
+        } else if isolated {
+            LockMode::DryRun(lock_interpreter)
+        } else {
+            LockMode::Write(lock_interpreter)
+        };
 
-            let mode = if let Some(frozen_source) = frozen {
-                LockMode::Frozen(frozen_source.into())
-            } else if let LockCheck::Enabled(lock_check) = lock_check {
-                LockMode::Locked(venv.interpreter(), lock_check)
-            } else if isolated {
-                LockMode::DryRun(venv.interpreter())
-            } else {
-                LockMode::Write(venv.interpreter())
-            };
-
-            let result = match Box::pin(
-                project::lock::LockOperation::new(
-                    mode,
-                    &settings.resolver,
-                    &client_builder,
-                    &state,
-                    Box::new(SummaryResolveLogger),
-                    &concurrency,
-                    cache,
-                    workspace_cache,
-                    printer,
-                    preview,
-                )
-                .execute(project.workspace().into()),
+        let result = match Box::pin(
+            project::lock::LockOperation::new(
+                mode,
+                &settings.resolver,
+                &client_builder,
+                &state,
+                Box::new(SummaryResolveLogger),
+                &concurrency,
+                cache,
+                workspace_cache,
+                printer,
+                preview,
             )
-            .await
-            {
-                Ok(result) => result,
-                Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                }
-                Err(err) => return Err(err.into()),
-            };
+            .execute(project.workspace().into()),
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(ProjectError::Operation(err)) => {
+                return diagnostics::OperationDiagnostic::with_system_certs(
+                    client_builder.system_certs(),
+                )
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            }
+            Err(err) => return Err(err.into()),
+        };
 
-            let target = match project {
-                VirtualProject::Project(project) => InstallTarget::Project {
-                    workspace: project.workspace(),
-                    name: project.project_name(),
-                    lock: result.lock(),
-                },
-                VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
-                    workspace,
-                    lock: result.lock(),
-                },
-            };
+        let target = match project {
+            VirtualProject::Project(project) => InstallTarget::Project {
+                workspace: project.workspace(),
+                name: project.project_name(),
+                lock: result.lock(),
+            },
+            VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
+                workspace,
+                lock: result.lock(),
+            },
+        };
 
-            target.validate_extras(&extras)?;
-            target.validate_groups(&groups)?;
+        target.validate_extras(&extras)?;
+        target.validate_groups(&groups)?;
 
+        if no_sync {
+            debug!("Skipping environment synchronization due to `--no-sync`");
+        } else {
+            let sync_state = state.fork();
             match project::sync::do_sync(
                 target,
                 &venv,
@@ -341,34 +368,32 @@ pub(crate) async fn check(
                 }
                 Err(err) => return Err(err.into()),
             }
-
-            Some(result.into_lock())
-        };
-
-        if let Some(lock) = lock {
-            let target = match project {
-                VirtualProject::Project(project) => InstallTarget::Project {
-                    workspace: project.workspace(),
-                    name: project.project_name(),
-                    lock: &lock,
-                },
-                VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
-                    workspace,
-                    lock: &lock,
-                },
-            };
-            let metadata = crate::commands::workspace::metadata::metadata_from_target(
-                project.workspace(),
-                (!no_sync).then_some(&venv),
-                target,
-                &extras,
-                &groups,
-                &settings.resolver,
-            )?;
-            let mut metadata = metadata.to_json()?;
-            metadata.push('\n');
-            workspace_metadata = Some(metadata);
         }
+
+        let lock = result.into_lock();
+
+        let target = match project {
+            VirtualProject::Project(project) => InstallTarget::Project {
+                workspace: project.workspace(),
+                name: project.project_name(),
+                lock: &lock,
+            },
+            VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
+                workspace,
+                lock: &lock,
+            },
+        };
+        let metadata = crate::commands::workspace::metadata::metadata_from_target(
+            project.workspace(),
+            (!no_sync).then_some(&venv),
+            target,
+            &extras,
+            &groups,
+            &settings.resolver,
+        )?;
+        let mut metadata = metadata.to_json()?;
+        metadata.push('\n');
+        workspace_metadata = Some(metadata);
 
         Some(venv.root().to_owned())
     } else {
