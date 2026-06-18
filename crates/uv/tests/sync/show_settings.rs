@@ -4476,9 +4476,9 @@ fn no_cache_env_override() -> anyhow::Result<()> {
 
     // Write a `uv.toml` file with `no-cache = true`.
     let config = context.temp_dir.child("uv.toml");
-    config.write_str(indoc::indoc! {r#"
+    config.write_str(indoc::indoc! {"
         no-cache = true
-    "#})?;
+    "})?;
 
     // Verify `no-cache = true` takes effect from the config file.
     let no_cache_config = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
