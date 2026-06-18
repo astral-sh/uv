@@ -1020,6 +1020,7 @@ impl ProjectInterpreter {
         active: Option<bool>,
         cache: &Cache,
         printer: Printer,
+        fail_on_invalid_environment: bool,
     ) -> Result<Self, ProjectError> {
         let WorkspacePython {
             source,
@@ -1053,7 +1054,10 @@ impl ProjectInterpreter {
                 }
             }
             Err(uv_python::Error::MissingEnvironment(_)) => {}
-            Err(uv_python::Error::InvalidEnvironment(inner)) => {
+            Err(uv_python::Error::InvalidEnvironment(inner)) => 'invalid_environment: {
+                if !fail_on_invalid_environment {
+                    break 'invalid_environment;
+                }
                 // If there's an invalid environment with existing content, we error instead of
                 // deleting it later on
                 match inner.kind {
@@ -1482,6 +1486,7 @@ impl ProjectEnvironment {
             active,
             cache,
             printer,
+            true,
         )
         .await?
         {

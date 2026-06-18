@@ -191,6 +191,7 @@ pub(crate) async fn export(
                     Some(false),
                     cache,
                     printer,
+                    true,
                 )
                 .await?
                 .into_interpreter()

@@ -95,6 +95,7 @@ pub(crate) async fn metadata(
             Some(false),
             cache,
             printer,
+            true,
         )
         .await?
         .into_interpreter();
