@@ -10305,6 +10305,58 @@ fn lock_member_non_workspace_source_with_root_workspace_source() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "app-a",
+            "lib-x",
+            "monorepo",
+        ]
+
+        [[package]]
+        name = "app-a"
+        version = "0.1.0"
+        source = { editable = "packages/app-a" }
+        dependencies = [
+            { name = "lib-x" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "lib-x", editable = "packages/lib-x" }]
+
+        [[package]]
+        name = "lib-x"
+        version = "1.0.0"
+        source = { editable = "packages/lib-x" }
+
+        [[package]]
+        name = "monorepo"
+        version = "1.0.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "app-a" },
+            { name = "lib-x" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "app-a", editable = "packages/app-a" },
+            { name = "lib-x", editable = "packages/lib-x" },
+        ]
+        "#);
+    });
+
     Ok(())
 }
 
