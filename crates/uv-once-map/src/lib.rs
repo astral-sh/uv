@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{BuildHasher, Hash, RandomState};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use papaya::{HashMap, ResizeMode};
 use tokio::sync::Notify;
@@ -71,10 +71,10 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     pub async fn register_or_wait(&self, key: &K) -> Option<V> {
         let notify = {
             let items = self.items.pin();
-            match items.try_insert(key.clone(), Value::Waiting(Arc::new(Notify::new()))) {
+            match items.try_insert_with(key.clone(), || Value::Waiting(Arc::new(Notify::new()))) {
                 Ok(_) => return None,
-                Err(value) => match value.current {
-                    Value::Filled(_) => return value.current.get(),
+                Err(value) => match value {
+                    Value::Filled(_) => return value.get(),
                     Value::Waiting(notify) => notify.clone(),
                 },
             }
@@ -183,7 +183,7 @@ impl<V> Value<V> {
     }
 
     fn lock(value: &Mutex<Option<V>>) -> MutexGuard<'_, Option<V>> {
-        value.lock().unwrap_or_else(|err| err.into_inner())
+        value.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     fn take(&self) -> Option<V> {
