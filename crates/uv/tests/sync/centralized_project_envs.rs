@@ -363,6 +363,22 @@ fn sync_centralized_env_virtual_workspace() -> Result<()> {
     });
     // The workspace member does not get its own environment.
     assert!(!member.child(".venv").exists());
+
+    context
+        .sync()
+        .arg("--package")
+        .arg("member")
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .assert()
+        .success();
+
+    // Selecting a workspace member still uses the workspace environment.
+    assert_eq!(
+        fs_err::read_link(context.temp_dir.child(".venv").path())?,
+        target
+    );
+    assert!(!member.child(".venv").exists());
     Ok(())
 }
 
