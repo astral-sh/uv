@@ -1868,6 +1868,90 @@ fn invert_preserves_marker_attribution() -> Result<()> {
     Ok(())
 }
 
+/// Universal inverted trees should include every version that directly depends on a package in a
+/// satisfiable marker environment.
+#[test]
+fn invert_preserves_marker_split_versions() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "bar==1.0.0; sys_platform == 'win32'",
+            "bar==2.0.0; sys_platform != 'win32'",
+        ]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'win32'",
+            "sys_platform != 'win32'",
+        ]
+
+        [[package]]
+        name = "bar"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "sys_platform == 'win32'",
+        ]
+        dependencies = [
+            { name = "baz", marker = "sys_platform == 'win32'" },
+        ]
+
+        [[package]]
+        name = "bar"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "sys_platform != 'win32'",
+        ]
+        dependencies = [
+            { name = "baz", marker = "sys_platform != 'win32'" },
+        ]
+
+        [[package]]
+        name = "baz"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple" }
+
+        [[package]]
+        name = "foo"
+        version = "1.0.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "bar", version = "1.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32'" },
+            { name = "bar", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen").arg("--universal").arg("--invert").arg("--package").arg("baz"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    baz v1.0.0
+    ├── bar v1.0.0
+    │   └── foo v1.0.0
+    └── bar v2.0.0
+        └── foo v1.0.0
+
+    ----- stderr -----
+
+    ");
+
+    Ok(())
+}
+
 /// Declared conflicts are world knowledge for the encoded extra and group markers.
 #[test]
 fn invert_preserves_conflict_marker_attribution() -> Result<()> {
