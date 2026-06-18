@@ -287,20 +287,19 @@ pub(super) async fn compile_bytecode(
 
 /// Compile the given Python source files to bytecode.
 pub(super) async fn compile_bytecode_files(
-    files: &[PathBuf],
+    files: impl IntoIterator<Item = anyhow::Result<PathBuf>>,
     venv: &PythonEnvironment,
     concurrency: &Concurrency,
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<()> {
-    if files.is_empty() {
-        return Ok(());
-    }
-
     let start = std::time::Instant::now();
     let files = compile_files(files, venv.python_executable(), concurrency, cache.root())
         .await
         .context("Failed to bytecode-compile installed packages")?;
+    if files == 0 {
+        return Ok(());
+    }
 
     write_bytecode_summary(files, start, printer)?;
     Ok(())
