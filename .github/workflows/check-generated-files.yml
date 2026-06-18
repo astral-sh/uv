@@ -37,6 +37,7 @@ jobs:
         uses: ./.github/actions/setup-srs
         with:
           artifact-cache-scope: github-linux-dev
+          target-path: ${{ github.workspace }}/target/debug
       - name: "Generate all"
         run: cargo dev generate-all --mode dry-run
       - name: "Check sysconfig mappings"
@@ -53,3 +54,6 @@ jobs:
           artifact-cache-hit: ${{ steps.srs.outputs.artifact-cache-hit }}
           artifact-cache-primary-key: ${{ steps.srs.outputs.artifact-cache-primary-key }}
           save-artifact-cache: "true"
+          target-cache-hit: ${{ steps.srs.outputs.target-cache-hit }}
+          target-cache-primary-key: ${{ steps.srs.outputs.target-cache-primary-key }}
+          target-path: ${{ github.workspace }}/target/debug

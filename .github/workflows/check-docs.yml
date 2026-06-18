@@ -1,5 +1,10 @@
 on:
   workflow_call:
+    inputs:
+      save-rust-cache:
+        required: false
+        type: string
+        default: "true"
 
 permissions: {}
 
@@ -23,6 +28,7 @@ jobs:
         uses: ./.github/actions/setup-srs
         with:
           artifact-cache-scope: github-linux-dev
+          target-path: ${{ github.workspace }}/target/debug
       - name: "Generate reference documentation"
         run: |
           cargo dev generate-options-reference
@@ -31,3 +37,11 @@ jobs:
 
       - name: "Build docs"
         run: uv run --only-group docs mkdocs build --strict -f mkdocs.yml
+
+      - name: "Save srs build cache"
+        if: ${{ inputs.save-rust-cache == 'true' }}
+        uses: ./.github/actions/save-srs-cache
+        with:
+          target-cache-hit: ${{ steps.srs.outputs.target-cache-hit }}
+          target-cache-primary-key: ${{ steps.srs.outputs.target-cache-primary-key }}
+          target-path: ${{ github.workspace }}/target/debug

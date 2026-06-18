@@ -161,6 +161,8 @@ jobs:
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: ./.github/workflows/check-docs.yml
+    with:
+      save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
     secrets: inherit
 
   check-zizmor:

@@ -38,6 +38,7 @@ jobs:
         uses: ./.github/actions/setup-srs
         with:
           artifact-cache-scope: depot-linux-test
+          target-path: ${{ github.workspace }}/target/fast-build
 
       - name: "Install Rust toolchain"
         run: rustup show
@@ -133,6 +134,9 @@ jobs:
           artifact-cache-hit: ${{ steps.srs.outputs.artifact-cache-hit }}
           artifact-cache-primary-key: ${{ steps.srs.outputs.artifact-cache-primary-key }}
           save-artifact-cache: "true"
+          target-cache-hit: ${{ steps.srs.outputs.target-cache-hit }}
+          target-cache-primary-key: ${{ steps.srs.outputs.target-cache-primary-key }}
+          target-path: ${{ github.workspace }}/target/fast-build
 
   cargo-test-macos:
     timeout-minutes: 30
