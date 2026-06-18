@@ -67,25 +67,21 @@ impl LoweredRequirement {
         // prefer the workspace root's source.
         let (sources, origin) = if matches!(origin, RequirementOrigin::Project)
             && workspace.packages().contains_key(&requirement.name)
-            && sources.is_some_and(|s| s.iter().any(|s| !matches!(s, Source::Workspace { .. })))
-        {
-            if let Some(workspace_source) = workspace.sources().get(&requirement.name) {
-                if workspace_source.iter().any(|s| {
-                    matches!(
-                        s,
-                        Source::Workspace {
-                            workspace: true,
-                            ..
-                        }
-                    )
-                }) {
-                    (Some(workspace_source), RequirementOrigin::Workspace)
-                } else {
-                    (sources, origin)
-                }
-            } else {
-                (sources, origin)
-            }
+            && let Some(project_sources) = sources
+            && project_sources
+                .iter()
+                .any(|source| !matches!(source, Source::Workspace { .. }))
+            && let Some(workspace_sources) = workspace.sources().get(&requirement.name)
+            && workspace_sources.iter().any(|source| {
+                matches!(
+                    source,
+                    Source::Workspace {
+                        workspace: true,
+                        ..
+                    }
+                )
+            }) {
+            (Some(workspace_sources), RequirementOrigin::Workspace)
         } else {
             (sources, origin)
         };
