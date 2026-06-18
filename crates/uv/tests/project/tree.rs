@@ -42,11 +42,76 @@ fn nested_dependencies() -> Result<()> {
     "
     );
 
+    // Flattening emits a deterministic set and omits the repeated path to `numpy`.
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--flatten"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    joblib v1.3.2
+    numpy v1.26.4
+    project v0.1.0
+    scikit-learn v1.4.1.post1
+    scipy v1.12.0
+    threadpoolctl v3.4.0
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    // Selection and pruning happen before flattening.
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--universal")
+        .arg("--package").arg("scikit-learn")
+        .arg("--prune").arg("scipy")
+        .arg("--flatten"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    joblib v1.3.2
+    numpy v1.26.4
+    scikit-learn v1.4.1.post1
+    threadpoolctl v3.4.0
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     Ok(())
+}
+
+#[test]
+fn flatten_conflicts_with_hierarchical_options() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.tree().arg("--flatten").arg("--depth").arg("1"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--flatten' cannot be used with '--depth <DEPTH>'
+
+    Usage: uv tree --cache-dir [CACHE_DIR] --flatten --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    "###);
+
+    uv_snapshot!(context.filters(), context.tree().arg("--flatten").arg("--no-dedupe"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--flatten' cannot be used with '--no-dedupe'
+
+    Usage: uv tree --cache-dir [CACHE_DIR] --flatten --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    "###);
 }
 
 #[test]
@@ -175,6 +240,22 @@ fn invert() -> Result<()> {
     "
     );
 
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--invert")
+        .arg("--package").arg("numpy")
+        .arg("--flatten"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    numpy v1.26.4
+    project v0.1.0
+    scikit-learn v1.4.1.post1
+    scipy v1.12.0
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
     Ok(())
 }
 
@@ -268,6 +349,19 @@ fn outdated() -> Result<()> {
     Resolved 4 packages in [TIME]
     "
     );
+
+    uv_snapshot!(context.filters(), context.tree().arg("--outdated").arg("--universal").arg("--flatten"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio v3.0.0 (latest: v4.3.0)
+    idna v3.6
+    project v0.1.0
+    sniffio v1.3.1
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
 
     Ok(())
 }
@@ -497,6 +591,21 @@ fn repeated_dependencies() -> Result<()> {
     "
     );
 
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--flatten"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio v1.4.0
+    anyio v4.3.0
+    async-generator v1.10
+    idna v3.6
+    project v0.1.0
+    sniffio v1.3.1
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
@@ -574,6 +683,66 @@ fn repeated_version() -> Result<()> {
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn flatten_distinguishes_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "dep"
+        version = "1.0.0"
+        source = { registry = "https://one.example/simple" }
+
+        [[package]]
+        name = "dep"
+        version = "1.0.0"
+        source = { registry = "https://two.example/simple" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "dep", version = "1.0.0", source = { registry = "https://one.example/simple" } },
+            { name = "dep", version = "1.0.0", source = { registry = "https://two.example/simple" } },
+        ]
+
+        [package.metadata]
+        requires-dist = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--frozen")
+        .arg("--universal")
+        .arg("--flatten"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    dep v1.0.0 @ registry+https://one.example/simple
+    dep v1.0.0 @ registry+https://two.example/simple
+    project v0.1.0
+
+    ----- stderr -----
+    ");
 
     Ok(())
 }
@@ -731,6 +900,30 @@ fn optional_dependencies() -> Result<()> {
     Resolved 14 packages in [TIME]
     "
     );
+
+    // Flattened traversal still activates both workspace extras and requested package extras.
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--flatten"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio v4.3.0
+    blinker v1.7.0
+    click v8.1.7
+    colorama v0.4.6
+    flask v3.0.2
+    idna v3.6
+    iniconfig v2.0.0
+    itsdangerous v2.1.2
+    jinja2 v3.1.3
+    markupsafe v2.1.5
+    project v0.1.0
+    python-dotenv v1.0.1
+    sniffio v1.3.1
+    werkzeug v3.0.1
+
+    ----- stderr -----
+    Resolved 14 packages in [TIME]
+    ");
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
@@ -1294,6 +1487,26 @@ fn cycle() -> Result<()> {
     Resolved 11 packages in [TIME]
     "
     );
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--flatten"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    argparse v1.4.0
+    extras v1.0.0
+    fixtures v3.0.0
+    linecache2 v1.0.0
+    pbr v6.0.0
+    project v0.1.0
+    python-mimeparse v1.6.0
+    six v1.16.0
+    testtools v2.3.0
+    traceback2 v1.4.0
+    unittest2 v1.1.0
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    ");
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
@@ -2257,6 +2470,17 @@ fn show_sizes() -> Result<()> {
     Resolved 2 packages in [TIME]
     "
     );
+
+    uv_snapshot!(context.filters(), context.tree().arg("--show-sizes").arg("--universal").arg("--flatten"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    iniconfig v2.0.0 ([SIZE])
+    project v0.1.0
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
 
     Ok(())
 }

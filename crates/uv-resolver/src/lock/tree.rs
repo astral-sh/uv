@@ -19,6 +19,15 @@ use uv_pypi_types::ResolverMarkerEnvironment;
 use crate::lock::{Package, PackageId};
 use crate::{Lock, PackageMap};
 
+/// The structure used to render a dependency graph.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum TreeDisplayMode {
+    /// Render dependency relationships as a tree.
+    Tree,
+    /// Render each reachable package once, without dependency relationships.
+    Flattened,
+}
+
 #[derive(Debug)]
 pub struct TreeDisplay<'env> {
     /// The constructed dependency graph.
@@ -37,6 +46,8 @@ pub struct TreeDisplay<'env> {
     lock: &'env Lock,
     /// Whether to show sizes in the rendered output.
     show_sizes: bool,
+    /// The structure used to render the selected graph.
+    mode: TreeDisplayMode,
 }
 
 impl<'env> TreeDisplay<'env> {
@@ -52,6 +63,7 @@ impl<'env> TreeDisplay<'env> {
         no_dedupe: bool,
         invert: bool,
         show_sizes: bool,
+        mode: TreeDisplayMode,
     ) -> Self {
         // Identify any workspace members.
         //
@@ -415,7 +427,97 @@ impl<'env> TreeDisplay<'env> {
             invert,
             lock,
             show_sizes,
+            mode,
         }
+    }
+
+    /// Traverse the selected graph and return each reachable package exactly once.
+    fn render_flattened(&'env self) -> Vec<String> {
+        let mut packages = BTreeSet::new();
+        let mut visited = FxHashSet::default();
+        let mut queue = VecDeque::new();
+
+        for node in &self.roots {
+            match self.graph[*node] {
+                Node::Root => {
+                    queue.extend(
+                        self.graph
+                            .edges_directed(*node, Direction::Outgoing)
+                            .map(|edge| Cursor::new(edge.target(), edge.id())),
+                    );
+                }
+                Node::Package(_) => queue.push_back(Cursor::root(*node)),
+            }
+        }
+
+        while let Some(cursor) = queue.pop_front() {
+            let Node::Package(package_id) = self.graph[cursor.node()] else {
+                continue;
+            };
+            let package = self.lock.find_by_id(package_id);
+            let edge = cursor.edge().map(|edge_id| &self.graph[edge_id]);
+            let expanded_extras = self.expanded_extras(package, edge);
+
+            packages.insert(package_id);
+            if !visited.insert(VisitedNode {
+                package_id,
+                expanded_extras: expanded_extras.clone(),
+            }) {
+                continue;
+            }
+
+            queue.extend(
+                self.graph
+                    .edges_directed(cursor.node(), Direction::Outgoing)
+                    .filter_map(|edge| match self.graph[edge.target()] {
+                        Node::Root => None,
+                        Node::Package(_) => {
+                            if !self.invert
+                                && let Edge::Optional(required_extra, _) = &self.graph[edge.id()]
+                                && !expanded_extras.contains(required_extra)
+                            {
+                                return None;
+                            }
+                            Some(Cursor::new(edge.target(), edge.id()))
+                        }
+                    }),
+            );
+        }
+
+        let mut package_counts = FxHashMap::default();
+        for package_id in &packages {
+            *package_counts
+                .entry((&package_id.name, package_id.version.as_ref()))
+                .or_insert(0usize) += 1;
+        }
+
+        packages
+            .into_iter()
+            .map(|package_id| {
+                let mut line = format!("{}", package_id.name);
+                if let Some(version) = package_id.version.as_ref() {
+                    let _ = write!(line, " v{version}");
+                }
+                if package_counts[&(&package_id.name, package_id.version.as_ref())] > 1 {
+                    let _ = write!(line, " @ {}", package_id.source);
+                }
+                if let Some(version) = self.latest.get(package_id) {
+                    let _ = write!(line, " {}", format!("(latest: v{version})").bold().cyan());
+                }
+                if self.show_sizes
+                    && let Some(size_bytes) = self
+                        .lock
+                        .find_by_id(package_id)
+                        .wheels
+                        .iter()
+                        .find_map(|wheel| wheel.size)
+                {
+                    let (bytes, unit) = human_readable_bytes(size_bytes);
+                    let _ = write!(line, " {}", format!("({bytes:.1}{unit})").dimmed());
+                }
+                line
+            })
+            .collect()
     }
 
     /// Perform a depth-first traversal of the given package and its dependencies.
@@ -724,6 +826,13 @@ impl Cursor {
 impl std::fmt::Display for TreeDisplay<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use owo_colors::OwoColorize;
+
+        if self.mode == TreeDisplayMode::Flattened {
+            for line in self.render_flattened() {
+                writeln!(f, "{line}")?;
+            }
+            return Ok(());
+        }
 
         let mut deduped = false;
         for line in self.render() {

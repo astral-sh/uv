@@ -4736,6 +4736,10 @@ pub struct TreeArgs {
     #[arg(long)]
     pub universal: bool,
 
+    /// Display each package once, without dependency relationships.
+    #[arg(long, conflicts_with_all = ["depth", "no_dedupe"])]
+    pub flatten: bool,
+
     #[command(flatten)]
     pub tree: DisplayTreeArgs,
 
