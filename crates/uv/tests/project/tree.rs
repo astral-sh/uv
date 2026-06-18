@@ -1655,7 +1655,7 @@ fn non_project() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--group").arg("async"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1672,6 +1672,98 @@ fn non_project() -> Result<()> {
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn non_project_group_selection_with_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let leaf = context.temp_dir.child("leaf");
+    leaf.create_dir_all()?;
+    leaf.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+    let leaf_url = Url::from_file_path(leaf.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert leaf path to URL"))?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(&formatdoc! {
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["leaf @ {leaf_url}"]
+        "#,
+    })?;
+    let child_url = Url::from_file_path(child.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert child path to URL"))?;
+
+    let test_dependency = context.temp_dir.child("test-dependency");
+    test_dependency.create_dir_all()?;
+    test_dependency.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "test-dependency"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+    let test_dependency_url = Url::from_file_path(test_dependency.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert test dependency path to URL"))?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {
+        r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        dev = ["child[feature] @ {child_url}"]
+        test = ["test-dependency @ {test_dependency_url}"]
+        "#,
+    })?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--only-group").arg("dev"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    child[feature] v0.1.0 (group: dev)
+    └── leaf v0.1.0 (extra: feature)
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    ");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(&formatdoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child[feature] @ {child_url}"]
+        # ///
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--script").arg(script.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    child[feature] v0.1.0
+    └── leaf v0.1.0 (extra: feature)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
 
     Ok(())
 }
@@ -1706,7 +1798,7 @@ fn non_project_member() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--group").arg("async"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1724,7 +1816,7 @@ fn non_project_member() -> Result<()> {
     "
     );
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--group").arg("async"), @"
     success: true
     exit_code: 0
     ----- stdout -----
