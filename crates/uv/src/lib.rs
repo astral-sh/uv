@@ -2672,6 +2672,7 @@ async fn run_project(
                 args.package,
                 args.no_dedupe,
                 args.invert,
+                args.only_emit_workspace,
                 args.outdated,
                 args.show_sizes,
                 args.python_version,

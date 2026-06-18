@@ -2650,6 +2650,7 @@ pub(crate) struct TreeSettings {
     pub(crate) package: Vec<PackageName>,
     pub(crate) no_dedupe: bool,
     pub(crate) invert: bool,
+    pub(crate) only_emit_workspace: bool,
     pub(crate) outdated: bool,
     pub(crate) show_sizes: bool,
     #[allow(dead_code)]
@@ -2671,6 +2672,7 @@ impl TreeSettings {
         let TreeArgs {
             tree,
             universal,
+            only_emit_workspace,
             dev,
             only_dev,
             no_dev,
@@ -2733,6 +2735,7 @@ impl TreeSettings {
             package: tree.package,
             no_dedupe: tree.no_dedupe,
             invert: tree.invert,
+            only_emit_workspace,
             outdated: tree.outdated,
             show_sizes: tree.show_sizes,
             script,

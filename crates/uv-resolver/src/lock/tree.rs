@@ -33,6 +33,10 @@ pub struct TreeDisplay<'env> {
     no_dedupe: bool,
     /// Whether the graph edges have been reversed (i.e., `--invert` mode).
     invert: bool,
+    /// The packages that are workspace members.
+    members: BTreeSet<&'env PackageId>,
+    /// Whether to omit non-workspace packages from the rendered tree.
+    only_emit_workspace: bool,
     /// Reference to the lock to look up additional metadata (e.g., wheel sizes).
     lock: &'env Lock,
     /// Whether to show sizes in the rendered output.
@@ -413,28 +417,39 @@ impl<'env> TreeDisplay<'env> {
             depth,
             no_dedupe,
             invert,
+            members,
+            only_emit_workspace: false,
             lock,
             show_sizes,
         }
+    }
+
+    /// Omit non-workspace packages from the rendered tree while retaining them for traversal.
+    #[must_use]
+    pub fn only_emit_workspace(mut self) -> Self {
+        self.only_emit_workspace = true;
+        self
     }
 
     /// Perform a depth-first traversal of the given package and its dependencies.
     fn visit(
         &'env self,
         cursor: Cursor,
-        visited: &mut FxHashMap<VisitedNode<'env>, Vec<&'env PackageId>>,
+        displayed_depth: usize,
+        visited: &mut FxHashMap<VisitedNode<'env>, bool>,
         path: &mut Vec<VisitedNode<'env>>,
-    ) -> Vec<String> {
-        // Short-circuit if the current path is longer than the provided depth.
-        if path.len() > self.depth {
-            return Vec::new();
-        }
-
+    ) -> Vec<RenderedNode> {
         let Node::Package(package_id) = self.graph[cursor.node()] else {
             return Vec::new();
         };
         let edge = cursor.edge().map(|edge_id| &self.graph[edge_id]);
         let package = self.lock.find_by_id(package_id);
+        let emit = !self.only_emit_workspace || self.members.contains(package_id);
+
+        // Hidden nodes do not consume display depth, since they are contracted out of the tree.
+        if emit && displayed_depth > self.depth {
+            return Vec::new();
+        }
 
         let expanded_extras = self.expanded_extras(package, edge);
         let visited_node = VisitedNode {
@@ -488,15 +503,20 @@ impl<'env> TreeDisplay<'env> {
         // 1. The package is in the current traversal path (i.e., a dependency cycle).
         // 2. The package has been visited and de-duplication is enabled (default).
         if path.contains(&visited_node) {
-            return vec![format!("{line} (*)")];
-        }
-        if !self.no_dedupe
-            && let Some(requirements) = visited.get(&visited_node)
-        {
-            return if requirements.is_empty() {
-                vec![line]
+            return if emit {
+                vec![RenderedNode::leaf(format!("{line} (*)"))]
             } else {
-                vec![format!("{line} (*)")]
+                Vec::new()
+            };
+        }
+        if emit
+            && !self.no_dedupe
+            && let Some(has_displayed_children) = visited.get(&visited_node)
+        {
+            return if *has_displayed_children {
+                vec![RenderedNode::leaf(format!("{line} (*)"))]
+            } else {
+                vec![RenderedNode::leaf(line)]
             };
         }
 
@@ -535,69 +555,39 @@ impl<'env> TreeDisplay<'env> {
             (edge, node)
         });
 
-        let mut lines = vec![line];
+        path.push(visited_node.clone());
 
-        // Keep track of the dependency path to avoid cycles.
-        // Only mark as visited if we're going to expand children (not at depth limit).
-        if path.len() < self.depth {
-            visited.insert(
-                visited_node.clone(),
-                dependencies
-                    .iter()
-                    .filter_map(|node| match self.graph[node.node()] {
-                        Node::Package(package_id) => Some(package_id),
-                        Node::Root => None,
-                    })
-                    .collect(),
-            );
-        }
-        path.push(visited_node);
-
-        for (index, dep) in dependencies.iter().enumerate() {
-            // For sub-visited packages, add the prefix to make the tree display user-friendly.
-            // The key observation here is you can group the tree as follows when you're at the
-            // root of the tree:
-            // root_package
-            // ├── level_1_0          // Group 1
-            // │   ├── level_2_0      ...
-            // │   │   ├── level_3_0  ...
-            // │   │   └── level_3_1  ...
-            // │   └── level_2_1      ...
-            // ├── level_1_1          // Group 2
-            // │   ├── level_2_2      ...
-            // │   └── level_2_3      ...
-            // └── level_1_2          // Group 3
-            //     └── level_2_4      ...
-            //
-            // The lines in Group 1 and 2 have `├── ` at the top and `|   ` at the rest while
-            // those in Group 3 have `└── ` at the top and `    ` at the rest.
-            // This observation is true recursively even when looking at the subtree rooted
-            // at `level_1_0`.
-            let (prefix_top, prefix_rest) = if dependencies.len() - 1 == index {
-                ("└── ", "    ")
-            } else {
-                ("├── ", "│   ")
-            };
-            for (visited_index, visited_line) in self.visit(*dep, visited, path).iter().enumerate()
-            {
-                let prefix = if visited_index == 0 {
-                    prefix_top
-                } else {
-                    prefix_rest
-                };
-                lines.push(format!("{prefix}{visited_line}"));
-            }
-        }
+        let children: Vec<RenderedNode> = dependencies
+            .iter()
+            .flat_map(|dependency| {
+                self.visit(
+                    *dependency,
+                    displayed_depth + usize::from(emit),
+                    visited,
+                    path,
+                )
+            })
+            .collect();
 
         path.pop();
 
-        lines
+        // Only mark the node as visited if its children were eligible for display. Otherwise, a
+        // later occurrence at a shallower depth still needs to be expanded.
+        if emit && displayed_depth < self.depth {
+            visited.insert(visited_node, !children.is_empty());
+        }
+
+        if emit {
+            vec![RenderedNode { line, children }]
+        } else {
+            children
+        }
     }
 
     /// Depth-first traverse the nodes to render the tree.
     fn render(&self) -> Vec<String> {
         let mut path = Vec::new();
-        let mut lines = Vec::with_capacity(self.graph.node_count());
+        let mut roots = Vec::new();
         let mut visited =
             FxHashMap::with_capacity_and_hasher(self.graph.node_count(), FxBuildHasher);
 
@@ -607,8 +597,9 @@ impl<'env> TreeDisplay<'env> {
                     for edge in self.graph.edges_directed(*node, Direction::Outgoing) {
                         let node = edge.target();
                         path.clear();
-                        lines.extend(self.visit(
+                        roots.extend(self.visit(
                             Cursor::new(node, edge.id()),
+                            0,
                             &mut visited,
                             &mut path,
                         ));
@@ -616,11 +607,15 @@ impl<'env> TreeDisplay<'env> {
                 }
                 Node::Package(_) => {
                     path.clear();
-                    lines.extend(self.visit(Cursor::root(*node), &mut visited, &mut path));
+                    roots.extend(self.visit(Cursor::root(*node), 0, &mut visited, &mut path));
                 }
             }
         }
 
+        let mut lines = Vec::with_capacity(self.graph.node_count());
+        for root in roots {
+            lines.extend(root.render());
+        }
         lines
     }
 
@@ -646,6 +641,44 @@ impl<'env> TreeDisplay<'env> {
             .iter()
             .filter(|extra| package.optional_dependencies.contains_key(*extra))
             .collect()
+    }
+}
+
+#[derive(Debug)]
+struct RenderedNode {
+    line: String,
+    children: Vec<Self>,
+}
+
+impl RenderedNode {
+    fn leaf(line: String) -> Self {
+        Self {
+            line,
+            children: Vec::new(),
+        }
+    }
+
+    fn render(&self) -> Vec<String> {
+        let mut lines = vec![self.line.clone()];
+
+        for (index, child) in self.children.iter().enumerate() {
+            // For sub-visited packages, add the prefix to make the tree display user-friendly.
+            let (prefix_top, prefix_rest) = if self.children.len() - 1 == index {
+                ("└── ", "    ")
+            } else {
+                ("├── ", "│   ")
+            };
+            for (line_index, line) in child.render().iter().enumerate() {
+                let prefix = if line_index == 0 {
+                    prefix_top
+                } else {
+                    prefix_rest
+                };
+                lines.push(format!("{prefix}{line}"));
+            }
+        }
+
+        lines
     }
 }
 

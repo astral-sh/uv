@@ -4739,6 +4739,15 @@ pub struct TreeArgs {
     #[command(flatten)]
     pub tree: DisplayTreeArgs,
 
+    /// Only emit workspace members, including the root project.
+    ///
+    /// Non-workspace packages are omitted from the display, but remain in the traversed dependency
+    /// graph. Workspace members reached through an omitted package are promoted to the nearest
+    /// displayed ancestor. With `--invert`, a selected non-workspace package is omitted while its
+    /// workspace dependents remain visible.
+    #[arg(long)]
+    pub only_emit_workspace: bool,
+
     /// Include the development dependency group [env: UV_DEV=]
     ///
     /// Development dependencies are defined via `dependency-groups.dev` or
