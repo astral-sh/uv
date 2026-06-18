@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeSet, VecDeque};
 use std::fmt::Write;
 
@@ -146,7 +147,11 @@ impl<'env> TreeDisplay<'env> {
                     .or_insert_with(|| graph.add_node(Node::Package(&dep.package_id)));
 
                 // Add an edge from the workspace package.
-                graph.add_edge(index, dep_index, Edge::Dev(group, Some(&dep.extra)));
+                graph.add_edge(
+                    index,
+                    dep_index,
+                    Edge::Dev(group, Some(RequestedExtras::Dependency(&dep.extra))),
+                );
 
                 // Push its dependencies on the queue.
                 if seen.insert((&dep.package_id, None)) {
@@ -207,17 +212,31 @@ impl<'env> TreeDisplay<'env> {
                         .or_insert_with(|| graph.add_node(Node::Package(&package.id)));
 
                     // Add an edge from the root.
-                    graph.add_edge(root, *index, Edge::Prod(None));
+                    graph.add_edge(
+                        root,
+                        *index,
+                        Edge::Prod(Some(RequestedExtras::Requirement(
+                            requirement.extras.as_ref(),
+                        ))),
+                    );
 
                     // Push its dependencies on the queue.
                     if seen.insert((&package.id, None)) {
                         queue.push_back((&package.id, None));
+                    }
+                    for extra in &*requirement.extras {
+                        if seen.insert((&package.id, Some(extra))) {
+                            queue.push_back((&package.id, Some(extra)));
+                        }
                     }
                 }
             }
 
             // Identify any dependency groups attached to the workspace itself.
             for (group, requirements) in lock.dependency_groups() {
+                if !groups.contains(group) {
+                    continue;
+                }
                 for requirement in requirements {
                     for package in by_name.get(&requirement.name).into_iter().flatten() {
                         // Determine whether this entry is "relevant" for the requirement, by intersecting
@@ -244,11 +263,23 @@ impl<'env> TreeDisplay<'env> {
                             .or_insert_with(|| graph.add_node(Node::Package(&package.id)));
 
                         // Add an edge from the root.
-                        graph.add_edge(root, *index, Edge::Dev(group, None));
+                        graph.add_edge(
+                            root,
+                            *index,
+                            Edge::Dev(
+                                group,
+                                Some(RequestedExtras::Requirement(requirement.extras.as_ref())),
+                            ),
+                        );
 
                         // Push its dependencies on the queue.
                         if seen.insert((&package.id, None)) {
                             queue.push_back((&package.id, None));
+                        }
+                        for extra in &*requirement.extras {
+                            if seen.insert((&package.id, Some(extra))) {
+                                queue.push_back((&package.id, Some(extra)));
+                            }
                         }
                     }
                 }
@@ -293,9 +324,9 @@ impl<'env> TreeDisplay<'env> {
                     index,
                     dep_index,
                     if let Some(extra) = extra {
-                        Edge::Optional(extra, Some(&dep.extra))
+                        Edge::Optional(extra, Some(RequestedExtras::Dependency(&dep.extra)))
                     } else {
-                        Edge::Prod(Some(&dep.extra))
+                        Edge::Prod(Some(RequestedExtras::Dependency(&dep.extra)))
                     },
                 );
 
@@ -665,17 +696,15 @@ enum Node<'env> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 enum Edge<'env> {
-    Prod(Option<&'env BTreeSet<ExtraName>>),
-    Optional(&'env ExtraName, Option<&'env BTreeSet<ExtraName>>),
-    Dev(&'env GroupName, Option<&'env BTreeSet<ExtraName>>),
+    Prod(Option<RequestedExtras<'env>>),
+    Optional(&'env ExtraName, Option<RequestedExtras<'env>>),
+    Dev(&'env GroupName, Option<RequestedExtras<'env>>),
 }
 
 impl<'env> Edge<'env> {
-    fn extras(&self) -> Option<&'env BTreeSet<ExtraName>> {
+    fn extras(&self) -> Option<RequestedExtras<'env>> {
         match self {
-            Self::Prod(extras) => *extras,
-            Self::Optional(_, extras) => *extras,
-            Self::Dev(_, extras) => *extras,
+            Self::Prod(extras) | Self::Optional(_, extras) | Self::Dev(_, extras) => *extras,
         }
     }
 
@@ -684,6 +713,48 @@ impl<'env> Edge<'env> {
             Self::Prod(_) => EdgeKind::Prod,
             Self::Optional(extra, _) => EdgeKind::Optional(extra),
             Self::Dev(group, _) => EdgeKind::Dev(group),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+enum RequestedExtras<'env> {
+    Dependency(&'env BTreeSet<ExtraName>),
+    Requirement(&'env [ExtraName]),
+}
+
+impl PartialEq for RequestedExtras<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.iter().eq(other.iter())
+    }
+}
+
+impl Eq for RequestedExtras<'_> {}
+
+impl PartialOrd for RequestedExtras<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for RequestedExtras<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.iter().cmp(other.iter())
+    }
+}
+
+impl<'env> RequestedExtras<'env> {
+    fn is_empty(self) -> bool {
+        match self {
+            Self::Dependency(extras) => extras.is_empty(),
+            Self::Requirement(extras) => extras.is_empty(),
+        }
+    }
+
+    fn iter(self) -> impl Iterator<Item = &'env ExtraName> {
+        match self {
+            Self::Dependency(extras) => Either::Left(extras.iter()),
+            Self::Requirement(extras) => Either::Right(extras.iter()),
         }
     }
 }
