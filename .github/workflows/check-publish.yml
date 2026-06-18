@@ -28,7 +28,7 @@ jobs:
         uses: ./.github/actions/setup-srs
         with:
           artifact-cache-scope: depot-linux-publish
-          target-path: ${{ github.workspace }}/target/package
+          target-path: ${{ github.workspace }}/target/debug
       - name: "cargo publish dry-run"
         run: cargo publish --workspace --dry-run
       - name: "Save srs build cache"
@@ -40,4 +40,4 @@ jobs:
           save-artifact-cache: "true"
           target-cache-hit: ${{ steps.srs.outputs.target-cache-hit }}
           target-cache-primary-key: ${{ steps.srs.outputs.target-cache-primary-key }}
-          target-path: ${{ github.workspace }}/target/package
+          target-path: ${{ github.workspace }}/target/debug
