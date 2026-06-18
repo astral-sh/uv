@@ -3,6 +3,52 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.22
+
+Released on 2026-06-18.
+
+### Enhancements
+
+- Publish wheels before sdists in `uv publish` ([#19831](https://github.com/astral-sh/uv/pull/19831))
+- Add `TY` and `RUFF` env vars for providing paths for binaries used by `uv format` and `uv check` ([#19821](https://github.com/astral-sh/uv/pull/19821))
+
+### Preview features
+
+- Allow configuring preview features in `uv.toml` and `pyproject.toml` ([#18437](https://github.com/astral-sh/uv/pull/18437))
+- Update the lockfile during `uv check --no-sync` ([#19909](https://github.com/astral-sh/uv/pull/19909))
+- Add `--script` to `uv check` and `uv metadata` ([#19860](https://github.com/astral-sh/uv/pull/19860))
+- Report workspace-exclusive dependency groups in `workspace metadata` ([#19862](https://github.com/astral-sh/uv/pull/19862))
+- Support SARIF as a `uv audit` output ([#19872](https://github.com/astral-sh/uv/pull/19872))
+
+### Performance
+
+- Use a more deadlock-resistant concurrent hashmap in the resolver ([#19532](https://github.com/astral-sh/uv/pull/19532))
+
+### Bug fixes
+
+- Update string marker ordering semantics to match [upstream clarified rules](https://github.com/pypa/packaging.python.org/pull/1988) ([#19808](https://github.com/astral-sh/uv/pull/19808))
+- Reject extras that have the same normalized name ([#19871](https://github.com/astral-sh/uv/pull/19871))
+- Reject dependency group `include-group` entries that have additional fields ([#19866](https://github.com/astral-sh/uv/pull/19866))
+- Reject invalid UTF-8 URL credentials ([#19814](https://github.com/astral-sh/uv/pull/19814))
+- Validate that PEP 517 `backend-path`s exist when building sdists ([#19834](https://github.com/astral-sh/uv/pull/19834))
+- Validate that `pylock.toml` files do not have an unsupported a `lock-version` ([#19869](https://github.com/astral-sh/uv/pull/19869))
+- Validate that the environment satisfies the `packages.requires-python` of a `pylock.toml` ([#19868](https://github.com/astral-sh/uv/pull/19868))
+- Allow `uv` to be recursively invoked by PEP 517 build hooks ([#19879](https://github.com/astral-sh/uv/pull/19879))
+- Allow empty `credentials.toml` files ([#19815](https://github.com/astral-sh/uv/pull/19815))
+- Fix transparent Python upgrades in project environments ([#19890](https://github.com/astral-sh/uv/pull/19890))
+- Handle non-file editable URLs in `uv pip list` ([#19867](https://github.com/astral-sh/uv/pull/19867))
+- Fix incorrect output from `uv tree --invert` ([#19910](https://github.com/astral-sh/uv/pull/19910))
+- Fix environment locking of `uv venv` in a project ([#19837](https://github.com/astral-sh/uv/pull/19837))
+- Fix handling of workspace-exclusive dependency groups in `uv tree` ([#19905](https://github.com/astral-sh/uv/pull/19905))
+
+### Documentation
+
+- Archive the 0.10.x changelog ([#19813](https://github.com/astral-sh/uv/pull/19813))
+
+### Other changes
+
+- Mark more tests as requiring network for vendors that need to run tests offline ([#19819](https://github.com/astral-sh/uv/pull/19819))
+
 ## 0.11.21
 
 Released on 2026-06-11.
