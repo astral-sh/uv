@@ -41,7 +41,7 @@ fn check_project() -> Result<()> {
 
 #[test]
 fn check_no_sync_creates_lock_without_sync() -> Result<()> {
-    let server = PackseServer::new("local/local-simple.toml");
+    let server = PackseServer::new("simple/single-package.toml");
     let context = uv_test::test_context!("3.12");
 
     context
@@ -52,7 +52,7 @@ fn check_no_sync_creates_lock_without_sync() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["a==1.2.3"]
+        dependencies = ["a==1.0.0"]
     "#})?;
     context.temp_dir.child("main.py").write_str(indoc! {r"
         x: int = 1
@@ -89,11 +89,11 @@ fn check_no_sync_creates_lock_without_sync() -> Result<()> {
 
         [[package]]
         name = "a"
-        version = "1.2.3+foo"
+        version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        sdist = { url = "http://[LOCALHOST]/files/a-1.2.3+foo.tar.gz", hash = "sha256:d8c42806a0bf7b47451778ed2a909a2f9d22fe3a4bac673934fc8fb2537a886a", upload-time = "2024-03-24T00:00:00Z" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:3d2b4c28a4e112f3a1cef1db4dc5efa33fcbbcc38bc11ccc80321097db86c097", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
-            { url = "http://[LOCALHOST]/files/a-1.2.3+foo-py3-none-any.whl", hash = "sha256:2fd8eec176cad72b6c4372682485914aff65d215fb8cd71c85e9ed4511fa8bbe", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:f936eedc194aa91ca01a4c6c9981136ca6c75ce6df47e3951b12522881dce809", upload-time = "2024-03-24T00:00:00Z" },
         ]
 
         [[package]]
@@ -105,7 +105,7 @@ fn check_no_sync_creates_lock_without_sync() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "a", specifier = "==1.2.3" }]
+        requires-dist = [{ name = "a", specifier = "==1.0.0" }]
         "#);
     });
     assert!(!context.site_packages().join("a").exists());
@@ -169,7 +169,7 @@ fn check_no_sync_uses_compatible_lock_interpreter() -> Result<()> {
 
 #[test]
 fn check_no_sync_updates_stale_lock_without_sync() -> Result<()> {
-    let server = PackseServer::new("local/local-simple.toml");
+    let server = PackseServer::new("simple/single-package.toml");
     let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
 
@@ -178,7 +178,7 @@ fn check_no_sync_updates_stale_lock_without_sync() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["a==1.2.3+bar"]
+        dependencies = ["a==1.0.0"]
     "#})?;
     context
         .lock()
@@ -194,7 +194,7 @@ fn check_no_sync_updates_stale_lock_without_sync() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["a==1.2.3+foo"]
+        dependencies = ["a==2.0.0"]
     "#})?;
     context.temp_dir.child("main.py").write_str(indoc! {r"
         x: int = 1
@@ -236,14 +236,14 @@ fn check_no_sync_updates_stale_lock_without_sync() -> Result<()> {
 
          [[package]]
          name = "a"
-        -version = "1.2.3+bar"
-        +version = "1.2.3+foo"
+        -version = "1.0.0"
+        +version = "2.0.0"
          source = { registry = "http://[LOCALHOST]/simple/" }
-        -sdist = { url = "http://[LOCALHOST]/files/a-1.2.3+bar.tar.gz", hash = "sha256:b96640078f7011764f0e428c0481c726149e4ae3190d29f9f5f7c2372e11f074", upload-time = "2024-03-24T00:00:00Z" }
-        +sdist = { url = "http://[LOCALHOST]/files/a-1.2.3+foo.tar.gz", hash = "sha256:d8c42806a0bf7b47451778ed2a909a2f9d22fe3a4bac673934fc8fb2537a886a", upload-time = "2024-03-24T00:00:00Z" }
+        -sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:3d2b4c28a4e112f3a1cef1db4dc5efa33fcbbcc38bc11ccc80321097db86c097", upload-time = "2024-03-24T00:00:00Z" }
+        +sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:80ec95a66cff82a78a3333e3f5702e4254cf80533f21762933252eec58c9869a", upload-time = "2024-03-24T00:00:00Z" }
          wheels = [
-        -    { url = "http://[LOCALHOST]/files/a-1.2.3+bar-py3-none-any.whl", hash = "sha256:dc4f0c4f8461a32a72175670fa502b7bfb6c0e0ab542e8e26895caf77fc4b17d", upload-time = "2024-03-24T00:00:00Z" },
-        +    { url = "http://[LOCALHOST]/files/a-1.2.3+foo-py3-none-any.whl", hash = "sha256:2fd8eec176cad72b6c4372682485914aff65d215fb8cd71c85e9ed4511fa8bbe", upload-time = "2024-03-24T00:00:00Z" },
+        -    { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:f936eedc194aa91ca01a4c6c9981136ca6c75ce6df47e3951b12522881dce809", upload-time = "2024-03-24T00:00:00Z" },
+        +    { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:833374310e0a15880f3be9e6d082f527c9ac70129b2054d733da9b754315361f", upload-time = "2024-03-24T00:00:00Z" },
          ]
 
          [[package]]
@@ -255,8 +255,8 @@ fn check_no_sync_updates_stale_lock_without_sync() -> Result<()> {
          ]
 
          [package.metadata]
-        -requires-dist = [{ name = "a", specifier = "==1.2.3+bar" }]
-        +requires-dist = [{ name = "a", specifier = "==1.2.3+foo" }]
+        -requires-dist = [{ name = "a", specifier = "==1.0.0" }]
+        +requires-dist = [{ name = "a", specifier = "==2.0.0" }]
         "#);
     });
     assert!(!context.site_packages().join("a").exists());
@@ -266,7 +266,7 @@ fn check_no_sync_updates_stale_lock_without_sync() -> Result<()> {
 
 #[test]
 fn check_no_sync_locked_rejects_stale_lock_without_update() -> Result<()> {
-    let server = PackseServer::new("local/local-simple.toml");
+    let server = PackseServer::new("simple/single-package.toml");
     let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
 
@@ -275,7 +275,7 @@ fn check_no_sync_locked_rejects_stale_lock_without_update() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["a==1.2.3+bar"]
+        dependencies = ["a==1.0.0"]
     "#})?;
     context
         .lock()
@@ -291,7 +291,7 @@ fn check_no_sync_locked_rejects_stale_lock_without_update() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["a==1.2.3+foo"]
+        dependencies = ["a==2.0.0"]
     "#})?;
 
     uv_snapshot!(
@@ -356,7 +356,7 @@ fn check_no_sync_locked_requires_existing_lock() -> Result<()> {
 
 #[test]
 fn check_no_sync_frozen_uses_existing_lock_without_update() -> Result<()> {
-    let server = PackseServer::new("local/local-simple.toml");
+    let server = PackseServer::new("simple/single-package.toml");
     let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
 
@@ -365,7 +365,7 @@ fn check_no_sync_frozen_uses_existing_lock_without_update() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["a==1.2.3+bar"]
+        dependencies = ["a==1.0.0"]
     "#})?;
     context
         .lock()
@@ -381,7 +381,7 @@ fn check_no_sync_frozen_uses_existing_lock_without_update() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["a==1.2.3+foo"]
+        dependencies = ["a==2.0.0"]
     "#})?;
     context.temp_dir.child("main.py").write_str(indoc! {r"
         x: int = 1
@@ -451,7 +451,7 @@ fn check_no_sync_frozen_requires_existing_lock() -> Result<()> {
 
 #[test]
 fn check_no_sync_isolated_does_not_write_lock_or_sync() -> Result<()> {
-    let server = PackseServer::new("local/local-simple.toml");
+    let server = PackseServer::new("simple/single-package.toml");
     let context = uv_test::test_context!("3.12");
 
     context
@@ -462,7 +462,7 @@ fn check_no_sync_isolated_does_not_write_lock_or_sync() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["a==1.2.3"]
+        dependencies = ["a==1.0.0"]
     "#})?;
     context.temp_dir.child("main.py").write_str(indoc! {r"
         x: int = 1
