@@ -65,7 +65,6 @@ fn check_no_sync_creates_lock_without_sync() -> Result<()> {
             .arg("--no-sync")
             .arg("--index")
             .arg(server.index_url())
-            .env_remove(EnvVars::UV_EXCLUDE_NEWER)
             .arg("--ty-version")
             .arg("0.0.17"),
         @"
@@ -86,6 +85,9 @@ fn check_no_sync_creates_lock_without_sync() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2026-02-15T00:00:00Z"
 
         [[package]]
         name = "a"
@@ -170,7 +172,7 @@ fn check_no_sync_uses_compatible_lock_interpreter() -> Result<()> {
 #[test]
 fn check_no_sync_updates_stale_lock_without_sync() -> Result<()> {
     let server = PackseServer::new("simple/single-package.toml");
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-02-15T00:00:00Z");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
 
     pyproject_toml.write_str(indoc! {r#"
@@ -184,7 +186,6 @@ fn check_no_sync_updates_stale_lock_without_sync() -> Result<()> {
         .lock()
         .arg("--index")
         .arg(server.index_url())
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .assert()
         .success();
     let stale_lock = context.read("uv.lock");
@@ -207,7 +208,6 @@ fn check_no_sync_updates_stale_lock_without_sync() -> Result<()> {
             .arg("--no-sync")
             .arg("--index")
             .arg(server.index_url())
-            .env_remove(EnvVars::UV_EXCLUDE_NEWER)
             .arg("--ty-version")
             .arg("0.0.17"),
         @"
@@ -229,10 +229,13 @@ fn check_no_sync_updates_stale_lock_without_sync() -> Result<()> {
         assert_snapshot!(diff, @r#"
         --- old
         +++ new
-        @@ -1,23 +1,23 @@
+        @@ -1,26 +1,26 @@
          version = 1
          revision = 3
          requires-python = ">=3.12"
+
+         [options]
+         exclude-newer = "2026-02-15T00:00:00Z"
 
          [[package]]
          name = "a"
@@ -267,7 +270,7 @@ fn check_no_sync_updates_stale_lock_without_sync() -> Result<()> {
 #[test]
 fn check_no_sync_locked_rejects_stale_lock_without_update() -> Result<()> {
     let server = PackseServer::new("simple/single-package.toml");
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-02-15T00:00:00Z");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
 
     pyproject_toml.write_str(indoc! {r#"
@@ -281,7 +284,6 @@ fn check_no_sync_locked_rejects_stale_lock_without_update() -> Result<()> {
         .lock()
         .arg("--index")
         .arg(server.index_url())
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .assert()
         .success();
     let stale_lock = context.read("uv.lock");
@@ -301,8 +303,7 @@ fn check_no_sync_locked_rejects_stale_lock_without_update() -> Result<()> {
             .arg("--no-sync")
             .arg("--locked")
             .arg("--index")
-            .arg(server.index_url())
-            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+            .arg(server.index_url()),
         @"
     success: false
     exit_code: 2
@@ -357,7 +358,7 @@ fn check_no_sync_locked_requires_existing_lock() -> Result<()> {
 #[test]
 fn check_no_sync_frozen_uses_existing_lock_without_update() -> Result<()> {
     let server = PackseServer::new("simple/single-package.toml");
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-02-15T00:00:00Z");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
 
     pyproject_toml.write_str(indoc! {r#"
@@ -371,7 +372,6 @@ fn check_no_sync_frozen_uses_existing_lock_without_update() -> Result<()> {
         .lock()
         .arg("--index")
         .arg(server.index_url())
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .assert()
         .success();
     let stale_lock = context.read("uv.lock");
@@ -395,7 +395,6 @@ fn check_no_sync_frozen_uses_existing_lock_without_update() -> Result<()> {
             .arg("--frozen")
             .arg("--index")
             .arg(server.index_url())
-            .env_remove(EnvVars::UV_EXCLUDE_NEWER)
             .arg("--ty-version")
             .arg("0.0.17"),
         @"
@@ -476,7 +475,6 @@ fn check_no_sync_isolated_does_not_write_lock_or_sync() -> Result<()> {
             .arg("--isolated")
             .arg("--index")
             .arg(server.index_url())
-            .env_remove(EnvVars::UV_EXCLUDE_NEWER)
             .arg("--ty-version")
             .arg("0.0.17"),
         @"
@@ -981,7 +979,7 @@ fn check_with_declared_dependency() -> Result<()> {
 #[test]
 fn check_isolated() -> Result<()> {
     let server = PackseServer::new("extras/extra-does-not-exist-backtrack.toml");
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-02-15T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -1028,7 +1026,6 @@ fn check_isolated() -> Result<()> {
         .lock()
         .arg("--index")
         .arg(server.index_url())
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .assert()
         .success();
     let existing_lock = context.read("uv.lock");
