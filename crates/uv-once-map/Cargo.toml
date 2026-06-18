@@ -17,6 +17,6 @@ test = false
 workspace = true
 
 [dependencies]
-dashmap = { workspace = true }
 futures = { workspace = true }
+papaya = { workspace = true }
 tokio = { workspace = true }

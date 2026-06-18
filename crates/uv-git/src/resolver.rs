@@ -3,9 +3,8 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use dashmap::DashMap;
-use dashmap::mapref::one::Ref;
 use fs_err::tokio as fs;
+use papaya::{HashMap, ResizeMode};
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 
@@ -60,18 +59,26 @@ impl GitHttpSettings {
 }
 
 /// A resolver for Git repositories.
-#[derive(Default, Clone)]
-pub struct GitResolver(Arc<DashMap<RepositoryReference, GitOid>>);
+#[derive(Clone)]
+pub struct GitResolver(Arc<HashMap<RepositoryReference, GitOid>>);
+
+impl Default for GitResolver {
+    fn default() -> Self {
+        Self(Arc::new(
+            HashMap::builder().resize_mode(ResizeMode::Blocking).build(),
+        ))
+    }
+}
 
 impl GitResolver {
     /// Inserts a new [`GitOid`] for the given [`RepositoryReference`].
     pub fn insert(&self, reference: RepositoryReference, sha: GitOid) {
-        self.0.insert(reference, sha);
+        self.0.pin().insert(reference, sha);
     }
 
     /// Returns the [`GitOid`] for the given [`RepositoryReference`], if it exists.
-    fn get(&self, reference: &RepositoryReference) -> Option<Ref<'_, RepositoryReference, GitOid>> {
-        self.0.get(reference)
+    fn get(&self, reference: &RepositoryReference) -> Option<GitOid> {
+        self.0.pin().get(reference).copied()
     }
 
     /// Return the [`GitOid`] for the given [`GitUrl`], if it is already known.
@@ -84,7 +91,7 @@ impl GitResolver {
         // If we know the precise commit already, return it.
         let reference = RepositoryReference::from(url);
         if let Some(precise) = self.get(&reference) {
-            return Some(*precise);
+            return Some(precise);
         }
 
         None
@@ -181,7 +188,7 @@ impl GitResolver {
         // single process are consistent.
         let url = {
             if let Some(precise) = self.get(&reference) {
-                Cow::Owned(url.clone().with_precise(*precise))
+                Cow::Owned(url.clone().with_precise(precise))
             } else {
                 Cow::Borrowed(url)
             }
@@ -241,7 +248,7 @@ impl GitResolver {
     pub fn precise(&self, url: GitUrl) -> Option<GitUrl> {
         let reference = RepositoryReference::from(&url);
         let precise = self.get(&reference)?;
-        Some(url.with_precise(*precise))
+        Some(url.with_precise(precise))
     }
 
     /// Returns `true` if the two Git URLs refer to the same precise commit.
@@ -263,11 +270,11 @@ impl GitResolver {
         }
 
         // Otherwise, the URLs must resolve to the same precise commit.
-        let Some(a_precise) = a.precise().or_else(|| self.get(&a_ref).map(|sha| *sha)) else {
+        let Some(a_precise) = a.precise().or_else(|| self.get(&a_ref)) else {
             return false;
         };
 
-        let Some(b_precise) = b.precise().or_else(|| self.get(&b_ref).map(|sha| *sha)) else {
+        let Some(b_precise) = b.precise().or_else(|| self.get(&b_ref)) else {
             return false;
         };
 

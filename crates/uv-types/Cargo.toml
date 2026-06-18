@@ -31,7 +31,7 @@ uv-redacted = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
-dashmap = { workspace = true }
+papaya = { workspace = true }
 rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 

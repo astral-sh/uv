@@ -1,9 +1,9 @@
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{BuildHasher, Hash, RandomState};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use dashmap::{DashMap, Entry};
+use papaya::{HashMap, ResizeMode};
 use tokio::sync::Notify;
 
 /// The caller tried to wait for a task that was never registered.
@@ -28,7 +28,7 @@ impl<K: Debug + Display> std::error::Error for UnregisteredTask<K> {}
 /// Note that this always clones the value out of the underlying map. Because
 /// of this, it's common to wrap the `V` in an `Arc<V>` to make cloning cheap.
 pub struct OnceMap<K, V, S = RandomState> {
-    items: DashMap<K, Value<V>, S>,
+    items: HashMap<K, Value<V>, S>,
 }
 
 impl<K: Eq + Hash + Debug, V: Debug, S: BuildHasher + Clone> Debug for OnceMap<K, V, S> {
@@ -44,14 +44,10 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     /// or other tasks will hang. If it returns `false`, this job is already in progress and you
     /// can [`OnceMap::wait`] for the result.
     pub fn register(&self, key: K) -> bool {
-        let entry = self.items.entry(key);
-        match entry {
-            Entry::Occupied(_) => false,
-            Entry::Vacant(entry) => {
-                entry.insert(Value::Waiting(Arc::new(Notify::new())));
-                true
-            }
-        }
+        self.items
+            .pin()
+            .try_insert(key, Value::Waiting(Arc::new(Notify::new())))
+            .is_ok()
     }
 
     /// Register that you want to start a job, unless it was already started, then wait for its
@@ -74,19 +70,13 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     /// ```
     pub async fn register_or_wait(&self, key: &K) -> Option<V> {
         let notify = {
-            let entry = self.items.entry(key.clone());
-            match entry {
-                Entry::Occupied(value) => match value.get() {
-                    Value::Filled(value) => return Some(value.clone()),
+            let items = self.items.pin();
+            match items.try_insert_with(key.clone(), || Value::Waiting(Arc::new(Notify::new()))) {
+                Ok(_) => return None,
+                Err(value) => match value {
+                    Value::Filled(_) => return value.get(),
                     Value::Waiting(notify) => notify.clone(),
                 },
-                Entry::Vacant(entry) => {
-                    // We insert the notify even if the caller is `wait`. Calling `wait` without
-                    // a previous `register` is a fatal error, so the state of the map doesn't
-                    // matter.
-                    entry.insert(Value::Waiting(Arc::new(Notify::new())));
-                    return None;
-                }
             }
         };
 
@@ -94,23 +84,24 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
         let notification = notify.notified();
 
         // Make sure the value wasn't inserted in-between us checking the map and registering the waiter.
-        if let Value::Filled(value) = self.items.get(key).expect("map is append-only").value() {
-            return Some(value.clone());
+        if let Some(value) = self.items.pin().get(key).expect("map is append-only").get() {
+            return Some(value);
         }
 
         // Wait until the value is inserted.
         notification.await;
 
-        let entry = self.items.get(key).expect("map is append-only");
-        match entry.value() {
-            Value::Filled(value) => Some(value.clone()),
+        let items = self.items.pin();
+        let value = items.get(key).expect("map is append-only");
+        match value {
+            Value::Filled(_) => value.get(),
             Value::Waiting(_) => unreachable!("notify was called"),
         }
     }
 
     /// Submit the result of a job you registered.
     pub fn done(&self, key: K, value: V) {
-        if let Some(Value::Waiting(notify)) = self.items.insert(key, Value::Filled(value)) {
+        if let Some(Value::Waiting(notify)) = self.items.pin().insert(key, Value::filled(value)) {
             notify.notify_waiters();
         }
     }
@@ -139,11 +130,8 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     where
         K: Borrow<Q>,
     {
-        let entry = self.items.get(key)?;
-        match entry.value() {
-            Value::Filled(value) => Some(value.clone()),
-            Value::Waiting(_) => None,
-        }
+        let items = self.items.pin();
+        items.get(key)?.get()
     }
 
     /// Remove the result of a previous job, if any.
@@ -151,18 +139,18 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     where
         K: Borrow<Q>,
     {
-        let entry = self.items.remove(key)?;
-        match entry {
-            (_, Value::Filled(value)) => Some(value),
-            (_, Value::Waiting(_)) => None,
-        }
+        let items = self.items.pin();
+        items.remove(key)?.take()
     }
 }
 
 impl<K: Eq + Hash + Clone, V, H: Default + BuildHasher + Clone> Default for OnceMap<K, V, H> {
     fn default() -> Self {
         Self {
-            items: DashMap::with_hasher(H::default()),
+            items: HashMap::builder()
+                .hasher(H::default())
+                .resize_mode(ResizeMode::Blocking)
+                .build(),
         }
     }
 }
@@ -176,7 +164,7 @@ where
         Self {
             items: iter
                 .into_iter()
-                .map(|(k, v)| (k, Value::Filled(v)))
+                .map(|(k, v)| (k, Value::filled(v)))
                 .collect(),
         }
     }
@@ -185,5 +173,32 @@ where
 #[derive(Debug)]
 enum Value<V> {
     Waiting(Arc<Notify>),
-    Filled(V),
+    /// The mutex is a workaround to papaya always returning borrowed instead of owned values.
+    Filled(Mutex<Option<V>>),
+}
+
+impl<V> Value<V> {
+    fn filled(value: V) -> Self {
+        Self::Filled(Mutex::new(Some(value)))
+    }
+
+    fn lock(value: &Mutex<Option<V>>) -> MutexGuard<'_, Option<V>> {
+        value.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn take(&self) -> Option<V> {
+        match self {
+            Self::Filled(value) => Self::lock(value).take(),
+            Self::Waiting(_) => None,
+        }
+    }
+}
+
+impl<V: Clone> Value<V> {
+    fn get(&self) -> Option<V> {
+        match self {
+            Self::Filled(value) => Self::lock(value).clone(),
+            Self::Waiting(_) => None,
+        }
+    }
 }
