@@ -5352,8 +5352,6 @@ pub struct CheckArgs {
     pub frozen: bool,
 
     /// Avoid syncing the virtual environment [env: UV_NO_SYNC=]
-    ///
-    /// The project lockfile will still be created or updated as needed.
     #[arg(long)]
     pub no_sync: bool,
 
