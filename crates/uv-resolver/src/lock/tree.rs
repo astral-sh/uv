@@ -655,26 +655,43 @@ impl<'env> TreeDisplay<'env> {
         serde_json::to_string_pretty(&JsonGraph::from(self))
     }
 
-    /// Return the shortest distance from any displayed root to every package within the requested
+    /// Return the packages and edges reachable from the displayed roots within the requested
     /// depth.
-    fn json_distances(&self) -> FxHashMap<NodeIndex, usize> {
+    fn json_traversal(&self) -> JsonTraversal {
         let mut distances = FxHashMap::default();
         let mut queue = VecDeque::new();
+        let mut nodes = FxHashSet::default();
+        let mut edges = FxHashSet::default();
 
         for root in &self.roots {
             match self.graph[*root] {
                 Node::Root => {
                     for edge in self.graph.edges_directed(*root, Direction::Outgoing) {
-                        if matches!(self.graph[edge.target()], Node::Package(_))
-                            && distances.insert(edge.target(), 0).is_none()
-                        {
-                            queue.push_back(edge.target());
+                        let Node::Package(package_id) = self.graph[edge.target()] else {
+                            continue;
+                        };
+                        let state = JsonTraversalNode {
+                            index: edge.target(),
+                            expanded_extras: self.expanded_extras(
+                                self.lock.find_by_id(package_id),
+                                Some(edge.weight()),
+                            ),
+                        };
+                        nodes.insert(state.index);
+                        if distances.insert(state.clone(), 0).is_none() {
+                            queue.push_back(state);
                         }
                     }
                 }
-                Node::Package(_) => {
-                    if distances.insert(*root, 0).is_none() {
-                        queue.push_back(*root);
+                Node::Package(package_id) => {
+                    let state = JsonTraversalNode {
+                        index: *root,
+                        expanded_extras: self
+                            .expanded_extras(self.lock.find_by_id(package_id), None),
+                    };
+                    nodes.insert(state.index);
+                    if distances.insert(state.clone(), 0).is_none() {
+                        queue.push_back(state);
                     }
                 }
             }
@@ -686,20 +703,46 @@ impl<'env> TreeDisplay<'env> {
                 continue;
             }
 
-            for edge in self.graph.edges_directed(source, Direction::Outgoing) {
-                let target = edge.target();
-                if !matches!(self.graph[target], Node::Package(_))
-                    || distances.contains_key(&target)
+            for edge in self.graph.edges_directed(source.index, Direction::Outgoing) {
+                if !self.invert
+                    && let Edge::Optional(required_extra, _) = edge.weight()
+                    && !source.expanded_extras.contains(required_extra)
                 {
                     continue;
                 }
-                distances.insert(target, distance + 1);
-                queue.push_back(target);
+
+                let target = edge.target();
+                let Node::Package(package_id) = self.graph[target] else {
+                    continue;
+                };
+                let state = JsonTraversalNode {
+                    index: target,
+                    expanded_extras: self
+                        .expanded_extras(self.lock.find_by_id(package_id), Some(edge.weight())),
+                };
+                nodes.insert(state.index);
+                edges.insert(edge.id());
+                if !distances.contains_key(&state) {
+                    distances.insert(state.clone(), distance + 1);
+                    queue.push_back(state);
+                }
             }
         }
 
-        distances
+        JsonTraversal { nodes, edges }
     }
+}
+
+#[derive(Debug)]
+struct JsonTraversal {
+    nodes: FxHashSet<NodeIndex>,
+    edges: FxHashSet<EdgeIndex>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct JsonTraversalNode<'env> {
+    index: NodeIndex,
+    expanded_extras: BTreeSet<&'env ExtraName>,
 }
 
 #[derive(Debug, Serialize)]
@@ -713,9 +756,9 @@ struct JsonGraph<'env> {
 
 impl<'env> From<&TreeDisplay<'env>> for JsonGraph<'env> {
     fn from(tree: &TreeDisplay<'env>) -> Self {
-        let distances = tree.json_distances();
+        let traversal = tree.json_traversal();
 
-        let mut package_nodes = distances.keys().copied().collect::<Vec<_>>();
+        let mut package_nodes = traversal.nodes.iter().copied().collect::<Vec<_>>();
         package_nodes.sort_by_key(|index| &tree.graph[*index]);
 
         let node_ids = package_nodes
@@ -770,13 +813,7 @@ impl<'env> From<&TreeDisplay<'env>> for JsonGraph<'env> {
         let mut graph_edges = tree
             .graph
             .edge_references()
-            .filter(|edge| {
-                distances
-                    .get(&edge.source())
-                    .is_some_and(|distance| *distance < tree.depth)
-                    && node_ids.contains_key(&edge.source())
-                    && node_ids.contains_key(&edge.target())
-            })
+            .filter(|edge| traversal.edges.contains(&edge.id()))
             .collect::<Vec<_>>();
         graph_edges.sort_by(|left, right| {
             (

@@ -1,8 +1,8 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
-use insta::assert_snapshot;
+use insta::{assert_json_snapshot, assert_snapshot};
 use url::Url;
 
 use uv_static::EnvVars;
@@ -430,6 +430,112 @@ fn json_output_virtual_root() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     "###);
+
+    Ok(())
+}
+
+#[test]
+fn json_output_depth_with_extra_context() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-a", "package-c"]
+
+        [tool.uv.sources]
+        package-a = { path = "packages/package-a" }
+        package-c = { path = "packages/package-c" }
+        "#,
+    )?;
+
+    let package_a = context.temp_dir.child("packages/package-a");
+    package_a.create_dir_all()?;
+    package_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["package-b"]
+
+        [tool.uv.sources]
+        package-b = { path = "../package-b" }
+        "#,
+    )?;
+
+    let package_c = context.temp_dir.child("packages/package-c");
+    package_c.create_dir_all()?;
+    package_c.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-c"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-a[feature]"]
+
+        [tool.uv.sources]
+        package-a = { path = "../package-a" }
+        "#,
+    )?;
+
+    let package_b = context.temp_dir.child("packages/package-b");
+    package_b.create_dir_all()?;
+    package_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-b"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    let package_names = |depth: u8| -> Result<Vec<String>> {
+        let output = context
+            .tree()
+            .arg("--preview-features")
+            .arg("json-output")
+            .arg("--format")
+            .arg("json")
+            .arg("--universal")
+            .arg("--depth")
+            .arg(depth.to_string())
+            .output()?;
+        output.clone().assert().success();
+        let report: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+        report["nodes"]
+            .as_array()
+            .context("dependency graph nodes should be an array")?
+            .iter()
+            .map(|node| {
+                node["name"]
+                    .as_str()
+                    .context("dependency graph node should have a name")
+                    .map(ToOwned::to_owned)
+            })
+            .collect()
+    };
+
+    assert_json_snapshot!(package_names(2)?, @r#"
+    [
+      "package-a",
+      "package-c",
+      "project"
+    ]
+    "#);
+    assert_json_snapshot!(package_names(3)?, @r#"
+    [
+      "package-a",
+      "package-b",
+      "package-c",
+      "project"
+    ]
+    "#);
 
     Ok(())
 }
