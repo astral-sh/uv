@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, anyhow};
@@ -24,8 +24,8 @@ use uv_distribution_types::{
     UnresolvedRequirementSpecification, VersionOrUrlRef,
 };
 use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
-use uv_fs::Simplified;
-use uv_install_wheel::LinkMode;
+use uv_fs::{CWD, Simplified, normalize_path_under};
+use uv_install_wheel::{LinkMode, installed_dist_info_path, read_record};
 use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -47,9 +47,9 @@ use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
-use crate::commands::compile_bytecode;
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
+use crate::commands::{compile_bytecode, compile_bytecode_files};
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
@@ -555,6 +555,14 @@ impl Changelog {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BytecodeCompilation {
+    /// Compile all Python source files in the environment.
+    All,
+    /// Compile Python source files installed by this operation.
+    Installed,
+}
+
 /// Install a set of requirements into the current environment.
 ///
 /// Returns a [`Changelog`] summarizing the changes made to the environment.
@@ -566,7 +574,7 @@ pub(crate) async fn install(
     reinstall: &Reinstall,
     build_options: &BuildOptions,
     link_mode: LinkMode,
-    compile: bool,
+    compile: Option<BytecodeCompilation>,
     hasher: &HashStrategy,
     tags: &Tags,
     client: &RegistryClient,
@@ -633,7 +641,7 @@ pub(crate) async fn install(
         && cached.is_empty()
         && reinstalls.is_empty()
         && extraneous.is_empty()
-        && !compile
+        && compile.is_none()
     {
         logger.on_check(resolution.len(), start, printer, dry_run)?;
         return Ok(Changelog::default());
@@ -711,8 +719,16 @@ pub(crate) async fn install(
         uninstalls.extend(shared_uninstalls);
     }
 
-    if compile {
-        compile_bytecode(venv, concurrency, cache, printer).await?;
+    if let Some(compile) = compile {
+        match compile {
+            BytecodeCompilation::All => {
+                compile_bytecode(venv, concurrency, cache, printer).await?;
+            }
+            BytecodeCompilation::Installed => {
+                let files = python_source_files_for_installs(venv, &installs)?;
+                compile_bytecode_files(&files, venv, concurrency, cache, printer).await?;
+            }
+        }
     }
 
     // Construct a summary of the changes made to the environment.
@@ -722,6 +738,55 @@ pub(crate) async fn install(
     logger.on_complete(&changelog, printer, dry_run)?;
 
     Ok(changelog)
+}
+
+/// Return the Python source files owned by the distributions installed by this operation.
+fn python_source_files_for_installs(
+    venv: &PythonEnvironment,
+    installs: &[CachedDist],
+) -> anyhow::Result<Vec<PathBuf>> {
+    let layout = venv.interpreter().layout();
+    let site_packages = [
+        CWD.join(&layout.scheme.purelib),
+        CWD.join(&layout.scheme.platlib),
+    ];
+    let mut files = BTreeSet::new();
+
+    for install in installs {
+        let dist_info = installed_dist_info_path(&layout, install.path()).with_context(|| {
+            format!("Failed to locate installed distribution for bytecode compilation: `{install}`")
+        })?;
+        let record_root = dist_info.parent().with_context(|| {
+            format!(
+                "Invalid installed distribution path: `{}`",
+                dist_info.user_display()
+            )
+        })?;
+        let record_path = dist_info.join("RECORD");
+        let record = read_record(fs_err::File::open(&record_path)?)
+            .with_context(|| format!("Failed to read `{}`", record_path.user_display()))?;
+
+        for entry in record {
+            let path = Path::new(&entry.path);
+            if path.extension().is_none_or(|extension| extension != "py") {
+                continue;
+            }
+
+            let path = record_root.join(path);
+            let Some(path) = site_packages
+                .iter()
+                .find_map(|site_packages| normalize_path_under(&path, site_packages))
+            else {
+                continue;
+            };
+            if !path.is_file() {
+                continue;
+            }
+            files.insert(path);
+        }
+    }
+
+    Ok(files.into_iter().collect())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

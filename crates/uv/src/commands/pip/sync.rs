@@ -534,7 +534,7 @@ pub(crate) async fn pip_sync(
         &reinstall,
         &build_options,
         link_mode,
-        compile,
+        compile.then_some(operations::BytecodeCompilation::All),
         &hasher,
         &tags,
         &client,

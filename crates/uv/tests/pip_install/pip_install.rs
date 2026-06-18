@@ -99,6 +99,130 @@ fn empty_requirements_txt() -> Result<()> {
     Ok(())
 }
 
+/// Compile only distributions installed by the current operation.
+#[test]
+fn compile_bytecode_for_installed_distributions() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.pip_install()
+        .arg("sniffio==1.3.1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    "
+    );
+
+    uv_snapshot!(context.pip_install()
+        .arg("anyio==3.7.1")
+        .arg("--compile-bytecode"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+    Bytecode compiled 45 files in [TIME]
+     + anyio==3.7.1
+     + idna==3.6
+    "
+    );
+
+    assert!(
+        context
+            .site_packages()
+            .join("anyio")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
+    assert!(
+        context
+            .site_packages()
+            .join("idna")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
+    assert!(
+        !context
+            .site_packages()
+            .join("sniffio")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
+
+    uv_snapshot!(context.pip_install()
+        .arg("sniffio==1.3.1")
+        .arg("--reinstall-package")
+        .arg("sniffio")
+        .arg("--compile-bytecode"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 5 files in [TIME]
+     ~ sniffio==1.3.1
+    "
+    );
+
+    assert!(
+        context
+            .site_packages()
+            .join("sniffio")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
+}
+
+/// Compile symlinked source files installed by the current operation.
+#[test]
+#[cfg(unix)]
+fn compile_bytecode_with_symlink_link_mode() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.pip_install()
+        .arg("sniffio==1.3.1")
+        .arg("--compile-bytecode")
+        .arg("--link-mode")
+        .arg("symlink"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 5 files in [TIME]
+     + sniffio==1.3.1
+    "
+    );
+
+    assert!(
+        context
+            .site_packages()
+            .join("sniffio")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
+}
+
 #[test]
 fn missing_pyproject_toml() {
     let context = uv_test::test_context!("3.12");
