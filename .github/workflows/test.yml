@@ -90,8 +90,6 @@ jobs:
 
       - name: "Cargo test"
         env:
-          # The Linux test suite exercises catch_unwind, which currently requires LLVM.
-          RUSTFLAGS: -Zcodegen-backend=llvm
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
           RUST_BACKTRACE: 1

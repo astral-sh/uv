@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version="2026.06.11"
+version="2026.06.18"
 toolchain="srs-${version}"
 
 case "$(uname -s)-$(uname -m)" in
     Darwin-arm64)
         target="aarch64-apple-darwin"
-        checksum="1af16e9d499b8c0b03598fbc109712f5168aafe102d7e7a182815faa7265c790"
+        checksum="396a766e963f42312af25cd09fb69ebd655db62e0a1bb1033897d3fb6217f6fe"
         ;;
     Linux-x86_64)
         target="x86_64-unknown-linux-gnu"
-        checksum="cb8381108109251ed491b43ee4473bfdb6f143bf5f17ceea2af98320bb4227a4"
+        checksum="5233e51866ee8d5e0bec8fa3dd80198b1c7e49edc2ebcca32ec6bfe3db187736"
         ;;
     *)
         echo "srs ${version} does not support $(uname -s)-$(uname -m)" >&2
