@@ -266,16 +266,16 @@ pub(crate) async fn check(
 
         let state = UniversalState::default();
         // Keep the environment locked through synchronization and metadata collection.
-        let _environment_lock = if no_sync {
-            None
-        } else {
-            venv.lock()
+        let _environment_lock;
+        if !no_sync {
+            _environment_lock = venv
+                .lock()
                 .await
                 .inspect_err(|err| {
                     tracing::warn!("Failed to acquire environment lock: {err}");
                 })
-                .ok()
-        };
+                .ok();
+        }
 
         let mode = if let Some(frozen_source) = frozen {
             LockMode::Frozen(frozen_source.into())
