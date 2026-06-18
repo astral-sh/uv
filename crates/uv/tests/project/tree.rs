@@ -190,6 +190,37 @@ fn json_output() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
+    let output = context
+        .tree()
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .arg("--universal")
+        .arg("--quiet")
+        .output()?;
+    output.clone().assert().success();
+    assert!(output.stderr.is_empty());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    let package_names = report["nodes"]
+        .as_array()
+        .context("dependency graph nodes should be an array")?
+        .iter()
+        .map(|node| {
+            node["name"]
+                .as_str()
+                .context("dependency graph node should have a name")
+        })
+        .collect::<Result<Vec<_>>>()?;
+    assert_json_snapshot!(package_names, @r#"
+    [
+      "package-a",
+      "package-b",
+      "package-c",
+      "project"
+    ]
+    "#);
+
     uv_snapshot!(context.filters(), context.tree()
         .arg("--preview-features")
         .arg("json-output")
