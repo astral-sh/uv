@@ -841,12 +841,12 @@ fn get_relocatable_executable(
 
 /// Reads the record file
 /// <https://www.python.org/dev/peps/pep-0376/#record>
-pub fn read_record(record: impl Read) -> Result<Vec<RecordEntry>, Error> {
+pub fn read_record_iter(record: impl Read) -> impl Iterator<Item = Result<RecordEntry, Error>> {
     csv::ReaderBuilder::new()
         .has_headers(false)
         .escape(Some(b'"'))
         .from_reader(record)
-        .deserialize()
+        .into_deserialize()
         .map(|entry| {
             let entry: RecordEntry = entry?;
             Ok(RecordEntry {
@@ -855,7 +855,10 @@ pub fn read_record(record: impl Read) -> Result<Vec<RecordEntry>, Error> {
                 ..entry
             })
         })
-        .collect()
+}
+
+pub fn read_record(record: impl Read) -> Result<Vec<RecordEntry>, Error> {
+    read_record_iter(record).collect()
 }
 
 pub(crate) fn write_record(

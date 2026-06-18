@@ -25,7 +25,7 @@ use uv_distribution_types::{
 };
 use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
 use uv_fs::{CWD, Simplified, normalize_path_under};
-use uv_install_wheel::{LinkMode, installed_dist_info_path, read_record};
+use uv_install_wheel::{LinkMode, installed_dist_info_path, read_record_iter};
 use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -725,8 +725,8 @@ pub(crate) async fn install(
                 compile_bytecode(venv, concurrency, cache, printer).await?;
             }
             BytecodeCompilation::Installed => {
-                let files = python_source_files_for_installs(venv, &installs)?;
-                compile_bytecode_files(&files, venv, concurrency, cache, printer).await?;
+                let files = python_source_files_for_installs(venv, &installs);
+                compile_bytecode_files(files, venv, concurrency, cache, printer).await?;
             }
         }
     }
@@ -740,46 +740,53 @@ pub(crate) async fn install(
     Ok(changelog)
 }
 
+type PythonSourceFileIterator = Box<dyn Iterator<Item = anyhow::Result<PathBuf>>>;
+
 /// Return the Python source files owned by the distributions installed by this operation.
-fn python_source_files_for_installs(
-    venv: &PythonEnvironment,
-    installs: &[CachedDist],
-) -> anyhow::Result<Vec<PathBuf>> {
+fn python_source_files_for_installs<'a>(
+    venv: &'a PythonEnvironment,
+    installs: &'a [CachedDist],
+) -> impl Iterator<Item = anyhow::Result<PathBuf>> + 'a {
     let layout = venv.interpreter().layout();
     let site_packages = [
         CWD.join(&layout.scheme.purelib),
         CWD.join(&layout.scheme.platlib),
     ];
-    let mut files = BTreeSet::new();
-
-    for install in installs {
-        let dist_info = installed_dist_info_path(&layout, install.path()).with_context(|| {
+    installs.iter().flat_map(move |install| {
+        let dist_info = match installed_dist_info_path(&layout, install.path()).with_context(|| {
             format!("Failed to locate installed distribution for bytecode compilation: `{install}`")
-        })?;
-        let record_root = dist_info.parent().with_context(|| {
-            format!(
+        }) {
+            Ok(dist_info) => dist_info,
+            Err(err) => return Box::new(std::iter::once(Err(err))) as PythonSourceFileIterator,
+        };
+        let Some(record_root) = dist_info.parent().map(Path::to_path_buf) else {
+            return Box::new(std::iter::once(Err(anyhow!(
                 "Invalid installed distribution path: `{}`",
                 dist_info.user_display()
-            )
-        })?;
+            ))));
+        };
         let record_path = dist_info.join("RECORD");
-        let record = read_record(fs_err::File::open(&record_path)?)
-            .with_context(|| format!("Failed to read `{}`", record_path.user_display()))?;
+        let record_file = match fs_err::File::open(&record_path)
+            .with_context(|| format!("Failed to read `{}`", record_path.user_display()))
+        {
+            Ok(record_file) => record_file,
+            Err(err) => return Box::new(std::iter::once(Err(err))),
+        };
+        let site_packages = site_packages.clone();
 
-        for entry in record {
-            let Some(path) =
-                python_source_path_from_record(record_root, &entry.path, &site_packages)
-            else {
-                continue;
+        Box::new(read_record_iter(record_file).filter_map(move |entry| {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(err) => {
+                    return Some(Err(err).with_context(|| {
+                        format!("Failed to read `{}`", record_path.user_display())
+                    }));
+                }
             };
-            if !path.is_file() {
-                continue;
-            }
-            files.insert(path);
-        }
-    }
-
-    Ok(files.into_iter().collect())
+            let path = python_source_path_from_record(&record_root, &entry.path, &site_packages)?;
+            path.is_file().then_some(Ok(path))
+        }))
+    })
 }
 
 /// Resolve a Python source path from an installed `RECORD` entry.

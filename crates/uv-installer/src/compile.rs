@@ -31,6 +31,8 @@ pub enum CompileError {
     Walkdir(#[from] walkdir::Error),
     #[error("Failed to send task to worker")]
     WorkerDisappeared(SendError<PathBuf>),
+    #[error("Failed to identify Python source files")]
+    SourceFiles(#[source] anyhow::Error),
     #[error("The task executor is broken, did some other task panic?")]
     Join,
     #[error("Failed to start Python interpreter to run compile script")]
@@ -250,16 +252,21 @@ pub async fn compile_tree(
 /// or communicate with the Python workers are returned.
 #[instrument(skip(files, python_executable))]
 pub async fn compile_files(
-    files: &[PathBuf],
+    files: impl IntoIterator<Item = anyhow::Result<PathBuf>>,
     python_executable: &Path,
     concurrency: &Concurrency,
     cache: &Path,
 ) -> Result<usize, CompileError> {
-    if files.is_empty() {
+    let mut files = files.into_iter();
+    let mut initial_files = Vec::with_capacity(concurrency.installs);
+    for file in files.by_ref().take(concurrency.installs) {
+        initial_files.push(file.map_err(CompileError::SourceFiles)?);
+    }
+    if initial_files.is_empty() {
         return Ok(0);
     }
 
-    let worker_count = concurrency.installs.min(files.len());
+    let worker_count = initial_files.len();
     let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count * 10);
 
     // Running Python with an actual file will produce better error messages.
@@ -277,13 +284,23 @@ pub async fn compile_files(
     drop(receiver);
 
     let mut send_error = None;
-    for file in files {
+    let mut source_error = None;
+    let mut source_files = 0;
+    for file in initial_files.into_iter().map(Ok).chain(files) {
+        let file = match file {
+            Ok(file) => file,
+            Err(err) => {
+                source_error = Some(err);
+                break;
+            }
+        };
         debug_assert!(
             file.is_absolute(),
             "compileall doesn't work with relative paths: `{}`",
             file.display()
         );
-        if let Err(err) = sender.send(file.clone()).await {
+        source_files += 1;
+        if let Err(err) = sender.send(file).await {
             send_error = Some(err);
             break;
         }
@@ -291,8 +308,11 @@ pub async fn compile_files(
     drop(sender);
 
     wait_for_workers(worker_handles, send_error).await?;
+    if let Some(source_error) = source_error {
+        return Err(CompileError::SourceFiles(source_error));
+    }
 
-    Ok(files.len())
+    Ok(source_files)
 }
 
 async fn worker(
