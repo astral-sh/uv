@@ -2791,7 +2791,7 @@ fn run_no_sync() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    // Running with `--no-sync` should succeed error, even if the lockfile isn't present.
+    // Running with `--no-sync` should create the lockfile without syncing the environment.
     uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("--version"), @"
     success: true
     exit_code: 0
@@ -2799,7 +2799,12 @@ fn run_no_sync() -> Result<()> {
     Python 3.12.[X]
 
     ----- stderr -----
+    Resolved 4 packages in [TIME]
     ");
+    assert!(context.temp_dir.child("uv.lock").exists());
+    context
+        .assert_command("import importlib.util; assert importlib.util.find_spec('anyio') is None")
+        .success();
 
     context.lock().assert().success();
 
@@ -2811,6 +2816,7 @@ fn run_no_sync() -> Result<()> {
     Python 3.12.[X]
 
     ----- stderr -----
+    Resolved 4 packages in [TIME]
     ");
 
     context.sync().assert().success();
@@ -2823,7 +2829,324 @@ fn run_no_sync() -> Result<()> {
     anyio
 
     ----- stderr -----
+    Resolved 4 packages in [TIME]
     ");
+
+    Ok(())
+}
+
+#[test]
+fn run_no_sync_updates_lock_without_sync() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+    "#})?;
+    context.sync().assert().success();
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .run()
+            .arg("--no-sync")
+            .arg("python")
+            .arg("-c")
+            .arg("import anyio; import importlib.util; assert importlib.util.find_spec('iniconfig') is None; print(anyio.__name__)"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    context.lock().arg("--check").assert().success();
+
+    Ok(())
+}
+
+#[test]
+fn run_no_sync_locked_rejects_stale_lock_without_update() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+    "#})?;
+    context
+        .lock()
+        .arg("--exclude-newer")
+        .arg("2026-02-15T00:00:00Z")
+        .assert()
+        .success();
+    let stale_lock = context.read("uv.lock");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .run()
+            .arg("--no-sync")
+            .arg("--locked")
+            .arg("--exclude-newer")
+            .arg("2026-02-15T00:00:00Z")
+            .arg("python")
+            .arg("--version"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    "
+    );
+
+    assert_eq!(stale_lock, context.read("uv.lock"));
+    assert!(!context.site_packages().join("iniconfig").exists());
+
+    Ok(())
+}
+
+#[test]
+fn run_no_sync_locked_requires_existing_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .run()
+            .arg("--no-sync")
+            .arg("--locked")
+            .arg("python")
+            .arg("--version"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    "
+    );
+
+    assert!(!context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn run_no_sync_frozen_uses_existing_lock_without_update() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+    "#})?;
+    context
+        .lock()
+        .arg("--exclude-newer")
+        .arg("2026-02-15T00:00:00Z")
+        .assert()
+        .success();
+    let stale_lock = context.read("uv.lock");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .run()
+            .arg("--no-sync")
+            .arg("--frozen")
+            .arg("--exclude-newer")
+            .arg("2026-02-15T00:00:00Z")
+            .arg("python")
+            .arg("--version"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    "
+    );
+
+    assert_eq!(stale_lock, context.read("uv.lock"));
+    assert!(!context.site_packages().join("iniconfig").exists());
+
+    Ok(())
+}
+
+#[test]
+fn run_no_sync_frozen_requires_existing_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .run()
+            .arg("--no-sync")
+            .arg("--frozen")
+            .arg("python")
+            .arg("--version"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    "
+    );
+
+    assert!(!context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn run_no_sync_isolated_does_not_write_lock_or_sync() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .run()
+            .arg("--no-sync")
+            .arg("--isolated")
+            .arg("--exclude-newer")
+            .arg("2026-02-15T00:00:00Z")
+            .arg("python")
+            .arg("-c")
+            .arg("import importlib.util; assert importlib.util.find_spec('iniconfig') is None; print('clean')"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    clean
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.site_packages().join("iniconfig").exists());
+
+    Ok(())
+}
+
+#[test]
+fn run_no_sync_errors_on_invalid_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str("invalid")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .run()
+            .arg("--no-sync")
+            .arg("python")
+            .arg("--version")
+            .env(EnvVars::RUST_LOG, "error"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      Caused by: TOML parse error at line 1, column 8
+      |
+    1 | invalid
+      |        ^
+    key with no value, expected `=`
+    "
+    );
 
     Ok(())
 }
@@ -2856,7 +3179,7 @@ fn run_no_sync_env_var() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    // Running with `UV_NO_SYNC=1` should succeed, even if the lockfile isn't present.
+    // Running with `UV_NO_SYNC=1` should create the lockfile without syncing the environment.
     uv_snapshot!(context.filters(), context.run().env(EnvVars::UV_NO_SYNC, "1").arg("--").arg("python").arg("--version"), @"
     success: true
     exit_code: 0
@@ -2864,6 +3187,7 @@ fn run_no_sync_env_var() -> Result<()> {
     Python 3.12.[X]
 
     ----- stderr -----
+    Resolved 4 packages in [TIME]
     ");
 
     context.lock().assert().success();
@@ -2876,6 +3200,7 @@ fn run_no_sync_env_var() -> Result<()> {
     Python 3.12.[X]
 
     ----- stderr -----
+    Resolved 4 packages in [TIME]
     ");
 
     context.sync().assert().success();
@@ -2888,6 +3213,7 @@ fn run_no_sync_env_var() -> Result<()> {
     anyio
 
     ----- stderr -----
+    Resolved 4 packages in [TIME]
     ");
 
     Ok(())
@@ -6460,14 +6786,14 @@ fn run_pep723_script_with_constraints() -> Result<()> {
 
 #[test]
 fn run_no_sync_incompatible_python() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&["3.12", "3.11", "3.9"]);
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
         [project]
         name = "foo"
         version = "1.0.0"
-        requires-python = ">=3.12"
+        requires-python = ">=3.11"
         dependencies = [
           "iniconfig"
         ]
@@ -6496,14 +6822,16 @@ fn run_no_sync_incompatible_python() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
-    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--python").arg("3.9").arg("main.py"), @"
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--python").arg("3.11").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Hello, world!
 
     ----- stderr -----
-    warning: Using incompatible environment (`.venv`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.9`)
+    warning: Using incompatible environment (`.venv`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.11`)
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Resolved 2 packages in [TIME]
     ");
 
     Ok(())

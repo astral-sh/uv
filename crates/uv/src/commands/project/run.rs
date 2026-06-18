@@ -69,7 +69,7 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     EnvironmentSpecification, PreferenceLocation, ProjectEnvironment, ProjectError,
-    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
+    ProjectInterpreter, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
     default_dependency_groups, script_extra_build_requires, script_specification,
     update_environment, validate_project_requires_python,
 };
@@ -718,121 +718,149 @@ pub(crate) async fn run(
                 .into_environment()?
             };
 
-            if no_sync {
-                debug!("Skipping environment synchronization due to `--no-sync`");
-
-                // If we're not syncing, we should still attempt to respect the locked preferences
-                // in any `--with` requirements.
-                if !isolated && !requirements.is_empty() {
-                    base_lock = LockTarget::from(project.workspace())
-                        .read()
-                        .await
-                        .ok()
-                        .flatten()
-                        .map(|lock| (lock, project.workspace().install_path().to_owned()));
-                }
+            // `--no-sync` intentionally permits an incompatible project environment, but locking
+            // must still use an interpreter that satisfies the project and any explicit Python
+            // request.
+            let lock_interpreter = if no_sync && !isolated && frozen.is_none() {
+                let workspace_python = WorkspacePython::from_request(
+                    python.as_deref().map(PythonRequest::parse),
+                    Some(project.workspace()),
+                    &groups,
+                    project_dir,
+                    no_config,
+                )
+                .await?;
+                Some(
+                    ProjectInterpreter::discover(
+                        project.workspace(),
+                        &groups,
+                        workspace_python,
+                        &client_builder,
+                        python_preference,
+                        python_downloads,
+                        &install_mirrors,
+                        false,
+                        None,
+                        &cache,
+                        printer,
+                    )
+                    .await?
+                    .into_interpreter(),
+                )
             } else {
-                let _lock = venv
+                None
+            };
+            let lock_interpreter = lock_interpreter
+                .as_ref()
+                .unwrap_or_else(|| venv.interpreter());
+
+            let _environment_lock;
+            if !no_sync {
+                _environment_lock = venv
                     .lock()
                     .await
                     .inspect_err(|err| {
                         warn!("Failed to acquire environment lock: {err}");
                     })
                     .ok();
+            }
 
-                // Determine the lock mode.
-                let mode = if let Some(frozen_source) = frozen {
-                    LockMode::Frozen(frozen_source.into())
-                } else if let LockCheck::Enabled(lock_check) = lock_check {
-                    LockMode::Locked(venv.interpreter(), lock_check)
-                } else if isolated {
-                    LockMode::DryRun(venv.interpreter())
-                } else {
-                    LockMode::Write(venv.interpreter())
-                };
+            // Determine the lock mode.
+            let mode = if let Some(frozen_source) = frozen {
+                LockMode::Frozen(frozen_source.into())
+            } else if let LockCheck::Enabled(lock_check) = lock_check {
+                LockMode::Locked(lock_interpreter, lock_check)
+            } else if isolated {
+                LockMode::DryRun(lock_interpreter)
+            } else {
+                LockMode::Write(lock_interpreter)
+            };
 
-                let result = match Box::pin(
-                    project::lock::LockOperation::new(
-                        mode,
-                        &settings.resolver,
-                        &client_builder,
-                        &lock_state,
-                        if show_resolution {
-                            Box::new(DefaultResolveLogger)
-                        } else {
-                            Box::new(SummaryResolveLogger)
-                        },
-                        &concurrency,
-                        &cache,
-                        workspace_cache,
-                        printer,
-                        preview,
-                    )
-                    .execute(project.workspace().into()),
+            let result = match Box::pin(
+                project::lock::LockOperation::new(
+                    mode,
+                    &settings.resolver,
+                    &client_builder,
+                    &lock_state,
+                    if show_resolution {
+                        Box::new(DefaultResolveLogger)
+                    } else {
+                        Box::new(SummaryResolveLogger)
+                    },
+                    &concurrency,
+                    &cache,
+                    workspace_cache,
+                    printer,
+                    preview,
                 )
-                .await
-                {
-                    Ok(result) => result,
-                    Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::with_system_certs(
-                            client_builder.system_certs(),
-                        )
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                    }
-                    Err(err) => return Err(err.into()),
-                };
+                .execute(project.workspace().into()),
+            )
+            .await
+            {
+                Ok(result) => result,
+                Err(ProjectError::Operation(err)) => {
+                    return diagnostics::OperationDiagnostic::with_system_certs(
+                        client_builder.system_certs(),
+                    )
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                }
+                Err(err) => return Err(err.into()),
+            };
 
-                // Identify the installation target.
-                let target = match &project {
-                    VirtualProject::Project(project) => {
-                        if all_packages {
-                            InstallTarget::Workspace {
-                                workspace: project.workspace(),
-                                lock: result.lock(),
-                            }
-                        } else if let Some(package) = package.as_ref() {
-                            InstallTarget::Project {
-                                workspace: project.workspace(),
-                                name: package,
-                                lock: result.lock(),
-                            }
-                        } else {
-                            // By default, install the root package.
-                            InstallTarget::Project {
-                                workspace: project.workspace(),
-                                name: project.project_name(),
-                                lock: result.lock(),
-                            }
+            // Identify the installation target.
+            let target = match &project {
+                VirtualProject::Project(project) => {
+                    if all_packages {
+                        InstallTarget::Workspace {
+                            workspace: project.workspace(),
+                            lock: result.lock(),
+                        }
+                    } else if let Some(package) = package.as_ref() {
+                        InstallTarget::Project {
+                            workspace: project.workspace(),
+                            name: package,
+                            lock: result.lock(),
+                        }
+                    } else {
+                        // By default, install the root package.
+                        InstallTarget::Project {
+                            workspace: project.workspace(),
+                            name: project.project_name(),
+                            lock: result.lock(),
                         }
                     }
-                    VirtualProject::NonProject(workspace) => {
-                        if all_packages {
-                            InstallTarget::NonProjectWorkspace {
-                                workspace,
-                                lock: result.lock(),
-                            }
-                        } else if let Some(package) = package.as_ref() {
-                            InstallTarget::Project {
-                                workspace,
-                                name: package,
-                                lock: result.lock(),
-                            }
-                        } else {
-                            // By default, install the entire workspace.
-                            InstallTarget::NonProjectWorkspace {
-                                workspace,
-                                lock: result.lock(),
-                            }
+                }
+                VirtualProject::NonProject(workspace) => {
+                    if all_packages {
+                        InstallTarget::NonProjectWorkspace {
+                            workspace,
+                            lock: result.lock(),
+                        }
+                    } else if let Some(package) = package.as_ref() {
+                        InstallTarget::Project {
+                            workspace,
+                            name: package,
+                            lock: result.lock(),
+                        }
+                    } else {
+                        // By default, install the entire workspace.
+                        InstallTarget::NonProjectWorkspace {
+                            workspace,
+                            lock: result.lock(),
                         }
                     }
-                };
+                }
+            };
 
+            // Validate that the set of requested extras and development groups are defined in the lockfile.
+            target.validate_extras(&extras)?;
+            target.validate_groups(&groups)?;
+
+            if no_sync {
+                debug!("Skipping environment synchronization due to `--no-sync`");
+            } else {
                 let install_options = InstallOptions::default();
-                // Validate that the set of requested extras and development groups are defined in the lockfile.
-                target.validate_extras(&extras)?;
-                target.validate_groups(&groups)?;
-
                 match project::sync::do_sync(
                     target,
                     &venv,
@@ -871,12 +899,12 @@ pub(crate) async fn run(
                     }
                     Err(err) => return Err(err.into()),
                 }
-
-                base_lock = Some((
-                    result.into_lock(),
-                    project.workspace().install_path().to_owned(),
-                ));
             }
+
+            base_lock = Some((
+                result.into_lock(),
+                project.workspace().install_path().to_owned(),
+            ));
 
             venv.into_interpreter()
         } else {

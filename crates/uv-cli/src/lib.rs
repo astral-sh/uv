@@ -3732,9 +3732,6 @@ pub struct RunArgs {
     pub no_active: bool,
 
     /// Avoid syncing the virtual environment [env: UV_NO_SYNC=]
-    ///
-    /// Implies `--frozen`, as the project dependencies will be ignored (i.e., the lockfile will not
-    /// be updated, since the environment will not be synced regardless).
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_sync: bool,
 
