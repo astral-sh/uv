@@ -121,17 +121,17 @@ impl IndexUrl {
             return;
         };
 
-        if let Some(path) = verbatim_url.given() {
-            if !is_disambiguated_path(path) {
-                if cfg!(windows) {
-                    warn_user!(
-                        "Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `.\\{path}` or `./{path}`). Support for ambiguous values will be removed in the future"
-                    );
-                } else {
-                    warn_user!(
-                        "Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `./{path}`). Support for ambiguous values will be removed in the future"
-                    );
-                }
+        if let Some(path) = verbatim_url.given()
+            && !is_disambiguated_path(path)
+        {
+            if cfg!(windows) {
+                warn_user!(
+                    "Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `.\\{path}` or `./{path}`). Support for ambiguous values will be removed in the future"
+                );
+            } else {
+                warn_user!(
+                    "Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `./{path}`). Support for ambiguous values will be removed in the future"
+                );
             }
         }
     }

@@ -503,10 +503,10 @@ impl Index {
 
     /// Resolve the index relative to the given root directory.
     pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
-        if let IndexUrl::Path(ref url) = self.url {
-            if let Some(given) = url.given() {
-                self.url = IndexUrl::parse(given, Some(root_dir))?;
-            }
+        if let IndexUrl::Path(ref url) = self.url
+            && let Some(given) = url.given()
+        {
+            self.url = IndexUrl::parse(given, Some(root_dir))?;
         }
         Ok(self)
     }
@@ -565,24 +565,24 @@ impl FromStr for Index {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Determine whether the source is prefixed with a name, as in `name=https://pypi.org/simple`.
-        if let Some((name, url)) = s.split_once('=') {
-            if !name.chars().any(|c| c == ':') {
-                let name = IndexName::from_str(name)?;
-                let url = IndexUrl::from_str(url)?;
-                return Ok(Self {
-                    name: Some(name),
-                    url,
-                    explicit: false,
-                    default: false,
-                    origin: None,
-                    format: IndexFormat::Simple,
-                    publish_url: None,
-                    authenticate: AuthPolicy::default(),
-                    ignore_error_codes: None,
-                    cache_control: None,
-                    exclude_newer: None,
-                });
-            }
+        if let Some((name, url)) = s.split_once('=')
+            && !name.chars().any(|c| c == ':')
+        {
+            let name = IndexName::from_str(name)?;
+            let url = IndexUrl::from_str(url)?;
+            return Ok(Self {
+                name: Some(name),
+                url,
+                explicit: false,
+                default: false,
+                origin: None,
+                format: IndexFormat::Simple,
+                publish_url: None,
+                authenticate: AuthPolicy::default(),
+                ignore_error_codes: None,
+                cache_control: None,
+                exclude_newer: None,
+            });
         }
 
         // Otherwise, assume the source is a URL.

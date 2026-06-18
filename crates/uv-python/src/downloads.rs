@@ -236,22 +236,22 @@ pub struct PlatformRequest {
 impl PlatformRequest {
     /// Check if this platform request is satisfied by a platform.
     pub(crate) fn matches(&self, platform: &Platform) -> bool {
-        if let Some(os) = self.os {
-            if !platform.os.supports(os) {
-                return false;
-            }
+        if let Some(os) = self.os
+            && !platform.os.supports(os)
+        {
+            return false;
         }
 
-        if let Some(arch) = self.arch {
-            if !arch.satisfied_by(platform) {
-                return false;
-            }
+        if let Some(arch) = self.arch
+            && !arch.satisfied_by(platform)
+        {
+            return false;
         }
 
-        if let Some(libc) = self.libc {
-            if platform.libc != libc {
-                return false;
-            }
+        if let Some(libc) = self.libc
+            && platform.libc != libc
+        {
+            return false;
         }
 
         true
@@ -555,10 +555,10 @@ impl PythonDownloadRequest {
             return false;
         }
 
-        if let Some(implementation) = &self.implementation {
-            if key.implementation != LenientImplementationName::from(*implementation) {
-                return false;
-            }
+        if let Some(implementation) = &self.implementation
+            && key.implementation != LenientImplementationName::from(*implementation)
+        {
+            return false;
         }
         // If we don't allow pre-releases, don't match a key with a pre-release tag
         if !self.allows_prereleases() && key.prerelease.is_some() {
@@ -573,10 +573,10 @@ impl PythonDownloadRequest {
             ) {
                 return false;
             }
-            if let Some(variant) = version.variant() {
-                if variant != key.variant {
-                    return false;
-                }
+            if let Some(variant) = version.variant()
+                && variant != key.variant
+            {
+                return false;
             }
         }
         true
@@ -634,14 +634,14 @@ impl PythonDownloadRequest {
 
     pub(crate) fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
         let executable = interpreter.sys_executable().display();
-        if let Some(version) = self.version() {
-            if !version.matches_interpreter(interpreter) {
-                let interpreter_version = interpreter.python_version();
-                debug!(
-                    "Skipping interpreter at `{executable}`: version `{interpreter_version}` does not match request `{version}`"
-                );
-                return false;
-            }
+        if let Some(version) = self.version()
+            && !version.matches_interpreter(interpreter)
+        {
+            let interpreter_version = interpreter.python_version();
+            debug!(
+                "Skipping interpreter at `{executable}`: version `{interpreter_version}` does not match request `{version}`"
+            );
+            return false;
         }
         let platform = self.platform();
         let interpreter_platform = Platform::from(interpreter.platform());
@@ -651,14 +651,14 @@ impl PythonDownloadRequest {
             );
             return false;
         }
-        if let Some(implementation) = self.implementation() {
-            if !implementation.matches_interpreter(interpreter) {
-                debug!(
-                    "Skipping interpreter at `{executable}`: implementation `{}` does not match request `{implementation}`",
-                    interpreter.implementation_name(),
-                );
-                return false;
-            }
+        if let Some(implementation) = self.implementation()
+            && !implementation.matches_interpreter(interpreter)
+        {
+            debug!(
+                "Skipping interpreter at `{executable}`: implementation `{}` does not match request `{implementation}`",
+                interpreter.implementation_name(),
+            );
+            return false;
         }
         true
     }
@@ -997,13 +997,12 @@ impl ManagedPythonDownloadList {
             return Ok(download);
         }
 
-        if !request.allows_prereleases() {
-            if let Some(download) = self
+        if !request.allows_prereleases()
+            && let Some(download) = self
                 .iter_matching(&request.clone().with_prereleases(true))
                 .next()
-            {
-                return Ok(download);
-            }
+        {
+            return Ok(download);
         }
 
         Err(Error::NoDownloadFound(request.clone()))

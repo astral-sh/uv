@@ -1671,32 +1671,32 @@ impl Source {
             || rev.is_some()
             || matches!(lfs, GitLfsSetting::Enabled { .. }))
         {
-            if let Some(sources) = existing_sources {
-                if let Some(package_sources) = sources.get(name) {
-                    for existing_source in package_sources.iter() {
-                        if let Self::Git {
-                            git,
-                            subdirectory,
-                            path,
-                            marker,
-                            extra,
-                            group,
-                            ..
-                        } = existing_source
-                        {
-                            return Ok(Some(Self::Git {
-                                git: git.clone(),
-                                subdirectory: subdirectory.clone(),
-                                rev,
-                                tag,
-                                branch,
-                                lfs: lfs.into(),
-                                marker: *marker,
-                                path: path.clone(),
-                                extra: extra.clone(),
-                                group: group.clone(),
-                            }));
-                        }
+            if let Some(sources) = existing_sources
+                && let Some(package_sources) = sources.get(name)
+            {
+                for existing_source in package_sources.iter() {
+                    if let Self::Git {
+                        git,
+                        subdirectory,
+                        path,
+                        marker,
+                        extra,
+                        group,
+                        ..
+                    } = existing_source
+                    {
+                        return Ok(Some(Self::Git {
+                            git: git.clone(),
+                            subdirectory: subdirectory.clone(),
+                            rev,
+                            tag,
+                            branch,
+                            lfs: lfs.into(),
+                            marker: *marker,
+                            path: path.clone(),
+                            extra: extra.clone(),
+                            group: group.clone(),
+                        }));
                     }
                 }
             }

@@ -1051,21 +1051,20 @@ impl MarkerTree {
                         CanonicalMarkerValueString::PlatformRelease
                             | CanonicalMarkerValueString::PlatformVersion
                     ) && range.as_singleton().is_none()
+                        && let Some((start, end)) = range.bounding_range()
                     {
-                        if let Some((start, end)) = range.bounding_range() {
-                            if let Bound::Included(value) | Bound::Excluded(value) = start {
-                                reporter.report(
-                                    MarkerWarningKind::LexicographicComparison,
-                                    format!("Comparing {l_string} and {value} lexicographically"),
-                                );
-                            }
+                        if let Bound::Included(value) | Bound::Excluded(value) = start {
+                            reporter.report(
+                                MarkerWarningKind::LexicographicComparison,
+                                format!("Comparing {l_string} and {value} lexicographically"),
+                            );
+                        }
 
-                            if let Bound::Included(value) | Bound::Excluded(value) = end {
-                                reporter.report(
-                                    MarkerWarningKind::LexicographicComparison,
-                                    format!("Comparing {l_string} and {value} lexicographically"),
-                                );
-                            }
+                        if let Bound::Included(value) | Bound::Excluded(value) = end {
+                            reporter.report(
+                                MarkerWarningKind::LexicographicComparison,
+                                format!("Comparing {l_string} and {value} lexicographically"),
+                            );
                         }
                     }
 
@@ -1201,11 +1200,11 @@ impl MarkerTree {
     /// main conjunction.
     pub fn top_level_extra_name(self) -> Option<Cow<'static, ExtraName>> {
         // Fast path: The marker is only a `extra == "..."`.
-        if let MarkerTreeKind::Extra(marker) = self.kind() {
-            if marker.edge(true).is_true() {
-                let CanonicalMarkerValueExtra::Extra(extra) = marker.name;
-                return Some(Cow::Borrowed(extra));
-            }
+        if let MarkerTreeKind::Extra(marker) = self.kind()
+            && marker.edge(true).is_true()
+        {
+            let CanonicalMarkerValueExtra::Extra(extra) = marker.name;
+            return Some(Cow::Borrowed(extra));
         }
 
         let extra_expression = self.top_level_extra()?;

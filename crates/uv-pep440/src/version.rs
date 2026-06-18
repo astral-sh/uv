@@ -741,11 +741,11 @@ impl Version {
                     });
                 } else {
                     // Either bump the matching kind or set to 1
-                    if let Some(prerelease) = &mut full.pre {
-                        if prerelease.kind == kind {
-                            prerelease.number += 1;
-                            return;
-                        }
+                    if let Some(prerelease) = &mut full.pre
+                        && prerelease.kind == kind
+                    {
+                        prerelease.number += 1;
+                        return;
                     }
                     full.pre = Some(Prerelease { kind, number: 1 });
                 }

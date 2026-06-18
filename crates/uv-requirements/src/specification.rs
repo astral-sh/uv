@@ -565,12 +565,12 @@ impl RequirementsSpecification {
             }
 
             if let Some(index_url) = source.index_url {
-                if let Some(existing) = spec.index_url {
-                    if CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url()) {
-                        return Err(anyhow::anyhow!(
-                            "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
-                        ));
-                    }
+                if let Some(existing) = spec.index_url
+                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                {
+                    return Err(anyhow::anyhow!(
+                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                    ));
                 }
                 spec.index_url = Some(index_url);
             }
@@ -603,12 +603,12 @@ impl RequirementsSpecification {
             spec.constraints.extend(source.constraints);
 
             if let Some(index_url) = source.index_url {
-                if let Some(existing) = spec.index_url {
-                    if CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url()) {
-                        return Err(anyhow::anyhow!(
-                            "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
-                        ));
-                    }
+                if let Some(existing) = spec.index_url
+                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                {
+                    return Err(anyhow::anyhow!(
+                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                    ));
                 }
                 spec.index_url = Some(index_url);
             }
@@ -627,12 +627,12 @@ impl RequirementsSpecification {
             spec.overrides.extend(source.overrides);
 
             if let Some(index_url) = source.index_url {
-                if let Some(existing) = spec.index_url {
-                    if CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url()) {
-                        return Err(anyhow::anyhow!(
-                            "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
-                        ));
-                    }
+                if let Some(existing) = spec.index_url
+                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                {
+                    return Err(anyhow::anyhow!(
+                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                    ));
                 }
                 spec.index_url = Some(index_url);
             }

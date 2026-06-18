@@ -140,10 +140,10 @@ impl Conflicts {
         for (group, specifiers) in groups {
             if let Some(includer) = group_node_idxs.get(group) {
                 for specifier in specifiers {
-                    if let DependencyGroupSpecifier::IncludeGroup { include_group } = specifier {
-                        if let Some(included) = group_node_idxs.get(include_group) {
-                            graph.add_edge(*included, *includer, ());
-                        }
+                    if let DependencyGroupSpecifier::IncludeGroup { include_group } = specifier
+                        && let Some(included) = group_node_idxs.get(include_group)
+                    {
+                        graph.add_edge(*included, *includer, ());
                     }
                 }
             }

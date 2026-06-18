@@ -664,17 +664,16 @@ impl Workspace {
     /// Returns the set of conflicts for the workspace.
     pub fn conflicts(&self) -> Result<Conflicts, WorkspaceError> {
         let mut conflicting = Conflicts::empty();
-        if self.is_non_project() {
-            if let Some(root_conflicts) = self
+        if self.is_non_project()
+            && let Some(root_conflicts) = self
                 .pyproject_toml
                 .tool
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
                 .and_then(|uv| uv.conflicts.as_ref())
-            {
-                let mut root_conflicts = root_conflicts.to_conflicts()?;
-                conflicting.append(&mut root_conflicts);
-            }
+        {
+            let mut root_conflicts = root_conflicts.to_conflicts()?;
+            conflicting.append(&mut root_conflicts);
         }
         for member in self.packages.values() {
             conflicting.append(&mut member.pyproject_toml.conflicts()?);
@@ -979,20 +978,20 @@ impl Workspace {
         let mut workspace_members = Arc::new(workspace_members);
 
         // For the cases such as `MemberDiscovery::None`, add the current project if missing.
-        if let Some(root_member) = current_project {
-            if !workspace_members.contains_key(&root_member.project.name) {
-                assert!(matches!(
-                    options.members,
-                    MemberDiscovery::None | MemberDiscovery::Ignore(_)
-                ));
-                debug!(
-                    "Adding current workspace member: `{}`",
-                    root_member.root.simplified_display()
-                );
+        if let Some(root_member) = current_project
+            && !workspace_members.contains_key(&root_member.project.name)
+        {
+            assert!(matches!(
+                options.members,
+                MemberDiscovery::None | MemberDiscovery::Ignore(_)
+            ));
+            debug!(
+                "Adding current workspace member: `{}`",
+                root_member.root.simplified_display()
+            );
 
-                Arc::make_mut(&mut workspace_members)
-                    .insert(root_member.project.name.clone(), root_member);
-            }
+            Arc::make_mut(&mut workspace_members)
+                .insert(root_member.project.name.clone(), root_member);
         }
 
         let workspace_sources = workspace_pyproject_toml
