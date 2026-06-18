@@ -639,7 +639,7 @@ pub(crate) async fn pip_install(
         &reinstall,
         &build_options,
         link_mode,
-        compile,
+        compile.then_some(operations::BytecodeCompilation::Installed),
         &hasher,
         &tags,
         &client,

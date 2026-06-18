@@ -891,7 +891,7 @@ pub(crate) async fn do_sync(
         reinstall,
         build_options,
         link_mode,
-        compile_bytecode,
+        compile_bytecode.then_some(operations::BytecodeCompilation::All),
         &hasher,
         &tags,
         &client,
