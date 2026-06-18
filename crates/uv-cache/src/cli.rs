@@ -37,7 +37,7 @@ impl CacheArgs {
     /// Resolve `no_cache` from the CLI flag pair and `UV_NO_CACHE` env var.
     ///
     /// CLI flags take precedence over the env var. This does NOT account for
-    /// config file settings — use [`CacheSettings::resolve`] for full resolution.
+    /// config file settings — use `CacheSettings::resolve` (in the `uv` crate) for full resolution.
     pub fn resolved_no_cache(&self) -> bool {
         if self.no_cache {
             return true;
@@ -57,7 +57,7 @@ impl CacheArgs {
                 }
                 #[allow(clippy::exit)]
                 {
-                    std::process::exit(2);
+                    std::process::exit(1);
                 }
             }
         }

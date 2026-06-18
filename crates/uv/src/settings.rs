@@ -410,14 +410,6 @@ impl NetworkSettings {
     }
 }
 
-/// Read the `UV_NO_CACHE` environment variable and parse it as a boolish value.
-fn env_no_cache() -> Option<bool> {
-    match uv_static::parse_boolish_environment_variable(EnvVars::UV_NO_CACHE) {
-        Ok(value) => value,
-        Err(err) => parse_failure(&err.name, "a boolish value (true/false, 1/0, yes/no, etc.)"),
-    }
-}
-
 /// The resolved cache settings to use for any invocation of the CLI.
 #[derive(Debug, Clone)]
 pub(crate) struct CacheSettings {
@@ -429,11 +421,15 @@ impl CacheSettings {
     /// Resolve the [`CacheSettings`] from the CLI, environment, and filesystem configuration.
     ///
     /// Precedence: CLI flags > `UV_NO_CACHE` env var > config file > default (`false`).
-    pub(crate) fn resolve(args: CacheArgs, workspace: Option<&FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: CacheArgs,
+        workspace: Option<&FilesystemOptions>,
+        environment: &EnvironmentOptions,
+    ) -> Self {
         Self {
             no_cache: flag(args.cache, args.no_cache, "cache")
                 .map(|cache| !cache)
-                .combine(env_no_cache())
+                .combine(environment.no_cache.value)
                 .combine(workspace.and_then(|workspace| workspace.globals.no_cache))
                 .unwrap_or(false),
             cache_dir: args
@@ -5174,7 +5170,8 @@ mod tests {
             cache_dir: None,
         };
         let workspace = workspace_with_no_cache(true);
-        let resolved = CacheSettings::resolve(args, Some(&workspace));
+        let environment = EnvironmentOptions::new().unwrap();
+        let resolved = CacheSettings::resolve(args, Some(&workspace), &environment);
         assert!(!resolved.no_cache);
     }
 
@@ -5187,7 +5184,8 @@ mod tests {
             cache_dir: None,
         };
         let workspace = workspace_with_no_cache(false);
-        let resolved = CacheSettings::resolve(args, Some(&workspace));
+        let environment = EnvironmentOptions::new().unwrap();
+        let resolved = CacheSettings::resolve(args, Some(&workspace), &environment);
         assert!(resolved.no_cache);
     }
 }

@@ -4453,3 +4453,65 @@ fn build_isolation_override() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// Verify that `UV_NO_CACHE=false` overrides `no-cache = true` in a config file.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn no_cache_env_override() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio>3.0.0")?;
+
+    // Capture the baseline with no config.
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.pip_compile())
+            .arg("--show-settings")
+            .arg("requirements.in")
+    );
+
+    // Write a `uv.toml` file with `no-cache = true`.
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str(indoc::indoc! {r#"
+        no-cache = true
+    "#})?;
+
+    // Verify `no-cache = true` takes effect from the config file.
+    let no_cache_config = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+        .arg("--show-settings")
+        .arg("requirements.in"), @"
+    ...
+         installer_metadata: true,
+     }
+     CacheSettings {
+    -    no_cache: false,
+    +    no_cache: true,
+         cache_dir: Some(
+             \"[CACHE_DIR]/\",
+         ),
+    ...
+    ");
+
+    // Verify `UV_NO_CACHE=false` overrides the config file.
+    diff_uv_snapshot!(context.filters(), &no_cache_config, add_shared_args(context.pip_compile())
+        .arg("--show-settings")
+        .arg("requirements.in")
+        .env(EnvVars::UV_NO_CACHE, "false"), @"
+    ...
+         installer_metadata: true,
+     }
+     CacheSettings {
+    -    no_cache: true,
+    +    no_cache: false,
+         cache_dir: Some(
+             \"[CACHE_DIR]/\",
+         ),
+    ...
+    ");
+
+    Ok(())
+}

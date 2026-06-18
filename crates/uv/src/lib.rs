@@ -458,7 +458,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     }
 
     // Resolve the cache settings.
-    let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
+    let cache_settings =
+        CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref(), &environment);
 
     // Set and finalize the global preview configuration.
     uv_preview::set(globals.preview)?;
