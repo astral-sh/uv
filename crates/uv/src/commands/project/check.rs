@@ -253,120 +253,111 @@ pub(crate) async fn check(
 
         let state = UniversalState::default();
         let lock_target = LockTarget::Script(script);
-        let _environment_lock;
-        let lock = if no_sync {
-            debug!("Skipping environment synchronization due to `--no-sync`");
-
-            match lock_target.read().await {
-                Ok(lock) => lock,
-                Err(err) => {
-                    debug!("Failed to read lockfile; skipping workspace metadata: {err}");
-                    None
-                }
-            }
-        } else {
-            // Keep the environment locked through synchronization and metadata collection.
-            _environment_lock = venv
-                .lock()
-                .await
-                .inspect_err(|err| {
-                    tracing::warn!("Failed to acquire environment lock: {err}");
-                })
-                .ok();
-            let sync_state = state.fork();
-            let mode = if let Some(frozen_source) = frozen {
-                LockMode::Frozen(frozen_source.into())
-            } else if let LockCheck::Enabled(lock_check) = lock_check {
-                LockMode::Locked(venv.interpreter(), lock_check)
-            } else if isolated || !lock_target.lock_path().is_file() {
-                LockMode::DryRun(venv.interpreter())
-            } else {
-                LockMode::Write(venv.interpreter())
-            };
-            let result = match Box::pin(
-                project::lock::LockOperation::new(
-                    mode,
-                    &settings.resolver,
-                    &client_builder,
-                    &state,
-                    Box::new(SummaryResolveLogger),
-                    &concurrency,
-                    cache,
-                    workspace_cache,
-                    printer,
-                    preview,
-                )
-                .execute(lock_target),
-            )
+        // Scripts always run in an isolated environment, so `--no-sync` has no effect.
+        let _environment_lock = venv
+            .lock()
             .await
-            {
-                Ok(result) => result,
-                Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                }
-                Err(err) => return Err(err.into()),
-            };
-
-            let target = InstallTarget::Script {
-                script,
-                lock: result.lock(),
-            };
-            match project::sync::do_sync(
-                target,
-                &venv,
-                &extras,
-                &groups,
-                None,
-                InstallOptions::default(),
-                Modifications::Sufficient,
-                None,
-                (&settings).into(),
+            .inspect_err(|err| {
+                tracing::warn!("Failed to acquire environment lock: {err}");
+            })
+            .ok();
+        let sync_state = state.fork();
+        let mode = if let Some(frozen_source) = frozen {
+            LockMode::Frozen(frozen_source.into())
+        } else if let LockCheck::Enabled(lock_check) = lock_check {
+            LockMode::Locked(venv.interpreter(), lock_check)
+        } else if isolated || !lock_target.lock_path().is_file() {
+            LockMode::DryRun(venv.interpreter())
+        } else {
+            LockMode::Write(venv.interpreter())
+        };
+        let result = match Box::pin(
+            project::lock::LockOperation::new(
+                mode,
+                &settings.resolver,
                 &client_builder,
-                &sync_state,
-                Box::new(SummaryInstallLogger),
-                installer_metadata,
+                &state,
+                Box::new(SummaryResolveLogger),
                 &concurrency,
                 cache,
                 workspace_cache,
-                DryRun::Disabled,
                 printer,
                 preview,
-                &malware_settings,
             )
-            .await
-            {
-                Ok(_) => {}
-                Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                }
-                Err(err) => return Err(err.into()),
+            .execute(lock_target),
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(ProjectError::Operation(err)) => {
+                return diagnostics::OperationDiagnostic::with_system_certs(
+                    client_builder.system_certs(),
+                )
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
-            Some(result.into_lock())
+            Err(err) => return Err(err.into()),
         };
 
-        if let Some(lock) = lock {
-            let metadata = crate::commands::workspace::metadata::metadata_from_target(
-                (!no_sync).then_some(&venv),
-                InstallTarget::Script {
-                    script,
-                    lock: &lock,
-                },
-                &extras,
-                &groups,
-                &settings.resolver,
-            )?;
-            let mut metadata = metadata.to_json()?;
-            metadata.push('\n');
-            workspace_metadata = Some(metadata);
+        let target = InstallTarget::Script {
+            script,
+            lock: result.lock(),
+        };
+        match project::sync::do_sync(
+            target,
+            &venv,
+            &extras,
+            &groups,
+            None,
+            InstallOptions::default(),
+            Modifications::Sufficient,
+            None,
+            (&settings).into(),
+            &client_builder,
+            &sync_state,
+            Box::new(SummaryInstallLogger),
+            installer_metadata,
+            &concurrency,
+            cache,
+            workspace_cache,
+            DryRun::Disabled,
+            printer,
+            preview,
+            &malware_settings,
+        )
+        .await
+        {
+            Ok(_) => {}
+            Err(ProjectError::Operation(err)) => {
+                return diagnostics::OperationDiagnostic::with_system_certs(
+                    client_builder.system_certs(),
+                )
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            }
+            Err(err) => return Err(err.into()),
         }
+
+        if no_sync {
+            warn_user!(
+                "`--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+
+        let lock = result.into_lock();
+        let metadata = crate::commands::workspace::metadata::metadata_from_target(
+            Some(&venv),
+            InstallTarget::Script {
+                script,
+                lock: &lock,
+            },
+            &extras,
+            &groups,
+            &settings.resolver,
+        )?;
+        let mut metadata = metadata.to_json()?;
+        metadata.push('\n');
+        workspace_metadata = Some(metadata);
 
         Some(venv.root().to_owned())
     } else if let Some(project) = &project {

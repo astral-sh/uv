@@ -140,8 +140,9 @@ struct MetadataModuleOwner {
 
 /// A node in the dependency graph.
 ///
-/// There are 4 kinds of nodes:
+/// There are 5 kinds of nodes:
 ///
+/// * scripts:  `script+/workspace/script.py`
 /// * packages: `mypackage==1.0.0@registry+https://pypi.org/simple`
 /// * extras:   `mypackage[myextra]==1.0.0@registry+https://pypi.org/simple`
 /// * groups:   `mypackage:mygroup==1.0.0@registry+https://pypi.org/simple`
