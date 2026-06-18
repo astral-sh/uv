@@ -120,7 +120,8 @@ fn compile_bytecode_for_installed_distributions() {
 
     uv_snapshot!(context.pip_install()
         .arg("anyio==3.7.1")
-        .arg("--compile-bytecode"), @"
+        .arg("--compile-bytecode")
+        .env(EnvVars::UV_CONCURRENT_INSTALLS, "1"), @"
     success: true
     exit_code: 0
     ----- stdout -----

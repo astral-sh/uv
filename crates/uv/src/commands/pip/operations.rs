@@ -759,15 +759,8 @@ fn python_source_files_for_installs(
             .with_context(|| format!("Failed to read `{}`", record_path.user_display()))?;
 
         for entry in record {
-            let path = Path::new(&entry.path);
-            if path.extension().is_none_or(|extension| extension != "py") {
-                continue;
-            }
-
-            let path = record_root.join(path);
-            let Some(path) = site_packages
-                .iter()
-                .find_map(|site_packages| normalize_path_under(&path, site_packages))
+            let Some(path) =
+                python_source_path_from_record(record_root, &entry.path, &site_packages)
             else {
                 continue;
             };
@@ -779,6 +772,60 @@ fn python_source_files_for_installs(
     }
 
     Ok(files.into_iter().collect())
+}
+
+/// Resolve a Python source path from an installed `RECORD` entry.
+fn python_source_path_from_record(
+    record_root: &Path,
+    entry: &str,
+    site_packages: &[PathBuf],
+) -> Option<PathBuf> {
+    let path = Path::new(entry);
+    if path.extension().is_none_or(|extension| extension != "py") {
+        return None;
+    }
+
+    let path = record_root.join(path);
+    site_packages
+        .iter()
+        .find_map(|site_packages| normalize_path_under(&path, site_packages))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::python_source_path_from_record;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn record_python_sources_stay_in_site_packages() {
+        let record_root = Path::new("venv/purelib");
+        let site_packages = [PathBuf::from("venv/purelib"), PathBuf::from("venv/platlib")];
+
+        assert_eq!(
+            python_source_path_from_record(record_root, "package/__init__.py", &site_packages,),
+            Some(PathBuf::from("venv/purelib/package/__init__.py"))
+        );
+        assert_eq!(
+            python_source_path_from_record(
+                record_root,
+                "../platlib/package/module.py",
+                &site_packages,
+            ),
+            Some(PathBuf::from("venv/platlib/package/module.py"))
+        );
+        assert_eq!(
+            python_source_path_from_record(record_root, "../scripts/tool.py", &site_packages),
+            None
+        );
+        assert_eq!(
+            python_source_path_from_record(record_root, "/outside.py", &site_packages),
+            None
+        );
+        assert_eq!(
+            python_source_path_from_record(record_root, "package/data.txt", &site_packages),
+            None
+        );
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
