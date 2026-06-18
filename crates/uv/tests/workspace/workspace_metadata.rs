@@ -1724,6 +1724,42 @@ fn workspace_metadata_group_only() -> Result<()> {
     "#
     );
 
+    // With `--sync`, modules provided by the non-project root's dependency group should be
+    // attributed to their locked package.
+    let assert = context
+        .workspace_metadata()
+        .arg("--sync")
+        .current_dir(&workspace)
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let module_owners = serde_json::to_string_pretty(&metadata["module_owners"])?;
+
+    insta::assert_snapshot!(module_owners, @r#"
+    {
+      "iniconfig": [
+        {
+          "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+        }
+      ],
+      "iniconfig._parse": [
+        {
+          "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+        }
+      ],
+      "iniconfig._version": [
+        {
+          "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+        }
+      ],
+      "iniconfig.exceptions": [
+        {
+          "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+        }
+      ]
+    }
+    "#);
+
     Ok(())
 }
 

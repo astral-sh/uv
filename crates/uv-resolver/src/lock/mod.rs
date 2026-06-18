@@ -6611,6 +6611,12 @@ enum LockErrorKind {
         /// The ID of the package.
         name: PackageName,
     },
+    /// An error that occurs when a concrete root package does not belong to the lock.
+    #[error("Could not find root package `{id}` in lock", id = id.cyan())]
+    RootPackageMissingFromLock {
+        /// The ID of the package.
+        id: PackageId,
+    },
     /// An error that occurs when resolving metadata for a package.
     #[error("Failed to generate package metadata for `{id}`", id = id.cyan())]
     Resolution {
