@@ -4,7 +4,7 @@ use anstream::eprintln;
 
 use uv_cache::Refresh;
 use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
-use uv_distribution_types::{ConfigSettings, PackageConfigSettings, Requirement};
+use uv_distribution_types::{ConfigSettings, Index, PackageConfigSettings, Requirement};
 use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
 use uv_settings::{Combine, EnvFlag, PipOptions, ResolverInstallerOptions, ResolverOptions};
 use uv_warnings::owo_colors::OwoColorize;
@@ -107,14 +107,6 @@ impl Flag {
             Self::Enabled { source, .. } => Some(source),
         }
     }
-
-    /// Returns the CLI flag name, if the flag is enabled.
-    pub fn name(self) -> Option<&'static str> {
-        match self {
-            Self::Disabled => None,
-            Self::Enabled { name, .. } => Some(name),
-        }
-    }
 }
 
 impl From<Flag> for bool {
@@ -140,6 +132,43 @@ pub fn resolve_flag(cli_flag: bool, name: &'static str, env_flag: EnvFlag) -> Fl
         }
     } else {
         Flag::Disabled
+    }
+}
+
+/// Resolve a pair of mutually exclusive boolean flags from the CLI and environment variables.
+///
+/// If either flag is set on the command line, both environment variables are ignored so the CLI
+/// retains precedence over the full pair.
+pub fn resolve_flag_pair(
+    cli_flag: bool,
+    cli_no_flag: bool,
+    name: &'static str,
+    no_name: &'static str,
+    env_flag: Option<EnvFlag>,
+    env_no_flag: Option<EnvFlag>,
+) -> (Flag, Flag) {
+    if cli_flag || cli_no_flag {
+        (
+            if cli_flag {
+                Flag::from_cli(name)
+            } else {
+                Flag::disabled()
+            },
+            if cli_no_flag {
+                Flag::from_cli(no_name)
+            } else {
+                Flag::disabled()
+            },
+        )
+    } else {
+        (
+            env_flag.map_or_else(Flag::disabled, |env_flag| {
+                resolve_flag(false, name, env_flag)
+            }),
+            env_no_flag.map_or_else(Flag::disabled, |env_no_flag| {
+                resolve_flag(false, no_name, env_no_flag)
+            }),
+        )
     }
 }
 
@@ -195,6 +224,27 @@ impl From<RefreshArgs> for Refresh {
     }
 }
 
+/// Extract the `--index` and `--default-index` values from [`IndexArgs`].
+pub fn indexes_from_args(
+    default_index: Option<&Maybe<Index>>,
+    index: Option<&[Vec<Maybe<Index>>]>,
+) -> Option<Vec<Index>> {
+    let default_index = default_index
+        .cloned()
+        .and_then(Maybe::into_option)
+        .map(|default_index| vec![default_index]);
+    let index = index.map(|index| {
+        index
+            .iter()
+            .flatten()
+            .cloned()
+            .filter_map(Maybe::into_option)
+            .collect()
+    });
+
+    default_index.combine(index)
+}
+
 impl From<ResolverArgs> for PipOptions {
     fn from(args: ResolverArgs) -> Self {
         let ResolverArgs {
@@ -202,6 +252,7 @@ impl From<ResolverArgs> for PipOptions {
             upgrade,
             no_upgrade,
             upgrade_package,
+            upgrade_group,
             index_strategy,
             keyring_provider,
             resolution,
@@ -219,6 +270,16 @@ impl From<ResolverArgs> for PipOptions {
             no_sources_package,
             exclude_newer_package,
         } = args;
+
+        if !upgrade_group.is_empty() {
+            eprintln!(
+                "{}{} `{}` is not supported in `uv pip` commands",
+                "error".bold().red(),
+                ":".bold(),
+                "--upgrade-group".green(),
+            );
+            std::process::exit(2);
+        }
 
         Self {
             upgrade: flag(upgrade, no_upgrade, "no-upgrade"),
@@ -245,7 +306,11 @@ impl From<ResolverArgs> for PipOptions {
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
             no_sources: if no_sources { Some(true) } else { None },
-            no_sources_package: Some(no_sources_package),
+            no_sources_package: if no_sources_package.is_empty() {
+                None
+            } else {
+                Some(no_sources_package)
+            },
             ..Self::from(index_args)
         }
     }
@@ -291,7 +356,11 @@ impl From<InstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
-            no_sources_package: Some(no_sources_package),
+            no_sources_package: if no_sources_package.is_empty() {
+                None
+            } else {
+                Some(no_sources_package)
+            },
             ..Self::from(index_args)
         }
     }
@@ -304,6 +373,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             upgrade,
             no_upgrade,
             upgrade_package,
+            upgrade_group,
             reinstall,
             no_reinstall,
             reinstall_package,
@@ -326,6 +396,16 @@ impl From<ResolverInstallerArgs> for PipOptions {
             no_sources_package,
             exclude_newer_package,
         } = args;
+
+        if !upgrade_group.is_empty() {
+            eprintln!(
+                "{}{} `{}` is not supported in `uv pip` commands",
+                "error".bold().red(),
+                ":".bold(),
+                "--upgrade-group".green(),
+            );
+            std::process::exit(2);
+        }
 
         Self {
             upgrade: flag(upgrade, no_upgrade, "upgrade"),
@@ -355,7 +435,11 @@ impl From<ResolverInstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
-            no_sources_package: Some(no_sources_package),
+            no_sources_package: if no_sources_package.is_empty() {
+                None
+            } else {
+                Some(no_sources_package)
+            },
             ..Self::from(index_args)
         }
     }
@@ -391,16 +475,7 @@ impl From<IndexArgs> for PipOptions {
         } = args;
 
         Self {
-            index: default_index
-                .and_then(Maybe::into_option)
-                .map(|default_index| vec![default_index])
-                .combine(index.map(|index| {
-                    index
-                        .iter()
-                        .flat_map(std::clone::Clone::clone)
-                        .filter_map(Maybe::into_option)
-                        .collect()
-                })),
+            index: indexes_from_args(default_index.as_ref(), index.as_deref()),
             index_url: index_url.and_then(Maybe::into_option),
             extra_index_url: extra_index_url.map(|extra_index_urls| {
                 extra_index_urls
@@ -430,6 +505,7 @@ pub fn resolver_options(
         upgrade,
         no_upgrade,
         upgrade_package,
+        upgrade_group,
         index_strategy,
         keyring_provider,
         resolution,
@@ -458,17 +534,10 @@ pub fn resolver_options(
     } = build_args;
 
     ResolverOptions {
-        index: index_args
-            .default_index
-            .and_then(Maybe::into_option)
-            .map(|default_index| vec![default_index])
-            .combine(index_args.index.map(|index| {
-                index
-                    .into_iter()
-                    .flat_map(|v| v.clone())
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            })),
+        index: indexes_from_args(
+            index_args.default_index.as_ref(),
+            index_args.index.as_deref(),
+        ),
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url
@@ -490,6 +559,7 @@ pub fn resolver_options(
         upgrade: Upgrade::from_args(
             flag(upgrade, no_upgrade, "no-upgrade"),
             upgrade_package.into_iter().map(Requirement::from).collect(),
+            upgrade_group,
         ),
         index_strategy,
         keyring_provider,
@@ -521,11 +591,23 @@ pub fn resolver_options(
         link_mode,
         torch_backend: None,
         no_build: flag(no_build, build, "build"),
-        no_build_package: Some(no_build_package),
+        no_build_package: if no_build_package.is_empty() {
+            None
+        } else {
+            Some(no_build_package)
+        },
         no_binary: flag(no_binary, binary, "binary"),
-        no_binary_package: Some(no_binary_package),
+        no_binary_package: if no_binary_package.is_empty() {
+            None
+        } else {
+            Some(no_binary_package)
+        },
         no_sources: if no_sources { Some(true) } else { None },
-        no_sources_package: Some(no_sources_package),
+        no_sources_package: if no_sources_package.is_empty() {
+            None
+        } else {
+            Some(no_sources_package)
+        },
     }
 }
 
@@ -534,11 +616,25 @@ pub fn resolver_installer_options(
     resolver_installer_args: ResolverInstallerArgs,
     build_args: BuildOptionsArgs,
 ) -> ResolverInstallerOptions {
+    let index = indexes_from_args(
+        resolver_installer_args.index_args.default_index.as_ref(),
+        resolver_installer_args.index_args.index.as_deref(),
+    );
+    resolver_installer_options_with_indexes(resolver_installer_args, build_args, index)
+}
+
+/// Construct the [`ResolverInstallerOptions`] with a precomputed list of indexes.
+pub fn resolver_installer_options_with_indexes(
+    resolver_installer_args: ResolverInstallerArgs,
+    build_args: BuildOptionsArgs,
+    index: Option<Vec<Index>>,
+) -> ResolverInstallerOptions {
     let ResolverInstallerArgs {
         index_args,
         upgrade,
         no_upgrade,
         upgrade_package,
+        upgrade_group,
         reinstall,
         no_reinstall,
         reinstall_package,
@@ -571,20 +667,8 @@ pub fn resolver_installer_options(
         no_binary_package,
     } = build_args;
 
-    let default_index = index_args
-        .default_index
-        .and_then(Maybe::into_option)
-        .map(|default_index| vec![default_index]);
-    let index = index_args.index.map(|index| {
-        index
-            .into_iter()
-            .flat_map(|v| v.clone())
-            .filter_map(Maybe::into_option)
-            .collect()
-    });
-
     ResolverInstallerOptions {
-        index: default_index.combine(index),
+        index,
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url
@@ -606,6 +690,7 @@ pub fn resolver_installer_options(
         upgrade: Upgrade::from_args(
             flag(upgrade, no_upgrade, "upgrade"),
             upgrade_package.into_iter().map(Requirement::from).collect(),
+            upgrade_group,
         ),
         reinstall: Reinstall::from_args(
             flag(reinstall, no_reinstall, "reinstall"),

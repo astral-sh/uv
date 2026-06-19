@@ -1,0 +1,15 @@
+[project]
+name = "albatross"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["iniconfig>=2,<3"]
+
+[project.optional-dependencies]
+io = ["anyio"]
+
+[dependency-groups]
+dev = ["idna>=3"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

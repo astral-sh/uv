@@ -49,7 +49,7 @@ function global:deactivate([switch] $NonDestructive) {
 }
 
 function global:pydoc {
-    python -m pydoc $args
+    & python -m pydoc $args
 }
 
 # unset irrelevant variables

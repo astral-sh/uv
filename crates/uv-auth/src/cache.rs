@@ -11,7 +11,7 @@ use url::Url;
 use uv_once_map::OnceMap;
 use uv_redacted::DisplaySafeUrl;
 
-use crate::credentials::{Authentication, Username};
+use crate::credentials::{Authentication, CredentialsFromUrlError, Username};
 use crate::{Credentials, Realm};
 
 type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
@@ -62,13 +62,16 @@ impl CredentialsCache {
     /// Populate the global authentication store with credentials on a URL, if there are any.
     ///
     /// Returns `true` if the store was updated.
-    pub fn store_credentials_from_url(&self, url: &DisplaySafeUrl) -> bool {
-        if let Some(credentials) = Credentials::from_url(url) {
+    pub fn store_credentials_from_url(
+        &self,
+        url: &DisplaySafeUrl,
+    ) -> Result<bool, CredentialsFromUrlError> {
+        if let Some(credentials) = Credentials::from_url(url)? {
             trace!("Caching credentials for {url}");
             self.insert(url, Arc::new(Authentication::from(credentials)));
-            true
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -185,9 +188,7 @@ impl CredentialsCache {
 
         // If we only have a username, add a new entry or replace an existing entry if it doesn't have a password
         let existing = realms.get(&key);
-        if existing.is_none()
-            || existing.is_some_and(|credentials| credentials.password().is_none())
-        {
+        if existing.is_none_or(|credentials| credentials.password().is_none()) {
             return realms.insert(key, credentials.clone());
         }
 

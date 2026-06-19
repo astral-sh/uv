@@ -23,7 +23,7 @@ use uv_torch::TorchMode;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
-use crate::{FilesystemOptions, Options, PipOptions};
+use crate::{AuditOptions, FilesystemOptions, Options, PipOptions, PreviewOption};
 
 pub trait Combine {
     /// Combine two values, preferring the values in `self`.
@@ -72,6 +72,15 @@ impl Combine for Option<PipOptions> {
     }
 }
 
+impl Combine for Option<AuditOptions> {
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
 macro_rules! impl_combine_or {
     ($name:ident) => {
         impl Combine for Option<$name> {
@@ -100,6 +109,7 @@ impl_combine_or!(PipExtraIndex);
 impl_combine_or!(PipFindLinks);
 impl_combine_or!(PipIndex);
 impl_combine_or!(PrereleaseMode);
+impl_combine_or!(PreviewOption);
 impl_combine_or!(ProxyUrl);
 impl_combine_or!(PythonDownloads);
 impl_combine_or!(PythonPreference);

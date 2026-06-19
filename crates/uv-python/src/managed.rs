@@ -16,7 +16,8 @@ use tracing::{debug, warn};
 use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
 use uv_fs::{
-    LockedFile, LockedFileError, LockedFileMode, Simplified, replace_symlink, symlink_or_copy_file,
+    LockedFile, LockedFileError, LockedFileMode, Simplified, normalize_absolute_path,
+    replace_symlink, symlink_or_copy_file, verbatim_path,
 };
 use uv_platform::{Error as PlatformError, Os};
 use uv_platform::{LibcDetectionError, Platform};
@@ -32,9 +33,7 @@ use crate::implementation::{
 use crate::installation::{self, PythonInstallationKey};
 use crate::interpreter::Interpreter;
 use crate::python_version::PythonVersion;
-use crate::{
-    PythonInstallationMinorVersionKey, PythonRequest, PythonVariant, macos_dylib, sysconfig,
-};
+use crate::{PythonInstallationMinorVersionKey, PythonVariant, macos_dylib, sysconfig};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -54,49 +53,20 @@ pub enum Error {
     ExtractError(#[from] uv_extract::Error),
     #[error(transparent)]
     SysconfigError(#[from] sysconfig::Error),
-    #[error("Failed to copy to: {0}", to.user_display())]
-    CopyError {
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
     #[error("Missing expected Python executable at {}", _0.user_display())]
     MissingExecutable(PathBuf),
     #[error("Missing expected target directory for Python minor version link at {}", _0.user_display())]
     MissingPythonMinorVersionLinkTargetDirectory(PathBuf),
-    #[error("Failed to create canonical Python executable at {} from {}", to.user_display(), from.user_display())]
-    CanonicalizeExecutable {
-        from: PathBuf,
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
-    #[error("Failed to create Python executable link at {} from {}", to.user_display(), from.user_display())]
-    LinkExecutable {
-        from: PathBuf,
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
-    #[error("Failed to create Python minor version link directory at {} from {}", to.user_display(), from.user_display())]
-    PythonMinorVersionLinkDirectory {
-        from: PathBuf,
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
-    #[error("Failed to create directory for Python executable link at {}", to.user_display())]
-    ExecutableDirectory {
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
-    #[error("Failed to read Python installation directory: {0}", dir.user_display())]
-    ReadError {
-        dir: PathBuf,
-        #[source]
-        err: io::Error,
-    },
+    #[error("Failed to create canonical Python executable")]
+    CanonicalizeExecutable(#[source] io::Error),
+    #[error("Failed to create Python executable link")]
+    LinkExecutable(#[source] io::Error),
+    #[error("Failed to create Python minor version link directory")]
+    PythonMinorVersionLinkDirectory(#[source] io::Error),
+    #[error("Failed to create directory for Python executable link")]
+    ExecutableDirectory(#[source] io::Error),
+    #[error("Failed to read Python installation directory")]
+    ReadError(#[source] io::Error),
     #[error("Failed to find a directory to install executables into")]
     NoExecutableDirectory,
     #[error(transparent)]
@@ -241,18 +211,12 @@ impl ManagedPythonInstallations {
                         Err(err) => Some(Err(err)),
                     })
                     .collect::<Result<_, io::Error>>()
-                    .map_err(|err| Error::ReadError {
-                        dir: self.root.clone(),
-                        err,
-                    })?;
+                    .map_err(Error::ReadError)?;
                 directories
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => vec![],
             Err(err) => {
-                return Err(Error::ReadError {
-                    dir: self.root.clone(),
-                    err,
-                });
+                return Err(Error::ReadError(err));
             }
         };
         let scratch = self.scratch();
@@ -264,8 +228,7 @@ impl ManagedPythonInstallations {
             .filter(|path| {
                 path.file_name()
                     .and_then(OsStr::to_str)
-                    .map(|name| !name.starts_with('.'))
-                    .unwrap_or(true)
+                    .is_none_or(|name| !name.starts_with('.'))
             })
             .filter_map(|path| {
                 ManagedPythonInstallation::from_path(path)
@@ -278,9 +241,8 @@ impl ManagedPythonInstallations {
     }
 
     /// Iterate over Python installations that support the current platform.
-    pub fn find_matching_current_platform(
-        &self,
-    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
+    pub(crate) fn find_matching_current_platform()
+    -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
         let platform = Platform::from_env()?;
 
         let iter = Self::from_settings(None)?
@@ -307,13 +269,22 @@ impl ManagedPythonInstallations {
         version: &'a PythonVersion,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + 'a, Error> {
         let request = VersionRequest::from(version);
-        Ok(self
-            .find_matching_current_platform()?
+        Ok(Self::find_matching_current_platform()?
             .filter(move |installation| request.matches_installation_key(installation.key())))
     }
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    pub(crate) fn absolute_root(&self) -> Result<PathBuf, Error> {
+        let root = if self.root.is_absolute() {
+            self.root.clone()
+        } else {
+            crate::current_dir()?.join(&self.root)
+        };
+
+        normalize_absolute_path(&root).map_err(|err| Error::AbsolutePath(self.root.clone(), err))
     }
 }
 
@@ -353,7 +324,7 @@ impl ManagedPythonInstallation {
         }
     }
 
-    pub(crate) fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
+    fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
         let path = path.as_ref();
 
         let key = PythonInstallationKey::from_str(
@@ -387,14 +358,14 @@ impl ManagedPythonInstallation {
     /// Returns `None` if the interpreter is not a managed installation.
     pub fn try_from_interpreter(interpreter: &Interpreter) -> Option<Self> {
         let managed_root = ManagedPythonInstallations::from_settings(None).ok()?;
+        let root = managed_root.absolute_root().ok()?;
 
         // Canonicalize both paths to handle Windows path format differences
         // (e.g., \\?\ prefix, different casing, junction vs actual path).
         // Fall back to the original path if canonicalization fails (e.g., target doesn't exist).
         let sys_base_prefix = dunce::canonicalize(interpreter.sys_base_prefix())
             .unwrap_or_else(|_| interpreter.sys_base_prefix().to_path_buf());
-        let root = dunce::canonicalize(managed_root.root())
-            .unwrap_or_else(|_| managed_root.root().to_path_buf());
+        let root = dunce::canonicalize(&root).unwrap_or(root);
 
         // Verify the interpreter's base prefix is within the managed root
         let suffix = sys_base_prefix.strip_prefix(&root).ok()?;
@@ -406,7 +377,7 @@ impl ManagedPythonInstallation {
         PythonInstallationKey::from_str(name).ok()?;
 
         // Construct the installation from the path within the managed root
-        let path = managed_root.root().join(name);
+        let path = root.join(name);
         Self::from_path(path).ok()
     }
 
@@ -490,7 +461,7 @@ impl ManagedPythonInstallation {
     }
 
     /// The [`PythonVersion`] of the toolchain.
-    pub fn version(&self) -> PythonVersion {
+    pub(crate) fn version(&self) -> PythonVersion {
         self.key.version()
     }
 
@@ -511,7 +482,7 @@ impl ManagedPythonInstallation {
         &self.key
     }
 
-    pub fn platform(&self) -> &Platform {
+    pub(crate) fn platform(&self) -> &Platform {
         self.key.platform()
     }
 
@@ -522,26 +493,6 @@ impl ManagedPythonInstallation {
 
     pub fn minor_version_key(&self) -> &PythonInstallationMinorVersionKey {
         PythonInstallationMinorVersionKey::ref_cast(&self.key)
-    }
-
-    pub fn satisfies(&self, request: &PythonRequest) -> bool {
-        match request {
-            PythonRequest::File(path) => self.executable(false) == *path,
-            PythonRequest::Default | PythonRequest::Any => true,
-            PythonRequest::Directory(path) => self.path() == *path,
-            PythonRequest::ExecutableName(name) => self
-                .executable(false)
-                .file_name()
-                .is_some_and(|filename| filename.to_string_lossy() == *name),
-            PythonRequest::Implementation(implementation) => {
-                *implementation == self.implementation()
-            }
-            PythonRequest::ImplementationVersion(implementation, version) => {
-                *implementation == self.implementation() && version.matches_version(&self.version())
-            }
-            PythonRequest::Version(version) => version.matches_version(&self.version()),
-            PythonRequest::Key(request) => request.satisfied_by_key(self.key()),
-        }
     }
 
     /// Ensure the environment contains the canonical Python executable names.
@@ -573,11 +524,7 @@ impl ManagedPythonInstallation {
                 }
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(err) => {
-                    return Err(Error::CanonicalizeExecutable {
-                        from: executable,
-                        to: python,
-                        err,
-                    });
+                    return Err(Error::CanonicalizeExecutable(err));
                 }
             }
         }
@@ -626,7 +573,7 @@ impl ManagedPythonInstallation {
 
     /// Ensure that the `sysconfig` data is patched to match the installation path.
     pub fn ensure_sysconfig_patched(&self) -> Result<(), Error> {
-        if cfg!(unix) {
+        if cfg!(unix) && !self.key.os().is_windows() {
             if self.key.os().is_emscripten() {
                 // Emscripten's stdlib is a zip file so we can't update the
                 // sysconfig directly
@@ -743,11 +690,13 @@ impl ManagedPythonInstallation {
         true
     }
 
-    pub fn url(&self) -> Option<&str> {
+    #[cfg(windows)]
+    pub(crate) fn url(&self) -> Option<&str> {
         self.url.as_deref()
     }
 
-    pub fn sha256(&self) -> Option<&str> {
+    #[cfg(windows)]
+    pub(crate) fn sha256(&self) -> Option<&str> {
         self.sha256.as_deref()
     }
 }
@@ -843,7 +792,7 @@ impl PythonMinorVersionLink {
         Self::from_executable(installation.executable(false).as_path(), installation.key())
     }
 
-    pub fn create_directory(&self) -> Result<(), Error> {
+    fn create_directory(&self) -> Result<(), Error> {
         match replace_symlink(
             self.target_directory.as_path(),
             self.symlink_directory.as_path(),
@@ -862,11 +811,7 @@ impl PythonMinorVersionLink {
             }
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
             Err(err) => {
-                return Err(Error::PythonMinorVersionLinkDirectory {
-                    from: self.symlink_directory.clone(),
-                    to: self.target_directory.clone(),
-                    err,
-                });
+                return Err(Error::PythonMinorVersionLinkDirectory(err));
             }
         }
         Ok(())
@@ -879,14 +824,17 @@ impl PythonMinorVersionLink {
     /// may exist but point to a different installation (e.g., after an upgrade), in which
     /// case we should not use the link for the current installation.
     pub fn exists(&self) -> bool {
+        let points_to_target = || {
+            fs_err::read_link(&self.symlink_directory)
+                .is_ok_and(|target| verbatim_path(&target) == verbatim_path(&self.target_directory))
+        };
+
         #[cfg(unix)]
         {
             self.symlink_directory
                 .symlink_metadata()
                 .is_ok_and(|metadata| metadata.file_type().is_symlink())
-                && self
-                    .read_target()
-                    .is_some_and(|target| target == self.target_directory)
+                && points_to_target()
         }
         #[cfg(windows)]
         {
@@ -897,25 +845,7 @@ impl PythonMinorVersionLink {
                     // is a symlink or junction.
                     (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0) != 0
                 })
-                && self
-                    .read_target()
-                    .is_some_and(|target| target == self.target_directory)
-        }
-    }
-
-    /// Read the target of the minor version link.
-    ///
-    /// On Unix, this reads the symlink target. On Windows, this reads the junction target
-    /// using the `junction` crate which properly handles the `\??\` prefix that Windows
-    /// uses internally for junction targets.
-    pub fn read_target(&self) -> Option<PathBuf> {
-        #[cfg(unix)]
-        {
-            self.symlink_directory.read_link().ok()
-        }
-        #[cfg(windows)]
-        {
-            junction::get_target(&self.symlink_directory).ok()
+                && points_to_target()
         }
     }
 }
@@ -957,10 +887,7 @@ fn executable_path_from_base(
 /// If the file already exists at the link path, an error will be returned.
 pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), Error> {
     let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
-    fs_err::create_dir_all(link_parent).map_err(|err| Error::ExecutableDirectory {
-        to: link_parent.to_path_buf(),
-        err,
-    })?;
+    fs_err::create_dir_all(link_parent).map_err(Error::ExecutableDirectory)?;
 
     if cfg!(unix) {
         // Note this will never copy on Unix — we use it here to allow compilation on Windows
@@ -969,11 +896,7 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 Err(Error::MissingExecutable(executable.to_path_buf()))
             }
-            Err(err) => Err(Error::LinkExecutable {
-                from: executable.to_path_buf(),
-                to: link.to_path_buf(),
-                err,
-            }),
+            Err(err) => Err(Error::LinkExecutable(err)),
         }
     } else if cfg!(windows) {
         use uv_trampoline_builder::windows_python_launcher;
@@ -987,11 +910,7 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
         {
             std::fs::File::create_new(link)
                 .and_then(|mut file| file.write_all(launcher.as_ref()))
-                .map_err(|err| Error::LinkExecutable {
-                    from: executable.to_path_buf(),
-                    to: link.to_path_buf(),
-                    err,
-                })
+                .map_err(Error::LinkExecutable)
         }
     } else {
         unimplemented!("Only Windows and Unix are supported.")
@@ -1005,27 +924,16 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
 /// See [`create_link_to_executable`] for a variant that errors if the link already exists.
 pub fn replace_link_to_executable(link: &Path, executable: &Path) -> Result<(), Error> {
     let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
-    fs_err::create_dir_all(link_parent).map_err(|err| Error::ExecutableDirectory {
-        to: link_parent.to_path_buf(),
-        err,
-    })?;
+    fs_err::create_dir_all(link_parent).map_err(Error::ExecutableDirectory)?;
 
     if cfg!(unix) {
-        replace_symlink(executable, link).map_err(|err| Error::LinkExecutable {
-            from: executable.to_path_buf(),
-            to: link.to_path_buf(),
-            err,
-        })
+        replace_symlink(executable, link).map_err(Error::LinkExecutable)
     } else if cfg!(windows) {
         use uv_trampoline_builder::windows_python_launcher;
 
         let launcher = windows_python_launcher(executable, false)?;
 
-        uv_fs::write_atomic_sync(link, &*launcher).map_err(|err| Error::LinkExecutable {
-            from: executable.to_path_buf(),
-            to: link.to_path_buf(),
-            err,
-        })
+        uv_fs::write_atomic_sync(link, &*launcher).map_err(Error::LinkExecutable)
     } else {
         unimplemented!("Only Windows and Unix are supported.")
     }
@@ -1421,6 +1329,30 @@ mod tests {
                 let v3_10 = PythonVersion::from_str("3.10").unwrap();
                 let matched: Vec<_> = installations.find_version(&v3_10).unwrap().collect();
                 assert_eq!(matched.len(), 1);
+            },
+        );
+    }
+
+    #[test]
+    fn test_relative_install_dir_resolves_against_pwd() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workdir = temp_dir.path().join("workdir");
+        fs::create_dir(&workdir).unwrap();
+
+        temp_env::with_vars(
+            [
+                (
+                    uv_static::EnvVars::UV_PYTHON_INSTALL_DIR,
+                    Some(std::ffi::OsStr::new(".python-installs")),
+                ),
+                (uv_static::EnvVars::PWD, Some(workdir.as_os_str())),
+            ],
+            || {
+                let installations = ManagedPythonInstallations::from_settings(None).unwrap();
+                assert_eq!(
+                    installations.absolute_root().unwrap(),
+                    workdir.join(".python-installs")
+                );
             },
         );
     }

@@ -4,8 +4,6 @@ use std::{ffi::OsString, path::PathBuf};
 pub enum Error {
     #[error("I/O operation failed during extraction")]
     Io(#[source] std::io::Error),
-    #[error("Invalid zip file")]
-    Zip(#[from] zip::result::ZipError),
     #[error("Invalid zip file structure")]
     AsyncZip(#[from] async_zip::error::ZipError),
     #[error("Invalid tar file")]
@@ -113,11 +111,6 @@ impl Error {
             Ok(zip_err) => return Self::AsyncZip(zip_err),
             Err(err) => err,
         };
-        let err = match err.downcast::<zip::result::ZipError>() {
-            Ok(zip_err) => return Self::Zip(zip_err),
-            Err(err) => err,
-        };
-
         Self::Io(err)
     }
 

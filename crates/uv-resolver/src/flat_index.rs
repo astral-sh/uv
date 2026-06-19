@@ -8,9 +8,8 @@ use uv_client::{FlatIndexEntries, FlatIndexEntry};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel, IndexUrl,
-    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
-    WheelCompatibility,
+    File, HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
+    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -40,32 +39,25 @@ impl FlatIndex {
     ) -> Self {
         // Collect compatible distributions.
         let mut index = FxHashMap::<PackageName, FlatDistributions>::default();
-        for entry in entries.entries {
-            let distributions = index.entry(entry.filename.name().clone()).or_default();
-            distributions.add_file(
-                entry.file,
-                entry.filename,
-                tags,
-                hasher,
-                build_options,
-                entry.index,
-            );
-        }
+        let (entries, offline) = entries.into_parts();
 
-        // Collect offline entries.
-        let offline = entries.offline;
+        for entry in entries {
+            let (filename, file, index_url) = entry.into_parts();
+            let distributions = index.entry(filename.name().clone()).or_default();
+            distributions.add_file(file, filename, tags, hasher, build_options, index_url);
+        }
 
         Self { index, offline }
     }
 
     /// Get the [`FlatDistributions`] for the given package name.
-    pub fn get(&self, package_name: &PackageName) -> Option<&FlatDistributions> {
+    pub(crate) fn get(&self, package_name: &PackageName) -> Option<&FlatDistributions> {
         self.index.get(package_name)
     }
 
     /// Whether any `--find-links` entries could not be resolved due to a lack of network
     /// connectivity.
-    pub fn offline(&self) -> bool {
+    pub(crate) fn offline(&self) -> bool {
         self.offline
     }
 }
@@ -78,7 +70,7 @@ pub struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);
 impl FlatDistributions {
     /// Collect all files from a `--find-links` target into a [`FlatIndex`].
     #[instrument(skip_all)]
-    pub fn from_entries(
+    pub(crate) fn from_entries(
         entries: Vec<FlatIndexEntry>,
         tags: Option<&Tags>,
         hasher: &HashStrategy,
@@ -86,26 +78,15 @@ impl FlatDistributions {
     ) -> Self {
         let mut distributions = Self::default();
         for entry in entries {
-            distributions.add_file(
-                entry.file,
-                entry.filename,
-                tags,
-                hasher,
-                build_options,
-                entry.index,
-            );
+            let (filename, file, index) = entry.into_parts();
+            distributions.add_file(file, filename, tags, hasher, build_options, index);
         }
         distributions
     }
 
     /// Returns an [`Iterator`] over the distributions.
-    pub fn iter(&self) -> impl Iterator<Item = (&Version, &PrioritizedDist)> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&Version, &PrioritizedDist)> {
         self.0.iter()
-    }
-
-    /// Removes the [`PrioritizedDist`] for the given version.
-    pub fn remove(&mut self, version: &Version) -> Option<PrioritizedDist> {
-        self.0.remove(version)
     }
 
     /// Add the given [`File`] to the [`FlatDistributions`] for the given package.
@@ -184,12 +165,11 @@ impl FlatDistributions {
         }
 
         // Check if hashes line up
-        let hash = if let HashPolicy::Validate(required) =
-            hasher.get_package(&filename.name, &filename.version)
-        {
+        let hash_policy = hasher.get_package(&filename.name, &filename.version);
+        let hash = if hash_policy.requires_validation() {
             if hashes.is_empty() {
                 HashComparison::Missing
-            } else if required.iter().any(|hash| hashes.contains(hash)) {
+            } else if hash_policy.matches(hashes) {
                 HashComparison::Matched
             } else {
                 HashComparison::Mismatched
@@ -225,12 +205,11 @@ impl FlatDistributions {
         };
 
         // Check if hashes line up.
-        let hash = if let HashPolicy::Validate(required) =
-            hasher.get_package(&filename.name, &filename.version)
-        {
+        let hash_policy = hasher.get_package(&filename.name, &filename.version);
+        let hash = if hash_policy.requires_validation() {
             if hashes.is_empty() {
                 HashComparison::Missing
-            } else if required.iter().any(|hash| hashes.contains(hash)) {
+            } else if hash_policy.matches(hashes) {
                 HashComparison::Matched
             } else {
                 HashComparison::Mismatched

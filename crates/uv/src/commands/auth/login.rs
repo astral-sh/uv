@@ -42,7 +42,7 @@ pub(crate) async fn login(
 
         let client = client_builder
             .auth_integration(AuthIntegration::NoAuthMiddleware)
-            .build();
+            .build()?;
 
         let access_token = pyx_login_with_browser(&pyx_store, &client, &printer).await?;
         let jwt = PyxJwt::decode(&access_token)?;
@@ -71,7 +71,7 @@ pub(crate) async fn login(
     };
 
     // Extract credentials from URL if present
-    let url_credentials = Credentials::from_url(&url);
+    let url_credentials = Credentials::from_url(&url)?;
     let url_username = url_credentials.as_ref().and_then(|c| c.username());
     let url_password = url_credentials.as_ref().and_then(|c| c.password());
 

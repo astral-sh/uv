@@ -32,7 +32,7 @@ async fn add_package_native_auth_realm() -> Result<()> {
 
     // Try to add a package without credentials.
     uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--default-index").arg(proxy.username_url("public", "/basic-auth/simple"))
-        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -41,8 +41,8 @@ async fn add_package_native_auth_realm() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
 
@@ -98,7 +98,7 @@ async fn add_package_native_auth_realm() -> Result<()> {
 
     // Authentication should fail again
     uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--default-index").arg(proxy.username_url("public", "/basic-auth/simple"))
-        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -107,8 +107,8 @@ async fn add_package_native_auth_realm() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
 
@@ -143,7 +143,7 @@ async fn add_package_native_auth() -> Result<()> {
 
     // Try to add a package without credentials.
     uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--default-index").arg(proxy.username_url("public", "/basic-auth/simple"))
-        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -152,8 +152,8 @@ async fn add_package_native_auth() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
 
@@ -209,7 +209,7 @@ async fn add_package_native_auth() -> Result<()> {
 
     // Authentication should fail again
     uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--default-index").arg(proxy.username_url("public", "/basic-auth/simple"))
-        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -218,8 +218,8 @@ async fn add_package_native_auth() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
 
@@ -1212,6 +1212,62 @@ async fn login_text_store() {
 }
 
 #[test]
+fn login_text_store_empty_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    context.temp_dir.child("credentials.toml").write_str("")?;
+
+    uv_snapshot!(context.auth_login()
+        .arg("https://example.com/simple")
+        .arg("--token")
+        .arg("test-token")
+        .env(EnvVars::UV_CREDENTIALS_DIR, context.temp_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for https://example.com/
+    ");
+
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/simple")
+        .env(EnvVars::UV_CREDENTIALS_DIR, context.temp_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    test-token
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn login_text_store_comments_only_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    context
+        .temp_dir
+        .child("credentials.toml")
+        .write_str("# No credentials have been configured yet.\n")?;
+
+    uv_snapshot!(context.auth_login()
+        .arg("https://example.com/simple")
+        .arg("--token")
+        .arg("test-token")
+        .env(EnvVars::UV_CREDENTIALS_DIR, context.temp_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for https://example.com/
+    ");
+
+    Ok(())
+}
+
+#[test]
 #[expect(clippy::disallowed_types)]
 fn login_password_stdin() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
@@ -2166,7 +2222,7 @@ fn login_pyx_dev_with_custom_api_url() {
         .arg("testuser")
         .arg("--password")
         .arg("testpass")
-        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2183,7 +2239,7 @@ fn login_pyx_dev_with_custom_api_url() {
         .arg("testuser")
         .arg("--password")
         .arg("testpass")
-        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2201,7 +2257,7 @@ fn login_pyx_dev_with_custom_api_url() {
         .arg("testuser")
         .arg("--password")
         .arg("testpass")
-        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2221,7 +2277,7 @@ fn logout_pyx_dev_with_custom_api_url() {
     // no credentials exist, but verifies it's recognized as pyx).
     uv_snapshot!(context.auth_logout()
         .arg("pyx.dev")
-        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2242,7 +2298,7 @@ fn token_pyx_dev_with_custom_api_url() {
         .arg("pyx.dev")
         .arg("--username")
         .arg("testuser")
-        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2264,7 +2320,7 @@ fn token_pyx_staging_without_env_var() {
     // Without PYX_API_URL set, staging pyx URLs are NOT recognized as pyx domains.
     // They fall through to the normal credential store lookup.
     uv_snapshot!(context.auth_token()
-        .arg("https://astral-sh-staging-api.pyx.dev"), @r"
+        .arg("https://astral-sh-staging-api.pyx.dev"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2288,7 +2344,7 @@ fn login_pyx_staging_with_env_var() {
         .arg("testuser")
         .arg("--password")
         .arg("testpass")
-        .env(EnvVars::PYX_API_URL, "https://astral-sh-staging-api.pyx.dev"), @r"
+        .env(EnvVars::PYX_API_URL, "https://astral-sh-staging-api.pyx.dev"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2306,7 +2362,7 @@ fn login_pyx_staging_with_env_var() {
         .arg("testuser")
         .arg("--password")
         .arg("testpass")
-        .env(EnvVars::PYX_API_URL, "https://astral-sh-staging-api.pyx.dev"), @r"
+        .env(EnvVars::PYX_API_URL, "https://astral-sh-staging-api.pyx.dev"), @"
     success: false
     exit_code: 2
     ----- stdout -----

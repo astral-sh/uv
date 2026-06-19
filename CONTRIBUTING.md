@@ -30,6 +30,13 @@ exploration of new features, we will almost always close these pull requests imm
 new feature to uv creates a long-term maintenance burden and requires strong consensus from the uv
 team before it is appropriate to begin work on an implementation.
 
+## Use of AI
+
+We **require all use of AI in contributions to follow our
+[AI Policy](https://github.com/astral-sh/.github/blob/main/AI_POLICY.md)**.
+
+If your contribution does not follow the policy, it will be closed.
+
 ## Setup
 
 [Rust](https://rustup.rs/) (and a C compiler) are required to build uv.
@@ -45,6 +52,17 @@ On Fedora-based distributions, you can install a C compiler with:
 ```shell
 sudo dnf install gcc
 ```
+
+On Windows, [NASM](https://www.nasm.us/) is required for building the TLS backend (`aws-lc-sys`). If
+it is not present, a prebuilt blob provided by `aws-lc-sys` will be used instead. WinGet can be used
+to install NASM:
+
+```shell
+winget install NASM.NASM
+```
+
+After installation, add `C:\Program Files\NASM` to your `PATH`. While the prebuilt blob will not be
+used when NASM is found, you can guarantee this behavior by setting `AWS_LC_SYS_PREBUILT_NASM=0`.
 
 ## Testing
 
@@ -100,6 +118,13 @@ To run and review a specific snapshot test:
 ```shell
 cargo test --package <package> --test <test> -- <test_name> -- --exact
 cargo insta review
+```
+
+A script is available to update the snapshots based on results in CI. This is useful for updating
+snapshots without re-running the test suite and for updating platform-specific snapshots.
+
+```shell
+./scripts/apply-ci-snapshots.sh
 ```
 
 ### Git and Git LFS
@@ -255,17 +280,11 @@ To preview any changes to the documentation locally:
 3. Run the development server with:
 
    ```shell
-   uvx --with-requirements docs/requirements.txt -- mkdocs serve -f mkdocs.yml
+   uv run --only-group docs mkdocs serve -f mkdocs.yml
    ```
 
 The documentation should then be available locally at
 [http://127.0.0.1:8000/uv/](http://127.0.0.1:8000/uv/).
-
-To update the documentation dependencies, edit `docs/requirements.in`, then run:
-
-```shell
-uv pip compile docs/requirements.in -o docs/requirements.txt --universal -p 3.12
-```
 
 Documentation is deployed automatically on release by publishing to the
 [Astral documentation](https://github.com/astral-sh/docs) repository, which itself deploys via

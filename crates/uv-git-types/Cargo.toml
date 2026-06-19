@@ -1,6 +1,6 @@
 [package]
 name = "uv-git-types"
-version = "0.0.22"
+version = "0.0.55"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -16,9 +16,11 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-cache-key = { workspace = true }
 uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 
+percent-encoding = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

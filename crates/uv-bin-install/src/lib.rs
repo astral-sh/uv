@@ -3,25 +3,31 @@
 //! These utilities are specifically for consuming distributions that are _not_ Python packages,
 //! e.g., `ruff` (which does have a Python package, but also has standalone binaries on GitHub).
 
+use std::error::Error as _;
 use std::fmt;
+use std::io;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::task::{Context, Poll};
+use std::time::{Duration, SystemTimeError};
 
 use futures::{StreamExt, TryStreamExt};
+use reqwest_retry::Retryable;
 use reqwest_retry::policies::ExponentialBackoff;
 use serde::Deserialize;
 use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use url::Url;
+use uv_client::retryable_on_request_failure;
 use uv_distribution_filename::SourceDistExtension;
+use uv_static::{astral_mirror_base_url, astral_mirror_url_from_env, custom_astral_mirror_url};
 
 use uv_cache::{Cache, CacheBucket, CacheEntry, Error as CacheError};
-use uv_client::{BaseClient, RetryState};
+use uv_client::{BaseClient, RetriableError, fetch_with_url_fallback};
 use uv_extract::{Error as ExtractError, stream};
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_platform::Platform;
 use uv_redacted::DisplaySafeUrl;
 
@@ -29,46 +35,171 @@ use uv_redacted::DisplaySafeUrl;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Binary {
     Ruff,
+    Ty,
+    Uv,
 }
 
 impl Binary {
-    /// Get the default version for this binary.
-    pub fn default_version(&self) -> Version {
+    /// Get the default version constraints for this binary.
+    ///
+    /// Returns a version range constraint (e.g., `>=0.15,<0.16`) rather than a pinned version,
+    /// allowing patch version updates without requiring a uv release.
+    pub fn default_constraints(&self) -> VersionSpecifiers {
         match self {
             // TODO(zanieb): Figure out a nice way to automate updating this
-            Self::Ruff => Version::new([0, 15, 0]),
+            Self::Ruff => [
+                VersionSpecifier::greater_than_equal_version(Version::new([0, 15])),
+                VersionSpecifier::less_than_version(Version::new([0, 16])),
+            ]
+            .into_iter()
+            .collect(),
+            Self::Ty => [
+                VersionSpecifier::greater_than_equal_version(Version::new([0, 0])),
+                VersionSpecifier::less_than_version(Version::new([0, 1])),
+            ]
+            .into_iter()
+            .collect(),
+            Self::Uv => VersionSpecifiers::empty(),
         }
     }
 
     /// The name of the binary.
     ///
     /// See [`Binary::executable`] for the platform-specific executable name.
-    pub fn name(&self) -> &'static str {
+    fn name(self) -> &'static str {
         match self {
             Self::Ruff => "ruff",
+            Self::Ty => "ty",
+            Self::Uv => "uv",
         }
     }
 
-    /// Get the download URL for a specific version and platform.
-    pub fn download_url(
-        &self,
+    /// Get the ordered list of download URLs for a specific version and platform.
+    fn download_urls(
+        self,
         version: &Version,
         platform: &str,
         format: ArchiveFormat,
-    ) -> Result<Url, Error> {
+    ) -> Result<Vec<DisplaySafeUrl>, Error> {
+        let custom_astral_mirror = astral_mirror_url_from_env();
+        self.download_urls_with_astral_mirror(
+            version,
+            platform,
+            format,
+            custom_astral_mirror.as_deref(),
+        )
+    }
+
+    fn download_urls_with_astral_mirror(
+        self,
+        version: &Version,
+        platform: &str,
+        format: ArchiveFormat,
+        astral_mirror_url: Option<&str>,
+    ) -> Result<Vec<DisplaySafeUrl>, Error> {
+        let astral_mirror_url = custom_astral_mirror_url(astral_mirror_url);
         match self {
             Self::Ruff => {
-                let url = format!(
-                    "https://github.com/astral-sh/ruff/releases/download/{version}/ruff-{platform}.{}",
+                let suffix = format!("{version}/ruff-{platform}.{}", format.extension());
+                let mirror_base = astral_mirror_base_url(astral_mirror_url);
+                let mirror = format!("{mirror_base}{RUFF_MIRROR_SUFFIX}{suffix}");
+                let mut urls = vec![parse_url(mirror)?];
+                // When using the default mirror, also fall back to GitHub.
+                if astral_mirror_url.is_none() {
+                    let canonical = format!("{RUFF_GITHUB_URL_PREFIX}{suffix}");
+                    urls.push(parse_url(canonical)?);
+                }
+                Ok(urls)
+            }
+            Self::Ty => {
+                let suffix = format!("{version}/ty-{platform}.{}", format.extension());
+                let mirror_base = astral_mirror_base_url(astral_mirror_url);
+                let mirror = format!("{mirror_base}{TY_MIRROR_SUFFIX}{suffix}");
+                let mut urls = vec![parse_url(mirror)?];
+                // When using the default mirror, also fall back to GitHub.
+                if astral_mirror_url.is_none() {
+                    let canonical = format!("{TY_GITHUB_URL_PREFIX}{suffix}");
+                    urls.push(parse_url(canonical)?);
+                }
+                Ok(urls)
+            }
+            Self::Uv => {
+                let canonical = format!(
+                    "{UV_GITHUB_URL_PREFIX}{version}/uv-{platform}.{}",
                     format.extension()
                 );
-                Url::parse(&url).map_err(|err| Error::UrlParse { url, source: err })
+                Ok(vec![parse_url(canonical)?])
             }
         }
     }
 
+    /// Return the ordered list of manifest URLs to try for this binary.
+    fn manifest_urls(self) -> Result<Vec<DisplaySafeUrl>, Error> {
+        let custom_astral_mirror = astral_mirror_url_from_env();
+        self.manifest_urls_with_astral_mirror(custom_astral_mirror.as_deref())
+    }
+
+    fn manifest_urls_with_astral_mirror(
+        self,
+        astral_mirror_url: Option<&str>,
+    ) -> Result<Vec<DisplaySafeUrl>, Error> {
+        let astral_mirror_url = custom_astral_mirror_url(astral_mirror_url);
+        let name = self.name();
+        let mirror_base = astral_mirror_base_url(astral_mirror_url);
+        let mirror = format!("{mirror_base}{VERSIONS_MANIFEST_MIRROR_SUFFIX}/{name}.ndjson");
+        let mut urls = vec![parse_url(mirror)?];
+        // When using the default mirror, also fall back to the canonical raw GitHub URL.
+        if astral_mirror_url.is_none() {
+            let canonical = format!("{VERSIONS_MANIFEST_URL}/{name}.ndjson");
+            urls.push(parse_url(canonical)?);
+        }
+        Ok(urls)
+    }
+
+    /// Given a canonical artifact URL (e.g., from the versions manifest), return the ordered list
+    /// of URLs to try for this binary.
+    fn mirror_urls(self, canonical_url: DisplaySafeUrl) -> Result<Vec<DisplaySafeUrl>, Error> {
+        let custom_astral_mirror = astral_mirror_url_from_env();
+        self.mirror_urls_with_astral_mirror(canonical_url, custom_astral_mirror.as_deref())
+    }
+
+    fn mirror_urls_with_astral_mirror(
+        self,
+        canonical_url: DisplaySafeUrl,
+        astral_mirror_url: Option<&str>,
+    ) -> Result<Vec<DisplaySafeUrl>, Error> {
+        let astral_mirror_url = custom_astral_mirror_url(astral_mirror_url);
+        match self {
+            Self::Ruff => {
+                if let Some(suffix) = canonical_url.as_str().strip_prefix(RUFF_GITHUB_URL_PREFIX) {
+                    let mirror_base = astral_mirror_base_url(astral_mirror_url);
+                    let mirror = format!("{mirror_base}{RUFF_MIRROR_SUFFIX}{suffix}");
+                    let mirror_url = parse_url(mirror)?;
+                    if astral_mirror_url.is_some() {
+                        return Ok(vec![mirror_url]);
+                    }
+                    return Ok(vec![mirror_url, canonical_url]);
+                }
+                Ok(vec![canonical_url])
+            }
+            Self::Ty => {
+                if let Some(suffix) = canonical_url.as_str().strip_prefix(TY_GITHUB_URL_PREFIX) {
+                    let mirror_base = astral_mirror_base_url(astral_mirror_url);
+                    let mirror = format!("{mirror_base}{TY_MIRROR_SUFFIX}{suffix}");
+                    let mirror_url = parse_url(mirror)?;
+                    if astral_mirror_url.is_some() {
+                        return Ok(vec![mirror_url]);
+                    }
+                    return Ok(vec![mirror_url, canonical_url]);
+                }
+                Ok(vec![canonical_url])
+            }
+            Self::Uv => Ok(vec![canonical_url]),
+        }
+    }
+
     /// Get the executable name
-    pub fn executable(&self) -> String {
+    fn executable(self) -> String {
         format!("{}{}", self.name(), std::env::consts::EXE_SUFFIX)
     }
 }
@@ -81,14 +212,14 @@ impl fmt::Display for Binary {
 
 /// Archive formats for binary downloads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ArchiveFormat {
+enum ArchiveFormat {
     Zip,
     TarGz,
 }
 
 impl ArchiveFormat {
     /// Get the file extension for this archive format.
-    pub fn extension(&self) -> &'static str {
+    fn extension(self) -> &'static str {
         match self {
             Self::Zip => "zip",
             Self::TarGz => "tar.gz",
@@ -146,8 +277,30 @@ impl fmt::Display for BinVersion {
     }
 }
 
-/// Base URL for the versions manifest.
+/// The canonical GitHub URL prefix for Ruff releases.
+const RUFF_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/ruff/releases/download/";
+
+/// The canonical GitHub URL prefix for ty releases.
+const TY_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/ty/releases/download/";
+
+/// The canonical GitHub URL prefix for uv releases.
+const UV_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/uv/releases/download/";
+
+/// The suffix appended to the Astral mirror base for Ruff releases.
+const RUFF_MIRROR_SUFFIX: &str = "/github/ruff/releases/download/";
+
+/// The suffix appended to the Astral mirror base for ty releases.
+const TY_MIRROR_SUFFIX: &str = "/github/ty/releases/download/";
+
+/// The suffix appended to the Astral mirror base for the versions manifest.
+const VERSIONS_MANIFEST_MIRROR_SUFFIX: &str = "/github/versions/main/v1";
+
+/// The canonical base URL for the versions manifest.
 const VERSIONS_MANIFEST_URL: &str = "https://raw.githubusercontent.com/astral-sh/versions/main/v1";
+
+fn parse_url(url: String) -> Result<DisplaySafeUrl, Error> {
+    DisplaySafeUrl::parse(&url).map_err(|source| Error::UrlParse { url, source })
+}
 
 /// Binary version information from the versions manifest.
 #[derive(Debug, Deserialize)]
@@ -179,15 +332,15 @@ struct BinArtifact {
 pub struct ResolvedVersion {
     /// The version number.
     pub version: Version,
-    /// The download URL for this version and current platform.
-    pub artifact_url: Url,
+    /// The ordered list of download URLs to try for this version and current platform.
+    artifact_urls: Vec<DisplaySafeUrl>,
     /// The archive format.
-    pub archive_format: ArchiveFormat,
+    archive_format: ArchiveFormat,
 }
 
 impl ResolvedVersion {
     /// Construct a [`ResolvedVersion`] from a [`Binary`] and a [`Version`] by inferring the
-    /// download URL and archive format from the current platform.
+    /// download URLs and archive format from the current platform.
     pub fn from_version(binary: Binary, version: Version) -> Result<Self, Error> {
         let platform = Platform::from_env()?;
         let platform_name = platform.as_cargo_dist_triple();
@@ -196,10 +349,10 @@ impl ResolvedVersion {
         } else {
             ArchiveFormat::TarGz
         };
-        let artifact_url = binary.download_url(&version, &platform_name, archive_format)?;
+        let artifact_urls = binary.download_urls(&version, &platform_name, archive_format)?;
         Ok(Self {
             version,
-            artifact_url,
+            artifact_urls,
             archive_format,
         })
     }
@@ -215,11 +368,18 @@ pub enum Error {
         source: reqwest_middleware::Error,
     },
 
+    #[error("Failed to read from: {url}")]
+    Stream {
+        url: DisplaySafeUrl,
+        #[source]
+        source: reqwest::Error,
+    },
+
     #[error("Failed to parse URL: {url}")]
     UrlParse {
         url: String,
         #[source]
-        source: url::ParseError,
+        source: uv_redacted::DisplaySafeUrlError,
     },
 
     #[error("Failed to extract archive")]
@@ -240,11 +400,16 @@ pub enum Error {
     #[error("Failed to detect platform")]
     Platform(#[from] uv_platform::Error),
 
-    #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
+    #[error(
+        "Request failed after {retries} {subject} in {duration:.1}s",
+        subject = if *retries > 1 { "retries" } else { "retry" },
+        duration = duration.as_secs_f32()
+    )]
     RetriedError {
         #[source]
         err: Box<Self>,
         retries: u32,
+        duration: Duration,
     },
 
     #[error("Failed to fetch version manifest from: {url}")]
@@ -279,18 +444,59 @@ pub enum Error {
 
     #[error("Unsupported archive format: {0}")]
     UnsupportedArchiveFormat(String),
+
+    #[error(transparent)]
+    SystemTime(#[from] SystemTimeError),
 }
 
-impl Error {
-    /// Return the number of retries that were made to complete this request before this error was
-    /// returned.
-    ///
-    /// Note that e.g. 3 retries equates to 4 attempts.
+impl RetriableError for Error {
     fn retries(&self) -> u32 {
         if let Self::RetriedError { retries, .. } = self {
             return *retries;
         }
         0
+    }
+
+    /// Returns `true` if trying an alternative URL makes sense after this error.
+    ///
+    /// Download and streaming failures qualify, as do malformed manifest responses.
+    fn should_try_next_url(&self) -> bool {
+        match self {
+            Self::Download { .. }
+            | Self::ManifestFetch { .. }
+            | Self::ManifestParse(..)
+            | Self::ManifestUtf8(..) => true,
+            Self::Stream { .. } => true,
+            Self::RetriedError { err, .. } => err.should_try_next_url(),
+            err => {
+                // Walk the error chain to see if there's a nested download or streaming error.
+                let mut source = err.source();
+                while let Some(err) = source {
+                    if let Some(io_err) = err.downcast_ref::<io::Error>() {
+                        if io_err
+                            .get_ref()
+                            .and_then(|e| e.downcast_ref::<Self>() as Option<&Self>)
+                            .is_some_and(|e| {
+                                matches!(e, Self::Stream { .. } | Self::Download { .. })
+                            })
+                        {
+                            return true;
+                        }
+                    }
+                    source = err.source();
+                }
+                // Make sure all retriable errors also trigger a fallback to the next URL.
+                retryable_on_request_failure(err) == Some(Retryable::Transient)
+            }
+        }
+    }
+
+    fn into_retried(self, retries: u32, duration: Duration) -> Self {
+        Self::RetriedError {
+            err: Box::new(self),
+            retries,
+            duration,
+        }
     }
 }
 
@@ -313,62 +519,41 @@ pub async fn find_matching_version(
     let platform = Platform::from_env()?;
     let platform_name = platform.as_cargo_dist_triple();
 
-    let manifest_url = format!("{}/{}.ndjson", VERSIONS_MANIFEST_URL, binary.name());
-    let manifest_url_parsed = Url::parse(&manifest_url).map_err(|source| Error::UrlParse {
-        url: manifest_url.clone(),
-        source,
-    })?;
+    let manifest_urls = binary.manifest_urls()?;
 
-    let mut retry_state = RetryState::start(*retry_policy, manifest_url_parsed.clone());
-
-    loop {
-        let result = fetch_and_find_matching_version(
-            binary,
-            constraints,
-            exclude_newer,
-            &platform_name,
-            &manifest_url,
-            &manifest_url_parsed,
-            client,
-        )
-        .await;
-
-        match result {
-            Ok(resolved) => return Ok(resolved),
-            Err(err) => {
-                if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
-                    retry_state.sleep_backoff(backoff).await;
-                    continue;
-                }
-                return if retry_state.total_retries() > 0 {
-                    Err(Error::RetriedError {
-                        err: Box::new(err),
-                        retries: retry_state.total_retries(),
-                    })
-                } else {
-                    Err(err)
-                };
-            }
-        }
-    }
+    fetch_with_url_fallback(
+        &manifest_urls,
+        *retry_policy,
+        &format!("manifest for `{binary}`"),
+        |url| {
+            fetch_and_find_matching_version(
+                binary,
+                constraints,
+                exclude_newer,
+                &platform_name,
+                url,
+                client,
+            )
+        },
+    )
+    .await
 }
 
-/// Inner function that fetches the manifest and finds a matching version.
+/// Fetch the manifest from a single URL and find a matching version.
 ///
-/// This is separated from [`find_matching_version`] to allow retry logic to wrap
-/// the entire streaming operation.
+/// Separated from [`find_matching_version`] so that [`fetch_with_url_fallback`] can call it
+/// independently for each URL in the fallback list.
 async fn fetch_and_find_matching_version(
     binary: Binary,
     constraints: Option<&uv_pep440::VersionSpecifiers>,
     exclude_newer: Option<jiff::Timestamp>,
     platform_name: &str,
-    manifest_url: &str,
-    manifest_url_parsed: &Url,
+    manifest_url: DisplaySafeUrl,
     client: &BaseClient,
 ) -> Result<ResolvedVersion, Error> {
     let response = client
-        .for_host(&DisplaySafeUrl::from_url(manifest_url_parsed.clone()))
-        .get(manifest_url_parsed.clone())
+        .for_host(&manifest_url)
+        .get(Url::from(manifest_url.clone()))
         .send()
         .await
         .map_err(|source| Error::ManifestFetch {
@@ -390,12 +575,13 @@ async fn fetch_and_find_matching_version(
             return Ok(None);
         }
         let version_info: BinVersionInfo = serde_json::from_str(line_str)?;
-        Ok(check_version_match(
+        check_version_match(
+            binary,
             &version_info,
             constraints,
             exclude_newer,
             platform_name,
-        ))
+        )
     };
 
     // Stream the response line by line
@@ -442,26 +628,27 @@ async fn fetch_and_find_matching_version(
 
 /// Check if a version matches the constraints and find the artifact for the platform.
 ///
-/// Returns `Some(resolved)` if the version matches and an artifact is found,
-/// `None` if the version doesn't match or no artifact is available for the platform.
+/// Returns `Ok(Some(resolved))` if the version matches and an artifact is found,
+/// `Ok(None)` if the version doesn't match or no artifact is available for the platform.
 fn check_version_match(
+    binary: Binary,
     version_info: &BinVersionInfo,
     constraints: Option<&uv_pep440::VersionSpecifiers>,
     exclude_newer: Option<jiff::Timestamp>,
     platform_name: &str,
-) -> Option<ResolvedVersion> {
+) -> Result<Option<ResolvedVersion>, Error> {
     // Skip versions newer than the exclude_newer cutoff
     if let Some(cutoff) = exclude_newer
         && version_info.date > cutoff
     {
-        return None;
+        return Ok(None);
     }
 
     // Skip versions that don't match the constraints
     if let Some(constraints) = constraints
         && !constraints.contains(&version_info.version)
     {
-        return None;
+        return Ok(None);
     }
 
     // Find an artifact matching the platform, trusting whichever archive format the
@@ -471,7 +658,7 @@ fn check_version_match(
             continue;
         }
 
-        let Ok(artifact_url) = Url::parse(&artifact.url) else {
+        let Ok(canonical_url) = DisplaySafeUrl::parse(&artifact.url) else {
             continue;
         };
 
@@ -481,14 +668,14 @@ fn check_version_match(
             _ => continue,
         };
 
-        return Some(ResolvedVersion {
+        return Ok(Some(ResolvedVersion {
             version: version_info.version.clone(),
-            artifact_url,
+            artifact_urls: binary.mirror_urls(canonical_url)?,
             archive_format,
-        });
+        }));
     }
 
-    None
+    Ok(None)
 }
 
 /// Install the given binary from a [`ResolvedVersion`].
@@ -503,10 +690,10 @@ pub async fn bin_install(
     let platform = Platform::from_env()?;
     let platform_name = platform.as_cargo_dist_triple();
 
-    bin_install_from_url(
+    bin_install_from_urls(
         binary,
         &resolved.version,
-        &resolved.artifact_url,
+        &resolved.artifact_urls,
         resolved.archive_format,
         &platform_name,
         client,
@@ -517,11 +704,11 @@ pub async fn bin_install(
     .await
 }
 
-/// Install a binary from a specific URL.
-async fn bin_install_from_url(
+/// Install a binary from an ordered list of URLs, trying each in sequence.
+async fn bin_install_from_urls(
     binary: Binary,
     version: &Version,
-    download_url: &Url,
+    download_urls: &[DisplaySafeUrl],
     format: ArchiveFormat,
     platform_name: &str,
     client: &BaseClient,
@@ -529,7 +716,6 @@ async fn bin_install_from_url(
     cache: &Cache,
     reporter: &dyn Reporter,
 ) -> Result<PathBuf, Error> {
-    let download_url = DisplaySafeUrl::from_url(download_url.clone());
     let cache_entry = CacheEntry::new(
         cache
             .bucket(CacheBucket::Binaries)
@@ -548,17 +734,23 @@ async fn bin_install_from_url(
     let cache_dir = cache_entry.dir();
     fs_err::tokio::create_dir_all(&cache_dir).await?;
 
-    let path = download_and_unpack_with_retry(
-        binary,
-        version,
-        client,
-        retry_policy,
-        cache,
-        reporter,
-        platform_name,
-        format,
-        &download_url,
-        &cache_entry,
+    let path = fetch_with_url_fallback(
+        download_urls,
+        *retry_policy,
+        &format!("`{binary}`"),
+        |url| {
+            download_and_unpack(
+                binary,
+                version,
+                client,
+                cache,
+                reporter,
+                platform_name,
+                format,
+                url,
+                &cache_entry,
+            )
+        },
     )
     .await?;
 
@@ -580,58 +772,9 @@ async fn bin_install_from_url(
     Ok(path)
 }
 
-/// Download and unpack a binary with retry on stream failures.
-async fn download_and_unpack_with_retry(
-    binary: Binary,
-    version: &Version,
-    client: &BaseClient,
-    retry_policy: &ExponentialBackoff,
-    cache: &Cache,
-    reporter: &dyn Reporter,
-    platform_name: &str,
-    format: ArchiveFormat,
-    download_url: &DisplaySafeUrl,
-    cache_entry: &CacheEntry,
-) -> Result<PathBuf, Error> {
-    let mut retry_state = RetryState::start(*retry_policy, download_url.clone());
-
-    loop {
-        let result = download_and_unpack(
-            binary,
-            version,
-            client,
-            cache,
-            reporter,
-            platform_name,
-            format,
-            download_url,
-            cache_entry,
-        )
-        .await;
-
-        match result {
-            Ok(path) => return Ok(path),
-            Err(err) => {
-                if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
-                    retry_state.sleep_backoff(backoff).await;
-                    continue;
-                }
-                return if retry_state.total_retries() > 0 {
-                    Err(Error::RetriedError {
-                        err: Box::new(err),
-                        retries: retry_state.total_retries(),
-                    })
-                } else {
-                    Err(err)
-                };
-            }
-        }
-    }
-}
-
-/// Download and unpackage a binary,
+/// Download and unpack a binary from a single URL.
 ///
-/// NOTE [`download_and_unpack_with_retry`] should be used instead.
+/// Use [`bin_install_from_urls`] (via [`fetch_with_url_fallback`]) to get URL-fallback and retry.
 async fn download_and_unpack(
     binary: Binary,
     version: &Version,
@@ -640,14 +783,14 @@ async fn download_and_unpack(
     reporter: &dyn Reporter,
     platform_name: &str,
     format: ArchiveFormat,
-    download_url: &DisplaySafeUrl,
+    download_url: DisplaySafeUrl,
     cache_entry: &CacheEntry,
 ) -> Result<PathBuf, Error> {
     // Create a temporary directory for extraction
     let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::Binaries))?;
 
     let response = client
-        .for_host(download_url)
+        .for_host(&download_url)
         .get(Url::from(download_url.clone()))
         .send()
         .await
@@ -670,6 +813,8 @@ async fn download_and_unpack(
             return Err(Error::RetriedError {
                 err: Box::new(err),
                 retries,
+                // This value is overwritten in `download_and_unpack_with_retry`.
+                duration: Duration::default(),
             });
         }
         return Err(err);
@@ -685,14 +830,19 @@ async fn download_and_unpack(
     // Stream download directly to extraction
     let reader = response
         .bytes_stream()
-        .map_err(std::io::Error::other)
+        .map_err(|err| {
+            std::io::Error::other(Error::Stream {
+                url: download_url.clone(),
+                source: err,
+            })
+        })
         .into_async_read()
         .compat();
 
     let id = reporter.on_download_start(binary.name(), version, size);
     let mut progress_reader = ProgressReader::new(reader, id, reporter);
     stream::archive(
-        download_url,
+        &download_url,
         &mut progress_reader,
         format.into(),
         temp_dir.path(),
@@ -771,5 +921,458 @@ where
                 self.reporter
                     .on_download_progress(self.index, buf.filled().len() as u64);
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use std::io::Write;
+    use uv_client::{BaseClientBuilder, fetch_with_url_fallback, retryable_on_request_failure};
+    use uv_redacted::DisplaySafeUrl;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::*;
+
+    async fn spawn_manifest_server(response: ResponseTemplate) -> (DisplaySafeUrl, MockServer) {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/uv.ndjson"))
+            .respond_with(response)
+            .mount(&server)
+            .await;
+
+        (
+            DisplaySafeUrl::parse(&format!("{}/uv.ndjson", server.uri())).unwrap(),
+            server,
+        )
+    }
+
+    fn manifest_response(body: &str) -> ResponseTemplate {
+        ResponseTemplate::new(200).set_body_raw(body.to_owned(), "application/x-ndjson")
+    }
+
+    fn not_found_response() -> ResponseTemplate {
+        ResponseTemplate::new(404)
+    }
+
+    fn uv_manifest_line(version: &str, platform: &str) -> String {
+        let extension = if cfg!(windows) { "zip" } else { "tar.gz" };
+        let url = format!(
+            "https://github.com/astral-sh/uv/releases/download/{version}/uv-{platform}.{extension}"
+        );
+
+        format!(
+            "{}\n",
+            json!({
+                "version": version,
+                "date": "2025-01-01T00:00:00Z",
+                "artifacts": [{
+                    "platform": platform,
+                    "url": url,
+                    "archive_format": extension,
+                }],
+            })
+        )
+    }
+
+    async fn resolve_version_from_manifest_urls(
+        urls: &[DisplaySafeUrl],
+        constraints: Option<&VersionSpecifiers>,
+    ) -> Result<ResolvedVersion, Error> {
+        let platform = Platform::from_env().unwrap();
+        let platform_name = platform.as_cargo_dist_triple();
+        let client_builder = BaseClientBuilder::default().retries(0);
+        let retry_policy = client_builder.retry_policy();
+        let client = client_builder.build().expect("failed to build base client");
+
+        fetch_with_url_fallback(urls, retry_policy, "manifest for `uv`", |url| {
+            fetch_and_find_matching_version(
+                Binary::Uv,
+                constraints,
+                None,
+                &platform_name,
+                url,
+                &client,
+            )
+        })
+        .await
+    }
+
+    #[test]
+    fn test_uv_download_urls() {
+        let urls = Binary::Uv
+            .download_urls(
+                &Version::new([0, 6, 0]),
+                "x86_64-unknown-linux-gnu",
+                ArchiveFormat::TarGz,
+            )
+            .expect("uv download URLs should be valid");
+
+        let urls = urls
+            .into_iter()
+            .map(|url| url.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            urls,
+            vec![
+                "https://github.com/astral-sh/uv/releases/download/0.6.0/uv-x86_64-unknown-linux-gnu.tar.gz"
+                    .to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_ruff_download_urls_custom_astral_mirror() {
+        let urls = Binary::Ruff
+            .download_urls_with_astral_mirror(
+                &Version::new([0, 15, 1]),
+                "x86_64-unknown-linux-gnu",
+                ArchiveFormat::TarGz,
+                Some("https://nexus.example.com/repository/releases.astral.sh/"),
+            )
+            .expect("ruff download URLs should be valid");
+
+        let urls = urls
+            .into_iter()
+            .map(|url| url.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            urls,
+            vec![
+                "https://nexus.example.com/repository/releases.astral.sh/github/ruff/releases/download/0.15.1/ruff-x86_64-unknown-linux-gnu.tar.gz"
+                    .to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_ruff_download_urls_empty_astral_mirror_uses_default() {
+        let default_urls = Binary::Ruff
+            .download_urls_with_astral_mirror(
+                &Version::new([0, 15, 1]),
+                "x86_64-unknown-linux-gnu",
+                ArchiveFormat::TarGz,
+                None,
+            )
+            .expect("ruff download URLs should be valid");
+        let empty_urls = Binary::Ruff
+            .download_urls_with_astral_mirror(
+                &Version::new([0, 15, 1]),
+                "x86_64-unknown-linux-gnu",
+                ArchiveFormat::TarGz,
+                Some(""),
+            )
+            .expect("ruff download URLs should be valid");
+
+        assert_eq!(default_urls, empty_urls);
+    }
+
+    #[test]
+    fn test_ty_download_urls_custom_astral_mirror() {
+        let urls = Binary::Ty
+            .download_urls_with_astral_mirror(
+                &Version::new([0, 0, 1]),
+                "x86_64-unknown-linux-gnu",
+                ArchiveFormat::TarGz,
+                Some("https://nexus.example.com/repository/releases.astral.sh/"),
+            )
+            .expect("ty download URLs should be valid");
+
+        let urls = urls
+            .into_iter()
+            .map(|url| url.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            urls,
+            vec![
+                "https://nexus.example.com/repository/releases.astral.sh/github/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz"
+                    .to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_ty_download_urls_use_default_astral_mirror_then_github() {
+        let default_urls = Binary::Ty
+            .download_urls_with_astral_mirror(
+                &Version::new([0, 0, 1]),
+                "x86_64-unknown-linux-gnu",
+                ArchiveFormat::TarGz,
+                None,
+            )
+            .expect("ty download URLs should be valid");
+        let empty_urls = Binary::Ty
+            .download_urls_with_astral_mirror(
+                &Version::new([0, 0, 1]),
+                "x86_64-unknown-linux-gnu",
+                ArchiveFormat::TarGz,
+                Some(""),
+            )
+            .expect("ty download URLs should be valid");
+
+        assert_eq!(default_urls, empty_urls);
+        assert_eq!(
+            default_urls,
+            vec![
+                DisplaySafeUrl::parse(
+                    "https://releases.astral.sh/github/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz",
+                )
+                .expect("default Astral mirror ty URL should be valid"),
+                DisplaySafeUrl::parse(
+                    "https://github.com/astral-sh/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz",
+                )
+                .expect("canonical ty URL should be valid"),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_manifest_urls_custom_astral_mirror() {
+        for (binary, filename) in [
+            (Binary::Ruff, "ruff.ndjson"),
+            (Binary::Ty, "ty.ndjson"),
+            (Binary::Uv, "uv.ndjson"),
+        ] {
+            let urls = binary
+                .manifest_urls_with_astral_mirror(Some(
+                    "https://nexus.example.com/repository/releases.astral.sh/",
+                ))
+                .expect("manifest URLs should be valid");
+
+            let urls = urls
+                .into_iter()
+                .map(|url| url.to_string())
+                .collect::<Vec<_>>();
+            assert_eq!(
+                urls,
+                vec![format!(
+                    "https://nexus.example.com/repository/releases.astral.sh/github/versions/main/v1/{filename}"
+                )]
+            );
+        }
+    }
+
+    #[test]
+    fn test_ruff_mirror_urls_custom_astral_mirror() {
+        let canonical_url = DisplaySafeUrl::parse(
+            "https://github.com/astral-sh/ruff/releases/download/0.15.1/ruff-x86_64-unknown-linux-gnu.tar.gz",
+        )
+        .unwrap();
+        let urls = Binary::Ruff
+            .mirror_urls_with_astral_mirror(
+                canonical_url,
+                Some("https://nexus.example.com/repository/releases.astral.sh/"),
+            )
+            .expect("mirror URLs should be valid");
+
+        let urls = urls
+            .into_iter()
+            .map(|url| url.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            urls,
+            vec![
+                "https://nexus.example.com/repository/releases.astral.sh/github/ruff/releases/download/0.15.1/ruff-x86_64-unknown-linux-gnu.tar.gz"
+                    .to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_ty_mirror_urls_custom_astral_mirror() {
+        let canonical_url = DisplaySafeUrl::parse(
+            "https://github.com/astral-sh/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz",
+        )
+        .expect("canonical ty URL should be valid");
+        let urls = Binary::Ty
+            .mirror_urls_with_astral_mirror(
+                canonical_url,
+                Some("https://nexus.example.com/repository/releases.astral.sh/"),
+            )
+            .expect("mirror URLs should be valid");
+
+        let urls = urls
+            .into_iter()
+            .map(|url| url.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            urls,
+            vec![
+                "https://nexus.example.com/repository/releases.astral.sh/github/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz"
+                    .to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_ty_mirror_urls_use_default_astral_mirror_then_github() {
+        let canonical_url = DisplaySafeUrl::parse(
+            "https://github.com/astral-sh/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz",
+        )
+        .expect("canonical ty URL should be valid");
+        let default_urls = Binary::Ty
+            .mirror_urls_with_astral_mirror(canonical_url.clone(), None)
+            .expect("mirror URLs should be valid");
+        let empty_urls = Binary::Ty
+            .mirror_urls_with_astral_mirror(canonical_url.clone(), Some(""))
+            .expect("mirror URLs should be valid");
+
+        assert_eq!(default_urls, empty_urls);
+        assert_eq!(
+            default_urls,
+            vec![
+                DisplaySafeUrl::parse(
+                    "https://releases.astral.sh/github/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz",
+                )
+                .expect("default Astral mirror ty URL should be valid"),
+                canonical_url,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_manifest_urls_empty_astral_mirror_uses_default() {
+        for binary in [Binary::Ruff, Binary::Ty, Binary::Uv] {
+            let default_urls = binary
+                .manifest_urls_with_astral_mirror(None)
+                .expect("manifest URLs should be valid");
+            let empty_urls = binary
+                .manifest_urls_with_astral_mirror(Some(""))
+                .expect("manifest URLs should be valid");
+            assert_eq!(default_urls, empty_urls);
+        }
+    }
+
+    #[test]
+    fn test_ruff_mirror_urls_empty_astral_mirror_uses_default() {
+        let canonical_url = DisplaySafeUrl::parse(
+            "https://github.com/astral-sh/ruff/releases/download/0.15.1/ruff-x86_64-unknown-linux-gnu.tar.gz",
+        )
+        .unwrap();
+        let default_urls = Binary::Ruff
+            .mirror_urls_with_astral_mirror(canonical_url.clone(), None)
+            .expect("mirror URLs should be valid");
+        let empty_urls = Binary::Ruff
+            .mirror_urls_with_astral_mirror(canonical_url, Some(""))
+            .expect("mirror URLs should be valid");
+
+        assert_eq!(default_urls, empty_urls);
+    }
+
+    #[tokio::test]
+    async fn test_manifest_falls_back_on_404() {
+        let platform = Platform::from_env().unwrap();
+        let platform_name = platform.as_cargo_dist_triple();
+        let (mirror_url, mirror_server) = spawn_manifest_server(not_found_response()).await;
+        let (canonical_url, canonical_server) = spawn_manifest_server(manifest_response(
+            &uv_manifest_line("1.2.3", &platform_name),
+        ))
+        .await;
+
+        let resolved = resolve_version_from_manifest_urls(&[mirror_url, canonical_url], None)
+            .await
+            .expect("404 from mirror should fall back to canonical manifest");
+
+        assert_eq!(resolved.version, Version::new([1, 2, 3]));
+        assert_eq!(mirror_server.received_requests().await.unwrap().len(), 1);
+        assert_eq!(canonical_server.received_requests().await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_manifest_falls_back_on_parse_error() {
+        let platform = Platform::from_env().unwrap();
+        let platform_name = platform.as_cargo_dist_triple();
+        let (mirror_url, mirror_server) =
+            spawn_manifest_server(manifest_response("{not json}\n")).await;
+        let (canonical_url, canonical_server) = spawn_manifest_server(manifest_response(
+            &uv_manifest_line("1.2.3", &platform_name),
+        ))
+        .await;
+
+        let resolved = resolve_version_from_manifest_urls(&[mirror_url, canonical_url], None)
+            .await
+            .expect("parse failure from mirror should fall back to canonical manifest");
+
+        assert_eq!(resolved.version, Version::new([1, 2, 3]));
+        assert_eq!(mirror_server.received_requests().await.unwrap().len(), 1);
+        assert_eq!(canonical_server.received_requests().await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_manifest_no_matching_version_does_not_fallback() {
+        let platform = Platform::from_env().unwrap();
+        let platform_name = platform.as_cargo_dist_triple();
+        let (mirror_url, mirror_server) = spawn_manifest_server(manifest_response(
+            &uv_manifest_line("1.2.3", &platform_name),
+        ))
+        .await;
+        let (canonical_url, canonical_server) = spawn_manifest_server(manifest_response(
+            &uv_manifest_line("9.9.9", &platform_name),
+        ))
+        .await;
+        let constraints =
+            VersionSpecifiers::from(VersionSpecifier::equals_version(Version::new([9, 9, 9])));
+
+        let err =
+            resolve_version_from_manifest_urls(&[mirror_url, canonical_url], Some(&constraints))
+                .await
+                .expect_err("no matching version should not fall back to canonical manifest");
+
+        assert!(matches!(err, Error::NoMatchingVersion { .. }));
+        assert_eq!(mirror_server.received_requests().await.unwrap().len(), 1);
+        assert_eq!(canonical_server.received_requests().await.unwrap().len(), 0);
+    }
+
+    /// Verify that `should_try_next_url` returns `true` even for streaming errors
+    /// that `retryable_on_request_failure` does not recognise as transient.
+    ///
+    /// This exercises a realistic body-streaming protocol failure: the server
+    /// advertises chunked transfer encoding but sends an invalid chunk size.
+    #[tokio::test]
+    async fn test_non_retryable_stream_error_triggers_url_fallback() {
+        use futures::TryStreamExt;
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = std::io::Read::read(&mut stream, &mut buf);
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nZZZ\r\nhello\r\n0\r\n\r\n",
+                )
+                .unwrap();
+        });
+
+        let url = DisplaySafeUrl::parse(&format!("http://{addr}/ruff.tar.gz")).unwrap();
+        let client = BaseClientBuilder::default()
+            .build()
+            .expect("failed to build base client");
+        let response = client
+            .for_host(&url)
+            .get(Url::from(url.clone()))
+            .send()
+            .await
+            .unwrap();
+
+        let reqwest_err = response.bytes_stream().try_next().await.unwrap_err();
+        assert!(reqwest_err.is_body() || reqwest_err.is_decode());
+
+        let err = Error::Extract {
+            source: ExtractError::Io(io::Error::other(Error::Stream {
+                url,
+                source: reqwest_err,
+            })),
+        };
+
+        assert!(retryable_on_request_failure(&err).is_none());
+        assert!(
+            err.should_try_next_url(),
+            "non-retryable streaming error should still trigger URL fallback, got: {err}"
+        );
     }
 }

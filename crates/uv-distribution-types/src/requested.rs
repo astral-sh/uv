@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 
 use crate::{
     Dist, DistributionId, DistributionMetadata, Identifier, InstalledDist, Name, ResourceId,
-    VersionOrUrlRef,
+    VersionId, VersionOrUrlRef,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -41,6 +41,13 @@ impl DistributionMetadata for RequestedDist {
         match self {
             Self::Installed(dist) => dist.version_or_url(),
             Self::Installable(dist) => dist.version_or_url(),
+        }
+    }
+
+    fn version_id(&self) -> VersionId {
+        match self {
+            Self::Installed(dist) => dist.version_id(),
+            Self::Installable(dist) => dist.version_id(),
         }
     }
 }

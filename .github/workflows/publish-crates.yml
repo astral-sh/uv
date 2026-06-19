@@ -19,15 +19,20 @@ jobs:
       name: release
     permissions:
       contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
-      # TODO(zanieb): Switch to trusted publishing once published
-      # - uses: rust-lang/crates-io-auth-action@v1
-      #   id: auth
+      - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
+        id: auth
+      - name: Install nightly toolchain
+        # Nightly is required for the unstable `-Zpublish-timeout` flag, which lets us
+        # raise the per-crate wait above the 60s default. crates.io indexing has been
+        # known to lag long enough to exceed that during workspace publishes.
+        run: rustup toolchain install nightly-2026-06-12 --profile minimal --no-self-update
       - name: Publish workspace crates
         # Note `--no-verify` is safe because we do a publish dry-run elsewhere in CI
-        run: cargo publish --workspace --no-verify
+        run: python3 scripts/publish-crates.py --cargo cargo +nightly-2026-06-12 --no-verify -- -Zpublish-timeout --config 'publish.timeout=600'
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

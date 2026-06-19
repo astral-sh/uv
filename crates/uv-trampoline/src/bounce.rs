@@ -1,4 +1,3 @@
-#![allow(clippy::disallowed_types)]
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
@@ -143,42 +142,14 @@ fn make_child_cmdline() -> CString {
             // SAFETY: `std::env::set_var` is safe to call on Windows, and
             // this code only ever runs on Windows.
             unsafe {
-                // Setting this env var will cause `getpath.py` to set
-                // `executable` to the path to this trampoline. This is
-                // the approach taken by CPython for Python Launchers
-                // (in `launcher.c`). This allows virtual environments to
-                // be correctly detected when using trampolines.
-                std::env::set_var(EnvVars::PYVENV_LAUNCHER, &executable_name);
-
-                // If this is not a virtual environment, set `PYTHONHOME` to
-                // the parent directory of the executable. This ensures that
-                // the correct installation directories are added to `sys.path`
-                // when running with a junction trampoline.
-                //
-                // We use a marker variable (`UV_INTERNAL__PYTHONHOME`) to track
-                // whether `PYTHONHOME` was set by uv. This allows us to:
-                // - Override inherited `PYTHONHOME` from parent Python processes
-                // - Preserve user-defined `PYTHONHOME` values
-                if !is_virtualenv(python_exe.as_path()) {
-                    let python_home = std::env::var(EnvVars::PYTHONHOME).ok();
-                    let marker = std::env::var(EnvVars::UV_INTERNAL__PYTHONHOME).ok();
-
-                    // Only set `PYTHONHOME` if:
-                    // - It's not set, OR
-                    // - It was set by uv (marker matches current `PYTHONHOME`)
-                    let should_override = match (&python_home, &marker) {
-                        (None, _) => true,
-                        (Some(home), Some(m)) if home == m => true,
-                        _ => false,
-                    };
-
-                    if should_override {
-                        let home = python_exe
-                            .parent()
-                            .expect("Python executable should have a parent directory");
-                        std::env::set_var(EnvVars::PYTHONHOME, home);
-                        std::env::set_var(EnvVars::UV_INTERNAL__PYTHONHOME, home);
-                    }
+                if is_virtualenv(&executable_name) {
+                    // Setting this env var will cause `getpath.py` to set
+                    // `executable` to the path to this trampoline. This is
+                    // the approach taken by CPython for Python Launchers
+                    // (in `launcher.c`). This allows virtual environments to
+                    // be correctly detected when using trampolines. This
+                    // environment variable is cleared by getpath.
+                    std::env::set_var(EnvVars::PYVENV_LAUNCHER, &executable_name);
                 }
             }
         }
@@ -452,11 +423,25 @@ pub fn bounce(is_gui: bool) -> ! {
         print_job_error_and_exit("uv trampoline failed to create job object", e);
     });
 
+    // Assign the child to the job object so it gets terminated if the trampoline is killed.
+    //
+    // If the assignment fails, the child may outlive the trampoline on forced kill, but normal
+    // execution (child exits naturally) is unaffected so we ignore the failure. This matches
+    // `distlib`'s approach where `AssignProcessToJobObject` failure is non-fatal [1]. There are
+    // various plausible scenarios where we may fail to assign the child, including simple race
+    // conditions like the child process exiting before assignment.
+    //
+    // See also <https://github.com/astral-sh/uv/pull/18170> which explores a more robust solution
+    // at the cost of increased complexity.
+    //
+    // [1]: https://github.com/pypa/distlib/blob/37df85a61ead2ea2dc48d0e06f7bfe2f209a982c/PC/launcher.c#L835
+    //
     // SAFETY: child_handle is a valid process handle returned by spawn_child.
     if let Err(e) = unsafe { job.assign_process(child_handle) } {
-        print_job_error_and_exit(
-            "uv trampoline failed to assign child process to job object",
-            e,
+        warn!(
+            "uv trampoline failed to assign child process to job object\n  Caused by: {} (os error {})",
+            e.message(),
+            e.code(),
         );
     }
 

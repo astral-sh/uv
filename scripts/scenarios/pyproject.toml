@@ -1,5 +1,0 @@
-[dependency-groups]
-packse = [
-  "chevron-blue",
-  "packse>=0.3.53"
-]

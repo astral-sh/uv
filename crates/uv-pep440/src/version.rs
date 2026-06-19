@@ -436,7 +436,7 @@ impl Version {
     /// The version `1.0min0` is smaller than all other `1.0` versions,
     /// like `1.0a1`, `1.0dev0`, etc.
     #[inline]
-    pub fn min(&self) -> Option<u64> {
+    fn min(&self) -> Option<u64> {
         match self.inner {
             VersionInner::Small { ref small } => small.min(),
             VersionInner::Full { ref full } => full.min,
@@ -449,7 +449,7 @@ impl Version {
     /// The version `1.0max0` is larger than all other `1.0` versions,
     /// like `1.0.post1`, `1.0+local`, etc.
     #[inline]
-    pub fn max(&self) -> Option<u64> {
+    fn max(&self) -> Option<u64> {
         match self.inner {
             VersionInner::Small { ref small } => small.max(),
             VersionInner::Full { ref full } => full.max,
@@ -484,6 +484,23 @@ impl Version {
         self
     }
 
+    /// Return this version's release component at the given precision.
+    ///
+    /// Preserve the epoch, pad missing release segments with zeros, and discard every other
+    /// component. Return `None` for a precision of zero.
+    #[inline]
+    #[must_use]
+    pub fn only_release_at_precision(&self, precision: usize) -> Option<Self> {
+        let release = self
+            .release()
+            .iter()
+            .copied()
+            .chain(std::iter::repeat(0))
+            .take(precision)
+            .collect::<Vec<_>>();
+        (!release.is_empty()).then(|| Self::new(release).with_epoch(self.epoch()))
+    }
+
     /// Push the given release number into this version. It will become the
     /// last number in the release component.
     #[inline]
@@ -513,7 +530,7 @@ impl Version {
     /// Set the epoch and return the updated version.
     #[inline]
     #[must_use]
-    pub fn with_epoch(mut self, value: u64) -> Self {
+    pub(crate) fn with_epoch(mut self, value: u64) -> Self {
         if let VersionInner::Small { small } = &mut self.inner {
             if small.set_epoch(value) {
                 return self;
@@ -552,7 +569,7 @@ impl Version {
     /// Set the dev-release component and return the updated version.
     #[inline]
     #[must_use]
-    pub fn with_dev(mut self, value: Option<u64>) -> Self {
+    pub(crate) fn with_dev(mut self, value: Option<u64>) -> Self {
         if let VersionInner::Small { small } = &mut self.inner {
             if small.set_dev(value) {
                 return self;
@@ -565,7 +582,7 @@ impl Version {
     /// Set the local segments and return the updated version.
     #[inline]
     #[must_use]
-    pub fn with_local_segments(mut self, value: Vec<LocalSegment>) -> Self {
+    pub(crate) fn with_local_segments(mut self, value: Vec<LocalSegment>) -> Self {
         if value.is_empty() {
             self.without_local()
         } else {
@@ -577,7 +594,7 @@ impl Version {
     /// Set the local version and return the updated version.
     #[inline]
     #[must_use]
-    pub fn with_local(mut self, value: LocalVersion) -> Self {
+    pub(crate) fn with_local(mut self, value: LocalVersion) -> Self {
         match value {
             LocalVersion::Segments(segments) => self.with_local_segments(segments),
             LocalVersion::Max => {
@@ -618,7 +635,7 @@ impl Version {
     /// Return the version with any segments apart from the minor version of the release removed.
     #[inline]
     #[must_use]
-    pub fn only_minor_release(&self) -> Self {
+    pub(crate) fn only_minor_release(&self) -> Self {
         Self::new(self.release().iter().take(2).copied())
     }
 
@@ -628,8 +645,16 @@ impl Version {
     #[must_use]
     pub fn only_release_trimmed(&self) -> Self {
         if let Some(last_non_zero) = self.release().iter().rposition(|segment| *segment != 0) {
-            if last_non_zero == self.release().len() {
-                // Already trimmed.
+            if last_non_zero + 1 == self.release().len()
+                && self.epoch() == 0
+                && self.pre().is_none()
+                && self.post().is_none()
+                && self.dev().is_none()
+                && self.local().is_empty()
+                && self.min().is_none()
+                && self.max().is_none()
+            {
+                // Already a trimmed release-only version.
                 self.clone()
             } else {
                 Self::new(self.release().iter().take(last_non_zero + 1).copied())
@@ -716,11 +741,11 @@ impl Version {
                     });
                 } else {
                     // Either bump the matching kind or set to 1
-                    if let Some(prerelease) = &mut full.pre {
-                        if prerelease.kind == kind {
-                            prerelease.number += 1;
-                            return;
-                        }
+                    if let Some(prerelease) = &mut full.pre
+                        && prerelease.kind == kind
+                    {
+                        prerelease.number += 1;
+                        return;
                     }
                     full.pre = Some(Prerelease { kind, number: 1 });
                 }
@@ -1610,13 +1635,13 @@ impl VersionPattern {
 
     /// Consumes this pattern and returns ownership of the underlying version.
     #[inline]
-    pub fn into_version(self) -> Version {
+    pub(crate) fn into_version(self) -> Version {
         self.version
     }
 
     /// Returns true if and only if this pattern contains a wildcard.
     #[inline]
-    pub fn is_wildcard(&self) -> bool {
+    pub(crate) fn is_wildcard(&self) -> bool {
         self.wildcard
     }
 }
@@ -1738,12 +1763,12 @@ pub enum LocalVersionSlice<'a> {
 
 impl LocalVersion {
     /// Return an empty local version.
-    pub fn empty() -> Self {
+    fn empty() -> Self {
         Self::Segments(Vec::new())
     }
 
     /// Returns `true` if the local version is empty.
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         match self {
             Self::Segments(segments) => segments.is_empty(),
             Self::Max => false,
@@ -1751,18 +1776,10 @@ impl LocalVersion {
     }
 
     /// Convert the local version segments into a slice.
-    pub fn as_slice(&self) -> LocalVersionSlice<'_> {
+    fn as_slice(&self) -> LocalVersionSlice<'_> {
         match self {
             Self::Segments(segments) => LocalVersionSlice::Segments(segments),
             Self::Max => LocalVersionSlice::Max,
-        }
-    }
-
-    /// Clear the local version segments, if they exist.
-    pub fn clear(&mut self) {
-        match self {
-            Self::Segments(segments) => segments.clear(),
-            Self::Max => *self = Self::Segments(Vec::new()),
         }
     }
 }
@@ -1824,7 +1841,7 @@ impl Ord for LocalVersionSlice<'_> {
 
 impl LocalVersionSlice<'_> {
     /// Return an empty local version.
-    pub const fn empty() -> Self {
+    const fn empty() -> Self {
         Self::Segments(&[])
     }
 
@@ -4218,36 +4235,29 @@ mod tests {
         );
     }
 
-    /// Wraps a `Version` and provides a more "bloated" debug but standard
-    /// representation.
-    ///
-    /// We don't do this by default because it takes up a ton of space, and
-    /// just printing out the display version of the version is quite a bit
-    /// simpler.
-    ///
-    /// Nevertheless, when *testing* version parsing, you really want to
-    /// be able to peek at all of its constituent parts. So we use this in
-    /// assertion failure messages.
-    struct VersionBloatedDebug<'a>(&'a Version);
-
-    impl std::fmt::Debug for VersionBloatedDebug<'_> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("Version")
-                .field("epoch", &self.0.epoch())
-                .field("release", &&*self.0.release())
-                .field("pre", &self.0.pre())
-                .field("post", &self.0.post())
-                .field("dev", &self.0.dev())
-                .field("local", &self.0.local())
-                .field("min", &self.0.min())
-                .field("max", &self.0.max())
-                .finish()
-        }
-    }
-
     impl Version {
+        /// Returns a more "bloated" debug representation of this [`Version`].
+        ///
+        /// We don't do this by default because it takes up a ton of space, and
+        /// just printing out the display version of the version is quite a bit
+        /// simpler.
+        ///
+        /// Nevertheless, when *testing* version parsing, you really want to
+        /// be able to peek at all of its constituent parts. So we use this in
+        /// assertion failure messages.
         pub(crate) fn as_bloated_debug(&self) -> impl std::fmt::Debug + '_ {
-            VersionBloatedDebug(self)
+            std::fmt::from_fn(|f| {
+                f.debug_struct("Version")
+                    .field("epoch", &self.epoch())
+                    .field("release", &&*self.release())
+                    .field("pre", &self.pre())
+                    .field("post", &self.post())
+                    .field("dev", &self.dev())
+                    .field("local", &self.local())
+                    .field("min", &self.min())
+                    .field("max", &self.max())
+                    .finish()
+            })
         }
     }
 
@@ -4263,6 +4273,50 @@ mod tests {
         let v2: Version = "1.2".parse().unwrap();
         assert_eq!(&*v2.release(), &[1, 2]);
         assert_eq!(v2.to_string(), "1.2");
+    }
+
+    #[test]
+    fn only_release_at_precision_preserves_epoch_and_discards_suffixes() {
+        let version = "1!2.3rc1.post2.dev3+local"
+            .parse::<Version>()
+            .expect("valid version");
+        assert_eq!(
+            version
+                .only_release_at_precision(4)
+                .expect("non-zero precision")
+                .to_string(),
+            "1!2.3.0.0"
+        );
+        assert_eq!(version.only_release_at_precision(0), None);
+    }
+
+    #[test]
+    fn only_release_trimmed_discards_non_release_segments() {
+        for version in ["1.2a1", "1.2.post1", "1!1.2", "1.2+local", "1.2.dev1"] {
+            let version = version.parse::<Version>().unwrap();
+            assert_eq!(version.only_release_trimmed(), Version::new([1, 2]));
+        }
+
+        assert_eq!(
+            Version::new([1, 2])
+                .with_min(Some(0))
+                .only_release_trimmed(),
+            Version::new([1, 2])
+        );
+        assert_eq!(
+            Version::new([1, 2])
+                .with_max(Some(0))
+                .only_release_trimmed(),
+            Version::new([1, 2])
+        );
+        assert_eq!(
+            Version::new([1, 2, 0]).only_release_trimmed(),
+            Version::new([1, 2])
+        );
+        assert_eq!(
+            Version::new([1, 2]).only_release_trimmed(),
+            Version::new([1, 2])
+        );
     }
 
     #[test]

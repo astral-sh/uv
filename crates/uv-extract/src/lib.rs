@@ -28,7 +28,7 @@ pub(crate) enum CompressionMethod {
 impl CompressionMethod {
     /// Returns `true` if this is a well-known compression method that we
     /// expect other ZIP implementations to support.
-    pub(crate) fn is_well_known(&self) -> bool {
+    fn is_well_known(&self) -> bool {
         matches!(self, Self::Stored | Self::Deflated | Self::Zstd)
     }
 }
@@ -53,20 +53,6 @@ impl From<async_zip::Compression> for CompressionMethod {
             async_zip::Compression::Bz => Self::Deprecated("bzip2"),
             async_zip::Compression::Lzma => Self::Deprecated("lzma"),
             async_zip::Compression::Xz => Self::Deprecated("xz"),
-            _ => Self::Deprecated("unknown"),
-        }
-    }
-}
-
-impl From<zip::CompressionMethod> for CompressionMethod {
-    fn from(value: zip::CompressionMethod) -> Self {
-        match value {
-            zip::CompressionMethod::Stored => Self::Stored,
-            zip::CompressionMethod::Deflated => Self::Deflated,
-            zip::CompressionMethod::Zstd => Self::Zstd,
-            zip::CompressionMethod::Bzip2 => Self::Deprecated("bzip2"),
-            zip::CompressionMethod::Lzma => Self::Deprecated("lzma"),
-            zip::CompressionMethod::Xz => Self::Deprecated("xz"),
             _ => Self::Deprecated("unknown"),
         }
     }

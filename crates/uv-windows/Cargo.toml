@@ -1,6 +1,6 @@
 [package]
 name = "uv-windows"
-version = "0.0.22"
+version = "0.0.55"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -14,10 +14,12 @@ workspace = true
 
 [lib]
 doctest = false
+test = false
 
 [features]
 default = ["std"]
-std = []
+std = ["dep:arrayvec"]
 
 [target.'cfg(windows)'.dependencies]
+arrayvec = { workspace = true, optional = true }
 windows = { workspace = true }

@@ -5,16 +5,15 @@ use std::path::Path;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
+use uv_errors::ErrorWithHints;
 use uv_fs::Simplified;
-use uv_preview::Preview;
-use uv_python::downloads::ManagedPythonDownloadList;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::{
     ExitStatus,
@@ -36,8 +35,8 @@ pub(crate) async fn find(
     python_downloads_json_url: Option<&str>,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let environment_preference = if system {
         EnvironmentPreference::OnlySystem
@@ -45,19 +44,28 @@ pub(crate) async fn find(
         EnvironmentPreference::Any
     };
 
-    let workspace_cache = WorkspaceCache::default();
     let project = if no_project {
         None
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-            .await
+        match VirtualProject::discover(
+            project_dir,
+            &DiscoveryOptions::default(),
+            cache,
+            workspace_cache,
+        )
+        .await
         {
             Ok(project) => Some(project),
-            Err(WorkspaceError::MissingProject(_)) => None,
-            Err(WorkspaceError::MissingPyprojectToml) => None,
-            Err(WorkspaceError::NonWorkspace(_)) => None,
             Err(err) => {
-                warn_user_once!("{err}");
+                // Ignore missing or unmanaged workspaces in Python discovery.
+                if !matches!(
+                    err.as_ref(),
+                    WorkspaceErrorKind::MissingProject(_)
+                        | WorkspaceErrorKind::MissingPyprojectToml
+                        | WorkspaceErrorKind::NonWorkspace(_)
+                ) {
+                    warn_user_once!("{err}");
+                }
                 None
             }
         }
@@ -78,17 +86,20 @@ pub(crate) async fn find(
     )
     .await?;
 
-    let client = client_builder.clone().retries(0).build();
-    let download_list = ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
-
-    let python = PythonInstallation::find(
-        &python_request.unwrap_or_default(),
+    let python_request = python_request.unwrap_or_default();
+    let python = PythonInstallation::find_existing(
+        &python_request,
         environment_preference,
         python_preference,
-        &download_list,
         cache,
-        preview,
     )?;
+    python
+        .download_and_warn_if_outdated_prerelease(
+            &python_request,
+            client_builder,
+            python_downloads_json_url,
+        )
+        .await?;
 
     // Warn if the discovered Python version is incompatible with the current workspace
     if let Some(requires_python) = requires_python {
@@ -134,7 +145,6 @@ pub(crate) async fn find_script(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let interpreter = match ScriptInterpreter::discover(
         script,
@@ -148,12 +158,15 @@ pub(crate) async fn find_script(
         Some(false),
         cache,
         printer,
-        preview,
     )
     .await
     {
         Err(error) => {
-            writeln!(printer.stderr(), "{error}")?;
+            writeln!(
+                printer.stderr(),
+                "{}",
+                ErrorWithHints::new(&error, uv_errors::Hint::hints(&error))
+            )?;
             return Ok(ExitStatus::Failure);
         }
         Ok(ScriptInterpreter::Interpreter(interpreter)) => interpreter,

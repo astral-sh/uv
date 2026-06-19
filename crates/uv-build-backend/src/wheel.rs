@@ -1,29 +1,43 @@
+use async_zip::base::write::{EntrySeekableWriter, ZipFileWriter};
+use async_zip::{Compression, ZipEntryBuilder};
 use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD as base64};
 use fs_err::File;
+use futures_lite::future::block_on;
+use futures_lite::io::{AsyncSeek, AsyncWrite, AsyncWriteExt};
 use globset::{GlobSet, GlobSetBuilder};
 use rustc_hash::FxHashSet;
 use sha2::{Digest, Sha256};
 use std::fmt::{Display, Formatter};
-use std::io::{BufReader, Read, Seek, Write};
+use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::{io, mem};
-use tempfile::NamedTempFile;
 use tracing::{debug, trace};
 use walkdir::WalkDir;
-use zip::{CompressionMethod, ZipWriter};
 
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::PreviewFeature;
 use uv_warnings::warn_user_once;
 
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
-    error_on_venv, find_roots,
+    error_on_venv, find_roots, write_directory_once, write_file_with_directories,
 };
+
+// Files at or below this size are buffered and written with `write_entry_whole`,
+// which was fastest in wheel-writer benchmarks because it can write final ZIP
+// headers without per-chunk async writes. The 16 MiB limit keeps typical source
+// files on that fast path without buffering very large data files wholesale.
+const WHOLE_FILE_ZIP_ENTRY_LIMIT: u64 = 16 * 1024 * 1024;
+// Buffer size for the large-file streaming fallback. 128 KiB was enough to cut
+// down read/write loop overhead compared to the 8 KiB default while remaining a
+// small fixed allocation for entries that are too large for `write_entry_whole`.
+const ZIP_STREAM_BUFFER_SIZE: usize = 128 * 1024;
 
 /// Build a wheel from the source tree and place it in the output directory.
 pub fn build_wheel(
@@ -32,7 +46,6 @@ pub fn build_wheel(
     metadata_directory: Option<&Path>,
     uv_version: &str,
     show_warnings: bool,
-    preview: Preview,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
@@ -58,7 +71,7 @@ pub fn build_wheel(
         fs_err::remove_file(&wheel_path)?;
     }
 
-    let temp_file = NamedTempFile::new_in(wheel_dir)?;
+    let temp_file = uv_fs::tempfile_in(wheel_dir)?;
     let wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file());
 
     write_wheel(
@@ -68,7 +81,6 @@ pub fn build_wheel(
         uv_version,
         wheel_writer,
         show_warnings,
-        preview,
     )?;
 
     temp_file
@@ -83,7 +95,6 @@ pub fn list_wheel(
     source_tree: &Path,
     uv_version: &str,
     show_warnings: bool,
-    preview: Preview,
 ) -> Result<(WheelFilename, FileList), Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
@@ -110,7 +121,6 @@ pub fn list_wheel(
         uv_version,
         writer,
         show_warnings,
-        preview,
     )?;
     Ok((filename, files))
 }
@@ -122,7 +132,6 @@ fn write_wheel(
     uv_version: &str,
     mut wheel_writer: impl DirectoryWriter,
     show_warnings: bool,
-    preview: Preview,
 ) -> Result<(), Error> {
     let settings = pyproject_toml
         .settings()
@@ -162,19 +171,8 @@ fn write_wheel(
     )?;
 
     let mut files_visited = 0;
-    let mut prefix_directories = FxHashSet::default();
+    let mut written_directories = FxHashSet::<PathBuf>::default();
     for module_relative in module_relative {
-        // For convenience, have directories for the whole tree in the wheel
-        for ancestor in module_relative.ancestors().skip(1) {
-            if ancestor == Path::new("") {
-                continue;
-            }
-            // Avoid duplicate directories in the zip.
-            if prefix_directories.insert(ancestor.to_path_buf()) {
-                wheel_writer.write_directory(&ancestor.portable_display().to_string())?;
-            }
-        }
-
         for entry in WalkDir::new(src_root.join(module_relative))
             .sort_by_file_name()
             .into_iter()
@@ -210,9 +208,18 @@ fn write_wheel(
 
             error_on_venv(entry.file_name(), entry.path())?;
 
-            let entry_path = entry_path.portable_display().to_string();
-            debug!("Adding to wheel: {entry_path}");
-            wheel_writer.write_dir_entry(&entry, &entry_path)?;
+            if entry.file_type().is_dir() {
+                continue;
+            }
+
+            debug!("Adding to wheel: {}", entry_path.user_display());
+            write_file_with_directories(
+                &mut wheel_writer,
+                &mut written_directories,
+                Path::new(""),
+                entry_path,
+                entry.path(),
+            )?;
         }
     }
     debug!("Visited {files_visited} files for wheel build");
@@ -235,37 +242,12 @@ fn write_wheel(
         )?;
     }
 
-    // Add the data files
-    for (name, directory) in settings.data.iter() {
-        debug!(
-            "Adding {name} data files from: {}",
-            directory.user_display()
-        );
-        if directory
-            .components()
-            .next()
-            .is_some_and(|component| !matches!(component, Component::CurDir | Component::Normal(_)))
-        {
-            return Err(Error::InvalidDataRoot {
-                name: name.to_string(),
-                path: directory.to_path_buf(),
-            });
-        }
-        let data_dir = format!(
-            "{}-{}.data/{}/",
-            pyproject_toml.name().as_dist_info_name(),
-            pyproject_toml.version(),
-            name
-        );
-
-        wheel_subdir_from_globs(
-            &source_tree.join(directory),
-            &data_dir,
-            &["**".to_string()],
-            &mut wheel_writer,
-            &format!("tool.uv.build-backend.data.{name}"),
-        )?;
-    }
+    write_data_files(
+        source_tree,
+        pyproject_toml,
+        settings.data.iter(),
+        &mut wheel_writer,
+    )?;
 
     debug!("Adding metadata files to wheel");
     let dist_info_dir = write_dist_info(
@@ -274,7 +256,6 @@ fn write_wheel(
         filename,
         source_tree,
         uv_version,
-        preview,
     )?;
     wheel_writer.close(&dist_info_dir)?;
 
@@ -288,7 +269,6 @@ pub fn build_editable(
     metadata_directory: Option<&Path>,
     uv_version: &str,
     show_warnings: bool,
-    preview: Preview,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
@@ -319,7 +299,7 @@ pub fn build_editable(
         fs_err::remove_file(&wheel_path)?;
     }
 
-    let temp_file = NamedTempFile::new_in(wheel_dir)?;
+    let temp_file = uv_fs::tempfile_in(wheel_dir)?;
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file());
 
     debug!("Adding pth file to {}", wheel_path.user_display());
@@ -338,6 +318,13 @@ pub fn build_editable(
         src_root.as_os_str().as_encoded_bytes(),
     )?;
 
+    write_data_files(
+        source_tree,
+        &pyproject_toml,
+        settings.data.iter(),
+        &mut wheel_writer,
+    )?;
+
     debug!("Adding metadata files to: {}", wheel_path.user_display());
     let dist_info_dir = write_dist_info(
         &mut wheel_writer,
@@ -345,7 +332,6 @@ pub fn build_editable(
         &filename,
         source_tree,
         uv_version,
-        preview,
     )?;
     wheel_writer.close(&dist_info_dir)?;
 
@@ -356,12 +342,52 @@ pub fn build_editable(
     Ok(filename)
 }
 
+/// Add files configured via `tool.uv.build-backend.data` to a wheel.
+fn write_data_files<'data>(
+    source_tree: &Path,
+    pyproject_toml: &PyProjectToml,
+    data: impl Iterator<Item = (&'static str, &'data Path)>,
+    wheel_writer: &mut impl DirectoryWriter,
+) -> Result<(), Error> {
+    for (name, directory) in data {
+        debug!(
+            "Adding {name} data files from: {}",
+            directory.user_display()
+        );
+        if directory
+            .components()
+            .next()
+            .is_some_and(|component| !matches!(component, Component::CurDir | Component::Normal(_)))
+        {
+            return Err(Error::InvalidDataRoot {
+                name: name.to_string(),
+                path: directory.to_path_buf(),
+            });
+        }
+        let data_dir = format!(
+            "{}-{}.data/{}/",
+            pyproject_toml.name().as_dist_info_name(),
+            pyproject_toml.version(),
+            name
+        );
+
+        wheel_subdir_from_globs(
+            &source_tree.join(directory),
+            &data_dir,
+            &["**".to_string()],
+            wheel_writer,
+            &format!("tool.uv.build-backend.data.{name}"),
+        )?;
+    }
+
+    Ok(())
+}
+
 /// Write the dist-info directory to the output directory without building the wheel.
 pub fn metadata(
     source_tree: &Path,
     metadata_directory: &Path,
     uv_version: &str,
-    preview: Preview,
 ) -> Result<String, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
@@ -390,7 +416,6 @@ pub fn metadata(
         &filename,
         source_tree,
         uv_version,
-        preview,
     )?;
     wheel_writer.close(&dist_info_dir)?;
 
@@ -408,7 +433,7 @@ struct RecordEntry {
     /// The urlsafe-base64-nopad encoded SHA256 of the files.
     hash: String,
     /// The size of the file in bytes.
-    size: usize,
+    size: u64,
 }
 
 /// Read the input file and write it both to the hasher and the target file.
@@ -421,9 +446,8 @@ fn write_hashed(
     writer: &mut dyn Write,
 ) -> Result<RecordEntry, io::Error> {
     let mut hasher = Sha256::new();
-    let mut size = 0;
-    // 8KB is the default defined in `std::sys_common::io`.
-    let mut buffer = vec![0; 8 * 1024];
+    let mut size: u64 = 0;
+    let mut buffer = vec![0; ZIP_STREAM_BUFFER_SIZE];
     loop {
         let read = match reader.read(&mut buffer) {
             Ok(read) => read,
@@ -436,7 +460,7 @@ fn write_hashed(
         }
         hasher.update(&buffer[..read]);
         writer.write_all(&buffer[..read])?;
-        size += read;
+        size += read as u64;
     }
     Ok(RecordEntry {
         path: path.to_string(),
@@ -535,7 +559,8 @@ fn wheel_subdir_from_globs(
             source: err,
         })?;
 
-    wheel_writer.write_directory(target)?;
+    let mut written_directories = FxHashSet::<PathBuf>::default();
+    let target = Path::new(target);
 
     for entry in WalkDir::new(src)
         .sort_by_file_name()
@@ -576,12 +601,19 @@ fn wheel_subdir_from_globs(
 
         error_on_venv(entry.file_name(), entry.path())?;
 
-        let license_path = Path::new(target)
-            .join(relative)
-            .portable_display()
-            .to_string();
+        if entry.file_type().is_dir() {
+            continue;
+        }
+
         debug!("Adding for {}: {}", globs_field, relative.user_display());
-        wheel_writer.write_dir_entry(&entry, &license_path)?;
+        write_directory_once(wheel_writer, &mut written_directories, target)?;
+        write_file_with_directories(
+            wheel_writer,
+            &mut written_directories,
+            target,
+            relative,
+            entry.path(),
+        )?;
     }
     Ok(())
 }
@@ -595,7 +627,6 @@ fn write_dist_info(
     filename: &WheelFilename,
     root: &Path,
     uv_version: &str,
-    preview: Preview,
 ) -> Result<String, Error> {
     let dist_info_dir = format!(
         "{}-{}.dist-info",
@@ -611,7 +642,7 @@ fn write_dist_info(
         &format!("{dist_info_dir}/WHEEL"),
         wheel_info.to_string().as_bytes(),
     )?;
-    if preview.is_enabled(PreviewFeature::MetadataJson) {
+    if uv_preview::is_enabled(PreviewFeature::MetadataJson) {
         writer.write_bytes(
             &format!("{dist_info_dir}/WHEEL.json"),
             &serde_json::to_vec(&wheel_info).map_err(Error::Json)?,
@@ -632,7 +663,7 @@ fn write_dist_info(
         &format!("{dist_info_dir}/METADATA"),
         metadata.core_metadata_format().as_bytes(),
     )?;
-    if preview.is_enabled(PreviewFeature::MetadataJson) {
+    if uv_preview::is_enabled(PreviewFeature::MetadataJson) {
         writer.write_bytes(
             &format!("{dist_info_dir}/METADATA.json"),
             &serde_json::to_vec(&metadata).map_err(Error::Json)?,
@@ -686,20 +717,88 @@ impl Display for WheelInfo {
     }
 }
 
-/// Zip archive (wheel) writer.
-struct ZipDirectoryWriter<W: Write + Seek> {
-    writer: ZipWriter<W>,
-    compression: CompressionMethod,
+/// ZIP archive (wheel) writer.
+struct ZipDirectoryWriter<W: AsyncWrite + AsyncSeek + Unpin> {
+    writer: ZipFileWriter<W>,
+    compression: Compression,
     /// The entries in the `RECORD` file.
     record: Vec<RecordEntry>,
 }
 
-impl<W: Write + Seek> ZipDirectoryWriter<W> {
+impl<W: AsyncWrite + AsyncSeek + Unpin> ZipDirectoryWriter<W> {
+    // Include the Unix file type bits because `async_zip` writes this mode
+    // directly to the ZIP external attributes. The sync `zip` crate adds
+    // those bits internally when starting file and directory entries.
+    const REGULAR_FILE_MODE: u16 = 0o100_644;
+    const EXECUTABLE_FILE_MODE: u16 = 0o100_755;
+    const DIRECTORY_MODE: u16 = 0o040_755;
+
+    fn entry(path: &str, compression: Compression, mode: u16) -> ZipEntryBuilder {
+        ZipEntryBuilder::new(path.to_string().into(), compression).unix_permissions(mode)
+    }
+
+    /// Add a file with the given name and return a writer for it.
+    fn new_writer<'slf>(
+        &'slf mut self,
+        path: &str,
+        executable_bit: bool,
+    ) -> Result<EntryWriter<'slf, W>, Error> {
+        // Set file permissions: 644 (rw-r--r--) for regular files, 755 (rwxr-xr-x) for executables
+        let mode = if executable_bit {
+            Self::EXECUTABLE_FILE_MODE
+        } else {
+            Self::REGULAR_FILE_MODE
+        };
+        let entry = Self::entry(path, self.compression, mode);
+        let writer = block_on(self.writer.write_entry_seekable(entry))?;
+        Ok(EntryWriter::new(writer))
+    }
+}
+
+struct SyncWriter<W> {
+    writer: W,
+}
+
+impl<W> SyncWriter<W> {
+    fn new(writer: W) -> Self {
+        Self { writer }
+    }
+}
+
+impl<W: Write + Unpin> AsyncWrite for SyncWriter<W> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        _context: &mut Context<'_>,
+        buffer: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Poll::Ready(self.get_mut().writer.write(buffer))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Poll::Ready(self.get_mut().writer.flush())
+    }
+
+    fn poll_close(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.poll_flush(context)
+    }
+}
+
+impl<W: Seek + Unpin> AsyncSeek for SyncWriter<W> {
+    fn poll_seek(
+        self: Pin<&mut Self>,
+        _context: &mut Context<'_>,
+        position: SeekFrom,
+    ) -> Poll<io::Result<u64>> {
+        Poll::Ready(self.get_mut().writer.seek(position))
+    }
+}
+
+impl<W: Write + Seek + Unpin> ZipDirectoryWriter<SyncWriter<W>> {
     /// A wheel writer with deflate compression.
     fn new_wheel(writer: W) -> Self {
         Self {
-            writer: ZipWriter::new(writer),
-            compression: CompressionMethod::Deflated,
+            writer: ZipFileWriter::new(SyncWriter::new(writer)),
+            compression: Compression::Deflate,
             record: Vec::new(),
         }
     }
@@ -710,43 +809,63 @@ impl<W: Write + Seek> ZipDirectoryWriter<W> {
     #[expect(dead_code)]
     fn new_editable(writer: W) -> Self {
         Self {
-            writer: ZipWriter::new(writer),
-            compression: CompressionMethod::Stored,
+            writer: ZipFileWriter::new(SyncWriter::new(writer)),
+            compression: Compression::Stored,
             record: Vec::new(),
         }
     }
+}
 
-    /// Add a file with the given name and return a writer for it.
-    fn new_writer<'slf>(
-        &'slf mut self,
-        path: &str,
-        executable_bit: bool,
-    ) -> Result<Box<dyn Write + 'slf>, Error> {
-        // Set file permissions: 644 (rw-r--r--) for regular files, 755 (rwxr-xr-x) for executables
-        let permissions = if executable_bit { 0o755 } else { 0o644 };
-        let options = zip::write::SimpleFileOptions::default()
-            .unix_permissions(permissions)
-            .compression_method(self.compression);
-        self.writer.start_file(path, options)?;
-        Ok(Box::new(&mut self.writer))
+struct EntryWriter<'writer, W: AsyncWrite + AsyncSeek + Unpin> {
+    writer: Option<EntrySeekableWriter<'writer, W>>,
+}
+
+impl<'writer, W: AsyncWrite + AsyncSeek + Unpin> EntryWriter<'writer, W> {
+    fn new(writer: EntrySeekableWriter<'writer, W>) -> Self {
+        Self {
+            writer: Some(writer),
+        }
+    }
+
+    fn close(mut self) -> Result<(), Error> {
+        let Some(writer) = self.writer.take() else {
+            return Ok(());
+        };
+        block_on(writer.close())?;
+        Ok(())
     }
 }
 
-impl<W: Write + Seek> DirectoryWriter for ZipDirectoryWriter<W> {
+impl<W: AsyncWrite + AsyncSeek + Unpin> Write for EntryWriter<'_, W> {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        let Some(writer) = self.writer.as_mut() else {
+            return Err(io::Error::other(
+                "wheel ZIP entry writer was already closed",
+            ));
+        };
+        block_on(writer.write(buffer))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        let Some(writer) = self.writer.as_mut() else {
+            return Ok(());
+        };
+        block_on(writer.flush())
+    }
+}
+
+impl<W: AsyncWrite + AsyncSeek + Unpin> DirectoryWriter for ZipDirectoryWriter<W> {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         trace!("Adding {}", path);
         // Set appropriate permissions for metadata files (644 = rw-r--r--)
-        let options = zip::write::SimpleFileOptions::default()
-            .unix_permissions(0o644)
-            .compression_method(self.compression);
-        self.writer.start_file(path, options)?;
-        self.writer.write_all(bytes)?;
+        let entry = Self::entry(path, self.compression, Self::REGULAR_FILE_MODE);
+        block_on(self.writer.write_entry_whole(entry, bytes))?;
 
         let hash = base64.encode(Sha256::new().chain_update(bytes).finalize());
         self.record.push(RecordEntry {
             path: path.to_string(),
             hash,
-            size: bytes.len(),
+            size: bytes.len() as u64,
         });
 
         Ok(())
@@ -754,27 +873,53 @@ impl<W: Write + Seek> DirectoryWriter for ZipDirectoryWriter<W> {
 
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
         trace!("Adding {} from {}", path, file.user_display());
-        let mut reader = BufReader::new(File::open(file)?);
+        let metadata = file.metadata()?;
         // Preserve the executable bit, especially for scripts
         #[cfg(unix)]
         let executable_bit = {
             use std::os::unix::fs::PermissionsExt;
-            file.metadata()?.permissions().mode() & 0o111 != 0
+            metadata.permissions().mode() & 0o111 != 0
         };
         // Windows has no executable bit
         #[cfg(not(unix))]
         let executable_bit = false;
-        let mut writer = self.new_writer(path, executable_bit)?;
-        let record = write_hashed(path, &mut reader, &mut writer)?;
-        drop(writer);
-        self.record.push(record);
+        let mode = if executable_bit {
+            Self::EXECUTABLE_FILE_MODE
+        } else {
+            Self::REGULAR_FILE_MODE
+        };
+
+        if metadata.len() <= WHOLE_FILE_ZIP_ENTRY_LIMIT {
+            let bytes = fs_err::read(file)?;
+            let entry = Self::entry(path, self.compression, mode);
+            block_on(self.writer.write_entry_whole(entry, &bytes))?;
+
+            let hash = base64.encode(Sha256::new().chain_update(&bytes).finalize());
+            self.record.push(RecordEntry {
+                path: path.to_string(),
+                hash,
+                size: bytes.len() as u64,
+            });
+        } else {
+            let mut reader = BufReader::new(File::open(file)?);
+            let mut writer = self.new_writer(path, executable_bit)?;
+            let record = write_hashed(path, &mut reader, &mut writer)?;
+            writer.close()?;
+            self.record.push(record);
+        }
         Ok(())
     }
 
     fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
         trace!("Adding directory {}", directory);
-        let options = zip::write::SimpleFileOptions::default().compression_method(self.compression);
-        Ok(self.writer.add_directory(directory, options)?)
+        let directory = if directory.ends_with('/') {
+            directory.to_string()
+        } else {
+            format!("{directory}/")
+        };
+        let entry = Self::entry(&directory, Compression::Stored, Self::DIRECTORY_MODE);
+        block_on(self.writer.write_entry_whole(entry, &[]))?;
+        Ok(())
     }
 
     /// Write the `RECORD` file and the central directory.
@@ -782,14 +927,13 @@ impl<W: Write + Seek> DirectoryWriter for ZipDirectoryWriter<W> {
         let record_path = format!("{dist_info_dir}/RECORD");
         trace!("Adding {record_path}");
         let record = mem::take(&mut self.record);
-        write_record(
-            &mut self.new_writer(&record_path, false)?,
-            dist_info_dir,
-            record,
-        )?;
+        let mut record_bytes = Vec::new();
+        write_record(&mut record_bytes, dist_info_dir, record)?;
+        let entry = Self::entry(&record_path, self.compression, Self::REGULAR_FILE_MODE);
+        block_on(self.writer.write_entry_whole(entry, &record_bytes))?;
 
         trace!("Adding central directory");
-        self.writer.finish()?;
+        block_on(self.writer.close())?;
         Ok(())
     }
 }
@@ -824,7 +968,7 @@ impl DirectoryWriter for FilesystemWriter {
         self.record.push(RecordEntry {
             path: path.to_string(),
             hash,
-            size: bytes.len(),
+            size: bytes.len() as u64,
         });
 
         Ok(fs_err::write(self.root.join(path), bytes)?)
@@ -911,15 +1055,10 @@ mod test {
     /// Snapshot all files from the prepare metadata hook.
     #[test]
     fn test_prepare_metadata() {
+        let _preview = uv_preview::test::with_features(&[]);
         let metadata_dir = TempDir::new().unwrap();
         let built_by_uv = Path::new("../../test/packages/built-by-uv");
-        metadata(
-            built_by_uv,
-            metadata_dir.path(),
-            "1.0.0+test",
-            Preview::default(),
-        )
-        .unwrap();
+        metadata(built_by_uv, metadata_dir.path(), "1.0.0+test").unwrap();
 
         let mut files: Vec<_> = WalkDir::new(metadata_dir.path())
             .sort_by_file_name()

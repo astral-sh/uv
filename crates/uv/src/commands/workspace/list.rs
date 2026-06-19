@@ -4,6 +4,7 @@ use std::path::Path;
 use anyhow::Result;
 
 use owo_colors::OwoColorize;
+use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
@@ -11,10 +12,20 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// List workspace members
-pub(crate) async fn list(project_dir: &Path, paths: bool, printer: Printer) -> Result<ExitStatus> {
-    let workspace_cache = WorkspaceCache::default();
-    let workspace =
-        Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache).await?;
+pub(crate) async fn list(
+    project_dir: &Path,
+    paths: bool,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+    printer: Printer,
+) -> Result<ExitStatus> {
+    let workspace = Workspace::discover(
+        project_dir,
+        &DiscoveryOptions::default(),
+        cache,
+        workspace_cache,
+    )
+    .await?;
 
     for (name, member) in workspace.packages() {
         if paths {

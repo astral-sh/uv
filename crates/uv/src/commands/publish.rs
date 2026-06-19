@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use console::Term;
-use owo_colors::{AnsiColors, OwoColorize};
+use owo_colors::OwoColorize;
 use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
 use uv_auth::{Credentials, PyxTokenStore};
@@ -12,7 +12,9 @@ use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
+use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
+use uv_errors::{ErrorOptions, write_error_chain_with_options};
 use uv_preview::{Preview, PreviewFeature};
 use uv_publish::{
     CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, check_trusted_publishing,
@@ -20,7 +22,7 @@ use uv_publish::{
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
-use uv_warnings::{warn_user_once, write_error_chain};
+use uv_warnings::warn_user_once;
 
 use crate::commands::reporters::PublishReporter;
 use crate::commands::{ExitStatus, human_readable_bytes};
@@ -101,7 +103,11 @@ pub(crate) async fn publish(
         (publish_url, check_url)
     };
 
-    let groups = group_files_for_publishing(paths, no_attestations)?;
+    let mut groups = group_files_for_publishing(paths, no_attestations)?;
+    // Sort by filename first so the stable type sort preserves filename order within each type.
+    groups.sort_by(|left, right| left.raw_filename.cmp(&right.raw_filename));
+    // Sort by distribution type, with wheels before source distributions.
+    groups.sort_by_key(|group| matches!(&group.filename, DistFilename::SourceDistFilename(_)));
     match groups.len() {
         0 => bail!("No files found to publish"),
         1 => {
@@ -142,14 +148,14 @@ pub(crate) async fn publish(
         .read_timeout(environment.http_read_timeout_upload)
         .connect_timeout(environment.http_connect_timeout)
         .client_name("upload")
-        .build();
+        .build()?;
     // For OIDC (trusted publishing), we need retries (GitHub's networking is unreliable)
     // and default timeouts.
     let oidc_client = client_builder
         .clone()
         .auth_integration(AuthIntegration::NoAuthMiddleware)
         .client_name("oidc")
-        .build();
+        .build()?;
     // For S3 uploads, we roll our own retry loop, use upload timeouts, and no auth middleware.
     let s3_client = client_builder
         .clone()
@@ -158,7 +164,7 @@ pub(crate) async fn publish(
         .read_timeout(environment.http_read_timeout_upload)
         .connect_timeout(environment.http_connect_timeout)
         .client_name("s3")
-        .build();
+        .build()?;
 
     let retry_policy = client_builder.retry_policy();
     // We're only checking a single URL and one at a time, so 1 permit is sufficient
@@ -199,12 +205,33 @@ pub(crate) async fn publish(
     let mut error_count: usize = 0;
 
     for group in groups {
+        // Check if the filename is normalized (e.g., version `2025.09.4` should be `2025.9.4`).
+        let normalized_filename = group.filename.to_string();
+        if group.raw_filename != normalized_filename {
+            if preview.is_enabled(PreviewFeature::PublishRequireNormalized) {
+                warn_user_once!(
+                    "`{}` has a non-normalized filename (expected `{normalized_filename}`), skipping",
+                    group.raw_filename
+                );
+                continue;
+            }
+            warn_user_once!(
+                "`{}` has a non-normalized filename (expected `{normalized_filename}`). \
+                Pass `--preview-features {}` to skip such files.",
+                group.raw_filename,
+                PreviewFeature::PublishRequireNormalized
+            );
+        }
+
+        let reporter = Arc::new(PublishReporter::single(printer));
+
         if let Some(check_url_client) = &check_url_client {
             match uv_publish::check_url(
                 check_url_client,
                 &group.file,
                 &group.filename,
                 &download_concurrency,
+                reporter.clone(),
             )
             .await
             {
@@ -219,7 +246,10 @@ pub(crate) async fn publish(
                 Ok(false) => {}
                 Err(err) => {
                     if dry_run {
-                        write_error_chain(&err, printer.stderr(), "error", AnsiColors::Red)?;
+                        write_error_chain_with_options(
+                            &err,
+                            ErrorOptions::default().with_stream(printer.stderr()),
+                        )?;
                         error_count += 1;
                         continue;
                     }
@@ -242,27 +272,39 @@ pub(crate) async fn publish(
             writeln!(
                 printer.stderr(),
                 "{} {} {}",
-                "Uploading".bold().green(),
+                "Hashing".bold().green(),
                 group.filename,
                 format!("({bytes:.1}{unit})").dimmed()
             )?;
         }
 
         // Collect the metadata for the file.
-        let form_metadata = match FormMetadata::read_from_file(&group.file, &group.filename)
-            .await
-            .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))
-        {
-            Ok(metadata) => metadata,
-            Err(err) => {
-                if dry_run {
-                    write_error_chain(&err, printer.stderr(), "error", AnsiColors::Red)?;
-                    error_count += 1;
-                    continue;
+        let form_metadata =
+            match FormMetadata::read_from_file(&group.file, &group.filename, reporter.clone())
+                .await
+                .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))
+            {
+                Ok(metadata) => metadata,
+                Err(err) => {
+                    if dry_run {
+                        write_error_chain_with_options(
+                            &err,
+                            ErrorOptions::default().with_stream(printer.stderr()),
+                        )?;
+                        error_count += 1;
+                        continue;
+                    }
+                    return Err(err.into());
                 }
-                return Err(err.into());
-            }
-        };
+            };
+
+        writeln!(
+            printer.stderr(),
+            "{} {} {}",
+            "Uploading".bold().green(),
+            group.filename,
+            format!("({bytes:.1}{unit})").dimmed()
+        )?;
 
         let uploaded = if direct {
             if dry_run {
@@ -289,11 +331,9 @@ pub(crate) async fn publish(
                     }
                     Err(err) => {
                         let err: anyhow::Error = err.into();
-                        write_error_chain(
+                        write_error_chain_with_options(
                             err.as_ref(),
-                            printer.stderr(),
-                            "error",
-                            AnsiColors::Red,
+                            ErrorOptions::default().with_stream(printer.stderr()),
                         )?;
                         error_count += 1;
                     }
@@ -302,7 +342,6 @@ pub(crate) async fn publish(
             }
 
             debug!("Using two-phase upload (direct mode)");
-            let reporter = PublishReporter::single(printer);
             upload_two_phase(
                 &group,
                 &form_metadata,
@@ -311,8 +350,7 @@ pub(crate) async fn publish(
                 &s3_client,
                 retry_policy,
                 &credentials,
-                // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
-                Arc::new(reporter),
+                reporter.clone(),
             )
             .await?
         } else {
@@ -337,7 +375,6 @@ pub(crate) async fn publish(
                     if !should_upload {
                         false
                     } else {
-                        let reporter = PublishReporter::single(printer);
                         upload(
                             &group,
                             &form_metadata,
@@ -347,8 +384,7 @@ pub(crate) async fn publish(
                             &credentials,
                             check_url_client.as_ref(),
                             &download_concurrency,
-                            // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
-                            Arc::new(reporter),
+                            reporter.clone(),
                         )
                         .await? // Filename and/or URL are already attached, if applicable.
                     }
@@ -356,11 +392,9 @@ pub(crate) async fn publish(
                 Err(err) => {
                     if dry_run {
                         let err: anyhow::Error = err.into();
-                        write_error_chain(
+                        write_error_chain_with_options(
                             err.as_ref(),
-                            printer.stderr(),
-                            "error",
-                            AnsiColors::Red,
+                            ErrorOptions::default().with_stream(printer.stderr()),
                         )?;
                         error_count += 1;
                         continue;
@@ -518,13 +552,11 @@ async fn gather_credentials(
             )?;
 
             trace!("Error trace: {err:?}");
-            write_error_chain(
+            write_error_chain_with_options(
                 anyhow::Error::from(err)
                     .context("Trusted publishing failed")
                     .as_ref(),
-                printer.stderr(),
-                "error",
-                AnsiColors::Red,
+                ErrorOptions::default().with_stream(printer.stderr()),
             )?;
         }
     }
@@ -590,7 +622,7 @@ mod tests {
         username: Option<String>,
         password: Option<String>,
     ) -> Result<(DisplaySafeUrl, Credentials)> {
-        let client = BaseClientBuilder::default().build();
+        let client = BaseClientBuilder::default().build()?;
         let token_store = PyxTokenStore::from_settings()?;
         gather_credentials(
             url,

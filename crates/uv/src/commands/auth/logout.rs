@@ -39,7 +39,7 @@ pub(crate) async fn logout(
     };
 
     // Extract credentials from URL if present
-    let url_credentials = Credentials::from_url(&url);
+    let url_credentials = Credentials::from_url(&url)?;
     let url_username = url_credentials.as_ref().and_then(|c| c.username());
 
     let username = match (username, url_username) {
@@ -99,7 +99,7 @@ async fn pyx_logout(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Initialize the client.
-    let client = client_builder.build();
+    let client = client_builder.build()?;
 
     // Retrieve the token store.
     let Some(tokens) = store.read().await? else {

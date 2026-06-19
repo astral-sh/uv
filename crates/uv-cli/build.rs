@@ -30,6 +30,13 @@ fn commit_info(workspace_root: &Path) {
         return;
     }
 
+    // If in a jj repository, do not attempt to retrieve commit information because they snapshot
+    // frequently and will cause unnecessary rebuilds.
+    let jj_dir = workspace_root.join(".jj");
+    if jj_dir.exists() {
+        return;
+    }
+
     if let Some(git_head_path) = git_head(&git_dir) {
         println!("cargo:rerun-if-changed={}", git_head_path.display());
 

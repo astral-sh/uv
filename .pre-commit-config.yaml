@@ -18,12 +18,11 @@ repos:
 
   - repo: local
     hooks:
-      - id: cargo-fmt
-        name: cargo fmt
-        entry: cargo fmt --
+      - id: rustfmt
+        name: rustfmt
+        entry: rustfmt
         language: system
         types: [rust]
-        pass_filenames: false # This makes it a lot faster
 
   - repo: local
     hooks:

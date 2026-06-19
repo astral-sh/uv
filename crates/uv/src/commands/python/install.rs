@@ -17,6 +17,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::Concurrency;
+use uv_errors::{ErrorOptions, write_error_chain_with_options};
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
 use uv_preview::{Preview, PreviewFeature};
@@ -35,11 +36,11 @@ use uv_python::{
 };
 use uv_shell::Shell;
 use uv_trampoline_builder::{Launcher, LauncherKind};
-use uv_warnings::{warn_user, write_error_chain};
+use uv_warnings::warn_user;
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, elapsed};
+use crate::commands::{ExitStatus, conjunction, elapsed};
 use crate::printer::Printer;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -338,7 +339,7 @@ async fn perform_install(
     let retry_policy = client_builder.retry_policy();
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
-    let client = client_builder.retries(0).build();
+    let client = client_builder.retries(0).build()?;
     let download_list =
         ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
     // TODO(zanieb): We use this variable to special-case .python-version files, but it'd be nice to
@@ -445,11 +446,13 @@ async fn perform_install(
                 request.request.to_canonical_string()
             )?;
             if is_from_python_version_file {
-                writeln!(
+                // TODO(zanieb): Consider refactoring this to use an error type.
+                write!(
                     printer.stderr(),
-                    "\n{}{} The version request came from a `.python-version` file; change the patch version in the file to upgrade instead",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "{}",
+                    uv_errors::Hints::from(
+                        "The version request came from a `.python-version` file; change the patch version in the file to upgrade instead",
+                    ),
                 )?;
             }
             return Ok(ExitStatus::Failure);
@@ -565,7 +568,11 @@ async fn perform_install(
             .iter()
             .copied()
             .cloned()
-            .try_for_each(|installation| sender.send(installation))?;
+            .try_for_each(|installation| {
+                sender
+                    .send(installation)
+                    .map_err(|err| anyhow::anyhow!(err))
+            })?;
     }
 
     // Check if Python downloads are banned
@@ -628,7 +635,9 @@ async fn perform_install(
 
                 let installation = ManagedPythonInstallation::new(path, download);
                 if let Some(ref sender) = bytecode_compilation_sender {
-                    sender.send(installation.clone())?;
+                    sender
+                        .send(installation.clone())
+                        .map_err(|err| anyhow::anyhow!(err))?;
                 }
                 changelog.installed.insert(installation.key().clone());
                 for request in &requests {
@@ -906,11 +915,9 @@ async fn perform_install(
         {
             match kind {
                 InstallErrorKind::DownloadUnpack => {
-                    write_error_chain(
+                    write_error_chain_with_options(
                         err.context(format!("Failed to install {key}")).as_ref(),
-                        printer.stderr(),
-                        "error",
-                        AnsiColors::Red,
+                        ErrorOptions::default().with_stream(printer.stderr()),
                     )?;
                 }
                 InstallErrorKind::Bin => {
@@ -920,12 +927,13 @@ async fn perform_install(
                         Some(true) => ("error", AnsiColors::Red),
                     };
 
-                    write_error_chain(
+                    write_error_chain_with_options(
                         err.context(format!("Failed to install executable for {key}"))
                             .as_ref(),
-                        printer.stderr(),
-                        level,
-                        color,
+                        ErrorOptions::default()
+                            .with_level(level)
+                            .with_color(color)
+                            .with_stream(printer.stderr()),
                     )?;
                 }
                 InstallErrorKind::Registry => {
@@ -936,12 +944,13 @@ async fn perform_install(
                     };
 
                     trace!("Error trace: {err:?}");
-                    write_error_chain(
+                    write_error_chain_with_options(
                         err.context(format!("Failed to create registry entry for {key}"))
                             .as_ref(),
-                        printer.stderr(),
-                        level,
-                        color,
+                        ErrorOptions::default()
+                            .with_level(level)
+                            .with_color(color)
+                            .with_stream(printer.stderr()),
                     )?;
                 }
             }
@@ -990,6 +999,8 @@ fn create_bin_links(
         vec![installation.key().executable_name_minor()]
     };
 
+    let mut existing_unmanaged = Vec::new();
+
     for target in targets {
         let target = bin.join(target);
         if upgrade && !target.try_exists().unwrap_or_default() {
@@ -1021,7 +1032,7 @@ fn create_bin_links(
                     .or_default()
                     .insert(target.clone());
             }
-            Err(uv_python::managed::Error::LinkExecutable { from: _, to, err })
+            Err(uv_python::managed::Error::LinkExecutable(err))
                 if err.kind() == ErrorKind::AlreadyExists =>
             {
                 debug!(
@@ -1059,20 +1070,14 @@ fn create_bin_links(
                                 if upgrade {
                                     warn_user!(
                                         "Executable already exists at `{}` but is not managed by uv; use `uv python install {}.{}{} --force` to replace it",
-                                        to.simplified_display(),
+                                        target.simplified_display(),
                                         installation.key().major(),
                                         installation.key().minor(),
                                         installation.key().variant().display_suffix()
                                     );
                                 } else {
-                                    errors.push((
-                                        InstallErrorKind::Bin,
-                                        installation.key().clone(),
-                                        anyhow::anyhow!(
-                                            "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
-                                            to.simplified_display()
-                                        ),
-                                    ));
+                                    // Defer reporting to allow grouping.
+                                    existing_unmanaged.push(target.clone());
                                 }
                                 continue;
                             }
@@ -1133,7 +1138,7 @@ fn create_bin_links(
                                 debug!(
                                     "Executable already exists for `{}` at `{}`. Use `--force` to replace it",
                                     existing.key(),
-                                    to.simplified_display()
+                                    target.simplified_display()
                                 );
                                 continue;
                             }
@@ -1142,13 +1147,13 @@ fn create_bin_links(
                 }
 
                 // Replace the existing link
-                if let Err(err) = fs_err::remove_file(&to) {
+                if let Err(err) = fs_err::remove_file(&target) {
                     errors.push((
                         InstallErrorKind::Bin,
                         installation.key().clone(),
                         anyhow::anyhow!(
                             "Executable already exists at `{}` but could not be removed: {err}",
-                            to.simplified_display()
+                            target.simplified_display()
                         ),
                     ));
                     continue;
@@ -1196,6 +1201,33 @@ fn create_bin_links(
                 ));
             }
         }
+    }
+
+    match existing_unmanaged.as_slice() {
+        [] => {}
+        [executable] => errors.push((
+            InstallErrorKind::Bin,
+            installation.key().clone(),
+            anyhow::anyhow!(
+                "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
+                executable.simplified_display()
+            ),
+        )),
+        executables => errors.push((
+            InstallErrorKind::Bin,
+            installation.key().clone(),
+            anyhow::anyhow!(
+                "Executables {} already exist in `{}` but are not managed by uv; use `--force` to replace them",
+                conjunction(
+                    executables
+                        .iter()
+                        .filter_map(|path| path.file_name())
+                        .map(|name| format!("`{}`", name.to_string_lossy()))
+                        .collect(),
+                ),
+                bin.simplified_display()
+            ),
+        )),
     }
 }
 

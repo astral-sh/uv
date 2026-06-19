@@ -44,7 +44,10 @@ fn start_connect_tunnel_proxy() -> std::net::SocketAddr {
                         Ok(n) => n,
                     };
                     total_read += n;
-                    if buf[..total_read].windows(4).any(|w| w == b"\r\n\r\n") {
+                    if buf[..total_read]
+                        .array_windows()
+                        .any(|window| window == b"\r\n\r\n")
+                    {
                         break;
                     }
                 }
@@ -182,7 +185,7 @@ async fn time_out_response(
     let (tx, rx) = tokio::sync::mpsc::channel(1);
     tokio::spawn(async move {
         let _ = tx.send(Ok(Frame::data(Bytes::new()))).await;
-        tokio::time::sleep(Duration::from_secs(60)).await;
+        tokio::time::sleep(Duration::from_mins(1)).await;
     });
     let body = StreamBody::new(ReceiverStream::new(rx)).boxed();
     Ok(hyper::Response::builder()
@@ -240,8 +243,7 @@ async fn simple_http_500() {
 
     let (_server_drop_guard, mock_server_uri) = http_error_server().await;
 
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("tqdm")
         .arg("--index-url")
@@ -252,9 +254,9 @@ async fn simple_http_500() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Request failed after 3 retries
-      Caused by: Failed to fetch: `[SERVER]/tqdm/`
-      Caused by: HTTP status server error (500 Internal Server Error) for url ([SERVER]/tqdm/)
+    error: Request failed after 3 retries in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/tqdm/`
+      Caused by: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/tqdm/)
     ");
 }
 
@@ -265,8 +267,7 @@ async fn simple_io_err() {
 
     let (_server_drop_guard, mock_server_uri) = io_error_server().await;
 
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("tqdm")
         .arg("--index-url")
@@ -277,9 +278,9 @@ async fn simple_io_err() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Request failed after 3 retries
-      Caused by: Failed to fetch: `[SERVER]/tqdm/`
-      Caused by: error sending request for url ([SERVER]/tqdm/)
+    error: Request failed after 3 retries in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/tqdm/`
+      Caused by: error sending request for url (http://[LOCALHOST]/tqdm/)
       Caused by: client error (SendRequest)
       Caused by: connection closed before message completed
     ");
@@ -292,8 +293,7 @@ async fn find_links_http_500() {
 
     let (_server_drop_guard, mock_server_uri) = http_error_server().await;
 
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("tqdm")
         .arg("--no-index")
@@ -305,10 +305,10 @@ async fn find_links_http_500() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `--find-links` URL: [SERVER]/
-      Caused by: Request failed after 3 retries
-      Caused by: Failed to fetch: `[SERVER]/`
-      Caused by: HTTP status server error (500 Internal Server Error) for url ([SERVER]/)
+    error: Failed to read `--find-links` URL: http://[LOCALHOST]/
+      Caused by: Request failed after 3 retries in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/`
+      Caused by: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/)
     ");
 }
 
@@ -319,8 +319,7 @@ async fn find_links_io_error() {
 
     let (_server_drop_guard, mock_server_uri) = io_error_server().await;
 
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("tqdm")
         .arg("--no-index")
@@ -332,10 +331,10 @@ async fn find_links_io_error() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `--find-links` URL: [SERVER]/
-      Caused by: Request failed after 3 retries
-      Caused by: Failed to fetch: `[SERVER]/`
-      Caused by: error sending request for url ([SERVER]/)
+    error: Failed to read `--find-links` URL: http://[LOCALHOST]/
+      Caused by: Request failed after 3 retries in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/`
+      Caused by: error sending request for url (http://[LOCALHOST]/)
       Caused by: client error (SendRequest)
       Caused by: connection closed before message completed
     ");
@@ -349,8 +348,7 @@ async fn find_links_mixed_error() {
 
     let (_server_drop_guard, mock_server_uri) = mixed_error_server().await;
 
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("tqdm")
         .arg("--no-index")
@@ -362,10 +360,10 @@ async fn find_links_mixed_error() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `--find-links` URL: [SERVER]/
-      Caused by: Request failed after 3 retries
-      Caused by: Failed to fetch: `[SERVER]/`
-      Caused by: HTTP status server error (500 Internal Server Error) for url ([SERVER]/)
+    error: Failed to read `--find-links` URL: http://[LOCALHOST]/
+      Caused by: Request failed after 3 retries in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/`
+      Caused by: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/)
     ");
 }
 
@@ -380,8 +378,7 @@ async fn direct_url_http_500() {
     let tqdm_url = format!(
         "{mock_server_uri}/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl"
     );
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}"))
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
@@ -390,10 +387,10 @@ async fn direct_url_http_500() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `tqdm @ [SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ├─▶ Request failed after 3 retries
-      ├─▶ Failed to fetch: `[SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ╰─▶ HTTP status server error (500 Internal Server Error) for url ([SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
+      × Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      ├─▶ Request failed after 3 retries in [TIME]
+      ├─▶ Failed to fetch: `http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      ╰─▶ HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
     ");
 }
 
@@ -407,8 +404,7 @@ async fn direct_url_io_error() {
     let tqdm_url = format!(
         "{mock_server_uri}/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl"
     );
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}"))
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
@@ -417,10 +413,10 @@ async fn direct_url_io_error() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `tqdm @ [SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ├─▶ Request failed after 3 retries
-      ├─▶ Failed to fetch: `[SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ├─▶ error sending request for url ([SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
+      × Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      ├─▶ Request failed after 3 retries in [TIME]
+      ├─▶ Failed to fetch: `http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      ├─▶ error sending request for url (http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
       ├─▶ client error (SendRequest)
       ╰─▶ connection closed before message completed
     ");
@@ -437,8 +433,7 @@ async fn direct_url_mixed_error() {
     let tqdm_url = format!(
         "{mock_server_uri}/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl"
     );
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}"))
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
@@ -447,10 +442,10 @@ async fn direct_url_mixed_error() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `tqdm @ [SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ├─▶ Request failed after 3 retries
-      ├─▶ Failed to fetch: `[SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ╰─▶ HTTP status server error (500 Internal Server Error) for url ([SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
+      × Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      ├─▶ Request failed after 3 retries in [TIME]
+      ├─▶ Failed to fetch: `http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      ╰─▶ HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
     ");
 }
 
@@ -493,8 +488,7 @@ async fn python_install_http_500() {
 
     let python_downloads_json = write_python_downloads_json(&context, &mock_server_uri);
 
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .python_install()
         .arg("cpython-3.10.0-darwin-aarch64-none")
         .arg("--python-downloads-json-url")
@@ -505,10 +499,10 @@ async fn python_install_http_500() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to install cpython-3.10.0-macos-aarch64-none
-      Caused by: Request failed after 3 retries
-      Caused by: Failed to download [SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst
-      Caused by: HTTP status server error (500 Internal Server Error) for url ([SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst)
+    error: Failed to install cpython-3.10.0-[PLATFORM]
+      Caused by: Request failed after 3 retries in [TIME]
+      Caused by: Failed to download http://[LOCALHOST]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-[PLATFORM]-pgo%2Blto-20211017T1616.tar.zst
+      Caused by: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-[PLATFORM]-pgo%2Blto-20211017T1616.tar.zst)
     ");
 }
 
@@ -524,8 +518,7 @@ async fn python_install_io_error() {
 
     let python_downloads_json = write_python_downloads_json(&context, &mock_server_uri);
 
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .python_install()
         .arg("cpython-3.10.0-darwin-aarch64-none")
         .arg("--python-downloads-json-url")
@@ -536,10 +529,10 @@ async fn python_install_io_error() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to install cpython-3.10.0-macos-aarch64-none
-      Caused by: Request failed after 3 retries
-      Caused by: Failed to download [SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst
-      Caused by: error sending request for url ([SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst)
+    error: Failed to install cpython-3.10.0-[PLATFORM]
+      Caused by: Request failed after 3 retries in [TIME]
+      Caused by: Failed to download http://[LOCALHOST]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-[PLATFORM]-pgo%2Blto-20211017T1616.tar.zst
+      Caused by: error sending request for url (http://[LOCALHOST]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-[PLATFORM]-pgo%2Blto-20211017T1616.tar.zst)
       Caused by: client error (SendRequest)
       Caused by: connection closed before message completed
     ");
@@ -611,7 +604,7 @@ async fn install_http_retries() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Request failed after 5 retries
+    error: Request failed after 5 retries in [TIME]
       Caused by: Failed to fetch: `http://[LOCALHOST]/anyio/`
       Caused by: HTTP status server error (503 Service Unavailable) for url (http://[LOCALHOST]/anyio/)
     "
@@ -643,7 +636,7 @@ async fn install_http_retry_low_level() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Request failed after 1 retry
+    error: Request failed after 1 retry in [TIME]
       Caused by: Failed to fetch: `http://[LOCALHOST]/anyio/`
       Caused by: error sending request for url (http://[LOCALHOST]/anyio/)
       Caused by: client error (SendRequest)
@@ -684,8 +677,7 @@ async fn rfc9457_problem_details_license_violation() {
     let mock_server_uri = server.uri();
     let tqdm_url = format!("{mock_server_uri}/packages/tqdm-4.67.1-py3-none-any.whl");
 
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}")), @"
     success: false
@@ -693,10 +685,10 @@ async fn rfc9457_problem_details_license_violation() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `tqdm @ [SERVER]/packages/tqdm-4.67.1-py3-none-any.whl`
-      ├─▶ Failed to fetch: `[SERVER]/packages/tqdm-4.67.1-py3-none-any.whl`
+      × Failed to download `tqdm @ http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl`
+      ├─▶ Failed to fetch: `http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl`
       ├─▶ Server message: License Compliance Issue, This package version has a license that violates organizational policy.
-      ╰─▶ HTTP status client error (403 Forbidden) for url ([SERVER]/packages/tqdm-4.67.1-py3-none-any.whl)
+      ╰─▶ HTTP status client error (403 Forbidden) for url (http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl)
     ");
 }
 
@@ -1079,9 +1071,9 @@ async fn retry_read_timeout_index() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Request failed after 1 retry
+    error: Request failed after 1 retry in [TIME]
       Caused by: Failed to fetch: `http://[LOCALHOST]/tqdm/`
-      Caused by: error decoding response body
+      Caused by: error decoding response body for url (http://[LOCALHOST]/tqdm/)
       Caused by: request or response body error
       Caused by: operation timed out
     ");
@@ -1105,7 +1097,7 @@ async fn retry_read_timeout_stream() {
 
     ----- stderr -----
       × Failed to download `tqdm @ http://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
-      ├─▶ Request failed after 1 retry
+      ├─▶ Request failed after 1 retry in [TIME]
       ├─▶ Failed to read metadata: `http://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
       ├─▶ Failed to read from zip file
       ├─▶ an upstream reader returned an error: Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).

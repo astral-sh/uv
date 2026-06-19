@@ -27,7 +27,7 @@ pub(crate) async fn token(
         }
         let client = client_builder
             .auth_integration(AuthIntegration::NoAuthMiddleware)
-            .build();
+            .build()?;
 
         pyx_refresh(&pyx_store, &client, printer).await?;
         return Ok(ExitStatus::Success);
@@ -37,7 +37,7 @@ pub(crate) async fn token(
     let url = service.url();
 
     // Extract credentials from URL if present
-    let url_credentials = Credentials::from_url(url);
+    let url_credentials = Credentials::from_url(url)?;
     let url_username = url_credentials.as_ref().and_then(|c| c.username());
 
     let username = match (username, url_username) {

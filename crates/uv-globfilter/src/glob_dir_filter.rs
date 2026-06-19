@@ -11,7 +11,7 @@ const DFA_SIZE_LIMIT: usize = 1_000_000;
 /// at all.
 ///
 /// Internally, the globs are converted to a regex and then to a DFA, which unlike the globs and the
-/// regex allows to check for prefix matches.
+/// regex allows checking for prefix matches.
 pub struct GlobDirFilter {
     glob_set: GlobSet,
     dfa: Option<dfa::dense::DFA<Vec<u32>>>,

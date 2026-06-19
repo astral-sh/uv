@@ -2,8 +2,12 @@
 
 ## Authentication with alternative package indexes
 
-See the [alternative indexes integration guide](../../guides/integration/alternative-indexes.md) for
-details on authentication with popular alternative Python package indexes.
+See the dedicated guides for authentication with popular alternative Python package indexes:
+
+- [Azure Artifacts](../../guides/integration/azure.md)
+- [Google Artifact Registry](../../guides/integration/google.md)
+- [AWS CodeArtifact](../../guides/integration/aws.md)
+- [JFrog Artifactory](../../guides/integration/jfrog.md)
 
 ## Hugging Face support
 

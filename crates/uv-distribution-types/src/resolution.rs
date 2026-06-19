@@ -191,16 +191,6 @@ pub enum Node {
     },
 }
 
-impl Node {
-    /// Returns `true` if the node should be installed.
-    pub fn install(&self) -> bool {
-        match self {
-            Self::Root => false,
-            Self::Dist { install, .. } => *install,
-        }
-    }
-}
-
 /// An edge in the resolution graph.
 #[derive(Debug, Clone)]
 pub enum Edge {
@@ -240,6 +230,12 @@ impl From<&ResolvedDist> for RequirementSource {
                     url: wheel.url.clone(),
                     ext: DistExtension::Wheel,
                 },
+                Dist::Built(BuiltDist::GitPath(wheel)) => Self::GitPath {
+                    url: wheel.url.clone(),
+                    git: (*wheel.git).clone(),
+                    install_path: wheel.install_path.clone(),
+                    ext: DistExtension::Wheel,
+                },
                 Dist::Source(SourceDist::Registry(sdist)) => Self::Registry {
                     specifier: uv_pep440::VersionSpecifiers::from(
                         uv_pep440::VersionSpecifier::equals_version(sdist.version.clone()),
@@ -257,7 +253,13 @@ impl From<&ResolvedDist> for RequirementSource {
                         ext: DistExtension::Source(sdist.ext),
                     }
                 }
-                Dist::Source(SourceDist::Git(sdist)) => Self::Git {
+                Dist::Source(SourceDist::GitPath(sdist)) => Self::GitPath {
+                    url: sdist.url.clone(),
+                    git: (*sdist.git).clone(),
+                    install_path: sdist.install_path.clone(),
+                    ext: DistExtension::Source(sdist.ext),
+                },
+                Dist::Source(SourceDist::GitDirectory(sdist)) => Self::GitDirectory {
                     git: (*sdist.git).clone(),
                     url: sdist.url.clone(),
                     subdirectory: sdist.subdirectory.clone(),

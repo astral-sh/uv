@@ -7,7 +7,7 @@
     // For tool versions defined in GitHub Actions:
     "customManagers:githubActionsVersions",
   ],
-  labels: ["internal", "build:skip-release"],
+  labels: ["internal", "build:skip-docker", "build:skip-release"],
   schedule: ["* 0-3 * * 1"],
   semanticCommits: "disabled",
   separateMajorMinor: false,
@@ -81,6 +81,19 @@
       enabled: false,
     },
     {
+      // Exclude test-integration.yml from Python version updates, as it intentionally
+      // tests specific Python versions and should not be auto-updated.
+      matchFileNames: [".github/workflows/test-integration.yml"],
+      matchDepNames: ["python"],
+      description: "Disable Python version updates in test-integration.yml",
+      enabled: false,
+    },
+    {
+      matchFileNames: [".github/workflows/test-system.yml"],
+      extends: ["schedule:monthly"],
+      description: "Monthly update of test-system.yml dependencies",
+    },
+    {
       groupName: "pre-commit dependencies",
       matchManagers: ["pre-commit"],
       description: "Weekly update of pre-commit dependencies",
@@ -125,6 +138,9 @@
       matchManagers: ["custom.regex"],
       matchDepNames: ["maturin"],
       commitMessageTopic: "maturin",
+      // Maturin upgrades can change release wheel contents, so keep release
+      // binary validation enabled.
+      labels: ["internal", "build:skip-docker"],
     },
   ],
   customManagers: [

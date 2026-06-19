@@ -17,7 +17,7 @@ use crate::printer::Printer;
 /// A trait to handle logging during install operations.
 pub(crate) trait InstallLogger {
     /// Log the completion of the audit phase.
-    fn on_audit(
+    fn on_check(
         &self,
         count: usize,
         start: std::time::Instant,
@@ -62,7 +62,7 @@ pub(crate) trait InstallLogger {
 pub(crate) struct DefaultInstallLogger;
 
 impl InstallLogger for DefaultInstallLogger {
-    fn on_audit(
+    fn on_check(
         &self,
         count: usize,
         start: std::time::Instant,
@@ -73,7 +73,7 @@ impl InstallLogger for DefaultInstallLogger {
             writeln!(
                 printer.stderr(),
                 "{}",
-                format!("Audited in {}", elapsed(start.elapsed())).dimmed()
+                format!("Checked in {}", elapsed(start.elapsed())).dimmed()
             )?;
         } else {
             let s = if count == 1 { "" } else { "s" };
@@ -81,7 +81,7 @@ impl InstallLogger for DefaultInstallLogger {
                 printer.stderr(),
                 "{}",
                 format!(
-                    "Audited {} {}",
+                    "Checked {} {}",
                     format!("{count} package{s}").bold(),
                     format!("in {}", elapsed(start.elapsed())).dimmed()
                 )
@@ -248,7 +248,7 @@ impl InstallLogger for DefaultInstallLogger {
 pub(crate) struct SummaryInstallLogger;
 
 impl InstallLogger for SummaryInstallLogger {
-    fn on_audit(
+    fn on_check(
         &self,
         _count: usize,
         _start: std::time::Instant,
@@ -313,7 +313,7 @@ impl UpgradeInstallLogger {
 }
 
 impl InstallLogger for UpgradeInstallLogger {
-    fn on_audit(
+    fn on_check(
         &self,
         _count: usize,
         _start: std::time::Instant,
@@ -398,7 +398,7 @@ impl InstallLogger for UpgradeInstallLogger {
                         printer.stderr(),
                         "{} {} {}",
                         "Reinstalled".yellow().bold(),
-                        &self.target,
+                        self.target,
                         reinstalls
                     )?;
                 } else {
@@ -416,7 +416,7 @@ impl InstallLogger for UpgradeInstallLogger {
                         printer.stderr(),
                         "{} {} {} -> {}",
                         "Updated".green().bold(),
-                        &self.target,
+                        self.target,
                         removals,
                         additions
                     )?;
@@ -432,7 +432,7 @@ impl InstallLogger for UpgradeInstallLogger {
                     printer.stderr(),
                     "{} {} {}",
                     "Removed".red().bold(),
-                    &self.target,
+                    self.target,
                     removals
                 )?;
             }
@@ -446,7 +446,7 @@ impl InstallLogger for UpgradeInstallLogger {
                     printer.stderr(),
                     "{} {} {}",
                     "Added".green().bold(),
-                    &self.target,
+                    self.target,
                     additions
                 )?;
             }
@@ -455,7 +455,7 @@ impl InstallLogger for UpgradeInstallLogger {
                     printer.stderr(),
                     "{} {} {}",
                     "Modified".dimmed(),
-                    &self.target.dimmed().bold(),
+                    self.target.dimmed().bold(),
                     "environment".dimmed()
                 )?;
             }

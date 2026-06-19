@@ -137,8 +137,7 @@ impl PythonVersionFile {
                 options
                     .stop_discovery_at
                     .and_then(Path::parent)
-                    .map(|stop_discovery_at| stop_discovery_at != *path)
-                    .unwrap_or(true)
+                    .is_none_or(|stop_discovery_at| stop_discovery_at != *path)
             })
             .find_map(|path| Self::find_in_directory(path, options))
     }
@@ -158,7 +157,7 @@ impl PythonVersionFile {
     /// Try to read a Python version file at the given path.
     ///
     /// If the file does not exist, `Ok(None)` is returned.
-    pub async fn try_from_path(path: PathBuf) -> Result<Option<Self>, std::io::Error> {
+    async fn try_from_path(path: PathBuf) -> Result<Option<Self>, std::io::Error> {
         match fs::tokio::read_to_string(&path).await {
             Ok(content) => {
                 debug!(
@@ -191,19 +190,6 @@ impl PythonVersionFile {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err),
         }
-    }
-
-    /// Read a Python version file at the given path.
-    ///
-    /// If the file does not exist, an error is returned.
-    pub async fn from_path(path: PathBuf) -> Result<Self, std::io::Error> {
-        let Some(result) = Self::try_from_path(path).await? else {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "Version file not found".to_string(),
-            ));
-        };
-        Ok(result)
     }
 
     /// Create a new representation of a version file at the given path.

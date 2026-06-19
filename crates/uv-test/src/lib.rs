@@ -1,15 +1,20 @@
 // The `unreachable_pub` is to silence false positives in RustRover.
 #![allow(dead_code, unreachable_pub)]
 
+pub mod find_links;
+mod http_server;
+pub mod packse;
+pub mod pypi_proxy;
+mod vendor;
+
 use std::borrow::BorrowMut;
 use std::ffi::OsString;
 use std::io::Write as _;
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Output, Stdio};
+use std::process::{Command, Output, Stdio};
 use std::str::FromStr;
 use std::{env, io};
-use uv_preview::Preview;
 use uv_python::downloads::ManagedPythonDownloadList;
 
 use assert_cmd::assert::{Assert, OutputAssertExt};
@@ -33,39 +38,18 @@ use uv_python::{
 };
 use uv_static::EnvVars;
 
-// Exclude any packages uploaded after this date.
-static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
+// Shared test timestamp for deterministic package availability and relative times.
+static TEST_TIMESTAMP: &str = "2024-03-25T00:00:00Z";
 
-pub const PACKSE_VERSION: &str = "0.3.53";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
-pub const LATEST_PYTHON_3_15: &str = "3.15.0a6";
-pub const LATEST_PYTHON_3_14: &str = "3.14.3";
-pub const LATEST_PYTHON_3_13: &str = "3.13.12";
-pub const LATEST_PYTHON_3_12: &str = "3.12.12";
-pub const LATEST_PYTHON_3_11: &str = "3.11.14";
-pub const LATEST_PYTHON_3_10: &str = "3.10.19";
-
-/// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
-/// to prevent dependency confusion attacks against our test suite.
-pub fn build_vendor_links_url() -> String {
-    env::var(EnvVars::UV_TEST_PACKSE_INDEX)
-        .map(|url| format!("{}/vendor/", url.trim_end_matches('/')))
-        .ok()
-        .unwrap_or(format!(
-            "https://astral-sh.github.io/packse/{PACKSE_VERSION}/vendor/"
-        ))
-}
-
-pub fn packse_index_url() -> String {
-    env::var(EnvVars::UV_TEST_PACKSE_INDEX)
-        .map(|url| format!("{}/simple-html/", url.trim_end_matches('/')))
-        .ok()
-        .unwrap_or(format!(
-            "https://astral-sh.github.io/packse/{PACKSE_VERSION}/simple-html/"
-        ))
-}
+const LATEST_PYTHON_3_15: &str = "3.15.0b2";
+const LATEST_PYTHON_3_14: &str = "3.14.6";
+const LATEST_PYTHON_3_13: &str = "3.13.14";
+pub const LATEST_PYTHON_3_12: &str = "3.12.13";
+const LATEST_PYTHON_3_11: &str = "3.11.15";
+const LATEST_PYTHON_3_10: &str = "3.10.20";
 
 /// Create a new [`TestContext`] with the given Python version.
 ///
@@ -130,19 +114,21 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     ),
     // Trim end-of-line whitespaces, to allow removing them on save.
     (r"([^\s])[ \t]+(\r?\n)", "$1$2"),
+    // Filter SSL certificate loading debug messages (environment-dependent)
+    (r"DEBUG Loaded \d+ certificate\(s\) from [^\n]+\n", ""),
 ];
 
 /// Create a context for tests which simplifies shared behavior across tests.
 ///
 /// * Set the current directory to a temporary directory (`temp_dir`).
 /// * Set the cache dir to a different temporary directory (`cache_dir`).
-/// * Set a cutoff for versions used in the resolution so the snapshots don't change after a new release.
+/// * Set a shared test timestamp so snapshots don't change after a new release.
 /// * Set the venv to a fresh `.venv` in `temp_dir`
 pub struct TestContext {
     pub root: ChildPath,
     pub temp_dir: ChildPath,
     pub cache_dir: ChildPath,
-    pub python_dir: ChildPath,
+    python_dir: ChildPath,
     pub home_dir: ChildPath,
     pub user_config_dir: ChildPath,
     pub bin_dir: ChildPath,
@@ -150,7 +136,7 @@ pub struct TestContext {
     pub workspace_root: PathBuf,
 
     /// The Python version used for the virtual environment, if any.
-    pub python_version: Option<PythonVersion>,
+    python_version: Option<PythonVersion>,
 
     /// All the Python versions available during this test context.
     pub python_versions: Vec<(PythonVersion, PathBuf)>,
@@ -166,6 +152,11 @@ pub struct TestContext {
 
     #[allow(dead_code)]
     _root: tempfile::TempDir,
+
+    /// Extra temporary directories whose lifetimes are tied to this context (e.g., directories
+    /// on alternate filesystems created by [`TestContext::with_cache_on_cow_fs`]).
+    #[allow(dead_code)]
+    _extra_tempdirs: Vec<tempfile::TempDir>,
 }
 
 impl TestContext {
@@ -215,7 +206,7 @@ impl TestContext {
             "Prepared",
             "Installed",
             "Uninstalled",
-            "Audited",
+            "Checked",
         ] {
             self.filters.push((
                 format!("{verb} \\d+ packages?"),
@@ -553,6 +544,7 @@ impl TestContext {
 
     /// Add a filter that ignores temporary directory in path.
     #[must_use]
+    #[cfg(windows)]
     pub fn with_filtered_windows_temp_dir(mut self) -> Self {
         let pattern = regex::escape(
             &self
@@ -571,6 +563,16 @@ impl TestContext {
         self.filters.push((
             r"compiled \d+ files".to_string(),
             "compiled [COUNT] files".to_string(),
+        ));
+        self
+    }
+
+    /// Add a (not context aware) filter for the current uv version `v<major>.<minor>.<patch>`
+    #[must_use]
+    pub fn with_filtered_current_version(mut self) -> Self {
+        self.filters.push((
+            regex::escape(&format!("v{}", env!("CARGO_PKG_VERSION"))),
+            "v[CURRENT_VERSION]".to_string(),
         ));
         self
     }
@@ -679,9 +681,120 @@ impl TestContext {
 
     /// Clear filters on `TestContext`.
     #[must_use]
+    #[cfg(windows)]
     pub fn clear_filters(mut self) -> Self {
         self.filters.clear();
         self
+    }
+
+    /// Use a cache directory on the filesystem specified by
+    /// [`EnvVars::UV_INTERNAL__TEST_COW_FS`].
+    ///
+    /// Returns `Ok(None)` if the environment variable is not set.
+    pub fn with_cache_on_cow_fs(self) -> anyhow::Result<Option<Self>> {
+        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_COW_FS).ok() else {
+            return Ok(None);
+        };
+        self.with_cache_on_fs(&dir, "COW_FS").map(Some)
+    }
+
+    /// Use a cache directory on the filesystem specified by
+    /// [`EnvVars::UV_INTERNAL__TEST_ALT_FS`].
+    ///
+    /// Returns `Ok(None)` if the environment variable is not set.
+    pub fn with_cache_on_alt_fs(self) -> anyhow::Result<Option<Self>> {
+        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_ALT_FS).ok() else {
+            return Ok(None);
+        };
+        self.with_cache_on_fs(&dir, "ALT_FS").map(Some)
+    }
+
+    /// Use a cache directory on the filesystem specified by
+    /// [`EnvVars::UV_INTERNAL__TEST_LOWLINKS_FS`].
+    ///
+    /// Returns `Ok(None)` if the environment variable is not set.
+    pub fn with_cache_on_lowlinks_fs(self) -> anyhow::Result<Option<Self>> {
+        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_LOWLINKS_FS).ok() else {
+            return Ok(None);
+        };
+        self.with_cache_on_fs(&dir, "LOWLINKS_FS").map(Some)
+    }
+
+    /// Use a cache directory on the filesystem specified by
+    /// [`EnvVars::UV_INTERNAL__TEST_NOCOW_FS`].
+    ///
+    /// Returns `Ok(None)` if the environment variable is not set.
+    pub fn with_cache_on_nocow_fs(self) -> anyhow::Result<Option<Self>> {
+        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_NOCOW_FS).ok() else {
+            return Ok(None);
+        };
+        self.with_cache_on_fs(&dir, "NOCOW_FS").map(Some)
+    }
+
+    /// Use a working directory on the filesystem specified by
+    /// [`EnvVars::UV_INTERNAL__TEST_COW_FS`].
+    ///
+    /// Returns `Ok(None)` if the environment variable is not set.
+    ///
+    /// Note a virtual environment is not created automatically.
+    pub fn with_working_dir_on_cow_fs(self) -> anyhow::Result<Option<Self>> {
+        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_COW_FS).ok() else {
+            return Ok(None);
+        };
+        self.with_working_dir_on_fs(&dir, "COW_FS").map(Some)
+    }
+
+    /// Use a working directory on the filesystem specified by
+    /// [`EnvVars::UV_INTERNAL__TEST_NOCOW_FS`].
+    ///
+    /// Returns `Ok(None)` if the environment variable is not set.
+    ///
+    /// Note a virtual environment is not created automatically.
+    pub fn with_working_dir_on_nocow_fs(self) -> anyhow::Result<Option<Self>> {
+        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_NOCOW_FS).ok() else {
+            return Ok(None);
+        };
+        self.with_working_dir_on_fs(&dir, "NOCOW_FS").map(Some)
+    }
+
+    fn with_cache_on_fs(mut self, dir: &str, name: &str) -> anyhow::Result<Self> {
+        fs_err::create_dir_all(dir)?;
+        let tmp = tempfile::TempDir::new_in(dir)?;
+        self.cache_dir = ChildPath::new(tmp.path()).child("cache");
+        fs_err::create_dir_all(&self.cache_dir)?;
+        let replacement = format!("[{name}]/[CACHE_DIR]/");
+        self.filters.extend(
+            Self::path_patterns(&self.cache_dir)
+                .into_iter()
+                .map(|pattern| (pattern, replacement.clone())),
+        );
+        self._extra_tempdirs.push(tmp);
+        Ok(self)
+    }
+
+    fn with_working_dir_on_fs(mut self, dir: &str, name: &str) -> anyhow::Result<Self> {
+        fs_err::create_dir_all(dir)?;
+        let tmp = tempfile::TempDir::new_in(dir)?;
+        self.temp_dir = ChildPath::new(tmp.path()).child("temp");
+        fs_err::create_dir_all(&self.temp_dir)?;
+        // Place the venv inside temp_dir (matching the default TestContext layout)
+        // so that `context.venv()` creates it at the same path that `VIRTUAL_ENV` points to.
+        let canonical_temp_dir = self.temp_dir.canonicalize()?;
+        self.venv = ChildPath::new(canonical_temp_dir.join(".venv"));
+        let temp_replacement = format!("[{name}]/[TEMP_DIR]/");
+        self.filters.extend(
+            Self::path_patterns(&self.temp_dir)
+                .into_iter()
+                .map(|pattern| (pattern, temp_replacement.clone())),
+        );
+        let venv_replacement = format!("[{name}]/[VENV]/");
+        self.filters.extend(
+            Self::path_patterns(&self.venv)
+                .into_iter()
+                .map(|pattern| (pattern, venv_replacement.clone())),
+        );
+        self._extra_tempdirs.push(tmp);
+        Ok(self)
     }
 
     /// Default to the canonicalized path to the temp directory. We need to do this because on
@@ -930,19 +1043,6 @@ impl TestContext {
         // Destroy any remaining UNC prefixes (Windows only)
         filters.push((r"\\\\\?\\".to_string(), String::new()));
 
-        // Remove the version from the packse url in lockfile snapshots. This avoids having a huge
-        // diff any time we upgrade packse
-        filters.push((
-            format!("https://astral-sh.github.io/packse/{PACKSE_VERSION}"),
-            "https://astral-sh.github.io/packse/PACKSE_VERSION".to_string(),
-        ));
-        // Developer convenience
-        if let Ok(packse_test_index) = env::var(EnvVars::UV_TEST_PACKSE_INDEX) {
-            filters.push((
-                packse_test_index.trim_end_matches('/').to_string(),
-                "https://astral-sh.github.io/packse/PACKSE_VERSION".to_string(),
-            ));
-        }
         // For wiremock tests
         filters.push((r"127\.0\.0\.1:\d*".to_string(), "[LOCALHOST]".to_string()));
         // Avoid breaking the tests when bumping the uv version
@@ -980,6 +1080,7 @@ impl TestContext {
             filters,
             extra_env: vec![],
             _root: root,
+            _extra_tempdirs: vec![],
         }
     }
 
@@ -1041,8 +1142,9 @@ impl TestContext {
     /// * Don't wrap text output based on the terminal we're in, the test output doesn't get printed
     ///   but snapshotted to a string.
     /// * Use a fake `HOME` to avoid accidentally changing the developer's machine.
+    /// * Ignore system configuration to avoid reading machine-specific settings.
     /// * Hide other Pythons with `UV_PYTHON_INSTALL_DIR` and installed interpreters with
-    ///   `UV_TEST_PYTHON_PATH` and an active venv (if applicable) by removing `VIRTUAL_ENV`.
+    ///   `UV_PYTHON_SEARCH_PATH` and an active venv (if applicable) by removing `VIRTUAL_ENV`.
     /// * Increase the stack size to avoid stack overflows on windows due to large async functions.
     pub fn add_shared_options(&self, command: &mut Command, activate_venv: bool) {
         self.add_shared_args(command);
@@ -1050,7 +1152,7 @@ impl TestContext {
     }
 
     /// Only the arguments of [`TestContext::add_shared_options`].
-    pub fn add_shared_args(&self, command: &mut Command) {
+    fn add_shared_args(&self, command: &mut Command) {
         command.arg("--cache-dir").arg(self.cache_dir.path());
     }
 
@@ -1073,6 +1175,8 @@ impl TestContext {
             .env_remove(EnvVars::VIRTUAL_ENV)
             // Disable wrapping of uv output for readability / determinism in snapshots.
             .env(EnvVars::UV_NO_WRAP, "1")
+            // Avoid reading host system configuration unless a test opts in.
+            .env(EnvVars::UV_NO_SYSTEM_CONFIG, "1")
             // While we disable wrapping in uv above, invoked tools may still wrap their output so
             // we set a fixed `COLUMNS` value for isolation from terminal width.
             .env(EnvVars::COLUMNS, "100")
@@ -1088,15 +1192,17 @@ impl TestContext {
                 EnvVars::XDG_DATA_HOME,
                 self.home_dir.join("data").as_os_str(),
             )
+            .env(EnvVars::UV_NO_SYSTEM_CONFIG, "1")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
             // Installations are not allowed by default; see `Self::with_managed_python_dirs`
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
-            .env(EnvVars::UV_TEST_PYTHON_PATH, self.python_path())
-            // Lock to a point in time view of the world
-            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
-            .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, EXCLUDE_NEWER)
-            // When installations are allowed, we don't want to write to global state, like the
-            // Windows registry
+            .env(EnvVars::UV_PYTHON_SEARCH_PATH, self.python_path())
+            .env(EnvVars::UV_EXCLUDE_NEWER, TEST_TIMESTAMP)
+            .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, TEST_TIMESTAMP)
+            .env(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF, TEST_TIMESTAMP)
+            // Keep Python discovery hermetic and avoid mutating global state, like the Windows
+            // registry, unless a test opts in explicitly.
+            .env(EnvVars::UV_PYTHON_NO_REGISTRY, "1")
             .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "0")
             // Since downloads, fetches and builds run in parallel, their message output order is
             // non-deterministic, so can't capture them in test output.
@@ -1250,6 +1356,22 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv upgrade` command with options shared across scenarios.
+    pub fn upgrade(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("upgrade");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    /// Create a `uv audit` command with options shared across scenarios.
+    pub fn audit(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("audit");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
     /// Create a `uv workspace metadata` command with options shared across scenarios.
     pub fn workspace_metadata(&self) -> Command {
         let mut command = self.new_command();
@@ -1288,7 +1410,17 @@ impl TestContext {
         command.arg("format");
         self.add_shared_options(&mut command, false);
         // Override to a more recent date for ruff version resolution
-        command.env(EnvVars::UV_EXCLUDE_NEWER, "2025-01-01T00:00:00Z");
+        command.env(EnvVars::UV_EXCLUDE_NEWER, "2026-02-15T00:00:00Z");
+        command
+    }
+
+    /// Create a `uv check` command with options shared across scenarios.
+    pub fn check(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("check");
+        self.add_shared_options(&mut command, false);
+        // Override to a more recent date for ty version resolution
+        command.env(EnvVars::UV_EXCLUDE_NEWER, "2026-02-15T00:00:00Z");
         command
     }
 
@@ -1695,6 +1827,7 @@ impl TestContext {
     }
 
     /// Only the filters added to this test context.
+    #[cfg(windows)]
     pub fn filters_without_standard_filters(&self) -> Vec<(&str, &str)> {
         self.filters
             .iter()
@@ -1703,7 +1836,6 @@ impl TestContext {
     }
 
     /// For when we add pypy to the test suite.
-    #[allow(clippy::unused_self)]
     pub fn python_kind(&self) -> &'static str {
         "python"
     }
@@ -1774,16 +1906,16 @@ impl TestContext {
 
         let lock_path = ChildPath::new(self.temp_dir.join("uv.lock"));
         let old_lock = fs_err::read_to_string(&lock_path).unwrap();
-        let (snapshot, _, status) = run_and_format_with_status(
+        let (snapshot, output) = run_and_format(
             change(self),
             self.filters(),
             "diff_lock",
             Some(WindowsFilters::Platform),
             None,
         );
-        assert!(status.success(), "{snapshot}");
+        assert!(output.status.success(), "{snapshot}");
         let new_lock = fs_err::read_to_string(&lock_path).unwrap();
-        diff_snapshot(&old_lock, &new_lock)
+        diff_snapshot(&old_lock, &new_lock, 10)
     }
 
     /// Read a file in the temporary directory
@@ -1825,6 +1957,7 @@ impl TestContext {
             EnvVars::SSL_CERT_DIR,
             EnvVars::SSL_CERT_FILE,
             EnvVars::UV_NATIVE_TLS,
+            EnvVars::UV_SYSTEM_CERTS,
         ];
 
         for env_var in EnvVars::all_names()
@@ -1840,14 +1973,14 @@ impl TestContext {
 
 /// Creates a "unified" diff between the two line-oriented strings suitable
 /// for snapshotting.
-pub fn diff_snapshot(old: &str, new: &str) -> String {
+pub fn diff_snapshot(old: &str, new: &str, context_radius: usize) -> String {
     static TRIM_TRAILING_WHITESPACE: std::sync::LazyLock<Regex> =
         std::sync::LazyLock::new(|| Regex::new(r"(?m)^\s+$").unwrap());
 
     let diff = similar::TextDiff::from_lines(old, new);
     let unified = diff
         .unified_diff()
-        .context_radius(10)
+        .context_radius(context_radius)
         .header("old", "new")
         .to_string();
     // Not totally clear why, but some lines end up containing only
@@ -1856,6 +1989,58 @@ pub fn diff_snapshot(old: &str, new: &str) -> String {
     TRIM_TRAILING_WHITESPACE
         .replace_all(&unified, "")
         .into_owned()
+}
+
+/// Assert a snapshot of the diff between `old` and a command's output.
+///
+/// Returns the command's snapshot, this is useful for chaining diffs.
+#[macro_export]
+macro_rules! diff_uv_snapshot {
+    ($filters:expr, $old:expr, $spawnable:expr, @$snapshot:literal) => {{
+        let new = $crate::capture_uv_snapshot!($filters, $spawnable);
+        let snapshot = $crate::diff_snapshot($old, &new, 3);
+        let mut settings = ::insta::Settings::clone_current();
+        // Show the complete diff on failure while avoiding assertions on its unstable metadata.
+        let description = match settings.description() {
+            Some(description) => format!("{description}\n\nUnfiltered diff:\n{snapshot}"),
+            None => format!("Unfiltered diff:\n{snapshot}"),
+        };
+        settings.set_description(description);
+        settings.add_filter(r"^--- old\n\+\+\+ new\n", "");
+        settings.add_filter(r"(?m)^@@.*$", "...");
+        settings.add_filter(r"\n$", "\n...\n");
+        settings.bind(|| {
+            ::insta::assert_snapshot!(snapshot, @$snapshot);
+        });
+        new
+    }};
+}
+
+/// Capture a command's output, optionally asserting it against a snapshot.
+#[macro_export]
+macro_rules! capture_uv_snapshot {
+    ($filters:expr, $spawnable:expr) => {{
+        // Don't echo the output to stderr while capturing without asserting.
+        let (snapshot, _) = $crate::run_and_format_silent(
+            $spawnable,
+            &$filters,
+            $crate::function_name!(),
+            Some($crate::WindowsFilters::Platform),
+            None,
+        );
+        snapshot
+    }};
+    ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
+        let (snapshot, _) = $crate::run_and_format(
+            $spawnable,
+            &$filters,
+            $crate::function_name!(),
+            Some($crate::WindowsFilters::Platform),
+            None,
+        );
+        ::insta::assert_snapshot!(snapshot, @$snapshot);
+        snapshot
+    }};
 }
 
 pub fn site_packages_path(venv: &Path, python: &str) -> PathBuf {
@@ -1879,7 +2064,7 @@ pub fn venv_bin_path(venv: impl AsRef<Path>) -> PathBuf {
 }
 
 /// Get the path to the python interpreter for a specific python version.
-pub fn get_python(version: &PythonVersion) -> PathBuf {
+fn get_python(version: &PythonVersion) -> PathBuf {
     ManagedPythonInstallations::from_settings(None)
         .map(|installed_pythons| {
             installed_pythons
@@ -1896,7 +2081,7 @@ pub fn get_python(version: &PythonVersion) -> PathBuf {
 }
 
 /// Create a virtual environment at the given path.
-pub fn create_venv_from_executable<P: AsRef<Path>>(
+fn create_venv_from_executable<P: AsRef<Path>>(
     path: P,
     cache_dir: &ChildPath,
     python: &Path,
@@ -1918,7 +2103,7 @@ pub fn create_venv_from_executable<P: AsRef<Path>>(
 
 /// Create a `PATH` with the requested Python versions available in order.
 ///
-/// Generally this should be used with `UV_TEST_PYTHON_PATH`.
+/// Generally this should be used with `UV_PYTHON_SEARCH_PATH`.
 pub fn python_path_with_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],
@@ -1933,8 +2118,8 @@ pub fn python_path_with_versions(
 
 /// Returns a list of Python executables for the given versions.
 ///
-/// Generally this should be used with `UV_TEST_PYTHON_PATH`.
-pub fn python_installations_for_versions(
+/// Generally this should be used with `UV_PYTHON_SEARCH_PATH`.
+fn python_installations_for_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],
     download_list: &ManagedPythonDownloadList,
@@ -1942,6 +2127,7 @@ pub fn python_installations_for_versions(
     let cache = Cache::from_path(temp_dir.child("cache").to_path_buf())
         .init_no_wait()?
         .expect("No cache contention when setting up Python in tests");
+    let _preview = uv_preview::test::with_features(&[]);
     let selected_pythons = python_versions
         .iter()
         .map(|python_version| {
@@ -1951,7 +2137,6 @@ pub fn python_installations_for_versions(
                 PythonPreference::Managed,
                 download_list,
                 &cache,
-                Preview::default(),
             ) {
                 python.into_interpreter().sys_executable().to_owned()
             } else {
@@ -1989,6 +2174,7 @@ pub fn apply_filters<T: AsRef<str>>(mut snapshot: String, filters: impl AsRef<[(
 /// Execute the command and format its output status, stdout and stderr into a snapshot string.
 ///
 /// This function is derived from `insta_cmd`s `spawn_with_info`.
+#[expect(clippy::print_stderr)]
 pub fn run_and_format<T: AsRef<str>>(
     command: impl BorrowMut<Command>,
     filters: impl AsRef<[(T, T)]>,
@@ -1996,22 +2182,27 @@ pub fn run_and_format<T: AsRef<str>>(
     windows_filters: Option<WindowsFilters>,
     input: Option<&str>,
 ) -> (String, Output) {
-    let (snapshot, output, _) =
-        run_and_format_with_status(command, filters, function_name, windows_filters, input);
+    let (snapshot, output) =
+        run_and_format_silent(command, filters, function_name, windows_filters, input);
+    eprintln!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Unfiltered output ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    eprintln!(
+        "----- stdout -----\n{}\n----- stderr -----\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    eprintln!("────────────────────────────────────────────────────────────────────────────────\n");
     (snapshot, output)
 }
 
-/// Execute the command and format its output status, stdout and stderr into a snapshot string.
-///
-/// This function is derived from `insta_cmd`s `spawn_with_info`.
-#[expect(clippy::print_stderr)]
-pub fn run_and_format_with_status<T: AsRef<str>>(
+/// Execute the command and format its output without printing the unfiltered output.
+#[doc(hidden)]
+pub fn run_and_format_silent<T: AsRef<str>>(
     mut command: impl BorrowMut<Command>,
     filters: impl AsRef<[(T, T)]>,
     function_name: &str,
     windows_filters: Option<WindowsFilters>,
     input: Option<&str>,
-) -> (String, Output, ExitStatus) {
+) -> (String, Output) {
     let program = command
         .borrow_mut()
         .get_program()
@@ -2021,7 +2212,7 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
     // Support profiling test run commands with traces.
     if let Ok(root) = env::var(EnvVars::TRACING_DURATIONS_TEST_ROOT) {
         // We only want to fail if the variable is set at runtime.
-        #[allow(clippy::assertions_on_constants)]
+        #[expect(clippy::assertions_on_constants)]
         {
             assert!(
                 cfg!(feature = "tracing-durations-export"),
@@ -2058,14 +2249,6 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
             .output()
             .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"))
     };
-
-    eprintln!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Unfiltered output ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    eprintln!(
-        "----- stdout -----\n{}\n----- stderr -----\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
-    eprintln!("────────────────────────────────────────────────────────────────────────────────\n");
 
     let mut snapshot = apply_filters(
         format!(
@@ -2107,12 +2290,12 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
                             "Resolved",
                             "Prepared",
                             "Installed",
-                            "Audited",
+                            "Checked",
                             "Uninstalled",
                         ]
                         .iter(),
                         WindowsFilters::Universal => {
-                            ["Prepared", "Installed", "Audited", "Uninstalled"].iter()
+                            ["Prepared", "Installed", "Checked", "Uninstalled"].iter()
                         }
                     } {
                         snapshot = snapshot.replace(
@@ -2125,8 +2308,7 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
         }
     }
 
-    let status = output.status;
-    (snapshot, output, status)
+    (snapshot, output)
 }
 
 /// Recursively copy a directory and its contents, skipping gitignored files.
@@ -2209,7 +2391,8 @@ pub async fn download_to_disk(url: &str, path: &Path) {
 
     let client = uv_client::BaseClientBuilder::default()
         .allow_insecure_host(trusted_hosts)
-        .build();
+        .build()
+        .expect("failed to build base client");
     let url = url.parse().unwrap();
     let response = client
         .for_host(&url)
